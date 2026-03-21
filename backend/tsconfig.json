@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    "noEmit": true,
+    "strict": true,
+    "baseUrl": "..",
+    "paths": {
+      "@backend/*": ["backend/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}
