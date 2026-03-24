@@ -878,7 +878,7 @@ function HomePage({ date }: { date?: string }) {
     new Date(reportTimeNow),
     data?.hero.report_time_text ?? '暂无更新',
   );
-  const homepageTitle = `${homeDate} 机场 VPN 推荐与可靠性榜单 | 机场榜 GateRank`;
+  const homepageTitle = '机场榜 GateRank | 机场 VPN 推荐、科学上网机场测评与可靠性榜单';
   const homepageDescription = data
     ? `${homeDate} 机场 VPN 榜单已更新，当前监测 ${formatNumber(data.hero.monitored_airports)} 个机场、累计实时测速 ${formatNumber(data.hero.realtime_tests)} 次，覆盖今日推荐、长期稳定、性价比、新入榜与风险预警，适合查找 VPN、科学上网、魔法与梯子相关机场参考。`
     : '机场榜 GateRank 提供今日推荐、长期稳定、性价比与风险预警等多维机场 VPN 榜单，帮助用户快速筛选值得关注的 VPN、科学上网、魔法和梯子测评报告。';
