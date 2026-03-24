@@ -1,5 +1,17 @@
-import { SCORE_WEIGHTS, THRESHOLDS } from '../config/scoring';
-import type { Airport, DailyMetrics, ScoreBreakdown } from '../types/domain';
+import {
+  FINAL_ENGINE_WEIGHTS,
+  SCORE_WEIGHTS,
+  THRESHOLDS,
+  TIME_DECAY_LAMBDA,
+} from '../config/scoring';
+import type { Airport, DailyMetrics, ScoreBreakdown, TimeSeriesScorePoint } from '../types/domain';
+import {
+  computeLatencyStats,
+  computeSScore,
+  computeStabilityScore,
+  computeStreakScore,
+  computeUptimeScore,
+} from '../utils/stability';
 
 export function normalizeLinear(
   value: number,
@@ -27,19 +39,12 @@ export function computeScore(
   metrics: DailyMetrics,
   historicalScore: number,
 ): ScoreBreakdown {
-  const uptimeScore = normalizeLinear(
-    metrics.uptime_percent_30d,
-    THRESHOLDS.uptime_percent_30d.good,
-    THRESHOLDS.uptime_percent_30d.bad,
-    THRESHOLDS.uptime_percent_30d.higherIsBetter,
-  );
-  const stabilityScore = normalizeLinear(
-    metrics.stable_days_streak,
-    THRESHOLDS.stability_days_streak.good,
-    THRESHOLDS.stability_days_streak.bad,
-    THRESHOLDS.stability_days_streak.higherIsBetter,
-  );
-  const streakScore = stabilityScore;
+  const uptimeBasis = metrics.uptime_percent_today ?? metrics.uptime_percent_30d;
+  const latencyStats = computeLatencyStats(metrics.latency_samples_ms || []);
+  const latencyCv = metrics.latency_cv ?? latencyStats.cv;
+  const uptimeScore = computeUptimeScore(uptimeBasis);
+  const stabilityScore = computeStabilityScore(latencyCv);
+  const streakScore = computeStreakScore(metrics.stable_days_streak);
 
   const latencyScore = normalizeLinear(
     metrics.median_latency_ms,
@@ -75,26 +80,13 @@ export function computeScore(
     THRESHOLDS.value_ratio.higherIsBetter,
   );
 
-  const domainPenalty = metrics.domain_ok ? 0 : 30;
-  const sslPenalty = clamp(
-    normalizeLinear(
-      metrics.ssl_days_left,
-      THRESHOLDS.ssl_days_left.good,
-      THRESHOLDS.ssl_days_left.bad,
-      THRESHOLDS.ssl_days_left.higherIsBetter,
-    ),
-    0,
-    100,
-  );
-  const complaintsPenalty = clamp(metrics.recent_complaints_count * 2, 0, 25);
-  const incidentsPenalty = clamp(metrics.history_incidents * 8, 0, 40);
-  const sslRiskPenalty = 100 - sslPenalty;
-  const riskPenalty = clamp(domainPenalty + sslRiskPenalty * 0.25 + complaintsPenalty + incidentsPenalty, 0, 100);
+  const domainPenalty = calcDomainPenalty(metrics.domain_ok);
+  const sslPenalty = calcSslPenalty(metrics.ssl_days_left);
+  const complaintPenalty = calcComplaintPenalty(metrics.recent_complaints_count);
+  const historyPenalty = calcHistoryPenalty(metrics.history_incidents);
+  const riskPenalty = round2(domainPenalty + sslPenalty + complaintPenalty + historyPenalty);
 
-  const s =
-    uptimeScore * SCORE_WEIGHTS.stability.uptime +
-    stabilityScore * SCORE_WEIGHTS.stability.stability +
-    streakScore * SCORE_WEIGHTS.stability.streak;
+  const s = computeSScore(uptimeScore, stabilityScore, streakScore);
 
   const p =
     latencyScore * SCORE_WEIGHTS.performance.latency +
@@ -106,7 +98,7 @@ export function computeScore(
     trialScore * SCORE_WEIGHTS.cost.trial +
     valueScore * SCORE_WEIGHTS.cost.value;
 
-  const r = 100 - riskPenalty;
+  const r = round2(clamp(100 - riskPenalty, 0, 100));
 
   const score =
     s * SCORE_WEIGHTS.final.s +
@@ -141,11 +133,150 @@ export function computeScore(
       value_score: round2(valueScore),
       value_ratio: round2(valueRatio),
       domain_penalty: round2(domainPenalty),
-      ssl_penalty: round2(sslRiskPenalty),
-      complaints_penalty: round2(complaintsPenalty),
-      incidents_penalty: round2(incidentsPenalty),
+      ssl_penalty: round2(sslPenalty),
+      complaint_penalty: round2(complaintPenalty),
+      history_penalty: round2(historyPenalty),
+      total_penalty: round2(riskPenalty),
+      risk_level: riskLevelFromScore(r),
+      uptime_percent_basis: round2(uptimeBasis),
+      latency_cv: round2(latencyCv ?? 0),
     },
   };
+}
+
+export function timeDecayWeight(daysDiff: number, decayLambda: number = TIME_DECAY_LAMBDA): number {
+  if (!Number.isFinite(daysDiff) || daysDiff < 0) {
+    return 0;
+  }
+  return Math.exp(-decayLambda * daysDiff);
+}
+
+export function computeWeightedScore(
+  timeSeries: TimeSeriesScorePoint[],
+  referenceDate: string,
+  decayLambda: number = TIME_DECAY_LAMBDA,
+): number {
+  if (timeSeries.length === 0) {
+    return 0;
+  }
+
+  const referenceTime = parseDateOnlyUtc(referenceDate);
+  let totalWeight = 0;
+  let weightedSum = 0;
+
+  for (const item of timeSeries) {
+    const itemTime = parseDateOnlyUtc(item.date);
+    if (Number.isNaN(itemTime) || Number.isNaN(item.score)) {
+      continue;
+    }
+
+    const daysDiff = Math.max(0, Math.floor((referenceTime - itemTime) / DAY_MS));
+    const weight = timeDecayWeight(daysDiff, decayLambda);
+    weightedSum += item.score * weight;
+    totalWeight += weight;
+  }
+
+  if (totalWeight === 0) {
+    return 0;
+  }
+
+  return round2(weightedSum / totalWeight);
+}
+
+export interface FinalEngineScoreInput {
+  sSeries: TimeSeriesScorePoint[];
+  pSeries: TimeSeriesScorePoint[];
+  rSeries: TimeSeriesScorePoint[];
+  pricePer100gb: number;
+  referenceDate: string;
+}
+
+export interface FinalEngineScoreResult {
+  s: number;
+  p: number;
+  r: number;
+  c: number;
+  final_score: number;
+  data_days: number;
+  cold_start_factor: number;
+}
+
+export function calcPriceScore(pricePer100gb: number): number {
+  return round2(clamp(100 - pricePer100gb, 0, 100));
+}
+
+export function coldStartFactor(days: number): number {
+  return round2(clamp(days / 7, 0, 1));
+}
+
+export function computeFinalEngineScore(input: FinalEngineScoreInput): FinalEngineScoreResult {
+  const s = computeWeightedScore(input.sSeries, input.referenceDate);
+  const p = computeWeightedScore(input.pSeries, input.referenceDate);
+  const r = computeWeightedScore(input.rSeries, input.referenceDate);
+  const c = calcPriceScore(input.pricePer100gb);
+  const dataDays = Math.min(input.sSeries.length, input.pSeries.length);
+  const factor = coldStartFactor(dataDays);
+  const total =
+    (
+      FINAL_ENGINE_WEIGHTS.s * s +
+      FINAL_ENGINE_WEIGHTS.p * p +
+      FINAL_ENGINE_WEIGHTS.r * r +
+      FINAL_ENGINE_WEIGHTS.c * c
+    ) * factor;
+
+  return {
+    s,
+    p,
+    r,
+    c,
+    final_score: round2(total),
+    data_days: dataDays,
+    cold_start_factor: factor,
+  };
+}
+
+export function calcDomainPenalty(domainOk: boolean): number {
+  return domainOk ? 0 : 30;
+}
+
+export function calcSslPenalty(sslDaysLeft: number | null | undefined): number {
+  if (sslDaysLeft === null || sslDaysLeft === undefined) {
+    return 5;
+  }
+  if (sslDaysLeft < 0) {
+    return 30;
+  }
+  if (sslDaysLeft < 7) {
+    return 20;
+  }
+  if (sslDaysLeft < 15) {
+    return 10;
+  }
+  if (sslDaysLeft < 30) {
+    return 5;
+  }
+  return 0;
+}
+
+export function calcComplaintPenalty(recentComplaintsCount: number): number {
+  return Math.min(Math.max(recentComplaintsCount, 0) * 3, 15);
+}
+
+export function calcHistoryPenalty(historyIncidents: number): number {
+  return Math.min(Math.max(historyIncidents, 0) * 10, 30);
+}
+
+export function riskLevelFromScore(rScore: number): string {
+  if (rScore >= 85) {
+    return 'low';
+  }
+  if (rScore >= 70) {
+    return 'medium_low';
+  }
+  if (rScore >= 55) {
+    return 'medium';
+  }
+  return 'high';
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -154,4 +285,10 @@ function clamp(value: number, min: number, max: number): number {
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function parseDateOnlyUtc(value: string): number {
+  return Date.parse(`${value}T00:00:00.000Z`);
 }

@@ -1,18 +1,38 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { RankingItem, RankingType } from '../types/domain';
+import { formatDateOnly } from '../utils/time';
 
 interface RankingRow extends RowDataPacket {
   rank_no: number;
   airport_id: number;
   score: number;
-  details_json: string;
+  details_json: unknown;
   name: string;
   status: 'normal' | 'risk' | 'down';
-  tags_json: string | null;
+  tags_json: unknown;
+}
+
+interface LatestDateRow extends RowDataPacket {
+  latest_date: unknown;
 }
 
 export class RankingRepository {
   constructor(private readonly pool: Pool) {}
+
+  async getLatestAvailableDate(onOrBefore: string): Promise<string | null> {
+    const [rows] = await this.pool.query<LatestDateRow[]>(
+      `SELECT MAX(date) AS latest_date
+         FROM airport_rankings_daily
+        WHERE date <= ?`,
+      [onOrBefore],
+    );
+
+    const latestDate = rows[0]?.latest_date;
+    if (!latestDate) {
+      return null;
+    }
+    return formatDateOnly(latestDate);
+  }
 
   async replaceForDate(
     date: string,
@@ -73,23 +93,49 @@ export class RankingRepository {
       };
     });
   }
+
+  async getRanksForAirport(
+    airportId: number,
+    date: string,
+  ): Promise<Partial<Record<RankingType, number>>> {
+    const [rows] = await this.pool.query<Array<RowDataPacket & { list_type: RankingType; rank_no: number }>>(
+      `SELECT list_type, rank_no
+         FROM airport_rankings_daily
+        WHERE airport_id = ? AND date = ?`,
+      [airportId, date],
+    );
+
+    return rows.reduce<Partial<Record<RankingType, number>>>((acc, row) => {
+      acc[row.list_type] = Number(row.rank_no);
+      return acc;
+    }, {});
+  }
 }
 
-function safeJson(value: string): Record<string, unknown> {
+function safeJson(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
   try {
-    const parsed = JSON.parse(value);
+    const parsed = JSON.parse(String(value));
     return parsed && typeof parsed === 'object' ? parsed : {};
   } catch {
     return {};
   }
 }
 
-function safeJsonArray(value: string | null): string[] {
+function safeJsonArray(value: unknown): string[] {
   if (!value) {
     return [];
   }
+  if (Array.isArray(value)) {
+    return value.map(String);
+  }
+  if (typeof value === 'object') {
+    return [];
+  }
   try {
-    const parsed = JSON.parse(value);
+    const parsed = JSON.parse(String(value));
     return Array.isArray(parsed) ? parsed.map(String) : [];
   } catch {
     return [];

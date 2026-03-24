@@ -15,7 +15,7 @@ export function buildRankings(
   const today = rows
     .filter((row) => row.airport.status !== 'down')
     .filter((row) => row.score.risk_penalty <= TODAY_MAX_RISK_PENALTY)
-    .sort((a, b) => b.score.final_score - a.score.final_score)
+    .sort((a, b) => rankingScoreOf(b) - rankingScoreOf(a))
     .slice(0, LIST_LIMIT);
 
   const stable = rows
@@ -31,7 +31,7 @@ export function buildRankings(
   const newSince = dateDaysAgo(date, NEW_AIRPORT_DAYS);
   const newest = rows
     .filter((row) => row.airport.created_at >= newSince)
-    .sort((a, b) => b.score.final_score - a.score.final_score)
+    .sort((a, b) => rankingScoreOf(b) - rankingScoreOf(a))
     .slice(0, LIST_LIMIT);
 
   const risk = rows
@@ -40,22 +40,25 @@ export function buildRankings(
     .slice(0, LIST_LIMIT);
 
   return {
-    today: toRows(today, 'final_score'),
+    today: toRows(today, 'ranking_score'),
     stable: toRows(stable, 's'),
     value: toRows(value, 'c'),
-    new: toRows(newest, 'final_score'),
+    new: toRows(newest, 'ranking_score'),
     risk: toRows(risk, 'risk_penalty'),
   };
 }
 
 function toRows(
   rows: RankedAirportInput[],
-  scoreKey: 'final_score' | 's' | 'c' | 'risk_penalty',
+  scoreKey: 'ranking_score' | 's' | 'c' | 'risk_penalty',
 ): Array<{ airport_id: number; rank: number; score: number; details: Record<string, unknown> }> {
   return rows.map((row, index) => ({
     airport_id: row.airport.id,
     rank: index + 1,
-    score: row.score[scoreKey],
+    score:
+      scoreKey === 'ranking_score'
+        ? rankingScoreOf(row)
+        : row.score[scoreKey],
     details: {
       airport_name: row.airport.name,
       status: row.airport.status,
@@ -67,8 +70,14 @@ function toRows(
       p: row.score.p,
       c: row.score.c,
       r: row.score.r,
+      total_score: rankingScoreOf(row),
       final_score: row.score.final_score,
       risk_penalty: row.score.risk_penalty,
     },
   }));
+}
+
+function rankingScoreOf(row: RankedAirportInput): number {
+  const score = Number(row.score.details.total_score ?? row.score.final_score);
+  return Number.isFinite(score) ? score : row.score.final_score;
 }

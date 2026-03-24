@@ -1,11 +1,21 @@
 import type { NextFunction, Request, Response } from 'express';
 import { sendError } from '../utils/http';
+import { getAdminAuthConfig } from '../utils/adminAuthConfig';
+import { verifyAdminToken } from '../utils/token';
 
 export function adminAuth(req: Request, res: Response, next: NextFunction): void {
   const apiKey = req.header('x-api-key');
-  const expected = process.env.ADMIN_API_KEY;
+  const config = getAdminAuthConfig();
+  const authHeader = req.header('authorization') || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : '';
+  const tokenSecret = config.jwtSecret;
 
-  if (!expected) {
+  if (token && tokenSecret && verifyAdminToken(tokenSecret, token)) {
+    next();
+    return;
+  }
+
+  if (!config.apiKey) {
     sendError(
       res,
       500,
@@ -16,7 +26,7 @@ export function adminAuth(req: Request, res: Response, next: NextFunction): void
     return;
   }
 
-  if (!apiKey || apiKey !== expected) {
+  if (!apiKey || apiKey !== config.apiKey) {
     sendError(res, 401, 'UNAUTHORIZED', 'Invalid or missing x-api-key', req.requestId);
     return;
   }

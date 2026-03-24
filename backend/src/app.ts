@@ -4,31 +4,88 @@ import { adminAuth } from './middleware/adminAuth';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestContext } from './middleware/requestContext';
 import { AirportRepository } from './repositories/airportRepository';
+import { AirportApplicationRepository } from './repositories/airportApplicationRepository';
 import { AuditRepository } from './repositories/auditRepository';
 import { MetricsRepository } from './repositories/metricsRepository';
+import { PerformanceRunRepository } from './repositories/performanceRunRepository';
+import { ProbeSampleRepository } from './repositories/probeSampleRepository';
 import { RankingRepository } from './repositories/rankingRepository';
 import { ScoreRepository } from './repositories/scoreRepository';
+import { StatsRepository } from './repositories/statsRepository';
+import { ManualJobRepository } from './repositories/manualJobRepository';
+import { createAdminAuthRoutes } from './routes/adminAuthRoutes';
 import { createAdminRoutes } from './routes/adminRoutes';
 import { createPublicRoutes } from './routes/publicRoutes';
+import { AdminAuthService } from './services/adminAuthService';
+import { AggregationService } from './services/aggregationService';
+import { ManualJobService } from './services/manualJobService';
+import { PublicViewService } from './services/publicViewService';
 import { RecomputeService } from './services/recomputeService';
+import { RiskCheckService } from './services/riskCheckService';
 
-export function createApp() {
+export async function createApp() {
   const pool = getDbPool();
   const airportRepository = new AirportRepository(pool);
+  await airportRepository.ensureSchema();
+  const airportApplicationRepository = new AirportApplicationRepository(pool);
+  await airportApplicationRepository.ensureSchema();
   const metricsRepository = new MetricsRepository(pool);
+  await metricsRepository.ensureSchema();
+  const probeSampleRepository = new ProbeSampleRepository(pool);
+  await probeSampleRepository.ensureSchema();
+  const performanceRunRepository = new PerformanceRunRepository(pool);
+  await performanceRunRepository.ensureSchema();
+  const manualJobRepository = new ManualJobRepository(pool);
+  await manualJobRepository.ensureSchema();
   const scoreRepository = new ScoreRepository(pool);
   const rankingRepository = new RankingRepository(pool);
+  const statsRepository = new StatsRepository(pool);
   const auditRepository = new AuditRepository(pool);
+  const authService = new AdminAuthService();
   const recomputeService = new RecomputeService({
     airportRepository,
     metricsRepository,
     scoreRepository,
     rankingRepository,
   });
+  const aggregationService = new AggregationService({
+    airportRepository,
+    probeSampleRepository,
+    metricsRepository,
+  });
+  const riskCheckService = new RiskCheckService({
+    airportRepository,
+    metricsRepository,
+  });
+  const manualJobService = new ManualJobService({
+    manualJobRepository,
+    aggregationService,
+    recomputeService,
+    riskCheckService,
+    auditRepository,
+  });
+  await manualJobService.initialize();
+  const publicViewService = new PublicViewService({
+    airportRepository,
+    metricsRepository,
+    scoreRepository,
+    rankingRepository,
+    statsRepository,
+  });
 
   const app = express();
   app.use(express.json());
   app.use(requestContext);
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, x-request-id, x-admin-actor');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
 
   app.get('/healthz', (_req, res) => {
     res.json({ status: 'ok' });
@@ -38,25 +95,36 @@ export function createApp() {
     '/api/v1',
     createPublicRoutes({
       airportRepository,
+      airportApplicationRepository,
       metricsRepository,
       scoreRepository,
       rankingRepository,
+      publicViewService,
     }),
   );
+
+  app.use('/api/v1/admin', createAdminAuthRoutes(authService));
 
   app.use(
     '/api/v1/admin',
     adminAuth,
     createAdminRoutes({
       airportRepository,
+      airportApplicationRepository,
+      probeSampleRepository,
+      performanceRunRepository,
       metricsRepository,
+      scoreRepository,
       recomputeService,
+      aggregationService,
+      manualJobService,
       auditRepository,
+      publicViewService,
     }),
   );
 
   app.use(notFoundHandler);
   app.use(errorHandler);
 
-  return { app, recomputeService };
+  return { app, recomputeService, aggregationService };
 }

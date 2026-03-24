@@ -1,11 +1,15 @@
 import { getDateInTimezone } from '../utils/time';
 import type { RecomputeService } from '../services/recomputeService';
+import type { AggregationService } from '../services/aggregationService';
 
 export class DailyRecomputeJob {
   private timer: NodeJS.Timeout | null = null;
   private lastRunDate = '';
 
-  constructor(private readonly recomputeService: RecomputeService) {}
+  constructor(
+    private readonly recomputeService: RecomputeService,
+    private readonly aggregationService: AggregationService,
+  ) {}
 
   start(): void {
     const intervalMs = Number(process.env.RECOMPUTE_POLL_MS || 5 * 60 * 1000);
@@ -38,6 +42,7 @@ export class DailyRecomputeJob {
     }
 
     try {
+      await this.aggregationService.aggregateForDate(date);
       await this.recomputeService.recomputeForDate(date);
       this.lastRunDate = date;
       console.log(`[job] daily recompute finished for ${date}`);

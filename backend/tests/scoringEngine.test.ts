@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeScore, normalizeLinear } from '../src/services/scoringEngine';
+import {
+  calcComplaintPenalty,
+  calcHistoryPenalty,
+  calcPriceScore,
+  calcSslPenalty,
+  coldStartFactor,
+  computeFinalEngineScore,
+  computeWeightedScore,
+  computeScore,
+  normalizeLinear,
+  riskLevelFromScore,
+  timeDecayWeight,
+} from '../src/services/scoringEngine';
 import type { Airport, DailyMetrics } from '../src/types/domain';
 
 test('normalizeLinear clamps for higherIsBetter', () => {
@@ -13,6 +25,43 @@ test('normalizeLinear clamps for lowerIsBetter', () => {
   assert.equal(normalizeLinear(5, 10, 50, false), 100);
   assert.equal(normalizeLinear(60, 10, 50, false), 0);
   assert.equal(normalizeLinear(30, 10, 50, false), 50);
+});
+
+test('timeDecayWeight applies exponential decay by day', () => {
+  assert.equal(timeDecayWeight(0), 1);
+  assert.equal(Number(timeDecayWeight(3).toFixed(6)), 0.740818);
+});
+
+test('computeWeightedScore emphasizes newer dates', () => {
+  const out = computeWeightedScore(
+    [
+      { date: '2026-03-20', score: 80 },
+      { date: '2026-03-21', score: 85 },
+      { date: '2026-03-22', score: 70 },
+    ],
+    '2026-03-22',
+  );
+
+  assert.equal(out, 77.99);
+});
+
+test('computeFinalEngineScore combines S/P/R and price with cold start factor', () => {
+  const out = computeFinalEngineScore({
+    sSeries: [{ date: '2026-03-20', score: 80 }],
+    pSeries: [{ date: '2026-03-20', score: 70 }],
+    rSeries: [{ date: '2026-03-20', score: 90 }],
+    pricePer100gb: 20,
+    referenceDate: '2026-03-20',
+  });
+
+  assert.equal(calcPriceScore(20), 80);
+  assert.equal(coldStartFactor(1), 0.14);
+  assert.equal(out.s, 80);
+  assert.equal(out.p, 70);
+  assert.equal(out.r, 90);
+  assert.equal(out.c, 80);
+  assert.equal(out.data_days, 1);
+  assert.equal(out.final_score, 11.06);
 });
 
 test('computeScore returns bounded and weighted output', () => {
@@ -31,6 +80,8 @@ test('computeScore returns bounded and weighted output', () => {
     airport_id: 1,
     date: '2026-03-22',
     uptime_percent_30d: 99.8,
+    uptime_percent_today: 99.8,
+    latency_samples_ms: [100, 110, 90, 105, 95],
     median_latency_ms: 100,
     median_download_mbps: 250,
     packet_loss_percent: 0.2,
@@ -48,4 +99,101 @@ test('computeScore returns bounded and weighted output', () => {
   assert.ok(out.r >= 0 && out.r <= 100);
   assert.ok(out.score >= 0 && out.score <= 100);
   assert.equal(out.final_score, Number((out.recent_score * 0.7 + 88 * 0.3).toFixed(2)));
+  assert.equal(out.details.ssl_penalty, 0);
+  assert.equal(out.details.complaint_penalty, 3);
+  assert.equal(out.details.history_penalty, 0);
+  assert.equal(out.details.total_penalty, 3);
+  assert.equal(out.details.risk_level, 'low');
+});
+
+test('computeScore uses uptime, latency cv and streak formulas for S', () => {
+  const airport: Airport = {
+    id: 1,
+    name: 'A',
+    website: 'https://a.example.com',
+    status: 'normal',
+    plan_price_month: 20,
+    has_trial: false,
+    tags: [],
+    created_at: '2026-03-20',
+  };
+
+  const metrics: DailyMetrics = {
+    airport_id: 1,
+    date: '2026-03-22',
+    uptime_percent_30d: 98,
+    uptime_percent_today: 99,
+    latency_samples_ms: [100, 120],
+    median_latency_ms: 110,
+    median_download_mbps: 100,
+    packet_loss_percent: 1,
+    stable_days_streak: 15,
+    domain_ok: true,
+    ssl_days_left: 30,
+    recent_complaints_count: 0,
+    history_incidents: 0,
+  };
+
+  const out = computeScore(airport, metrics, 0);
+  assert.equal(out.details.uptime_score, 80);
+  assert.equal(out.details.stability_score, 90.91);
+  assert.equal(out.details.streak_score, 50);
+  assert.equal(out.s, 77.27);
+});
+
+test('risk penalty helpers follow stepped MVP rules', () => {
+  assert.equal(calcSslPenalty(null), 5);
+  assert.equal(calcSslPenalty(-1), 30);
+  assert.equal(calcSslPenalty(3), 20);
+  assert.equal(calcSslPenalty(10), 10);
+  assert.equal(calcSslPenalty(20), 5);
+  assert.equal(calcSslPenalty(45), 0);
+
+  assert.equal(calcComplaintPenalty(2), 6);
+  assert.equal(calcComplaintPenalty(10), 15);
+  assert.equal(calcHistoryPenalty(2), 20);
+  assert.equal(calcHistoryPenalty(10), 30);
+
+  assert.equal(riskLevelFromScore(90), 'low');
+  assert.equal(riskLevelFromScore(72), 'medium_low');
+  assert.equal(riskLevelFromScore(55), 'medium');
+  assert.equal(riskLevelFromScore(40), 'high');
+});
+
+test('computeScore treats missing ssl data as light risk', () => {
+  const airport: Airport = {
+    id: 1,
+    name: 'A',
+    website: 'https://a.example.com',
+    status: 'normal',
+    plan_price_month: 20,
+    has_trial: false,
+    tags: [],
+    created_at: '2026-03-20',
+  };
+
+  const metrics: DailyMetrics = {
+    airport_id: 1,
+    date: '2026-03-22',
+    uptime_percent_30d: 99,
+    uptime_percent_today: 99,
+    latency_samples_ms: [100, 120],
+    median_latency_ms: 110,
+    median_download_mbps: 100,
+    packet_loss_percent: 1,
+    stable_days_streak: 15,
+    domain_ok: true,
+    ssl_days_left: null,
+    recent_complaints_count: 2,
+    history_incidents: 1,
+  };
+
+  const out = computeScore(airport, metrics, 0);
+  assert.equal(out.risk_penalty, 21);
+  assert.equal(out.r, 79);
+  assert.equal(out.details.ssl_penalty, 5);
+  assert.equal(out.details.complaint_penalty, 6);
+  assert.equal(out.details.history_penalty, 10);
+  assert.equal(out.details.total_penalty, 21);
+  assert.equal(out.details.risk_level, 'medium_low');
 });

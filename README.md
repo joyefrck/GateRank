@@ -12,8 +12,8 @@ GateRank 是一个「机场测评与榜单」系统。
 
 ### 核心流程
 
-1. 录入机场基础信息（名称、站点、价格、试用状态）
-2. 录入每日指标（可用率、延迟、下载、丢包、风险信号）
+1. 维护机场基础信息（名称、站点、价格、试用、订阅链接）
+2. 接入自动化采样（延迟/下载/可用性/丢包）并按日聚合
 3. 系统按统一公式计算 `S/P/C/R`
 4. 生成当日综合分与时间衰减分 `FinalScore`
 5. 生成 5 类榜单（今日推荐、最稳定、性价比、新机场、风险榜）
@@ -25,9 +25,12 @@ GateRank 是一个「机场测评与榜单」系统。
 - 价格：`C = 0.6*PriceScore + 0.2*TrialScore + 0.2*ValueScore`
 - 风险：`R = 100 - RiskPenalty`
 - 综合：`Score = 0.4*S + 0.3*P + 0.2*C + 0.1*R`
-- 衰减：`FinalScore = 0.7*RecentScore + 0.3*HistoricalScore`
+- 衰减权重：`w = exp(-lambda * days_diff)`，默认 `lambda = 0.1`
+- 历史衰减分：`HistoricalScore = Σ(score_i * w_i) / Σ(w_i)`，仅统计当前日期之前的每日 `score`
+- 最终衰减分：`FinalScore = Σ(score_i * w_i) / Σ(w_i)`，统计历史序列与当日 `score`
 
-说明：子项评分采用“阈值分段 + 线性插值”，并截断到 `[0, 100]`。
+说明：子项评分采用“阈值分段 + 线性插值”，并截断到 `[0, 100]`。时间衰减按天计算，日期越近权重越高。
+风险项例外：`RiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty`，其中域名异常记 `30`，SSL 未知记 `5`，证书即将过期按 `5/10/20/30` 分段，投诉按 `3` 分每条封顶 `15`，历史异常按 `10` 分每次封顶 `30`。
 
 ## 技术方案
 
@@ -50,6 +53,8 @@ GateRank 是一个「机场测评与榜单」系统。
 
 - `airports`: 机场基础信息
 - `airport_metrics_daily`: 每日指标快照
+- `airport_probe_samples`: 自动化采样明细
+- `airport_packet_loss_samples`: 丢包采样明细
 - `airport_scores_daily`: 每日子分/总分/衰减分
 - `airport_rankings_daily`: 每日榜单结果
 - `admin_audit_logs`: 管理操作审计
@@ -64,14 +69,25 @@ SQL 文件：[`backend/sql/schema.sql`](backend/sql/schema.sql)
 - `GET /api/v1/airports/:id/score-trend?days=30`
 - `GET /api/v1/airports/:id/report?date=YYYY-MM-DD`
 
-### 管理接口（需要 `x-api-key`）
+### 管理接口（`Bearer admin_token` 或 `x-api-key`）
 
+- `POST /api/v1/admin/login`
+- `GET /api/v1/admin/airports`
+- `GET /api/v1/admin/airports/:id`
 - `POST /api/v1/admin/airports`
 - `PATCH /api/v1/admin/airports/:id`
-- `POST /api/v1/admin/metrics/daily`
+- `GET /api/v1/admin/airports/:id/dashboard?date=YYYY-MM-DD`
+- `POST /api/v1/admin/probe-samples`
+- `POST /api/v1/admin/performance-runs`
+- `GET /api/v1/admin/airports/:id/probe-samples?date=YYYY-MM-DD`
+- `GET /api/v1/admin/airports/:id/daily-metrics?date=YYYY-MM-DD`
+- `GET /api/v1/admin/airports/:id/scores?date=YYYY-MM-DD`
+- `POST /api/v1/admin/jobs/aggregate?date=YYYY-MM-DD`
 - `POST /api/v1/admin/scores/recompute?date=YYYY-MM-DD`
 - `POST /api/v1/admin/complaints`
 - `POST /api/v1/admin/incidents`
+
+`/dashboard` 返回固定结构：`base / stability / performance / risk / time_decay`，用于后台固定 5 Tab。
 
 统一错误结构：
 
@@ -94,10 +110,10 @@ npm install
 ### 2. 配置后端环境变量
 
 ```bash
-cp backend/.env.example .env
+cp backend/.env.example backend/.env
 ```
 
-按需修改 `.env` 中 MySQL 与 `ADMIN_API_KEY`。
+按需修改 `backend/.env` 中 MySQL、`ADMIN_UI_PASSWORD`、`ADMIN_API_KEY` 与 `ADMIN_JWT_SECRET`。
 
 ### 3. 初始化数据库
 
@@ -129,8 +145,118 @@ npm run server:dev
 - 后端测试：`npm run test:backend`
 - 全局 TS 检查：`npm run lint`
 
+## 稳定性采集 Cron
+
+项目内置了一个可直接给 cron 调用的稳定性采集脚本：
+[`scripts/monitor_stability.py`](scripts/monitor_stability.py)
+
+职责：
+
+- 检测官网可用性，写入 `availability` 样本
+- 采集多次 TCP 建连延迟，写入 `latency` 样本
+- 调用后端 `aggregate` 与 `recompute`，刷新当日 S 分与榜单
+
+最小调用示例：
+
+```bash
+cd /path/to/GateRank
+ADMIN_API_KEY=gaterank_admin_key \
+AIRPORT_ID=1 \
+WEBSITE_URL=https://www.elphantroute.com/ \
+/usr/bin/python3 scripts/monitor_stability.py
+```
+
+推荐 cron 写法：
+
+```cron
+0 */6 * * * cd /path/to/GateRank && ADMIN_API_KEY=gaterank_admin_key AIRPORT_ID=1 WEBSITE_URL=https://www.elphantroute.com/ /usr/bin/python3 scripts/monitor_stability.py >> /var/log/gaterank-stability.log 2>&1
+```
+
+全机场批量模式：
+
+```cron
+0 */6 * * * cd /path/to/GateRank && ADMIN_API_KEY=gaterank_admin_key ALL_AIRPORTS=1 /usr/bin/python3 scripts/monitor_stability.py >> /var/log/gaterank-stability.log 2>&1
+```
+
+可选地只跑某个状态：
+
+```cron
+0 */6 * * * cd /path/to/GateRank && ADMIN_API_KEY=gaterank_admin_key ALL_AIRPORTS=1 AIRPORT_STATUS=normal /usr/bin/python3 scripts/monitor_stability.py >> /var/log/gaterank-stability.log 2>&1
+```
+
+常用环境变量：
+
+- `ADMIN_API_KEY`: 后台接口鉴权 key
+- `AIRPORT_ID`: 机场 ID，推荐显式配置
+- `AIRPORT_KEYWORD`: 可替代 `AIRPORT_ID`，脚本会先查机场再上报
+- `ALL_AIRPORTS`: 设为 `1/true/yes/on` 时批量遍历全部机场
+- `AIRPORT_STATUS`: 批量模式下可按 `normal|risk|down` 过滤
+- `WEBSITE_URL`: 用于 HTTP 可用性探测；未传时默认取后台记录的主官网
+- `TCP_HOST`: TCP 探测主机；未传时从 `WEBSITE_URL` 自动提取
+- `TCP_PORT`: 默认 `443`
+- `LATENCY_SAMPLE_COUNT`: 默认 `5`
+- `PAGE_SIZE`: 批量取机场列表时每页大小，默认 `100`
+- `SOURCE`: 样本来源标记，默认 `cron-stability`
+- `SKIP_RECOMPUTE`: 设为 `1/true/yes/on` 时只聚合不重算
+
+## 性能采集 Cron
+
+项目内置了一个可直接给 cron 调用的性能采集脚本：
+[`scripts/monitor_performance.py`](scripts/monitor_performance.py)
+
+职责：
+
+- 从后台基础信息读取 `subscription_url`
+- 检查 `sing-box` 是否可执行，并为代表节点启动临时本地代理
+- 采集代理链路延迟、下载速度与代理探测失败率
+- 调用后端 `performance-runs` 接口写入运行状态与原始性能样本
+- 调用后端 `aggregate` 与 `recompute`，刷新当日 P 分与榜单
+
+最小调用示例：
+
+```bash
+cd /path/to/GateRank
+ADMIN_API_KEY=gaterank_admin_key \
+AIRPORT_ID=1 \
+SING_BOX_BIN=sing-box \
+/usr/bin/python3 scripts/monitor_performance.py
+```
+
+推荐 cron 写法：
+
+```cron
+15 */6 * * * cd /path/to/GateRank && ADMIN_API_KEY=gaterank_admin_key ALL_AIRPORTS=1 SING_BOX_BIN=sing-box /usr/bin/python3 scripts/monitor_performance.py >> /var/log/gaterank-performance.log 2>&1
+```
+
+常用环境变量：
+
+- `ADMIN_API_KEY`: 后台接口鉴权 key
+- `AIRPORT_ID`: 单机场模式的机场 ID
+- `AIRPORT_KEYWORD`: 单机场模式下按关键字查机场
+- `ALL_AIRPORTS`: 设为 `1/true/yes/on` 时批量遍历全部机场
+- `AIRPORT_STATUS`: 批量模式下可按 `normal|risk|down` 过滤
+- `SING_BOX_BIN`: `sing-box` 可执行路径，默认 `sing-box`
+- `PROXY_PORT`: 本地 HTTP 代理端口，默认 `7890`
+- `PROXY_STARTUP_TIMEOUT`: 等待 `sing-box` 启动秒数，默认 `8`
+- `LATENCY_ATTEMPTS`: 每节点延迟探测次数，默认 `3`
+- `TEST_URL_LATENCY`: 代理 HTTP 诊断 URL，默认 `https://www.google.com/generate_204`
+- `TEST_URL_SPEED`: 下载测速 URL，默认 `https://speed.cloudflare.com/__down?bytes=5000000`
+- `SPEED_CONNECTIONS`: 下载测速并发连接数，默认 `4`
+- `SOURCE`: 运行来源标记，默认 `cron-performance`
+- `SKIP_RECOMPUTE`: 设为 `1/true/yes/on` 时只聚合不重算
+
+说明：
+
+- `median_latency_ms` 现在按“节点服务器 TCP 建连延迟”计算，用于性能评分，更接近代理客户端里的节点延迟口径。
+- `TEST_URL_LATENCY` 只用于记录代理 HTTP 诊断耗时，不再直接参与 `P` 评分。
+- `median_download_mbps` 现在按“多连接并发下载”计算，比之前的单连接下载更接近 Speedtest 的测速口径。
+
 ## 当前 MVP 边界
 
-- 当前阶段不接入真实探测器（HTTP/tcp/curl），以管理接口手动录入数据为主
-- 鉴权采用静态 API Key（未实现账号密码/JWT）
-- 管理端目前是 API 形态，管理后台 UI 后续可补
+- 管理后台为单管理员模型（密码换短期 token）
+- 数据台固定 5 Tab：
+  - 基础信息（人工维护）
+  - 稳定性数据（S）
+  - 性能数据（P）
+  - 风险数据（R）
+  - 时间维度（衰减）

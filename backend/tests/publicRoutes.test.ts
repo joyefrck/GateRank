@@ -1,0 +1,402 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { AddressInfo } from 'node:net';
+import express from 'express';
+import { errorHandler } from '../src/middleware/errorHandler';
+import { createPublicRoutes } from '../src/routes/publicRoutes';
+
+test('GET /pages/home returns public homepage view', async () => {
+  const app = express();
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async () => 1,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async (date: string) => ({
+          date,
+          generated_at: '2026-03-23T10:00:00+08:00',
+          hero: {
+            report_time_at: '2026-03-23T08:00:00+08:00',
+            report_time_text: '2 小时前',
+            monitored_airports: 12,
+            realtime_tests: 345,
+          },
+          sections: {
+            today_pick: {
+              title: '今日推荐机场',
+              subtitle: "Today's Top Pick",
+              items: [],
+            },
+            most_stable: {
+              title: '长期稳定机场',
+              subtitle: 'Most Stable',
+              items: [],
+            },
+            best_value: {
+              title: '性价比最佳',
+              subtitle: 'Best Value',
+              items: [],
+            },
+            new_entries: {
+              title: '新入榜潜力',
+              subtitle: 'New Entries',
+              items: [],
+            },
+            risk_alerts: {
+              title: '风险预警',
+              subtitle: 'Risk Alerts',
+              items: [],
+            },
+          },
+        }),
+        getFullRankingView: async () => ({
+          date: '2026-03-23',
+          generated_at: '2026-03-23T10:00:00+08:00',
+          page: 1,
+          page_size: 20,
+          total: 0,
+          total_pages: 1,
+          items: [],
+        }),
+        getReportView: async () => null,
+      } as any,
+    }),
+  );
+  app.use(errorHandler);
+  app.use(errorHandler);
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/pages/home?date=2026-03-23`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      hero: { monitored_airports: number; report_time_at: string | null };
+      sections: Record<string, unknown>;
+    };
+    assert.equal(data.hero.monitored_airports, 12);
+    assert.equal(data.hero.report_time_at, '2026-03-23T08:00:00+08:00');
+    assert.ok(data.sections.today_pick);
+    assert.ok(data.sections.risk_alerts);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/report-view returns report view payload', async () => {
+  const app = express();
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => ({ id: 1 }),
+      },
+      airportApplicationRepository: {
+        create: async () => 1,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => ({ airport_id: 1 }),
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => ({ airport_id: 1 }),
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async () => {
+          throw new Error('not used');
+        },
+        getFullRankingView: async () => {
+          throw new Error('not used');
+        },
+        getReportView: async () => ({
+          date: '2026-03-23',
+          airport: {
+            id: 1,
+            name: '大象网络',
+            website: 'https://example.com',
+            status: 'normal',
+            tags: ['长期稳定'],
+          },
+          summary_card: {
+            type: 'stable',
+            name: '大象网络',
+            tags: ['长期稳定'],
+            score: 95,
+            details: [
+              { label: '稳定记录', value: '455 天' },
+              { label: '最近30天', value: '0 波动' },
+            ],
+            conclusion: '整体最均衡',
+          },
+          ranking: {
+            today_pick_rank: 1,
+            most_stable_rank: 1,
+            best_value_rank: null,
+            new_entries_rank: null,
+            risk_alerts_rank: null,
+          },
+          score_breakdown: {
+            s: 94.2,
+            p: 91.7,
+            c: 88.4,
+            r: 96,
+            final_score: 95.1,
+            risk_penalty: 4,
+          },
+          metrics: {
+            uptime_percent_30d: 99.98,
+            median_latency_ms: 34,
+            median_download_mbps: 812,
+            packet_loss_percent: 0.1,
+            stable_days_streak: 455,
+            recent_complaints_count: 0,
+            history_incidents: 0,
+          },
+          trends: {
+            score_30d: [],
+            uptime_30d: [],
+            latency_30d: [],
+            download_30d: [],
+          },
+        }),
+      } as any,
+    }),
+  );
+  app.use(errorHandler);
+  app.use(errorHandler);
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/report-view?date=2026-03-23`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { summary_card: { score: number }; ranking: { today_pick_rank: number } };
+    assert.equal(data.summary_card.score, 95);
+    assert.equal(data.ranking.today_pick_rank, 1);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /pages/full-ranking returns paged full ranking payload', async () => {
+  const app = express();
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async () => 1,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async () => {
+          throw new Error('not used');
+        },
+        getFullRankingView: async (date: string, page: number, pageSize: number) => ({
+          date,
+          generated_at: '2026-03-23T10:00:00+08:00',
+          page,
+          page_size: pageSize,
+          total: 35,
+          total_pages: 2,
+          items: [
+            {
+              airport_id: 1,
+              rank: 21,
+              name: 'Cloud Airport',
+              website: 'https://example.com',
+              status: 'normal',
+              tags: ['稳定'],
+              founded_on: '2025-01-01',
+              plan_price_month: 12.5,
+              has_trial: true,
+              airport_intro: 'Fast and stable.',
+              created_at: '2026-01-01',
+              score: 88.6,
+              report_url: '/reports/1?date=2026-03-23',
+            },
+          ],
+        }),
+        getReportView: async () => null,
+      } as any,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/pages/full-ranking?date=2026-03-23&page=2`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      page: number;
+      page_size: number;
+      total: number;
+      total_pages: number;
+      items: Array<{ rank: number; score: number }>;
+    };
+    assert.equal(data.page, 2);
+    assert.equal(data.page_size, 20);
+    assert.equal(data.total, 35);
+    assert.equal(data.total_pages, 2);
+    assert.equal(data.items[0].rank, 21);
+    assert.equal(data.items[0].score, 88.6);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airport-applications accepts complete submission payload', async () => {
+  const created: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async (input) => {
+          created.push(input as Record<string, unknown>);
+          return 88;
+        },
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async () => null,
+        getFullRankingView: async () => null,
+        getReportView: async () => null,
+      } as any,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Cloud Airport',
+        website: 'https://example.com',
+        websites: ['https://example.com', 'https://mirror.example.com'],
+        status: 'normal',
+        plan_price_month: 12.5,
+        has_trial: true,
+        subscription_url: 'https://example.com/sub',
+        applicant_email: 'contact@example.com',
+        applicant_telegram: '@cloud',
+        founded_on: '2025-01-01',
+        airport_intro: 'Fast routes.',
+        test_account: 'tester',
+        test_password: 'secret',
+      }),
+    });
+
+    assert.equal(response.status, 201);
+    const data = (await response.json()) as { application_id: number; review_status: string };
+    assert.equal(data.application_id, 88);
+    assert.equal(data.review_status, 'pending');
+    assert.equal(created.length, 1);
+    assert.deepEqual(created[0].websites, ['https://example.com', 'https://mirror.example.com']);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airport-applications rejects missing required application fields', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async () => 1,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async () => null,
+        getFullRankingView: async () => null,
+        getReportView: async () => null,
+      } as any,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Cloud Airport',
+        websites: ['https://example.com'],
+        status: 'normal',
+        plan_price_month: 12.5,
+        has_trial: true,
+        applicant_email: 'bad-email',
+        applicant_telegram: '',
+        founded_on: '2027-01-01',
+        airport_intro: '',
+        test_account: '',
+        test_password: '',
+      }),
+    });
+
+    assert.equal(response.status, 400);
+    const data = (await response.json()) as { code: string };
+    assert.equal(data.code, 'BAD_REQUEST');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
