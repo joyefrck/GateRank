@@ -9,6 +9,7 @@ import type {
   RankingItem,
   RankingType,
   ReportView,
+  ScoreDeltaView,
 } from '../types/domain';
 import {
   dateDaysAgo,
@@ -49,6 +50,7 @@ interface PublicViewDeps {
       final_score: number;
       details?: Record<string, unknown>;
     } | null>;
+    getPublicDisplayScoreByAirportAndDate(airportId: number, date: string): Promise<number | null>;
     getTrend(
       airportId: number,
       startDate: string,
@@ -102,6 +104,7 @@ interface CardContext {
     risk_penalty: number;
     final_score: number;
     display_score: number;
+    yesterday_display_score: number | null;
   };
   metricsTrend30d: DailyMetrics[];
   scoreTrend30d: Array<{ date: string; final_score: number; display_score: number }>;
@@ -370,10 +373,12 @@ export class PublicViewService {
 
   private async loadCardContext(airportId: number, date: string): Promise<CardContext | null> {
     const trendStartDate = dateDaysAgo(date, 29);
-    const [airport, metrics, score, metricsTrend30d, scoreTrend30d] = await Promise.all([
+    const yesterdayDate = dateDaysAgo(date, 1);
+    const [airport, metrics, score, yesterdayDisplayScore, metricsTrend30d, scoreTrend30d] = await Promise.all([
       this.deps.airportRepository.getById(airportId),
       this.deps.metricsRepository.getByAirportAndDate(airportId, date),
       this.deps.scoreRepository.getByAirportAndDate(airportId, date),
+      this.deps.scoreRepository.getPublicDisplayScoreByAirportAndDate(airportId, yesterdayDate),
       this.deps.metricsRepository.getTrend(airportId, trendStartDate, date),
       this.deps.scoreRepository.getTrend(airportId, trendStartDate, date),
     ]);
@@ -393,6 +398,7 @@ export class PublicViewService {
         risk_penalty: score.risk_penalty,
         final_score: score.final_score,
         display_score: getDisplayScore(score),
+        yesterday_display_score: yesterdayDisplayScore,
       },
       metricsTrend30d,
       scoreTrend30d: scoreTrend30d.map((row) => ({
@@ -412,6 +418,10 @@ export class PublicViewService {
       website: context.airport.website,
       tags: context.airport.tags.slice(0, 3),
       score: round2(context.score.display_score),
+      score_delta_vs_yesterday: buildScoreDeltaView(
+        context.score.display_score,
+        context.score.yesterday_display_score,
+      ),
       details: buildCardDetails(section, context, date),
       conclusion: buildConclusion(section, context, date),
       report_url: `/reports/${context.airport.id}?date=${date}`,
@@ -592,12 +602,20 @@ function formatPrice(value: number): string {
 }
 
 function round2(value: number): number {
-  return Math.round(value * 100) / 100;
+  const rounded = Math.round(value * 100) / 100;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }
 
 function getDisplayScore(score: { final_score: number; details?: Record<string, unknown> }): number {
   const totalScore = Number(score.details?.total_score);
   return Number.isFinite(totalScore) ? totalScore : score.final_score;
+}
+
+function buildScoreDeltaView(currentScore: number, yesterdayScore: number | null): ScoreDeltaView {
+  return {
+    label: '对比昨天',
+    value: yesterdayScore === null ? null : round2(currentScore - yesterdayScore),
+  };
 }
 
 function resolveSummarySection(

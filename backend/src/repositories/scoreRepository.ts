@@ -48,6 +48,11 @@ interface PublicFullRankingRow extends RowDataPacket {
   display_score: number | null;
 }
 
+interface PublicDisplayScoreRow extends RowDataPacket {
+  airport_id: number;
+  display_score: number | null;
+}
+
 export class ScoreRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -193,6 +198,53 @@ export class ScoreRepository {
     }));
   }
 
+  async getPublicDisplayScoreByAirportAndDate(airportId: number, date: string): Promise<number | null> {
+    const [rows] = await this.pool.query<PublicDisplayScoreRow[]>(
+      `SELECT
+         airport_id,
+         COALESCE(
+           CAST(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.total_score')) AS DECIMAL(10,2)),
+           final_score
+         ) AS display_score
+       FROM airport_scores_daily
+       WHERE airport_id = ? AND date = ?
+       LIMIT 1`,
+      [airportId, date],
+    );
+
+    const displayScore = rows[0]?.display_score;
+    return displayScore === null || displayScore === undefined ? null : Number(displayScore);
+  }
+
+  async getPublicDisplayScoresByDate(
+    airportIds: number[],
+    date: string,
+  ): Promise<Map<number, number>> {
+    if (airportIds.length === 0) {
+      return new Map();
+    }
+
+    const placeholders = airportIds.map(() => '?').join(', ');
+    const [rows] = await this.pool.query<PublicDisplayScoreRow[]>(
+      `SELECT
+         airport_id,
+         COALESCE(
+           CAST(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.total_score')) AS DECIMAL(10,2)),
+           final_score
+         ) AS display_score
+       FROM airport_scores_daily
+       WHERE date = ?
+         AND airport_id IN (${placeholders})`,
+      [date, ...airportIds],
+    );
+
+    return new Map(
+      rows
+        .filter((row) => row.display_score !== null && row.display_score !== undefined)
+        .map((row) => [Number(row.airport_id), Number(row.display_score)]),
+    );
+  }
+
   async getPublicFullRankingByDate(
     date: string,
     page: number,
@@ -245,24 +297,42 @@ export class ScoreRepository {
       [date, safePageSize, offset],
     );
 
+    const yesterdayDate = shiftDateByDays(date, -1);
+    const yesterdayDisplayScores = await this.getPublicDisplayScoresByDate(
+      rows.map((row) => Number(row.airport_id)),
+      yesterdayDate,
+    );
+
     return {
       total: Number(totalRows[0]?.total || 0),
-      items: rows.map((row, index) => ({
-        airport_id: row.airport_id,
-        rank: offset + index + 1,
-        name: row.name,
-        website: row.website,
-        status: row.status,
-        tags: safeJsonArray(row.tags_json),
-        founded_on: row.founded_on ? formatDateOnly(row.founded_on) : null,
-        plan_price_month: Number(row.plan_price_month),
-        has_trial: !!row.has_trial,
-        airport_intro: row.airport_intro,
-        created_at: formatDateOnly(row.created_at),
-        score: row.display_score === null ? null : Number(row.display_score),
-        score_date: row.score_date ? formatDateOnly(row.score_date) : null,
-        report_url: row.score_date ? `/reports/${row.airport_id}?date=${formatDateOnly(row.score_date)}` : null,
-      })),
+      items: rows.map((row, index) => {
+        const currentScore = row.display_score === null ? null : Number(row.display_score);
+        const yesterdayScore = yesterdayDisplayScores.get(Number(row.airport_id));
+
+        return {
+          airport_id: row.airport_id,
+          rank: offset + index + 1,
+          name: row.name,
+          website: row.website,
+          status: row.status,
+          tags: safeJsonArray(row.tags_json),
+          founded_on: row.founded_on ? formatDateOnly(row.founded_on) : null,
+          plan_price_month: Number(row.plan_price_month),
+          has_trial: !!row.has_trial,
+          airport_intro: row.airport_intro,
+          created_at: formatDateOnly(row.created_at),
+          score: currentScore,
+          score_delta_vs_yesterday: {
+            label: '对比昨天',
+            value:
+              currentScore === null || yesterdayScore === undefined
+                ? null
+                : round2(currentScore - yesterdayScore),
+          },
+          score_date: row.score_date ? formatDateOnly(row.score_date) : null,
+          report_url: row.score_date ? `/reports/${row.airport_id}?date=${formatDateOnly(row.score_date)}` : null,
+        };
+      }),
     };
   }
 }
@@ -313,4 +383,15 @@ function toScoreDetailValue(value: unknown): ScoreDetailValue | undefined {
     return value;
   }
   return undefined;
+}
+
+function shiftDateByDays(date: string, days: number): string {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function round2(value: number): number {
+  const rounded = Math.round(value * 100) / 100;
+  return Object.is(rounded, -0) ? 0 : rounded;
 }

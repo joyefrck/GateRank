@@ -44,6 +44,14 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
       if (sql.includes('COUNT(*) AS total')) {
         return [[{ total: 25 }]];
       }
+      if (sql.includes('WHERE date = ?') && sql.includes('airport_id IN')) {
+        return [[
+          {
+            airport_id: 2,
+            display_score: 91.1,
+          },
+        ]];
+      }
       return [[
         {
           airport_id: 2,
@@ -69,6 +77,10 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
   assert.equal(result.items[0].rank, 21);
   assert.equal(result.items[0].status, 'risk');
   assert.equal(result.items[0].score, 93.2);
+  assert.deepEqual(result.items[0].score_delta_vs_yesterday, {
+    label: '对比昨天',
+    value: 2.1,
+  });
   assert.equal(result.items[0].report_url, '/reports/2?date=2026-03-24');
   assert.equal(result.items[0].score_date, '2026-03-24');
   assert.deepEqual(result.items[0].tags, ['稳定', '热门']);
@@ -81,6 +93,9 @@ test('ScoreRepository.getPublicFullRankingByDate keeps airports without scores',
     query: async (sql: string) => {
       if (sql.includes('COUNT(*) AS total')) {
         return [[{ total: 6 }]];
+      }
+      if (sql.includes('WHERE date = ?') && sql.includes('airport_id IN')) {
+        return [[]];
       }
       return [[
         {
@@ -105,6 +120,33 @@ test('ScoreRepository.getPublicFullRankingByDate keeps airports without scores',
   assert.equal(result.total, 6);
   assert.equal(result.items[0].airport_id, 10);
   assert.equal(result.items[0].score, null);
+  assert.deepEqual(result.items[0].score_delta_vs_yesterday, {
+    label: '对比昨天',
+    value: null,
+  });
   assert.equal(result.items[0].score_date, null);
   assert.equal(result.items[0].report_url, null);
+});
+
+test('ScoreRepository.getPublicDisplayScoreByAirportAndDate prefers details_json total_score', async () => {
+  const repository = new ScoreRepository({
+    query: async () => [[
+      {
+        airport_id: 7,
+        display_score: 96.2,
+      },
+    ]],
+  } as never);
+
+  const score = await repository.getPublicDisplayScoreByAirportAndDate(7, '2026-03-24');
+  assert.equal(score, 96.2);
+});
+
+test('ScoreRepository.getPublicDisplayScoreByAirportAndDate returns null when date is missing', async () => {
+  const repository = new ScoreRepository({
+    query: async () => [[]],
+  } as never);
+
+  const score = await repository.getPublicDisplayScoreByAirportAndDate(7, '2026-03-24');
+  assert.equal(score, null);
 });

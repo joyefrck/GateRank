@@ -39,7 +39,7 @@ GateRank 是一个「机场测评与榜单」系统。
 - 前端：React + Vite（展示榜单与报告）
 - 后端：Node.js + Express + TypeScript
 - 数据库：MySQL 8
-- 任务：后端内置每日重算任务（上海时区）
+- 任务：后端内置午夜维护流水线（上海时区）
 
 ### 后端分层
 
@@ -47,7 +47,7 @@ GateRank 是一个「机场测评与榜单」系统。
 - `services`: 评分引擎、榜单生成、重算编排
 - `repositories`: MySQL 读写封装
 - `middleware`: API Key 鉴权、请求上下文、统一错误结构
-- `jobs`: 每日自动重算
+- `jobs`: 午夜自动维护任务
 
 ### 数据模型（MVP）
 
@@ -156,6 +156,44 @@ npm run server:dev
 - 后端类型检查：`npm run server:typecheck`
 - 后端测试：`npm run test:backend`
 - 全局 TS 检查：`npm run lint`
+
+## 午夜自动维护
+
+后端支持一个按上海时间串行执行的午夜维护流水线，用来覆盖管理后台里的四个模块：
+
+- 稳定性数据（S）：调用 `scripts/monitor_stability.py`
+- 性能数据（P）：调用 `scripts/monitor_performance.py`
+- 风险数据（R）：逐机场执行风险体检
+- 时间维度（衰减）：最后统一执行一次 `aggregate + recompute`
+
+这样做的目的是控制服务器负载：
+
+- `S / P` 阶段只采样，不各自重复触发聚合和重算
+- `R` 阶段按机场串行执行，并可配置每个机场之间的间隔
+- 全量聚合与时间衰减重算只在最后执行一次
+
+建议配置：
+
+```bash
+NIGHTLY_PIPELINE_ENABLED=1
+NIGHTLY_PIPELINE_START_AT=00:00
+NIGHTLY_PIPELINE_TRIGGER_WINDOW_MINUTES=30
+NIGHTLY_PIPELINE_STAGE_GAP_MS=30000
+NIGHTLY_PIPELINE_RISK_AIRPORT_GAP_MS=1500
+NIGHTLY_PIPELINE_SCRIPT_TIMEOUT_MS=1800000
+```
+
+可选地限制只跑某个状态的机场：
+
+```bash
+NIGHTLY_PIPELINE_AIRPORT_STATUS=normal
+```
+
+说明：
+
+- `00:00` 指上海时间每日零点开始整条流水线，不代表四个模块同时并发启动。
+- 任务只会在设定时间后的一个短窗口内触发一次，避免服务白天重启后补跑整条午夜流水线。
+- “时间维度（衰减）”没有单独脚本，它包含在最后一次 `recomputeForDate` 里。
 
 ## 稳定性采集 Cron
 

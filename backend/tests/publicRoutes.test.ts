@@ -241,6 +241,10 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
               airport_intro: 'Fast and stable.',
               created_at: '2026-01-01',
               score: 88.6,
+              score_delta_vs_yesterday: {
+                label: '对比昨天',
+                value: 1.2,
+              },
               report_url: '/reports/1?date=2026-03-23',
             },
           ],
@@ -261,7 +265,7 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
       page_size: number;
       total: number;
       total_pages: number;
-      items: Array<{ rank: number; score: number }>;
+      items: Array<{ rank: number; score: number; score_delta_vs_yesterday: { label: string; value: number | null } }>;
     };
     assert.equal(data.page, 2);
     assert.equal(data.page_size, 20);
@@ -269,6 +273,10 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
     assert.equal(data.total_pages, 2);
     assert.equal(data.items[0].rank, 21);
     assert.equal(data.items[0].score, 88.6);
+    assert.deepEqual(data.items[0].score_delta_vs_yesterday, {
+      label: '对比昨天',
+      value: 1.2,
+    });
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

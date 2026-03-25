@@ -135,5 +135,11 @@ export async function createApp() {
   app.use(notFoundHandler);
   app.use(errorHandler);
 
-  return { app, recomputeService, aggregationService };
+  return {
+    app,
+    airportRepository,
+    recomputeService,
+    aggregationService,
+    riskCheckService,
+  };
 }

@@ -1,12 +1,12 @@
 import 'dotenv/config';
 import type { Server } from 'node:http';
 import { createApp } from './app';
-import { DailyRecomputeJob } from './jobs/dailyRecomputeJob';
+import { NightlyMaintenanceJob } from './jobs/nightlyMaintenanceJob';
 
 const port = Number(process.env.PORT || 8787);
 
 let server: Server | null = null;
-let job: DailyRecomputeJob | null = null;
+let job: NightlyMaintenanceJob | null = null;
 
 void bootstrap().catch((error) => {
   console.error('[server] bootstrap failed', error);
@@ -14,12 +14,17 @@ void bootstrap().catch((error) => {
 });
 
 async function bootstrap(): Promise<void> {
-  const { app, recomputeService, aggregationService } = await createApp();
+  const { app, airportRepository, recomputeService, aggregationService, riskCheckService } = await createApp();
   server = app.listen(port, () => {
     console.log(`[server] backend listening on :${port}`);
   });
 
-  job = new DailyRecomputeJob(recomputeService, aggregationService);
+  job = new NightlyMaintenanceJob({
+    airportRepository,
+    riskCheckService,
+    recomputeService,
+    aggregationService,
+  });
   job.start();
 }
 

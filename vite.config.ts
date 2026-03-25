@@ -21,6 +21,9 @@ function emitSeoAssets(siteUrl: string): Plugin {
     <loc>${normalizedSiteUrl}/rankings/all</loc>
   </url>
   <url>
+    <loc>${normalizedSiteUrl}/methodology</loc>
+  </url>
+  <url>
     <loc>${normalizedSiteUrl}/apply</loc>
   </url>
 </urlset>

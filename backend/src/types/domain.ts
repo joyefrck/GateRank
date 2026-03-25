@@ -120,6 +120,11 @@ export interface PublicCardDetail {
 
 export type PublicCardType = 'stable' | 'value' | 'risk' | 'new';
 
+export interface ScoreDeltaView {
+  label: string;
+  value: number | null;
+}
+
 export interface PublicCardItem {
   type: PublicCardType;
   airport_id: number;
@@ -127,6 +132,7 @@ export interface PublicCardItem {
   website: string;
   tags: string[];
   score: number;
+  score_delta_vs_yesterday: ScoreDeltaView;
   details: [PublicCardDetail, PublicCardDetail];
   conclusion: string;
   report_url: string;
@@ -169,6 +175,7 @@ export interface FullRankingItem {
   airport_intro?: string | null;
   created_at: string;
   score: number | null;
+  score_delta_vs_yesterday: ScoreDeltaView;
   score_date?: string | null;
   report_url?: string | null;
 }
@@ -186,7 +193,7 @@ export interface FullRankingView {
 export interface ReportView {
   date: string;
   airport: Pick<Airport, 'id' | 'name' | 'website' | 'status' | 'tags'>;
-  summary_card: Omit<PublicCardItem, 'airport_id' | 'report_url' | 'website'>;
+  summary_card: Omit<PublicCardItem, 'airport_id' | 'report_url' | 'website' | 'score_delta_vs_yesterday'>;
   ranking: {
     today_pick_rank: number | null;
     most_stable_rank: number | null;

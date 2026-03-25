@@ -16,6 +16,7 @@ test('PublicViewService.getHomePageView falls back to latest ranking date', asyn
     scoreRepository: {
       getLatestAvailableDate: async () => '2026-03-24',
       getByAirportAndDate: async () => null,
+      getPublicDisplayScoreByAirportAndDate: async () => null,
       getTrend: async () => [],
       getPublicFullRankingByDate: async () => ({
         total: 0,
@@ -68,6 +69,7 @@ test('PublicViewService.getFullRankingView falls back to latest score date', asy
     scoreRepository: {
       getLatestAvailableDate: async () => '2026-03-24',
       getByAirportAndDate: async () => null,
+      getPublicDisplayScoreByAirportAndDate: async () => null,
       getTrend: async () => [],
       getPublicFullRankingByDate: async (date: string, page: number, pageSize: number) => {
         requestedDates.push(`${date}:${page}:${pageSize}`);
@@ -158,6 +160,7 @@ test('PublicViewService.getHomePageView builds fallback cards from public scores
           total_score: 83,
         },
       }),
+      getPublicDisplayScoreByAirportAndDate: async () => 80,
       getTrend: async () => [{
         airport_id: 1,
         date: '2026-03-24',
@@ -190,6 +193,10 @@ test('PublicViewService.getHomePageView builds fallback cards from public scores
             airport_intro: 'Alpha intro',
             created_at: '2026-03-20',
             score: 83,
+            score_delta_vs_yesterday: {
+              label: '对比昨天',
+              value: 3,
+            },
             report_url: '/reports/1?date=2026-03-24',
           },
         ],
@@ -214,5 +221,103 @@ test('PublicViewService.getHomePageView builds fallback cards from public scores
   assert.equal(result.hero.report_time_at, '2026-03-24T10:00:00+08:00');
   assert.equal(result.sections.today_pick.items.length, 1);
   assert.equal(result.sections.today_pick.items[0].name, 'Alpha');
+  assert.deepEqual(result.sections.today_pick.items[0].score_delta_vs_yesterday, {
+    label: '对比昨天',
+    value: 3,
+  });
   assert.equal(result.sections.most_stable.items.length, 1);
+});
+
+test('PublicViewService.getHomePageView returns negative and missing score deltas', async () => {
+  const baseAirport = {
+    id: 1,
+    name: 'Alpha',
+    website: 'https://alpha.example.com',
+    status: 'normal' as const,
+    plan_price_month: 12,
+    has_trial: true,
+    tags: ['稳定'],
+    created_at: '2026-03-20',
+  };
+  const baseMetrics = {
+    airport_id: 1,
+    date: '2026-03-24',
+    uptime_percent_30d: 99.9,
+    median_latency_ms: 52,
+    median_download_mbps: 88,
+    packet_loss_percent: 0,
+    stable_days_streak: 5,
+    domain_ok: true,
+    ssl_days_left: 120,
+    recent_complaints_count: 0,
+    history_incidents: 0,
+  };
+  const baseScore = {
+    airport_id: 1,
+    date: '2026-03-24',
+    s: 82,
+    p: 76,
+    c: 70,
+    r: 95,
+    risk_penalty: 0,
+    score: 80,
+    recent_score: 80,
+    historical_score: 78,
+    final_score: 79,
+    details: {
+      total_score: 83,
+    },
+  };
+
+  const createService = (yesterdayDisplayScore: number | null) =>
+    new PublicViewService({
+      airportRepository: {
+        getById: async () => baseAirport,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => baseMetrics,
+        getTrend: async () => [baseMetrics],
+      },
+      scoreRepository: {
+        getLatestAvailableDate: async () => '2026-03-24',
+        getByAirportAndDate: async () => baseScore,
+        getPublicDisplayScoreByAirportAndDate: async () => yesterdayDisplayScore,
+        getTrend: async () => [baseScore],
+        getPublicFullRankingByDate: async () => ({
+          total: 1,
+          items: [],
+        }),
+      },
+      rankingRepository: {
+        getLatestAvailableDate: async () => '2026-03-24',
+        getRanking: async () => [{
+          airport_id: 1,
+          rank: 1,
+          name: 'Alpha',
+          status: 'normal' as const,
+          tags: ['稳定'],
+          score: 83,
+          key_metrics: {
+            uptime_percent_30d: 99.9,
+            median_latency_ms: 52,
+            median_download_mbps: 88,
+            packet_loss_percent: 0,
+          },
+        }],
+        getRanksForAirport: async () => ({}),
+      },
+      statsRepository: {
+        getHomeStats: async () => ({
+          monitored_airports: 1,
+          realtime_tests: 8,
+          latest_data_at: '2026-03-24T10:00:00+08:00',
+        }),
+      },
+    });
+
+  const negativeDelta = await createService(85).getHomePageView('2026-03-25');
+  assert.equal(negativeDelta.sections.today_pick.items[0].score_delta_vs_yesterday.value, -2);
+
+  const missingDelta = await createService(null).getHomePageView('2026-03-25');
+  assert.equal(missingDelta.sections.today_pick.items[0].score_delta_vs_yesterday.value, null);
 });
