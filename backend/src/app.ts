@@ -13,6 +13,7 @@ import { RankingRepository } from './repositories/rankingRepository';
 import { ScoreRepository } from './repositories/scoreRepository';
 import { StatsRepository } from './repositories/statsRepository';
 import { ManualJobRepository } from './repositories/manualJobRepository';
+import { SystemSettingRepository } from './repositories/systemSettingRepository';
 import { createAdminAuthRoutes } from './routes/adminAuthRoutes';
 import { createAdminRoutes } from './routes/adminRoutes';
 import { createPublicRoutes } from './routes/publicRoutes';
@@ -22,6 +23,7 @@ import { ManualJobService } from './services/manualJobService';
 import { PublicViewService } from './services/publicViewService';
 import { RecomputeService } from './services/recomputeService';
 import { RiskCheckService } from './services/riskCheckService';
+import { TelegramNotificationService } from './services/telegramNotificationService';
 
 export async function createApp() {
   const pool = getDbPool();
@@ -37,6 +39,8 @@ export async function createApp() {
   await performanceRunRepository.ensureSchema();
   const manualJobRepository = new ManualJobRepository(pool);
   await manualJobRepository.ensureSchema();
+  const systemSettingRepository = new SystemSettingRepository(pool);
+  await systemSettingRepository.ensureSchema();
   const scoreRepository = new ScoreRepository(pool);
   const rankingRepository = new RankingRepository(pool);
   const statsRepository = new StatsRepository(pool);
@@ -72,6 +76,9 @@ export async function createApp() {
     rankingRepository,
     statsRepository,
   });
+  const applicationNotificationService = new TelegramNotificationService({
+    systemSettingRepository,
+  });
 
   const app = express();
   app.use(express.json());
@@ -96,6 +103,7 @@ export async function createApp() {
     createPublicRoutes({
       airportRepository,
       airportApplicationRepository,
+      applicationNotificationService,
       metricsRepository,
       scoreRepository,
       rankingRepository,
@@ -120,6 +128,7 @@ export async function createApp() {
       manualJobService,
       auditRepository,
       publicViewService,
+      telegramNotificationService: applicationNotificationService,
     }),
   );
 

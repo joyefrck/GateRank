@@ -176,6 +176,17 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
   INDEX idx_admin_audit_logs_created_at (created_at)
 );
 
+CREATE TABLE IF NOT EXISTS admin_system_settings (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  setting_key VARCHAR(128) NOT NULL,
+  value_json JSON NOT NULL,
+  updated_by VARCHAR(128) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_admin_system_settings_key (setting_key)
+);
+
 CREATE TABLE IF NOT EXISTS admin_manual_jobs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   airport_id BIGINT UNSIGNED NOT NULL,

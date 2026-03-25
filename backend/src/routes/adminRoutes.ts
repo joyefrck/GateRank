@@ -1,6 +1,14 @@
 import { Router } from 'express';
 import { HttpError } from '../middleware/errorHandler';
 import { calcPriceScore, computeFinalEngineScore } from '../services/scoringEngine';
+import {
+  DEFAULT_TELEGRAM_API_BASE,
+  DEFAULT_TELEGRAM_NOTIFY_TIMEOUT_MS,
+  DEFAULT_WEBHOOK_NOTIFY_TIMEOUT_MS,
+  type NotificationDeliveryMode,
+  type TelegramNotificationSettingsInput,
+  TelegramSendError,
+} from '../services/telegramNotificationService';
 import type {
   AirportApplicationReviewStatus,
   AirportStatus,
@@ -153,10 +161,62 @@ interface AdminDeps {
     getHomePageView(date: string): Promise<unknown>;
     getReportView(airportId: number, date: string): Promise<unknown | null>;
   };
+  telegramNotificationService?: {
+    getAdminSettings(): Promise<unknown>;
+    updateAdminSettings(input: TelegramNotificationSettingsInput, updatedBy: string): Promise<unknown>;
+    sendTestMessage(input: TelegramNotificationSettingsInput): Promise<void>;
+  };
 }
 
 export function createAdminRoutes(deps: AdminDeps): Router {
   const router = Router();
+
+  router.get('/system-settings/telegram', async (req, res, next) => {
+    try {
+      res.json(await getTelegramNotificationService(deps).getAdminSettings());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/system-settings/telegram', async (req, res, next) => {
+    try {
+      const input = parseTelegramSettingsPayload((req.body ?? {}) as Record<string, unknown>, false);
+      const result = await getTelegramNotificationService(deps).updateAdminSettings(
+        input,
+        actorFromReq(req),
+      );
+      await deps.auditRepository.log(
+        'update_system_setting_telegram',
+        actorFromReq(req),
+        req.requestId,
+        input,
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/system-settings/telegram/test', async (req, res, next) => {
+    try {
+      const input = parseTelegramSettingsPayload((req.body ?? {}) as Record<string, unknown>, true);
+      await getTelegramNotificationService(deps).sendTestMessage(input);
+      await deps.auditRepository.log(
+        'test_system_setting_telegram',
+        actorFromReq(req),
+        req.requestId,
+        input,
+      );
+      res.json({ ok: true });
+    } catch (error) {
+      if (error instanceof TelegramSendError) {
+        next(new HttpError(error.status, 'TELEGRAM_TEST_FAILED', error.message));
+        return;
+      }
+      next(error);
+    }
+  });
 
   router.get('/airport-applications', async (req, res, next) => {
     try {
@@ -919,6 +979,13 @@ export function createAdminRoutes(deps: AdminDeps): Router {
   return router;
 }
 
+function getTelegramNotificationService(deps: AdminDeps): NonNullable<AdminDeps['telegramNotificationService']> {
+  if (!deps.telegramNotificationService) {
+    throw new Error('telegramNotificationService is not configured');
+  }
+  return deps.telegramNotificationService;
+}
+
 function parseDate(value: unknown): string {
   const date = String(value || getDateInTimezone());
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -986,6 +1053,117 @@ function optionalBoolean(value: unknown): boolean | undefined {
   return boolOrNull(value) ?? undefined;
 }
 
+function parseTelegramSettingsPayload(
+  payload: Record<string, unknown>,
+  allowPartial: boolean,
+): TelegramNotificationSettingsInput {
+  const enabled = optionalBoolean(payload.enabled);
+  if (!allowPartial && enabled === undefined) {
+    throw new HttpError(400, 'BAD_REQUEST', 'enabled must be boolean');
+  }
+
+  const deliveryMode = parseDeliveryMode(payload.delivery_mode, allowPartial);
+  const telegramChat = parseTelegramChatSettingsPayload(
+    payload.telegram_chat,
+    allowPartial,
+  );
+  const webhook = parseWebhookSettingsPayload(payload.webhook, allowPartial);
+
+  return {
+    enabled,
+    delivery_mode: deliveryMode,
+    telegram_chat: telegramChat,
+    webhook,
+  };
+}
+
+function parseDeliveryMode(
+  value: unknown,
+  allowPartial: boolean,
+): NotificationDeliveryMode | undefined {
+  if (value === undefined) {
+    if (allowPartial) {
+      return undefined;
+    }
+    throw new HttpError(400, 'BAD_REQUEST', 'delivery_mode must be telegram_chat|webhook');
+  }
+  if (value === 'telegram_chat' || value === 'webhook') {
+    return value;
+  }
+  throw new HttpError(400, 'BAD_REQUEST', 'delivery_mode must be telegram_chat|webhook');
+}
+
+function parseTelegramChatSettingsPayload(
+  value: unknown,
+  allowPartial: boolean,
+): TelegramNotificationSettingsInput['telegram_chat'] {
+  if (value === undefined) {
+    if (allowPartial) {
+      return undefined;
+    }
+    return {
+      chat_id: '',
+      api_base: DEFAULT_TELEGRAM_API_BASE,
+      timeout_ms: DEFAULT_TELEGRAM_NOTIFY_TIMEOUT_MS,
+    };
+  }
+
+  const payload = toPlainObject(value, 'telegram_chat');
+  return {
+    bot_token:
+      payload.bot_token === undefined ? undefined : String(payload.bot_token ?? '').trim(),
+    chat_id:
+      payload.chat_id === undefined
+        ? allowPartial
+          ? undefined
+          : ''
+        : String(payload.chat_id ?? '').trim(),
+    api_base:
+      payload.api_base === undefined
+        ? allowPartial
+          ? undefined
+          : DEFAULT_TELEGRAM_API_BASE
+        : String(payload.api_base ?? '').trim(),
+    timeout_ms:
+      payload.timeout_ms === undefined
+        ? allowPartial
+          ? undefined
+          : DEFAULT_TELEGRAM_NOTIFY_TIMEOUT_MS
+        : toPositiveIntOrThrow(payload.timeout_ms, 'telegram_chat.timeout_ms'),
+  };
+}
+
+function parseWebhookSettingsPayload(
+  value: unknown,
+  allowPartial: boolean,
+): TelegramNotificationSettingsInput['webhook'] {
+  if (value === undefined) {
+    if (allowPartial) {
+      return undefined;
+    }
+    return {
+      url: '',
+      timeout_ms: DEFAULT_WEBHOOK_NOTIFY_TIMEOUT_MS,
+    };
+  }
+
+  const payload = toPlainObject(value, 'webhook');
+  return {
+    url:
+      payload.url === undefined ? (allowPartial ? undefined : '') : String(payload.url ?? '').trim(),
+    bearer_token:
+      payload.bearer_token === undefined
+        ? undefined
+        : String(payload.bearer_token ?? '').trim(),
+    timeout_ms:
+      payload.timeout_ms === undefined
+        ? allowPartial
+          ? undefined
+          : DEFAULT_WEBHOOK_NOTIFY_TIMEOUT_MS
+        : toPositiveIntOrThrow(payload.timeout_ms, 'webhook.timeout_ms'),
+  };
+}
+
 function toNumberArray(value: unknown): number[] {
   if (!Array.isArray(value)) {
     throw new HttpError(400, 'BAD_REQUEST', 'must be number array');
@@ -999,12 +1177,27 @@ function toNumberArray(value: unknown): number[] {
   });
 }
 
+function toPlainObject(value: unknown, fieldName: string): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be object`);
+  }
+  return value as Record<string, unknown>;
+}
+
 function toPositiveInt(value: unknown, fallback: number): number {
   if (value === undefined) {
     return fallback;
   }
   const num = Number(value);
   return Number.isInteger(num) && num > 0 ? num : fallback;
+}
+
+function toPositiveIntOrThrow(value: unknown, fieldName: string): number {
+  const num = Number(value);
+  if (!Number.isInteger(num) || num <= 0) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be positive integer`);
+  }
+  return num;
 }
 
 function toBoundedPositiveInt(value: unknown, fallback: number, max: number): number {

@@ -276,6 +276,7 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
 
 test('POST /airport-applications accepts complete submission payload', async () => {
   const created: Array<Record<string, unknown>> = [];
+  const notified: Array<Record<string, unknown>> = [];
   const app = express();
   app.use(express.json());
   app.use(
@@ -287,6 +288,11 @@ test('POST /airport-applications accepts complete submission payload', async () 
         create: async (input) => {
           created.push(input as Record<string, unknown>);
           return 88;
+        },
+      },
+      applicationNotificationService: {
+        notifyNewAirportApplication: async (input) => {
+          notified.push(input as Record<string, unknown>);
         },
       },
       metricsRepository: {
@@ -337,7 +343,81 @@ test('POST /airport-applications accepts complete submission payload', async () 
     assert.equal(data.review_status, 'pending');
     assert.equal(created.length, 1);
     assert.deepEqual(created[0].websites, ['https://example.com', 'https://mirror.example.com']);
+    assert.equal(notified.length, 1);
+    assert.equal(notified[0].applicationId, 88);
+    assert.equal(notified[0].name, 'Cloud Airport');
+    assert.equal(notified[0].applicantTelegram, '@cloud');
   } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airport-applications still succeeds when telegram notification fails', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async () => 89,
+      },
+      applicationNotificationService: {
+        notifyNewAirportApplication: async () => {
+          throw new Error('telegram unavailable');
+        },
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async () => null,
+        getFullRankingView: async () => null,
+        getReportView: async () => null,
+      } as any,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Cloud Airport',
+        website: 'https://example.com',
+        websites: ['https://example.com'],
+        status: 'normal',
+        plan_price_month: 12.5,
+        has_trial: true,
+        subscription_url: 'https://example.com/sub',
+        applicant_email: 'contact@example.com',
+        applicant_telegram: '@cloud',
+        founded_on: '2025-01-01',
+        airport_intro: 'Fast routes.',
+        test_account: 'tester',
+        test_password: 'secret',
+      }),
+    });
+
+    assert.equal(response.status, 201);
+    const data = (await response.json()) as { application_id: number; review_status: string };
+    assert.equal(data.application_id, 89);
+    assert.equal(data.review_status, 'pending');
+  } finally {
+    console.error = originalConsoleError;
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });

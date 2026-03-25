@@ -25,6 +25,22 @@ interface PublicDeps {
       test_password: string;
     }): Promise<number>;
   };
+  applicationNotificationService?: {
+    notifyNewAirportApplication(input: {
+      applicationId: number;
+      requestId: string;
+      name: string;
+      website: string;
+      websites: string[];
+      planPriceMonth: number;
+      hasTrial: boolean;
+      subscriptionUrl?: string | null;
+      applicantEmail: string;
+      applicantTelegram: string;
+      foundedOn: string;
+      airportIntro: string;
+    }): Promise<void>;
+  };
   metricsRepository: {
     getByAirportAndDate(airportId: number, date: string): Promise<unknown | null>;
   };
@@ -55,11 +71,11 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         throw new HttpError(400, 'BAD_REQUEST', 'founded_on cannot be in the future');
       }
 
-      const applicationId = await deps.airportApplicationRepository.create({
+      const applicationInput = {
         name: mustString(payload.name, 'name'),
         website: websiteBundle.website,
         websites: websiteBundle.websites,
-        status: 'normal',
+        status: 'normal' as const,
         plan_price_month: mustNonNegativeNumber(payload.plan_price_month, 'plan_price_month'),
         has_trial: Boolean(payload.has_trial),
         subscription_url: optionalString(payload.subscription_url) || null,
@@ -69,7 +85,32 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         airport_intro: mustString(payload.airport_intro, 'airport_intro'),
         test_account: mustString(payload.test_account, 'test_account'),
         test_password: mustString(payload.test_password, 'test_password'),
-      });
+      };
+
+      const applicationId = await deps.airportApplicationRepository.create(applicationInput);
+
+      try {
+        await deps.applicationNotificationService?.notifyNewAirportApplication({
+          applicationId,
+          requestId: req.requestId || 'unknown',
+          name: applicationInput.name,
+          website: applicationInput.website,
+          websites: applicationInput.websites || [applicationInput.website],
+          planPriceMonth: applicationInput.plan_price_month,
+          hasTrial: applicationInput.has_trial,
+          subscriptionUrl: applicationInput.subscription_url,
+          applicantEmail: applicationInput.applicant_email,
+          applicantTelegram: applicationInput.applicant_telegram,
+          foundedOn: applicationInput.founded_on,
+          airportIntro: applicationInput.airport_intro,
+        });
+      } catch (error) {
+        console.error('[telegram] failed to notify new airport application', {
+          applicationId,
+          requestId: req.requestId || 'unknown',
+          error,
+        });
+      }
 
       res.status(201).json({
         application_id: applicationId,

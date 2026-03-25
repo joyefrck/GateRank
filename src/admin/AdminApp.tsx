@@ -3,6 +3,7 @@ import {
   Shield,
   Database,
   Activity,
+  Bell,
   RefreshCw,
   LogOut,
   Plus,
@@ -195,6 +196,42 @@ interface ManualJobRecord {
   updated_at: string;
 }
 
+interface TelegramSettingsView {
+  enabled: boolean;
+  delivery_mode: 'telegram_chat' | 'webhook';
+  telegram_chat: {
+    has_bot_token: boolean;
+    bot_token_masked: string | null;
+    chat_id: string;
+    api_base: string;
+    timeout_ms: number;
+  };
+  webhook: {
+    has_bearer_token: boolean;
+    bearer_token_masked: string | null;
+    url: string;
+    timeout_ms: number;
+  };
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+interface TelegramSettingsFormState {
+  enabled: boolean;
+  delivery_mode: 'telegram_chat' | 'webhook';
+  telegram_chat: {
+    bot_token: string;
+    chat_id: string;
+    api_base: string;
+    timeout_ms: string;
+  };
+  webhook: {
+    url: string;
+    bearer_token: string;
+    timeout_ms: string;
+  };
+}
+
 const TOKEN_KEY = 'gaterank_admin_token';
 
 function getApiBase(): string {
@@ -301,12 +338,14 @@ export default function AdminApp() {
         <aside className="bg-white rounded-xl border border-neutral-200 p-3 h-fit">
           <NavItem icon={<Database size={14} />} active={path.startsWith('/admin/airports')} onClick={() => navigate('/admin/airports')} label="机场管理" />
           <NavItem icon={<Shield size={14} />} active={path.startsWith('/admin/applications')} onClick={() => navigate('/admin/applications')} label="入驻申请" />
+          <NavItem icon={<Bell size={14} />} active={path.startsWith('/admin/settings')} onClick={() => navigate('/admin/settings')} label="系统设置" />
           <NavItem icon={<Activity size={14} />} active={path.startsWith('/admin/ops/recompute')} onClick={() => navigate('/admin/ops/recompute')} label="作业工具" />
         </aside>
 
         <main className="bg-white rounded-xl border border-neutral-200 p-6">
           {path === '/admin/airports' && <AirportsPage onOpenAirport={(id) => navigate(`/admin/airports/${id}/data`)} />}
           {path === '/admin/applications' && <ApplicationsPage onOpenAirports={() => navigate('/admin/airports')} />}
+          {path === '/admin/settings' && <SystemSettingsPage />}
           {path.match(/^\/admin\/airports\/\d+\/data$/) && (
             <AirportDataPage airportId={Number(path.split('/')[3])} onBack={() => navigate('/admin/airports')} />
           )}
@@ -380,6 +419,397 @@ function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
           {loading ? '登录中...' : '登录'}
         </button>
       </form>
+    </div>
+  );
+}
+
+function SystemSettingsPage() {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [settings, setSettings] = useState<TelegramSettingsView | null>(null);
+  const [clearBotToken, setClearBotToken] = useState(false);
+  const [clearWebhookBearerToken, setClearWebhookBearerToken] = useState(false);
+  const [form, setForm] = useState<TelegramSettingsFormState>({
+    enabled: false,
+    delivery_mode: 'telegram_chat',
+    telegram_chat: {
+      bot_token: '',
+      chat_id: '',
+      api_base: 'https://api.telegram.org',
+      timeout_ms: '5000',
+    },
+    webhook: {
+      url: '',
+      bearer_token: '',
+      timeout_ms: '5000',
+    },
+  });
+
+  const applyView = (view: TelegramSettingsView) => {
+    setSettings(view);
+    setForm({
+      enabled: view.enabled,
+      delivery_mode: view.delivery_mode,
+      telegram_chat: {
+        bot_token: '',
+        chat_id: view.telegram_chat.chat_id || '',
+        api_base: view.telegram_chat.api_base || 'https://api.telegram.org',
+        timeout_ms: String(view.telegram_chat.timeout_ms || 5000),
+      },
+      webhook: {
+        url: view.webhook.url || '',
+        bearer_token: '',
+        timeout_ms: String(view.webhook.timeout_ms || 5000),
+      },
+    });
+    setClearBotToken(false);
+    setClearWebhookBearerToken(false);
+  };
+
+  const fetchSettings = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/telegram')) as TelegramSettingsView;
+      applyView(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载设置失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchSettings();
+  }, []);
+
+  const buildPayload = () => {
+    const payload: Record<string, unknown> = {
+      enabled: form.enabled,
+      delivery_mode: form.delivery_mode,
+      telegram_chat: {
+        chat_id: form.telegram_chat.chat_id.trim(),
+        api_base: form.telegram_chat.api_base.trim() || 'https://api.telegram.org',
+        timeout_ms: Number(form.telegram_chat.timeout_ms || 5000),
+      },
+      webhook: {
+        url: form.webhook.url.trim(),
+        timeout_ms: Number(form.webhook.timeout_ms || 5000),
+      },
+    };
+
+    if (clearBotToken) {
+      (payload.telegram_chat as Record<string, unknown>).bot_token = '';
+    } else if (form.telegram_chat.bot_token.trim()) {
+      (payload.telegram_chat as Record<string, unknown>).bot_token = form.telegram_chat.bot_token.trim();
+    }
+
+    if (clearWebhookBearerToken) {
+      (payload.webhook as Record<string, unknown>).bearer_token = '';
+    } else if (form.webhook.bearer_token.trim()) {
+      (payload.webhook as Record<string, unknown>).bearer_token = form.webhook.bearer_token.trim();
+    }
+
+    return payload;
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/telegram', {
+        method: 'PATCH',
+        body: JSON.stringify(buildPayload()),
+      })) as TelegramSettingsView;
+      applyView(data);
+      setSuccess('申请通知配置已保存');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendTest = async () => {
+    setTesting(true);
+    setError('');
+    setSuccess('');
+    try {
+      await apiFetch('/api/v1/admin/system-settings/telegram/test', {
+        method: 'POST',
+        body: JSON.stringify(buildPayload()),
+      });
+      setSuccess(form.delivery_mode === 'telegram_chat' ? 'Telegram 测试消息已发送' : 'Webhook 测试请求已发送');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '测试发送失败');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold">系统设置</h2>
+          <p className="mt-1 text-sm text-neutral-500">申请通知支持 Telegram 直发和 Webhook 转发，保存后立即生效。</p>
+        </div>
+        <button className="px-3 py-2 rounded border text-sm" onClick={() => void fetchSettings()} disabled={loading}>
+          刷新
+        </button>
+      </div>
+
+      <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">申请通知</div>
+          <p className="mt-1 text-sm text-neutral-500">用于接收新的机场入驻申请提醒。测试不会持久化当前输入的密钥变更。</p>
+        </div>
+
+        {loading && <div className="text-sm text-neutral-500">加载中...</div>}
+
+        {!loading && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <ReadField label="当前发送模式" value={form.delivery_mode === 'telegram_chat' ? 'Telegram 直发' : 'Webhook 转发'} />
+              <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
+              <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
+              <ReadField label="Telegram Token" value={settings?.telegram_chat.has_bot_token ? `已配置 (${settings?.telegram_chat.bot_token_masked || '-'})` : '未配置'} />
+              <ReadField label="Telegram Chat ID" value={valueOrDash(settings?.telegram_chat.chat_id)} />
+              <ReadField label="Webhook Bearer" value={settings?.webhook.has_bearer_token ? `已配置 (${settings?.webhook.bearer_token_masked || '-'})` : '未配置'} />
+              <ReadField label="Webhook URL" value={valueOrDash(settings?.webhook.url)} />
+            </div>
+
+            <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
+              <div className="text-sm font-medium text-neutral-900">启用开关</div>
+              <p className="mt-1 text-sm text-neutral-500">关闭后不会自动推送新申请通知，但仍可手动发送测试消息。</p>
+              <label className="mt-4 inline-flex items-center gap-3 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-neutral-300"
+                  checked={form.enabled}
+                  onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+                />
+                启用申请通知
+              </label>
+            </div>
+
+            <div className="rounded-2xl border border-neutral-300 bg-white px-4 py-4 space-y-3">
+              <div className="text-sm font-medium text-neutral-900">发送模式</div>
+              <p className="text-sm text-neutral-500">Telegram 直发适合用户、群组、频道；如果目标是另一个 bot，请改用 Webhook 转发。</p>
+              <div className="flex flex-wrap gap-3">
+                <label className="inline-flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="radio"
+                    name="delivery_mode"
+                    checked={form.delivery_mode === 'telegram_chat'}
+                    onChange={() => setForm({ ...form, delivery_mode: 'telegram_chat' })}
+                  />
+                  Telegram 直发
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm font-medium">
+                  <input
+                    type="radio"
+                    name="delivery_mode"
+                    checked={form.delivery_mode === 'webhook'}
+                    onChange={() => setForm({ ...form, delivery_mode: 'webhook' })}
+                  />
+                  Webhook 转发
+                </label>
+              </div>
+            </div>
+
+            {form.delivery_mode === 'telegram_chat' && (
+              <>
+                <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
+                  <div className="text-sm font-medium text-neutral-900">Telegram 直发说明</div>
+                  <p className="mt-1 text-sm text-neutral-500">适合直接发给用户、群组、频道。如果目标是另一个 bot，这种方式不可用，请切换到 Webhook 转发。</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField
+                    label="Bot Token"
+                    hint={settings?.telegram_chat.has_bot_token ? '已配置，留空则不修改；如需删除，请勾选下方“清空已保存 Token”。' : '未配置时请直接输入新的 Bot Token。'}
+                  >
+                    <div className="space-y-2">
+                      <input
+                        className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                        type="password"
+                        placeholder={settings?.telegram_chat.has_bot_token ? '已配置，留空则不修改' : '输入新的 Bot Token'}
+                        value={form.telegram_chat.bot_token}
+                        onChange={(e) => {
+                          setClearBotToken(false);
+                          setForm({
+                            ...form,
+                            telegram_chat: { ...form.telegram_chat, bot_token: e.target.value },
+                          });
+                        }}
+                      />
+                      {settings?.telegram_chat.has_bot_token && (
+                        <div className="text-xs text-neutral-500">当前已保存：{settings.telegram_chat.bot_token_masked}</div>
+                      )}
+                    </div>
+                  </FormField>
+
+                  <FormField label="Chat ID" hint="例如群组 chat id 通常是 -100 开头。">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      placeholder="-1001234567890"
+                      value={form.telegram_chat.chat_id}
+                      onChange={(e) => setForm({
+                        ...form,
+                        telegram_chat: { ...form.telegram_chat, chat_id: e.target.value },
+                      })}
+                    />
+                  </FormField>
+
+                  <FormField label="API Base" hint="默认使用官方 Telegram API 地址。">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      placeholder="https://api.telegram.org"
+                      value={form.telegram_chat.api_base}
+                      onChange={(e) => setForm({
+                        ...form,
+                        telegram_chat: { ...form.telegram_chat, api_base: e.target.value },
+                      })}
+                    />
+                  </FormField>
+
+                  <FormField label="超时(ms)" hint="请求 Telegram API 的超时控制。">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={form.telegram_chat.timeout_ms}
+                      onChange={(e) => setForm({
+                        ...form,
+                        telegram_chat: { ...form.telegram_chat, timeout_ms: e.target.value },
+                      })}
+                    />
+                  </FormField>
+                </div>
+
+                {settings?.telegram_chat.has_bot_token && (
+                  <label className="inline-flex items-center gap-3 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-neutral-300"
+                      checked={clearBotToken}
+                      onChange={(e) => {
+                        setClearBotToken(e.target.checked);
+                        if (e.target.checked) {
+                          setForm({
+                            ...form,
+                            telegram_chat: { ...form.telegram_chat, bot_token: '' },
+                          });
+                        }
+                      }}
+                    />
+                    清空已保存 Bot Token
+                  </label>
+                )}
+              </>
+            )}
+
+            {form.delivery_mode === 'webhook' && (
+              <>
+                <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
+                  <div className="text-sm font-medium text-neutral-900">Webhook 转发说明</div>
+                  <p className="mt-1 text-sm text-neutral-500">如果你的 bot 需要接收事件，请让 GateRank 调用你控制的 Webhook，再由你的 bot 自己处理这条请求。</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FormField label="Webhook URL" hint="GateRank 会向这个地址 POST 申请通知事件。">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      placeholder="https://example.com/webhooks/gaterank"
+                      value={form.webhook.url}
+                      onChange={(e) => setForm({
+                        ...form,
+                        webhook: { ...form.webhook, url: e.target.value },
+                      })}
+                    />
+                  </FormField>
+
+                  <FormField
+                    label="Bearer Token"
+                    hint={settings?.webhook.has_bearer_token ? '已配置，留空则不修改；如需删除，请勾选下方“清空已保存 Bearer Token”。' : '用于 Authorization: Bearer ... 鉴权。'}
+                  >
+                    <div className="space-y-2">
+                      <input
+                        className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                        type="password"
+                        placeholder={settings?.webhook.has_bearer_token ? '已配置，留空则不修改' : '输入新的 Bearer Token'}
+                        value={form.webhook.bearer_token}
+                        onChange={(e) => {
+                          setClearWebhookBearerToken(false);
+                          setForm({
+                            ...form,
+                            webhook: { ...form.webhook, bearer_token: e.target.value },
+                          });
+                        }}
+                      />
+                      {settings?.webhook.has_bearer_token && (
+                        <div className="text-xs text-neutral-500">当前已保存：{settings.webhook.bearer_token_masked}</div>
+                      )}
+                    </div>
+                  </FormField>
+
+                  <FormField label="超时(ms)" hint="请求 Webhook 的超时控制。">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={form.webhook.timeout_ms}
+                      onChange={(e) => setForm({
+                        ...form,
+                        webhook: { ...form.webhook, timeout_ms: e.target.value },
+                      })}
+                    />
+                  </FormField>
+                </div>
+
+                {settings?.webhook.has_bearer_token && (
+                  <label className="inline-flex items-center gap-3 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-neutral-300"
+                      checked={clearWebhookBearerToken}
+                      onChange={(e) => {
+                        setClearWebhookBearerToken(e.target.checked);
+                        if (e.target.checked) {
+                          setForm({
+                            ...form,
+                            webhook: { ...form.webhook, bearer_token: '' },
+                          });
+                        }
+                      }}
+                    />
+                    清空已保存 Bearer Token
+                  </label>
+                )}
+              </>
+            )}
+
+            {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+            {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+
+            <div className="flex items-center justify-end gap-3">
+              <button className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50" disabled={testing} onClick={() => void sendTest()}>
+                {testing ? '发送中...' : form.delivery_mode === 'telegram_chat' ? '发送 Telegram 测试消息' : '发送 Webhook 测试请求'}
+              </button>
+              <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
+                {saving ? '保存中...' : '保存配置'}
+              </button>
+            </div>
+          </>
+        )}
+      </section>
     </div>
   );
 }
@@ -1857,7 +2287,15 @@ function formatDateTimeInBeijing(value: string | null | undefined): string {
   if (!value) {
     return '-';
   }
-  const date = new Date(value);
+  const trimmed = value.trim();
+  const sqlDateTimeMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2}:\d{2})$/);
+  const dateOnlyMatch = trimmed.match(/^(\d{4}-\d{2}-\d{2})$/);
+  const normalizedValue = sqlDateTimeMatch
+    ? `${sqlDateTimeMatch[1]}T${sqlDateTimeMatch[2]}+08:00`
+    : dateOnlyMatch
+      ? `${dateOnlyMatch[1]}T00:00:00+08:00`
+      : trimmed;
+  const date = new Date(normalizedValue);
   if (Number.isNaN(date.getTime())) {
     return value;
   }

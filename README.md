@@ -115,6 +115,18 @@ cp backend/.env.example backend/.env
 
 按需修改 `backend/.env` 中 MySQL、`ADMIN_UI_PASSWORD`、`ADMIN_API_KEY` 与 `ADMIN_JWT_SECRET`。
 
+申请通知优先在管理后台的“系统设置”里配置，支持两种互斥模式：
+
+- `Telegram 直发`：适合发给用户、群组、频道
+- `Webhook 转发`：适合把申请事件推给你自己的 bot 后端或其他系统
+
+如果数据库里还没有保存配置，后端只会对 `Telegram 直发` 继续回退使用下面这些环境变量；`Webhook` 模式没有环境变量回退：
+
+- `TELEGRAM_BOT_TOKEN`: Telegram Bot Token
+- `TELEGRAM_CHAT_ID`: 你接收通知的 chat id
+- `TELEGRAM_API_BASE`: 可选，默认 `https://api.telegram.org`
+- `TELEGRAM_NOTIFY_TIMEOUT_MS`: 可选，默认 `5000`
+
 ### 3. 初始化数据库
 
 执行 [`backend/sql/schema.sql`](backend/sql/schema.sql)。

@@ -4,6 +4,7 @@ import { AddressInfo } from 'node:net';
 import express from 'express';
 import { errorHandler } from '../src/middleware/errorHandler';
 import { createAdminRoutes } from '../src/routes/adminRoutes';
+import { TelegramSendError } from '../src/services/telegramNotificationService';
 import type { PerformanceRunInput, ProbeSampleInput } from '../src/types/domain';
 
 test('POST /performance-runs stores run diagnostics and performance samples', async () => {
@@ -638,6 +639,331 @@ test('GET /airport-applications/:id returns full application details', async () 
     const data = (await response.json()) as { id: number; test_password: string };
     assert.equal(data.id, 7);
     assert.equal(data.test_password, 'secret');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /system-settings/telegram returns masked telegram settings', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+      telegramNotificationService: {
+        getAdminSettings: async () => ({
+          enabled: true,
+          delivery_mode: 'telegram_chat',
+          telegram_chat: {
+            has_bot_token: true,
+            bot_token_masked: '1234***abcd',
+            chat_id: '-10012345',
+            api_base: 'https://api.telegram.org',
+            timeout_ms: 5000,
+          },
+          webhook: {
+            has_bearer_token: true,
+            bearer_token_masked: 'bear***1234',
+            url: 'https://example.com/webhook',
+            timeout_ms: 4000,
+          },
+          updated_at: '2026-03-25 12:00:00',
+          updated_by: 'admin',
+        }),
+        updateAdminSettings: async () => null,
+        sendTestMessage: async () => undefined,
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/telegram`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      delivery_mode: string;
+      telegram_chat: { has_bot_token: boolean; bot_token_masked: string };
+      webhook: { has_bearer_token: boolean; bearer_token_masked: string; url: string };
+      updated_by: string;
+    };
+    assert.equal(data.delivery_mode, 'telegram_chat');
+    assert.equal(data.telegram_chat.has_bot_token, true);
+    assert.equal(data.telegram_chat.bot_token_masked, '1234***abcd');
+    assert.equal(data.webhook.has_bearer_token, true);
+    assert.equal(data.webhook.bearer_token_masked, 'bear***1234');
+    assert.equal(data.webhook.url, 'https://example.com/webhook');
+    assert.equal(data.updated_by, 'admin');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /system-settings/telegram updates settings and writes audit log', async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const audits: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, actor, requestId, payload) => {
+          audits.push({ action, actor, requestId, payload: payload as Record<string, unknown> });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+      telegramNotificationService: {
+        getAdminSettings: async () => null,
+        updateAdminSettings: async (input, updatedBy) => {
+          updates.push({ ...(input as Record<string, unknown>), updatedBy });
+          return {
+            enabled: true,
+            delivery_mode: 'webhook',
+            telegram_chat: {
+              has_bot_token: true,
+              bot_token_masked: '1234***abcd',
+              chat_id: '-10012345',
+              api_base: 'https://api.telegram.org',
+              timeout_ms: 5000,
+            },
+            webhook: {
+              has_bearer_token: true,
+              bearer_token_masked: 'bear***1234',
+              url: 'https://example.com/webhook',
+              timeout_ms: 4000,
+            },
+            updated_at: '2026-03-25 12:00:00',
+            updated_by: updatedBy,
+          };
+        },
+        sendTestMessage: async () => undefined,
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/telegram`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({
+        enabled: true,
+        delivery_mode: 'webhook',
+        telegram_chat: {
+          chat_id: '-10012345',
+          api_base: 'https://api.telegram.org',
+          timeout_ms: 5000,
+        },
+        webhook: {
+          url: 'https://example.com/webhook',
+          bearer_token: 'secret-token',
+          timeout_ms: 4000,
+        },
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].updatedBy, 'tester');
+    assert.equal(updates[0].delivery_mode, 'webhook');
+    assert.deepEqual(updates[0].telegram_chat, {
+      bot_token: undefined,
+      chat_id: '-10012345',
+      api_base: 'https://api.telegram.org',
+      timeout_ms: 5000,
+    });
+    assert.deepEqual(updates[0].webhook, {
+      url: 'https://example.com/webhook',
+      bearer_token: 'secret-token',
+      timeout_ms: 4000,
+    });
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, 'update_system_setting_telegram');
+    const data = (await response.json()) as {
+      delivery_mode: string;
+      webhook: { bearer_token_masked: string; url: string };
+      updated_by: string;
+    };
+    assert.equal(data.delivery_mode, 'webhook');
+    assert.equal(data.webhook.bearer_token_masked, 'bear***1234');
+    assert.equal(data.webhook.url, 'https://example.com/webhook');
+    assert.equal(data.updated_by, 'tester');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /system-settings/telegram/test sends webhook test request without persisting', async () => {
+  const tests: Array<Record<string, unknown>> = [];
+  const audits: string[] = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action) => {
+          audits.push(action);
+        },
+      },
+      publicViewService: stubPublicViewService(),
+      telegramNotificationService: {
+        getAdminSettings: async () => null,
+        updateAdminSettings: async () => null,
+        sendTestMessage: async (input) => {
+          tests.push(input as Record<string, unknown>);
+        },
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/telegram/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        delivery_mode: 'webhook',
+        webhook: {
+          url: 'https://example.com/webhook',
+          timeout_ms: 8000,
+        },
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(tests.length, 1);
+    assert.equal(tests[0].delivery_mode, 'webhook');
+    assert.deepEqual(tests[0].webhook, {
+      url: 'https://example.com/webhook',
+      bearer_token: undefined,
+      timeout_ms: 8000,
+    });
+    assert.deepEqual(audits, ['test_system_setting_telegram']);
+    const data = (await response.json()) as { ok: boolean };
+    assert.equal(data.ok, true);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /system-settings/telegram/test exposes telegram validation errors', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+      telegramNotificationService: {
+        getAdminSettings: async () => null,
+        updateAdminSettings: async () => null,
+        sendTestMessage: async () => {
+          throw new TelegramSendError(
+            'Telegram 拒绝发送：当前 Chat ID 指向的是一个 bot。请填写你自己的用户或群组 chat id，而不是 bot 自己的 id。',
+            400,
+          );
+        },
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/telegram/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(response.status, 400);
+    const data = (await response.json()) as { code: string; message: string };
+    assert.equal(data.code, 'TELEGRAM_TEST_FAILED');
+    assert.match(data.message, /Chat ID 指向的是一个 bot/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
