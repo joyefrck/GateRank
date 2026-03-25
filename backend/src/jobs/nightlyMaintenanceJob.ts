@@ -2,6 +2,11 @@ import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import { SHANGHAI_TIMEZONE } from '../config/scoring';
+import {
+  augmentPathWithCommonBinaryDirs,
+  normalizeSingBoxError,
+  resolveBinaryPath,
+} from '../utils/runtimeBinary';
 import { getDateInTimezone } from '../utils/time';
 
 const execFileAsync = promisify(execFile);
@@ -67,6 +72,8 @@ export class NightlyMaintenanceJob {
   private readonly scriptTimeoutMs: number;
   private readonly airportStatus: string;
   private readonly triggerWindowMinutes: number;
+  private readonly singBoxBin: string;
+  private readonly runtimePath: string;
 
   constructor(private readonly deps: NightlyMaintenanceJobDeps) {
     this.logger = deps.logger || console;
@@ -86,6 +93,8 @@ export class NightlyMaintenanceJob {
     this.scriptTimeoutMs = maxNumber(process.env.NIGHTLY_PIPELINE_SCRIPT_TIMEOUT_MS, 30 * 60 * 1000);
     this.airportStatus = (process.env.NIGHTLY_PIPELINE_AIRPORT_STATUS || '').trim();
     this.triggerWindowMinutes = maxNumber(process.env.NIGHTLY_PIPELINE_TRIGGER_WINDOW_MINUTES, 30);
+    this.singBoxBin = resolveBinaryPath('sing-box', process.env.SING_BOX_BIN);
+    this.runtimePath = augmentPathWithCommonBinaryDirs(process.env.PATH);
   }
 
   start(): void {
@@ -173,11 +182,13 @@ export class NightlyMaintenanceJob {
     const scriptPath = path.resolve(this.repoRoot, 'scripts', scriptName);
     const env: NodeJS.ProcessEnv = {
       ...process.env,
+      PATH: this.runtimePath,
       API_BASE: this.apiBase,
       ADMIN_API_KEY: this.adminApiKey,
       ADMIN_BEARER_TOKEN: this.adminBearerToken,
       ALL_AIRPORTS: '1',
       SOURCE: source,
+      SING_BOX_BIN: this.singBoxBin,
       SKIP_AGGREGATE: '1',
       SKIP_RECOMPUTE: '1',
     };
@@ -196,7 +207,10 @@ export class NightlyMaintenanceJob {
       this.logger.log(`[job] ${stage} stage succeeded${detail ? `: ${detail}` : ''}`);
       return { stage, status: 'succeeded', detail: detail || 'ok' };
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
+      const detail = normalizeSingBoxError(
+        error instanceof Error ? error.message : String(error),
+        this.singBoxBin,
+      );
       this.logger.error(`[job] ${stage} stage failed`, error);
       return { stage, status: 'failed', detail };
     }

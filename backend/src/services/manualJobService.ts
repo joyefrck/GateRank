@@ -1,6 +1,11 @@
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import {
+  augmentPathWithCommonBinaryDirs,
+  normalizeSingBoxError,
+  resolveBinaryPath,
+} from '../utils/runtimeBinary';
 import { getAdminAuthConfig } from '../utils/adminAuthConfig';
 import { getDateInTimezone } from '../utils/time';
 import { signAdminToken } from '../utils/token';
@@ -43,6 +48,8 @@ export class ManualJobService {
   private readonly adminBearerToken: string;
   private readonly pythonBin: string;
   private readonly repoRoot: string;
+  private readonly singBoxBin: string;
+  private readonly runtimePath: string;
 
   constructor(private readonly deps: ManualJobServiceDeps) {
     this.apiBase = (process.env.API_BASE || `http://127.0.0.1:${process.env.PORT || 8787}`).replace(/\/+$/, '');
@@ -53,6 +60,8 @@ export class ManualJobService {
       : '';
     this.pythonBin = process.env.PYTHON_BIN || 'python3';
     this.repoRoot = process.cwd();
+    this.singBoxBin = resolveBinaryPath('sing-box', process.env.SING_BOX_BIN);
+    this.runtimePath = augmentPathWithCommonBinaryDirs(process.env.PATH);
   }
 
   async initialize(): Promise<void> {
@@ -192,27 +201,34 @@ export class ManualJobService {
     }
 
     const scriptPath = path.resolve(this.repoRoot, 'scripts', scriptName);
-    const { stdout, stderr } = await execFileAsync(this.pythonBin, [scriptPath], {
-      cwd: this.repoRoot,
-      env: {
-        ...process.env,
-        API_BASE: this.apiBase,
-        ADMIN_API_KEY: this.adminApiKey,
-        ADMIN_BEARER_TOKEN: this.adminBearerToken,
-        AIRPORT_ID: String(airportId),
-        SOURCE: source,
-        SKIP_AGGREGATE: '1',
-        SKIP_RECOMPUTE: '1',
-      },
-      maxBuffer: 10 * 1024 * 1024,
-    });
+    try {
+      const { stdout, stderr } = await execFileAsync(this.pythonBin, [scriptPath], {
+        cwd: this.repoRoot,
+        env: {
+          ...process.env,
+          PATH: this.runtimePath,
+          API_BASE: this.apiBase,
+          ADMIN_API_KEY: this.adminApiKey,
+          ADMIN_BEARER_TOKEN: this.adminBearerToken,
+          AIRPORT_ID: String(airportId),
+          SOURCE: source,
+          SING_BOX_BIN: this.singBoxBin,
+          SKIP_AGGREGATE: '1',
+          SKIP_RECOMPUTE: '1',
+        },
+        maxBuffer: 10 * 1024 * 1024,
+      });
 
-    if (stderr && stderr.trim()) {
-      const stderrText = stderr.trim();
-      if (stdout && stdout.trim()) {
-        return;
+      if (stderr && stderr.trim()) {
+        const stderrText = stderr.trim();
+        if (stdout && stdout.trim()) {
+          return;
+        }
+        throw new Error(normalizeSingBoxError(stderrText, this.singBoxBin));
       }
-      throw new Error(stderrText);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(normalizeSingBoxError(message, this.singBoxBin));
     }
   }
 }
