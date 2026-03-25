@@ -912,13 +912,15 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
         '@context': 'https://schema.org',
         '@type': 'ItemList',
         itemListOrder: 'https://schema.org/ItemListOrderDescending',
-        numberOfItems: data?.items.length || 0,
-        itemListElement: (data?.items || []).map((item) => ({
-          '@type': 'ListItem',
-          position: item.rank,
-          name: item.name,
-          url: buildAbsoluteUrl(item.report_url),
-        })),
+        numberOfItems: (data?.items || []).filter((item) => Boolean(item.report_url)).length,
+        itemListElement: (data?.items || [])
+          .filter((item) => Boolean(item.report_url))
+          .map((item) => ({
+            '@type': 'ListItem',
+            position: item.rank,
+            name: item.name,
+            url: buildAbsoluteUrl(item.report_url as string),
+          })),
       },
     ]),
     [data, date, safePage, seoDescription, seoTitle],

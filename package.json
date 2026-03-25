@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist",
     "lint": "tsc --noEmit",
+    "deploy:prod": "bash scripts/deploy_prod.sh",
     "server:dev": "tsx watch backend/src/server.ts",
     "server:start": "tsx backend/src/server.ts",
     "server:typecheck": "tsc -p backend/tsconfig.json --noEmit",
