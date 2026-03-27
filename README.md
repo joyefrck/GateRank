@@ -157,6 +157,27 @@ npm run server:dev
 - 后端测试：`npm run test:backend`
 - 全局 TS 检查：`npm run lint`
 
+## 生产发布
+
+当前生产环境通过 1Panel 的 `gaterank` 编排发布，编排内包含：
+
+- `gaterank-web`
+- `gaterank-api`
+
+推荐发布流程：
+
+1. 在本地完成修复并运行至少 `npm run server:typecheck`、`npm run test:backend`
+2. 如前端构建需要更高 Node 内存，可用 `NODE_OPTIONS=--max-old-space-size=4096 npm run build`
+3. 将需要发布的提交推送到 GitHub `main`
+4. 登录 1Panel，进入「容器」->「编排」
+5. 找到编排 `gaterank` 并点击「重启」
+6. 等待 `gaterank-web` 和 `gaterank-api` 启动完成后回查线上页面和后台手动任务
+
+说明：
+
+- 当前线上编排会在启动时重新从 GitHub 拉取最新代码
+- 不要把 1Panel 账号、密码或其他敏感信息写入仓库
+
 ## 午夜自动维护
 
 后端支持一个按上海时间串行执行的午夜维护流水线，用来覆盖管理后台里的四个模块：
