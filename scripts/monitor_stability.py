@@ -315,7 +315,7 @@ def request_json(
     }
     if config.admin_bearer_token:
         headers["Authorization"] = f"Bearer {config.admin_bearer_token}"
-    else:
+    if config.admin_api_key:
         headers["x-api-key"] = config.admin_api_key
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")

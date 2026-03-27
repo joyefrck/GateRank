@@ -7,7 +7,9 @@ import {
   normalizeSingBoxError,
   resolveBinaryPath,
 } from '../utils/runtimeBinary';
+import { getAdminAuthConfig } from '../utils/adminAuthConfig';
 import { getDateInTimezone } from '../utils/time';
+import { signAdminToken } from '../utils/token';
 
 const execFileAsync = promisify(execFile);
 
@@ -76,6 +78,7 @@ export class NightlyMaintenanceJob {
   private readonly runtimePath: string;
 
   constructor(private readonly deps: NightlyMaintenanceJobDeps) {
+    const authConfig = getAdminAuthConfig();
     this.logger = deps.logger || console;
     this.sleepFn = deps.sleep || defaultSleep;
     this.execFileFn = deps.execFileAsync || execFileAsync;
@@ -83,8 +86,9 @@ export class NightlyMaintenanceJob {
     this.repoRoot = process.cwd();
     this.pythonBin = process.env.PYTHON_BIN || 'python3';
     this.apiBase = (process.env.API_BASE || `http://127.0.0.1:${process.env.PORT || 8787}`).replace(/\/+$/, '');
-    this.adminApiKey = process.env.ADMIN_API_KEY || '';
-    this.adminBearerToken = process.env.ADMIN_BEARER_TOKEN || '';
+    this.adminApiKey = process.env.ADMIN_API_KEY || authConfig.apiKey || '';
+    this.adminBearerToken = process.env.ADMIN_BEARER_TOKEN
+      || (authConfig.jwtSecret ? signAdminToken(authConfig.jwtSecret, authConfig.tokenTtlHours).token : '');
     this.enabled = !isFalsey(process.env.NIGHTLY_PIPELINE_ENABLED ?? '0');
     this.startAt = normalizeClockTime(process.env.NIGHTLY_PIPELINE_START_AT || '00:00');
     this.pollMs = maxNumber(process.env.NIGHTLY_PIPELINE_POLL_MS, 60_000);

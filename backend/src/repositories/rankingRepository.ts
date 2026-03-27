@@ -59,7 +59,11 @@ export class RankingRepository {
 
     await this.pool.execute<ResultSetHeader>(
       `INSERT INTO airport_rankings_daily (airport_id, date, list_type, rank_no, score, details_json)
-       VALUES ${values}`,
+       VALUES ${values}
+       ON DUPLICATE KEY UPDATE
+         rank_no = VALUES(rank_no),
+         score = VALUES(score),
+         details_json = VALUES(details_json)`,
       flat,
     );
   }

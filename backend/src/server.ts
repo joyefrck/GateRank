@@ -2,6 +2,9 @@ import 'dotenv/config';
 import type { Server } from 'node:http';
 import { createApp } from './app';
 import { NightlyMaintenanceJob } from './jobs/nightlyMaintenanceJob';
+import { applyBackendEnvToProcessEnv } from './utils/backendEnv';
+
+applyBackendEnvToProcessEnv();
 
 const port = Number(process.env.PORT || 8787);
 
