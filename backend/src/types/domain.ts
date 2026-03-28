@@ -6,6 +6,7 @@ export type ProbeScope = 'stability' | 'performance';
 export type PerformanceRunStatus = 'success' | 'partial' | 'skipped' | 'failed';
 export type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
 export type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+export type NewsStatus = 'draft' | 'published' | 'archived';
 
 export interface Airport {
   id: number;
@@ -23,6 +24,8 @@ export interface Airport {
   test_account?: string | null;
   test_password?: string | null;
   tags: string[];
+  manual_tags?: string[];
+  auto_tags?: string[];
   created_at: string;
 }
 
@@ -230,6 +233,32 @@ export interface ApiErrorBody {
   code: string;
   message: string;
   request_id: string;
+}
+
+export interface NewsArticle {
+  id: number;
+  title: string;
+  slug: string;
+  excerpt: string;
+  cover_image_url: string;
+  content_markdown: string;
+  content_html: string;
+  status: NewsStatus;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NewsArticleListItem {
+  id: number;
+  title: string;
+  slug: string;
+  excerpt: string;
+  cover_image_url: string;
+  status: NewsStatus;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ProbeSample {

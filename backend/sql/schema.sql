@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS airports (
   plan_price_month DECIMAL(10,2) NOT NULL,
   has_trial TINYINT(1) NOT NULL DEFAULT 0,
   subscription_url VARCHAR(1024) NULL,
+  manual_tags_json JSON NULL,
+  auto_tags_json JSON NULL,
   applicant_email VARCHAR(255) NULL,
   applicant_telegram VARCHAR(128) NULL,
   founded_on DATE NULL,
@@ -204,4 +206,22 @@ CREATE TABLE IF NOT EXISTS admin_manual_jobs (
   INDEX idx_admin_manual_jobs_lookup (airport_id, date, kind, status),
   INDEX idx_admin_manual_jobs_created_at (created_at),
   CONSTRAINT fk_admin_manual_jobs_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
+);
+
+CREATE TABLE IF NOT EXISTS news_articles (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  title VARCHAR(255) NOT NULL,
+  slug VARCHAR(255) NOT NULL,
+  excerpt TEXT NOT NULL,
+  cover_image_url VARCHAR(1024) NOT NULL,
+  content_markdown MEDIUMTEXT NOT NULL,
+  content_html MEDIUMTEXT NOT NULL,
+  status ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft',
+  published_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_news_articles_slug (slug),
+  INDEX idx_news_articles_status_published_at (status, published_at DESC),
+  INDEX idx_news_articles_updated_at (updated_at DESC)
 );

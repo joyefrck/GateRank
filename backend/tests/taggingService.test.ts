@@ -12,6 +12,8 @@ function buildAirport(partial: Partial<Airport> = {}): Airport {
     plan_price_month: 20,
     has_trial: true,
     tags: [],
+    manual_tags: [],
+    auto_tags: [],
     created_at: '2026-03-01',
     ...partial,
   };
@@ -108,6 +110,58 @@ test('generateAirportTags adds 风险观察 when recent complaints exist', () =>
     priceMedian: 20,
   });
   assert.ok(tags.includes('风险观察'));
+});
+
+test('generateAirportTags adds 新手友好 when display score is healthy and trial is supported', () => {
+  const tags = generateAirportTags({
+    date: '2026-03-22',
+    airport: buildAirport({
+      has_trial: true,
+      plan_price_month: 18,
+      created_at: '2025-12-01',
+    }),
+    metrics: buildMetrics({ stable_days_streak: 10 }),
+    score: buildScore({
+      p: 76,
+      r: 78,
+      final_score: 52,
+      details: {
+        stability_score: 78,
+        price_score: 79,
+        total_score: 68,
+      },
+    }),
+    priceMedian: 22,
+  });
+  assert.ok(tags.includes('新手友好'));
+});
+
+test('generateAirportTags falls back to 观察中 when no stronger label matches', () => {
+  const tags = generateAirportTags({
+    date: '2026-03-22',
+    airport: buildAirport({
+      has_trial: false,
+      plan_price_month: 30,
+      created_at: '2025-01-01',
+    }),
+    metrics: buildMetrics({
+      stable_days_streak: 5,
+      recent_complaints_count: 0,
+      history_incidents: 0,
+    }),
+    score: buildScore({
+      p: 55,
+      r: 75,
+      final_score: 48,
+      details: {
+        stability_score: 72,
+        price_score: 68,
+        total_score: 58,
+      },
+    }),
+    priceMedian: 30,
+  });
+  assert.deepEqual(tags, ['观察中']);
 });
 
 test('computeMedian handles odd and even counts', () => {

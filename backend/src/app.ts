@@ -6,6 +6,7 @@ import { requestContext } from './middleware/requestContext';
 import { AirportRepository } from './repositories/airportRepository';
 import { AirportApplicationRepository } from './repositories/airportApplicationRepository';
 import { AuditRepository } from './repositories/auditRepository';
+import { NewsRepository } from './repositories/newsRepository';
 import { MetricsRepository } from './repositories/metricsRepository';
 import { PerformanceRunRepository } from './repositories/performanceRunRepository';
 import { ProbeSampleRepository } from './repositories/probeSampleRepository';
@@ -16,14 +17,21 @@ import { ManualJobRepository } from './repositories/manualJobRepository';
 import { SystemSettingRepository } from './repositories/systemSettingRepository';
 import { createAdminAuthRoutes } from './routes/adminAuthRoutes';
 import { createAdminRoutes } from './routes/adminRoutes';
+import { createNewsAdminRoutes } from './routes/newsAdminRoutes';
+import { createNewsPublicRoutes } from './routes/newsPublicRoutes';
 import { createPublicRoutes } from './routes/publicRoutes';
 import { AdminAuthService } from './services/adminAuthService';
 import { AggregationService } from './services/aggregationService';
 import { ManualJobService } from './services/manualJobService';
+import { NewsContentService } from './services/newsContentService';
+import { NewsCoverImageService } from './services/newsCoverImageService';
+import { PexelsCoverService } from './services/pexelsCoverService';
+import { NewsPublicService } from './services/newsPublicService';
 import { PublicViewService } from './services/publicViewService';
 import { RecomputeService } from './services/recomputeService';
 import { RiskCheckService } from './services/riskCheckService';
 import { TelegramNotificationService } from './services/telegramNotificationService';
+import { getNewsUploadRootDir } from './utils/newsStorage';
 
 export async function createApp() {
   const pool = getDbPool();
@@ -41,10 +49,13 @@ export async function createApp() {
   await manualJobRepository.ensureSchema();
   const systemSettingRepository = new SystemSettingRepository(pool);
   await systemSettingRepository.ensureSchema();
+  const newsRepository = new NewsRepository(pool);
+  await newsRepository.ensureSchema();
   const scoreRepository = new ScoreRepository(pool);
   const rankingRepository = new RankingRepository(pool);
   const statsRepository = new StatsRepository(pool);
   const auditRepository = new AuditRepository(pool);
+  await auditRepository.ensureSchema();
   const authService = new AdminAuthService();
   const recomputeService = new RecomputeService({
     airportRepository,
@@ -76,6 +87,10 @@ export async function createApp() {
     rankingRepository,
     statsRepository,
   });
+  const newsContentService = new NewsContentService();
+  const newsCoverImageService = new NewsCoverImageService();
+  const pexelsCoverService = new PexelsCoverService(undefined, undefined, newsCoverImageService);
+  const newsPublicService = new NewsPublicService(newsRepository, newsContentService);
   const applicationNotificationService = new TelegramNotificationService({
     systemSettingRepository,
   });
@@ -83,6 +98,7 @@ export async function createApp() {
   const app = express();
   app.use(express.json());
   app.use(requestContext);
+  app.use('/uploads', express.static(getNewsUploadRootDir()));
   app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, x-request-id, x-admin-actor');
@@ -111,6 +127,12 @@ export async function createApp() {
     }),
   );
 
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService,
+    }),
+  );
+
   app.use('/api/v1/admin', createAdminAuthRoutes(authService));
 
   app.use(
@@ -129,6 +151,19 @@ export async function createApp() {
       auditRepository,
       publicViewService,
       telegramNotificationService: applicationNotificationService,
+    }),
+  );
+
+  app.use(
+    '/api/v1/admin',
+    adminAuth,
+    createNewsAdminRoutes({
+      auditRepository,
+      newsRepository,
+      newsContentService,
+      newsPublicService,
+      pexelsCoverService,
+      newsCoverImageService,
     }),
   );
 

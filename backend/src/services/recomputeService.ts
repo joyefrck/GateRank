@@ -9,7 +9,7 @@ export interface RecomputeDependencies {
   airportRepository: {
     listAll(): Promise<Airport[]>;
     getById(id: number): Promise<Airport | null>;
-    setTags(airportId: number, tags: string[]): Promise<void>;
+    setAutoTags(airportId: number, tags: string[]): Promise<void>;
   };
   metricsRepository: {
     getByDate(date: string): Promise<DailyMetrics[]>;
@@ -84,10 +84,10 @@ export class RecomputeService {
         score: row.score,
         priceMedian,
       });
-      await this.deps.airportRepository.setTags(row.airport.id, tags);
+      await this.deps.airportRepository.setAutoTags(row.airport.id, tags);
     }
     for (const airportId of noMetricsAirportIds) {
-      await this.deps.airportRepository.setTags(airportId, ['不推荐']);
+      await this.deps.airportRepository.setAutoTags(airportId, ['不推荐']);
     }
 
     const rankings = buildRankings(date, scoredRows);
@@ -111,7 +111,7 @@ export class RecomputeService {
     }
 
     if (!metrics) {
-      await this.deps.airportRepository.setTags(airportId, ['不推荐']);
+      await this.deps.airportRepository.setAutoTags(airportId, ['不推荐']);
       await this.rebuildRankingsForDate(date);
       return { recomputed: 0 };
     }
@@ -130,7 +130,7 @@ export class RecomputeService {
       score,
       priceMedian,
     });
-    await this.deps.airportRepository.setTags(airport.id, tags);
+    await this.deps.airportRepository.setAutoTags(airport.id, tags);
     await this.rebuildRankingsForDate(date);
     return { recomputed: 1 };
   }

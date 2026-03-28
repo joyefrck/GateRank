@@ -179,6 +179,9 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
     assert.equal(data.base.price_score, 80);
     assert.equal(data.base.score_data_days, 2);
     assert.equal(data.base.total_score, 22.91);
+    assert.deepEqual(data.base.manual_tags, ['老牌机场']);
+    assert.deepEqual(data.base.auto_tags, ['观察中']);
+    assert.deepEqual(data.base.tags, ['老牌机场', '观察中']);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -1285,6 +1288,71 @@ test('PATCH /airport-applications/:id/review rejects already reviewed applicatio
   }
 });
 
+test('POST /airports prefers manual_tags over legacy tags field', async () => {
+  const createdInputs: Array<Record<string, unknown>> = [];
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: {
+        ...stubAirportRepository(),
+        create: async (input) => {
+          createdInputs.push(input as Record<string, unknown>);
+          return 1;
+        },
+      },
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Airport',
+        website: 'https://example.com',
+        websites: ['https://example.com'],
+        status: 'normal',
+        plan_price_month: 20,
+        has_trial: true,
+        tags: ['旧标签'],
+        manual_tags: ['人工标签'],
+      }),
+    });
+
+    assert.equal(response.status, 201);
+    assert.equal(createdInputs.length, 1);
+    assert.deepEqual(createdInputs[0].manual_tags, ['人工标签']);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 function stubAirportRepository() {
   return {
     listByQuery: async () => ({ items: [], total: 0 }),
@@ -1303,7 +1371,9 @@ function stubAirportRepository() {
       airport_intro: 'intro',
       test_account: 'tester',
       test_password: 'secret',
-      tags: [],
+      tags: ['老牌机场', '观察中'],
+      manual_tags: ['老牌机场'],
+      auto_tags: ['观察中'],
       created_at: '2026-03-20',
     }),
     create: async () => 1,

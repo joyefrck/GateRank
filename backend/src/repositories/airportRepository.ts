@@ -1,5 +1,6 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { Airport, AirportStatus } from '../types/domain';
+import { mergeDisplayTags, normalizeTagList } from '../utils/tags';
 
 interface AirportRow extends RowDataPacket {
   id: number;
@@ -16,6 +17,8 @@ interface AirportRow extends RowDataPacket {
   airport_intro: string | null;
   test_account: string | null;
   test_password: string | null;
+  manual_tags_json: unknown;
+  auto_tags_json: unknown;
   tags_json: unknown;
   created_at: string;
 }
@@ -34,6 +37,7 @@ export interface CreateAirportInput {
   airport_intro?: string | null;
   test_account?: string | null;
   test_password?: string | null;
+  manual_tags?: string[];
   tags?: string[];
 }
 
@@ -51,6 +55,7 @@ export interface UpdateAirportInput {
   airport_intro?: string | null;
   test_account?: string | null;
   test_password?: string | null;
+  manual_tags?: string[];
   tags?: string[];
 }
 
@@ -60,6 +65,8 @@ export class AirportRepository {
   async ensureSchema(): Promise<void> {
     await this.ensureColumn('websites_json', 'JSON NULL AFTER website');
     await this.ensureColumn('tags_json', 'JSON NULL AFTER subscription_url');
+    await this.ensureColumn('manual_tags_json', 'JSON NULL AFTER tags_json');
+    await this.ensureColumn('auto_tags_json', 'JSON NULL AFTER manual_tags_json');
     await this.ensureColumn('applicant_email', 'VARCHAR(255) NULL AFTER subscription_url');
     await this.ensureColumn('applicant_telegram', 'VARCHAR(128) NULL AFTER applicant_email');
     await this.ensureColumn('founded_on', 'DATE NULL AFTER applicant_telegram');
@@ -81,6 +88,20 @@ export class AirportRepository {
         WHERE tags_json IS NULL
            OR JSON_TYPE(tags_json) != 'ARRAY'`,
     );
+
+    await this.pool.query(
+      `UPDATE airports
+          SET manual_tags_json = tags_json
+        WHERE manual_tags_json IS NULL
+           OR JSON_TYPE(manual_tags_json) != 'ARRAY'`,
+    );
+
+    await this.pool.query(
+      `UPDATE airports
+          SET auto_tags_json = JSON_ARRAY()
+        WHERE auto_tags_json IS NULL
+           OR JSON_TYPE(auto_tags_json) != 'ARRAY'`,
+    );
   }
 
   async listAll(): Promise<Airport[]> {
@@ -100,6 +121,8 @@ export class AirportRepository {
          airport_intro,
          test_account,
          test_password,
+         manual_tags_json,
+         auto_tags_json,
          tags_json,
          created_at
          FROM airports
@@ -151,6 +174,8 @@ export class AirportRepository {
          airport_intro,
          test_account,
          test_password,
+         manual_tags_json,
+         auto_tags_json,
          tags_json,
          created_at
          FROM airports
@@ -183,6 +208,8 @@ export class AirportRepository {
          airport_intro,
          test_account,
          test_password,
+         manual_tags_json,
+         auto_tags_json,
          tags_json,
          created_at
          FROM airports
@@ -200,6 +227,9 @@ export class AirportRepository {
 
   async create(input: CreateAirportInput): Promise<number> {
     const websites = normalizeWebsiteList(input.websites, input.website);
+    const manualTags = normalizeTagList(input.manual_tags ?? input.tags ?? []);
+    const autoTags: string[] = [];
+    const mergedTags = mergeDisplayTags(manualTags, autoTags);
     const [result] = await this.pool.execute<ResultSetHeader>(
       `INSERT INTO airports (
          name,
@@ -215,8 +245,10 @@ export class AirportRepository {
          airport_intro,
          test_account,
          test_password,
+         manual_tags_json,
+         auto_tags_json,
          tags_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.name,
         websites[0],
@@ -231,7 +263,9 @@ export class AirportRepository {
         input.airport_intro || null,
         input.test_account || null,
         input.test_password || null,
-        JSON.stringify(input.tags || []),
+        JSON.stringify(manualTags),
+        JSON.stringify(autoTags),
+        JSON.stringify(mergedTags),
       ],
     );
 
@@ -299,9 +333,12 @@ export class AirportRepository {
       sets.push('test_password = ?');
       values.push(input.test_password || null);
     }
-    if (Array.isArray(input.tags)) {
-      sets.push('tags_json = ?');
-      values.push(JSON.stringify(input.tags));
+    if (Array.isArray(input.manual_tags)) {
+      sets.push('manual_tags_json = ?');
+      values.push(JSON.stringify(normalizeTagList(input.manual_tags)));
+    } else if (Array.isArray(input.tags)) {
+      sets.push('manual_tags_json = ?');
+      values.push(JSON.stringify(normalizeTagList(input.tags)));
     }
 
     if (sets.length === 0) {
@@ -314,14 +351,27 @@ export class AirportRepository {
       values,
     );
 
+    if (result.affectedRows > 0 && (Array.isArray(input.manual_tags) || Array.isArray(input.tags))) {
+      await this.rebuildMergedTags(id);
+    }
+
     return result.affectedRows > 0;
   }
 
-  async setTags(id: number, tags: string[]): Promise<void> {
+  async setManualTags(id: number, tags: string[]): Promise<void> {
     await this.pool.execute<ResultSetHeader>(
-      'UPDATE airports SET tags_json = ? WHERE id = ?',
-      [JSON.stringify(tags), id],
+      'UPDATE airports SET manual_tags_json = ? WHERE id = ?',
+      [JSON.stringify(normalizeTagList(tags)), id],
     );
+    await this.rebuildMergedTags(id);
+  }
+
+  async setAutoTags(id: number, tags: string[]): Promise<void> {
+    await this.pool.execute<ResultSetHeader>(
+      'UPDATE airports SET auto_tags_json = ? WHERE id = ?',
+      [JSON.stringify(normalizeTagList(tags)), id],
+    );
+    await this.rebuildMergedTags(id);
   }
 
   private async ensureColumn(columnName: string, definition: string): Promise<void> {
@@ -339,28 +389,39 @@ export class AirportRepository {
       await this.pool.query(`ALTER TABLE airports ADD COLUMN ${columnName} ${definition}`);
     }
   }
-}
 
-function safeJsonArray(value: unknown): string[] {
-  if (!value) {
-    return [];
-  }
-  if (Array.isArray(value)) {
-    return value.map(String);
-  }
-  if (typeof value === 'object') {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(String(value));
-    return Array.isArray(parsed) ? parsed.map(String) : [];
-  } catch {
-    return [];
+  private async rebuildMergedTags(id: number): Promise<void> {
+    const [rows] = await this.pool.query<Array<RowDataPacket & {
+      manual_tags_json: unknown;
+      auto_tags_json: unknown;
+    }>>(
+      `SELECT manual_tags_json, auto_tags_json
+         FROM airports
+        WHERE id = ?
+        LIMIT 1`,
+      [id],
+    );
+
+    if (rows.length === 0) {
+      return;
+    }
+
+    const manualTags = normalizeTagList(rows[0].manual_tags_json);
+    const autoTags = normalizeTagList(rows[0].auto_tags_json);
+    const mergedTags = mergeDisplayTags(manualTags, autoTags);
+
+    await this.pool.execute<ResultSetHeader>(
+      'UPDATE airports SET tags_json = ? WHERE id = ?',
+      [JSON.stringify(mergedTags), id],
+    );
   }
 }
 
 function toAirportEntity(row: AirportRow): Airport {
-  const websites = normalizeWebsiteList(safeJsonArray(row.websites_json), row.website);
+  const legacyTags = normalizeTagList(row.tags_json);
+  const manualTags = normalizeTagList(row.manual_tags_json ?? legacyTags);
+  const autoTags = normalizeTagList(row.auto_tags_json);
+  const websites = normalizeWebsiteList(normalizeTagList(row.websites_json), row.website);
   return {
     id: row.id,
     name: row.name,
@@ -376,7 +437,9 @@ function toAirportEntity(row: AirportRow): Airport {
     airport_intro: row.airport_intro,
     test_account: row.test_account,
     test_password: row.test_password,
-    tags: safeJsonArray(row.tags_json),
+    tags: mergeDisplayTags(manualTags, autoTags),
+    manual_tags: manualTags,
+    auto_tags: autoTags,
     created_at: toDateString(row.created_at),
   };
 }

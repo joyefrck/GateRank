@@ -129,6 +129,12 @@ cp backend/.env.example backend/.env
 - `VITE_API_BASE`: 前端请求后端 API 的基础地址
 - `VITE_GA_MEASUREMENT_ID`: GA4 测量 ID；未配置时默认回退到 `G-4V9Z53GSP2`
 
+News 模块补充：
+
+- `NEWS_UPLOAD_ROOT_DIR`: 可选，新闻图片上传根目录；默认落到 `backend/uploads`
+- 新闻图片会保存在 `${NEWS_UPLOAD_ROOT_DIR}/news`
+- 生产环境需要给 API 容器挂持久卷，否则重启后上传图片会丢失
+
 Google Analytics 当前只统计公开站页面，不统计 `/admin`，并且只接入基础 `page_view`，未启用 EEA consent mode。
 
 申请通知优先在管理后台的“系统设置”里配置，支持两种互斥模式：
@@ -179,6 +185,11 @@ npm run server:dev
 
 - `gaterank-web`
 - `gaterank-api`
+
+News 模块上线要求：
+
+- `gaterank-web` 需要把 `/news`、`/uploads`、`/sitemap.xml` 代理到 `gaterank-api`
+- `gaterank-api` 需要挂载新闻图片持久化目录
 
 推荐发布流程：
 

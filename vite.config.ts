@@ -12,7 +12,7 @@ function emitSeoAssets(siteUrl: string): Plugin {
     apply: 'build',
     generateBundle() {
       const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
-<!-- Dynamic report pages are linked from homepage cards and /rankings/all list items using /reports/:airportId?date=YYYY-MM-DD -->
+<!-- Dynamic news pages are emitted by the backend sitemap route in production -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>${normalizedSiteUrl}/</loc>
@@ -70,6 +70,18 @@ export default defineConfig(({mode}) => {
       hmr: process.env.DISABLE_HMR !== 'true',
       proxy: {
         '/api': {
+          target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8787',
+          changeOrigin: true,
+        },
+        '/news': {
+          target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8787',
+          changeOrigin: true,
+        },
+        '/uploads': {
+          target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8787',
+          changeOrigin: true,
+        },
+        '/sitemap.xml': {
           target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8787',
           changeOrigin: true,
         },

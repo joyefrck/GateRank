@@ -13,6 +13,8 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
       plan_price_month: 20,
       has_trial: true,
       tags: [],
+      manual_tags: ['老牌机场'],
+      auto_tags: [],
       created_at: '2026-03-10',
     },
     {
@@ -23,6 +25,8 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
       plan_price_month: 50,
       has_trial: false,
       tags: [],
+      manual_tags: ['高价位'],
+      auto_tags: [],
       created_at: '2026-03-21',
     },
   ];
@@ -58,14 +62,14 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
 
   const storedScores = new Map<string, ScoreBreakdown>();
   const replaced = new Map<string, number>();
-  const storedTags = new Map<number, string[]>();
+  const storedAutoTags = new Map<number, string[]>();
 
   const svc = new RecomputeService({
     airportRepository: {
       listAll: async () => airports,
       getById: async (airportId: number) => airports.find((airport) => airport.id === airportId) || null,
-      setTags: async (airportId: number, tags: string[]) => {
-        storedTags.set(airportId, tags);
+      setAutoTags: async (airportId: number, tags: string[]) => {
+        storedAutoTags.set(airportId, tags);
       },
     },
     metricsRepository: {
@@ -132,9 +136,9 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
   assert.equal(out1.recomputed, 2);
   assert.equal(out2.recomputed, 2);
   assert.equal(storedScores.size, 2);
-  assert.equal(storedTags.size, 2);
-  assert.ok((storedTags.get(1) || []).includes('新手友好'));
-  assert.ok((storedTags.get(2) || []).includes('风险观察'));
+  assert.equal(storedAutoTags.size, 2);
+  assert.ok((storedAutoTags.get(1) || []).includes('性价比高'));
+  assert.ok((storedAutoTags.get(2) || []).includes('风险观察'));
   assert.equal(replaced.size, 5);
   assert.ok((replaced.get('today') || 0) >= 1);
   assert.equal(storedScores.get('1:2026-03-22')?.historical_score, 92.62);
@@ -152,6 +156,8 @@ test('recomputeAirportForDate only updates target airport and rebuilds rankings'
       plan_price_month: 20,
       has_trial: true,
       tags: [],
+      manual_tags: ['老牌机场'],
+      auto_tags: [],
       created_at: '2026-03-10',
     },
     {
@@ -162,6 +168,8 @@ test('recomputeAirportForDate only updates target airport and rebuilds rankings'
       plan_price_month: 30,
       has_trial: false,
       tags: [],
+      manual_tags: ['备用线路多'],
+      auto_tags: [],
       created_at: '2026-03-10',
     },
   ];
@@ -210,14 +218,14 @@ test('recomputeAirportForDate only updates target airport and rebuilds rankings'
     }],
   ]);
   const replaced = new Map<string, number>();
-  const storedTags = new Map<number, string[]>();
+  const storedAutoTags = new Map<number, string[]>();
 
   const svc = new RecomputeService({
     airportRepository: {
       listAll: async () => airports,
       getById: async (airportId: number) => airports.find((airport) => airport.id === airportId) || null,
-      setTags: async (airportId: number, tags: string[]) => {
-        storedTags.set(airportId, tags);
+      setAutoTags: async (airportId: number, tags: string[]) => {
+        storedAutoTags.set(airportId, tags);
       },
     },
     metricsRepository: {
@@ -275,7 +283,7 @@ test('recomputeAirportForDate only updates target airport and rebuilds rankings'
   assert.equal(result.recomputed, 1);
   assert.ok(storedScores.has('1:2026-03-23'));
   assert.ok(storedScores.has('2:2026-03-23'));
-  assert.equal(storedTags.has(1), true);
-  assert.equal(storedTags.has(2), false);
+  assert.equal(storedAutoTags.has(1), true);
+  assert.equal(storedAutoTags.has(2), false);
   assert.equal(replaced.size, 5);
 });

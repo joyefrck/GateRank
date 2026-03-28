@@ -2,9 +2,8 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Shield,
   Database,
-  Activity,
   Bell,
-  RefreshCw,
+  Newspaper,
   LogOut,
   Plus,
   Search,
@@ -14,6 +13,8 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { TagBadgeGroup } from '../components/TagBadge';
+import { NewsEditorPage, NewsListPage } from './news/NewsPages';
 
 type AirportStatus = 'normal' | 'risk' | 'down';
 type AirportApplicationReviewStatus = 'pending' | 'reviewed' | 'rejected';
@@ -38,6 +39,8 @@ interface Airport {
   test_account?: string | null;
   test_password?: string | null;
   tags: string[];
+  manual_tags?: string[];
+  auto_tags?: string[];
   created_at: string;
   total_score?: number | null;
   price_score?: number | null;
@@ -58,7 +61,7 @@ interface AirportFormState {
   airport_intro: string;
   test_account: string;
   test_password: string;
-  tags: string[];
+  manual_tags: string[];
 }
 
 interface AirportDashboardView {
@@ -340,18 +343,25 @@ export default function AdminApp() {
         <aside className="bg-white rounded-xl border border-neutral-200 p-3 h-fit">
           <NavItem icon={<Database size={14} />} active={path.startsWith('/admin/airports')} onClick={() => navigate('/admin/airports')} label="机场管理" />
           <NavItem icon={<Shield size={14} />} active={path.startsWith('/admin/applications')} onClick={() => navigate('/admin/applications')} label="入驻申请" />
+          <NavItem icon={<Newspaper size={14} />} active={path.startsWith('/admin/news')} onClick={() => navigate('/admin/news')} label="News" />
           <NavItem icon={<Bell size={14} />} active={path.startsWith('/admin/settings')} onClick={() => navigate('/admin/settings')} label="系统设置" />
-          <NavItem icon={<Activity size={14} />} active={path.startsWith('/admin/ops/recompute')} onClick={() => navigate('/admin/ops/recompute')} label="作业工具" />
         </aside>
 
         <main className="bg-white rounded-xl border border-neutral-200 p-6">
           {path === '/admin/airports' && <AirportsPage onOpenAirport={(id) => navigate(`/admin/airports/${id}/data`)} />}
           {path === '/admin/applications' && <ApplicationsPage onOpenAirports={() => navigate('/admin/airports')} />}
+          {path === '/admin/news' && <NewsListPage onCreate={() => navigate('/admin/news/new')} onEdit={(id) => navigate(`/admin/news/${id}`)} />}
+          {(path === '/admin/news/new' || path.match(/^\/admin\/news\/\d+$/)) && (
+            <NewsEditorPage
+              articleId={path === '/admin/news/new' ? undefined : Number(path.split('/')[3])}
+              onBack={() => navigate('/admin/news')}
+              onNavigateToArticle={(id) => navigate(`/admin/news/${id}`)}
+            />
+          )}
           {path === '/admin/settings' && <SystemSettingsPage />}
           {path.match(/^\/admin\/airports\/\d+\/data$/) && (
             <AirportDataPage airportId={Number(path.split('/')[3])} onBack={() => navigate('/admin/airports')} />
           )}
-          {path === '/admin/ops/recompute' && <OpsRecomputePage />}
         </main>
       </div>
     </div>
@@ -823,6 +833,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<'' | AirportStatus>('');
   const [editing, setEditing] = useState<AirportFormState | null>(null);
+  const [manualTagInput, setManualTagInput] = useState('');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -846,9 +857,14 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
     void fetchList();
   }, []);
 
+  useEffect(() => {
+    setManualTagInput(editing ? formatTagInput(editing.manual_tags) : '');
+  }, [editing]);
+
   const saveAirport = async () => {
     if (!editing) return;
     const websites = normalizeUrlList(editing.websites);
+    const manualTags = parseTagInput(manualTagInput);
     if (!editing.name.trim()) {
       setFormError('请填写机场名称');
       return;
@@ -872,7 +888,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       airport_intro: editing.airport_intro.trim() || null,
       test_account: editing.test_account.trim() || null,
       test_password: editing.test_password || null,
-      tags: editing.tags || [],
+      manual_tags: manualTags,
     };
 
     setSaving(true);
@@ -1061,6 +1077,15 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                     支持试用
                   </label>
                 </div>
+
+                <FormField label="人工标签" hint="多个标签用逗号、顿号、空格或换行分隔。系统自动标签会单独计算，这里只维护人工标签。">
+                  <textarea
+                    className="min-h-[96px] w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    placeholder="例如：老牌机场, 流媒体友好, 备用线路多"
+                    value={manualTagInput}
+                    onChange={(e) => setManualTagInput(e.target.value)}
+                  />
+                </FormField>
               </section>
 
               <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
@@ -1838,7 +1863,9 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
             <ReadField label="试用" value={dashboard.base.has_trial ? '是' : '否'} />
             <ReadField label="有效数据天数" value={valueOrDash(dashboard.base.score_data_days)} />
             <ReadField label="订阅链接" value={dashboard.base.subscription_url || '-'} />
-            <ReadField label="标签" value={(dashboard.base.tags || []).join(', ') || '-'} />
+            <ReadField label="标签" value={<TagBadgeGroup tags={dashboard.base.tags || []} size="sm" />} />
+            <ReadField label="人工标签" value={<TagBadgeGroup tags={dashboard.base.manual_tags || []} size="sm" />} />
+            <ReadField label="系统标签" value={<TagBadgeGroup tags={dashboard.base.auto_tags || []} size="sm" />} />
           </div>
         </div>
       )}
@@ -2104,11 +2131,15 @@ function ManualJobActionCard({
   );
 }
 
-function ReadField({ label, value }: { label: string; value: string | number | boolean }) {
+function ReadField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="border rounded p-3 bg-neutral-50">
       <div className="text-xs text-neutral-500">{label}</div>
-      <div className="font-mono text-sm mt-1 whitespace-pre-wrap break-all">{value}</div>
+      {typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? (
+        <div className="mt-1 whitespace-pre-wrap break-all font-mono text-sm">{String(value)}</div>
+      ) : (
+        <div className="mt-2">{value}</div>
+      )}
     </div>
   );
 }
@@ -2143,33 +2174,6 @@ function valueOrDash(value: string | number | boolean | null | undefined): strin
   return value;
 }
 
-function OpsRecomputePage() {
-  const [date, setDate] = useState(today());
-  const [output, setOutput] = useState('');
-
-  const run = async () => {
-    setOutput('处理中...');
-    try {
-      const agg = await apiFetch(`/api/v1/admin/jobs/aggregate?date=${date}`, { method: 'POST' });
-      const rec = await apiFetch(`/api/v1/admin/scores/recompute?date=${date}`, { method: 'POST' });
-      setOutput(JSON.stringify({ aggregate: agg, recompute: rec }, null, 2));
-    } catch (err) {
-      setOutput(err instanceof Error ? err.message : '执行失败');
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <h2 className="text-lg font-bold">作业工具</h2>
-      <div className="flex items-center gap-2">
-        <input type="date" className="border rounded px-2 py-1.5 text-sm" value={date} onChange={(e) => setDate(e.target.value)} />
-        <button className="px-3 py-1.5 rounded bg-neutral-900 text-white text-sm" onClick={() => void run()}>执行聚合 + 重算</button>
-      </div>
-      <pre className="text-xs bg-neutral-50 border rounded p-3 overflow-auto">{output}</pre>
-    </div>
-  );
-}
-
 function today(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',
@@ -2202,7 +2206,7 @@ function createAirportForm(): AirportFormState {
     airport_intro: '',
     test_account: '',
     test_password: '',
-    tags: [],
+    manual_tags: [],
   };
 }
 
@@ -2221,8 +2225,21 @@ function toAirportForm(airport: Airport): AirportFormState {
     airport_intro: airport.airport_intro || '',
     test_account: airport.test_account || '',
     test_password: airport.test_password || '',
-    tags: airport.tags || [],
+    manual_tags: airport.manual_tags || airport.tags || [],
   };
+}
+
+function parseTagInput(value: string): string[] {
+  return [...new Set(
+    value
+      .split(/[\n,，、\s]+/g)
+      .map((item) => item.trim())
+      .filter(Boolean),
+  )];
+}
+
+function formatTagInput(tags: string[]): string {
+  return tags.join(', ');
 }
 
 function normalizeUrlList(values: string[]): string[] {

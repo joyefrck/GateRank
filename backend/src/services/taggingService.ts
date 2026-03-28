@@ -1,42 +1,32 @@
 import type { Airport, DailyMetrics, ScoreBreakdown } from '../types/domain';
-
-const TAG_ORDER = [
-  '不推荐',
-  '风险观察',
-  '新入榜',
-  '长期稳定',
-  '新手友好',
-  '性价比高',
-  '高性能',
-  '高端路线',
-] as const;
+import { sortDisplayTags } from '../utils/tags';
 
 const TAG_RULES = {
   longTermStable: {
-    stabilityScoreMin: 85,
-    stableDaysStreakMin: 30,
-    riskScoreMin: 80,
+    stabilityScoreMin: 80,
+    stableDaysStreakMin: 14,
+    riskScoreMin: 75,
   },
   beginnerFriendly: {
-    finalScoreMin: 80,
-    riskScoreMin: 80,
+    displayScoreMin: 65,
+    riskScoreMin: 75,
   },
   valueForMoney: {
-    priceScoreMin: 80,
-    performanceScoreMin: 70,
+    priceScoreMin: 75,
+    performanceScoreMin: 65,
   },
   highPerformance: {
-    performanceScoreMin: 85,
+    performanceScoreMin: 80,
   },
   premium: {
-    finalScoreMin: 85,
+    displayScoreMin: 75,
   },
   riskWatch: {
     riskScoreMaxExclusive: 70,
   },
   newcomer: {
-    trackingDaysMaxExclusive: 30,
-    recentScoreMin: 80,
+    trackingDaysMaxExclusive: 45,
+    displayScoreMin: 65,
   },
   notRecommended: {
     riskScoreMaxExclusive: 60,
@@ -62,8 +52,7 @@ export function generateAirportTags(input: GenerateAirportTagsInput): string[] {
   const stabilityScore = Number(score.details.stability_score ?? score.s);
   const priceScore = Number(score.details.price_score ?? score.c);
   const performanceScore = score.p;
-  const finalScore = score.final_score;
-  const recentScore = score.recent_score;
+  const displayScore = Number(score.details.total_score ?? score.final_score);
   const recentRiskEvents = metrics.recent_complaints_count;
   const trackingDays = getTrackingDays(airport.created_at, date);
 
@@ -88,7 +77,7 @@ export function generateAirportTags(input: GenerateAirportTagsInput): string[] {
 
   const reasonablePrice = Number.isFinite(priceMedian) && priceMedian > 0 ? priceMedian : airport.plan_price_month;
   if (
-    finalScore >= TAG_RULES.beginnerFriendly.finalScoreMin &&
+    displayScore >= TAG_RULES.beginnerFriendly.displayScoreMin &&
     riskScore >= TAG_RULES.beginnerFriendly.riskScoreMin &&
     (airport.has_trial || airport.plan_price_month <= reasonablePrice)
   ) {
@@ -107,7 +96,7 @@ export function generateAirportTags(input: GenerateAirportTagsInput): string[] {
   }
 
   if (
-    finalScore >= TAG_RULES.premium.finalScoreMin &&
+    displayScore >= TAG_RULES.premium.displayScoreMin &&
     airport.plan_price_month > reasonablePrice
   ) {
     tags.add('高端路线');
@@ -122,9 +111,13 @@ export function generateAirportTags(input: GenerateAirportTagsInput): string[] {
 
   if (
     trackingDays < TAG_RULES.newcomer.trackingDaysMaxExclusive &&
-    recentScore >= TAG_RULES.newcomer.recentScoreMin
+    displayScore >= TAG_RULES.newcomer.displayScoreMin
   ) {
     tags.add('新入榜');
+  }
+
+  if (tags.size === 0) {
+    tags.add('观察中');
   }
 
   return sortTags(tags);
@@ -153,10 +146,5 @@ function getTrackingDays(createdAt: string, date: string): number {
 }
 
 function sortTags(tags: Set<string>): string[] {
-  return [...tags].sort((a, b) => tagIndex(a) - tagIndex(b));
-}
-
-function tagIndex(tag: string): number {
-  const idx = TAG_ORDER.indexOf(tag as (typeof TAG_ORDER)[number]);
-  return idx === -1 ? Number.MAX_SAFE_INTEGER : idx;
+  return sortDisplayTags([...tags]);
 }

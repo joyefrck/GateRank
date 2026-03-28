@@ -53,6 +53,10 @@ export function buildMethodologyHref(): string {
   return '/methodology';
 }
 
+export function buildNewsHref(): string {
+  return '/news';
+}
+
 function ensureMetaTag(selector: string, create: () => HTMLMetaElement): HTMLMetaElement {
   let meta = document.head.querySelector(selector) as HTMLMetaElement | null;
   if (!meta) {
@@ -182,6 +186,12 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
               <span className="rounded-md bg-rose-500 px-2 py-1 text-[10px] tracking-[0.18em] text-white">实时</span>
             </a>
             <PublicNavLink href={buildMethodologyHref()} label="测评方法" active={active === 'methodology'} />
+            <a
+              href={buildNewsHref()}
+              className="rounded-full px-4 py-2 text-[18px] text-[#c93a2e] transition-all hover:bg-neutral-100 font-serif"
+            >
+              News
+            </a>
           </div>
         </div>
         <a
@@ -249,6 +259,7 @@ function SiteFooter() {
           <a href={buildHomeHref()} onClick={(event) => { event.preventDefault(); navigate('/'); }} className="hover:text-black transition-colors">今日推荐</a>
           <a href={buildFullRankingHref()} onClick={(event) => { event.preventDefault(); navigate('/rankings/all'); }} className="hover:text-black transition-colors">全量榜单</a>
           <a href={buildMethodologyHref()} onClick={(event) => { event.preventDefault(); navigate(buildMethodologyHref()); }} className="hover:text-black transition-colors">测评方法</a>
+          <a href={buildNewsHref()} className="hover:text-black transition-colors">News</a>
           <a href="/apply" className="hover:text-black transition-colors">申请入驻</a>
         </div>
 

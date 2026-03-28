@@ -55,6 +55,7 @@ interface AdminDeps {
       airport_intro?: string | null;
       test_account?: string | null;
       test_password?: string | null;
+      manual_tags?: string[];
       tags?: string[];
     }): Promise<number>;
     update(
@@ -73,6 +74,7 @@ interface AdminDeps {
         airport_intro?: string | null;
         test_account?: string | null;
         test_password?: string | null;
+        manual_tags?: string[];
         tags?: string[];
       },
     ): Promise<boolean>;
@@ -378,7 +380,10 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const airportIntro = optionalString(payload.airport_intro) || null;
       const testAccount = optionalString(payload.test_account) || null;
       const testPassword = optionalString(payload.test_password) || null;
-      const tags = toStringArray(payload.tags || []);
+      const manualTags =
+        payload.manual_tags !== undefined
+          ? toStringArray(payload.manual_tags)
+          : toStringArray(payload.tags || []);
 
       const airportId = await deps.airportRepository.create({
         name,
@@ -394,7 +399,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         airport_intro: airportIntro,
         test_account: testAccount,
         test_password: testPassword,
-        tags,
+        manual_tags: manualTags,
       });
 
       await deps.auditRepository.log('create_airport', actorFromReq(req), req.requestId, payload);
@@ -447,7 +452,12 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           payload.test_password === undefined
             ? undefined
             : optionalString(payload.test_password) || null,
-        tags: payload.tags === undefined ? undefined : toStringArray(payload.tags),
+        manual_tags:
+          payload.manual_tags === undefined
+            ? payload.tags === undefined
+              ? undefined
+              : toStringArray(payload.tags)
+            : toStringArray(payload.manual_tags),
       };
 
       const updated = await deps.airportRepository.update(airportId, patch);

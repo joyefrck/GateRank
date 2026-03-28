@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
+import { TagBadge, TagBadgeGroup } from './components/TagBadge';
 import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import {
   buildAbsoluteUrl,
@@ -357,13 +358,6 @@ const ConclusionCard = ({
     new: 'border-sky-500/30 bg-white shadow-[4px_4px_0px_0px_rgba(14,165,233,0.1)]',
   };
 
-  const tagStyles = {
-    stable: 'bg-emerald-500 text-white',
-    value: 'bg-sky-500 text-white',
-    risk: 'bg-rose-500 text-white',
-    new: 'bg-sky-500 text-white',
-  };
-
   const scoreColors = {
     stable: 'text-emerald-600',
     value: 'text-sky-600',
@@ -413,11 +407,9 @@ const ConclusionCard = ({
           </div>
         </div>
         <div className="flex flex-wrap gap-2 mt-3">
-            {tags.map((tag) => (
-              <span key={tag} className={`text-[11px] md:text-xs px-2.5 py-1 rounded-sm font-black uppercase tracking-[0.16em] ${tagStyles[type]}`}>
-                {tag}
-              </span>
-            ))}
+          {tags.map((tag) => (
+            <TagBadge key={tag} tag={tag} />
+          ))}
         </div>
       </div>
 
@@ -1079,20 +1071,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                             </div>
                           </dl>
 
-                          <div className="mt-5 flex flex-wrap gap-2">
-                            {item.tags.length > 0 ? item.tags.map((tag) => (
-                              <span
-                                key={`${item.airport_id}-${tag}`}
-                                className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-neutral-600"
-                              >
-                                {tag}
-                              </span>
-                            )) : (
-                              <span className="rounded-full border border-dashed border-neutral-300 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-neutral-400">
-                                暂无标签
-                              </span>
-                            )}
-                          </div>
+                          <TagBadgeGroup tags={item.tags} size="sm" className="mt-5" />
                         </div>
 
                         <div className="flex flex-col gap-3 rounded-[24px] border border-neutral-200 bg-white p-4 lg:sticky lg:top-24">
@@ -1325,11 +1304,9 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
                   查看测评方法
                   <ArrowRight className="h-3.5 w-3.5" />
                 </a>
-                <div className="flex flex-wrap gap-2 mt-5">
+                <div className="mt-5 flex flex-wrap gap-2">
                   {data.airport.tags.map((tag) => (
-                    <span key={tag} className="px-3 py-1 rounded-sm bg-neutral-900 text-white text-[11px] font-black uppercase tracking-[0.16em]">
-                      {tag}
-                    </span>
+                    <TagBadge key={tag} tag={tag} />
                   ))}
                   <span className={`px-3 py-1 rounded-sm border text-[11px] font-black uppercase tracking-[0.16em] ${getAirportStatusTone(data.airport.status)}`}>
                     {formatAirportStatus(data.airport.status)}
