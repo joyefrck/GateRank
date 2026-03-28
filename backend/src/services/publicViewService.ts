@@ -162,7 +162,7 @@ export class PublicViewService {
 
   async getHomePageView(date: string): Promise<HomePageView> {
     const resolvedDate = (await this.deps.rankingRepository.getLatestAvailableDate(date)) || date;
-    const [stats, today, stable, value, newest, risk] = await Promise.all([
+    const [stats, today, stable, value, newest, rawRisk] = await Promise.all([
       this.deps.statsRepository.getHomeStats(resolvedDate),
       this.deps.rankingRepository.getRanking(resolvedDate, 'today'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'stable'),
@@ -170,6 +170,7 @@ export class PublicViewService {
       this.deps.rankingRepository.getRanking(resolvedDate, 'new'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'risk'),
     ]);
+    const risk = rawRisk.filter((item) => item.status === 'risk' || item.status === 'down');
     const fallbackSections =
       today.length === 0 || stable.length === 0 || value.length === 0 || newest.length === 0 || risk.length === 0
         ? await this.buildFallbackHomeSections(resolvedDate)
@@ -256,7 +257,11 @@ export class PublicViewService {
       return null;
     }
 
-    const ranking = await this.deps.rankingRepository.getRanksForAirport(airportId, date);
+    const rawRanking = await this.deps.rankingRepository.getRanksForAirport(airportId, date);
+    const ranking = {
+      ...rawRanking,
+      risk: isRiskAlertAirport(base.airport) ? rawRanking.risk : undefined,
+    };
     const section = resolveSummarySection(base.airport, base.metrics, base.score, ranking, date);
     const summaryCard = this.buildCard(section, base, date);
     const metricsStartDate = dateDaysAgo(date, 29);
@@ -457,22 +462,14 @@ function compareByRiskPriority(left: CardContext, right: CardContext): number {
 }
 
 function getRiskPriority(context: CardContext): number {
-  if (context.airport.status === 'risk' || context.airport.status === 'down') {
+  if (isRiskAlertAirport(context.airport)) {
     return 4;
   }
-  if (context.metrics.domain_ok === false) {
-    return 3;
-  }
-  if (typeof context.metrics.ssl_days_left === 'number' && context.metrics.ssl_days_left <= 7) {
-    return 2;
-  }
-  if (Number(context.metrics.recent_complaints_count || 0) > 0 || Number(context.metrics.history_incidents || 0) > 0) {
-    return 1;
-  }
-  if (context.score.r < 70) {
-    return 1;
-  }
   return 0;
+}
+
+function isRiskAlertAirport(airport: Airport): boolean {
+  return airport.status === 'risk' || airport.status === 'down';
 }
 
 function isRiskAlertContext(context: CardContext): boolean {
@@ -625,7 +622,7 @@ function resolveSummarySection(
   ranking: Partial<Record<RankingType, number>>,
   date: string,
 ): HomeSectionKey {
-  if (airport.status === 'risk' || airport.status === 'down' || score.r < 70) {
+  if (isRiskAlertAirport(airport)) {
     return 'risk_alerts';
   }
 

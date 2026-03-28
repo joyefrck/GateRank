@@ -30,6 +30,14 @@ GateRank 是一个「机场测评与榜单」系统。
 - 最终衰减分：`FinalScore = Σ(score_i * w_i) / Σ(w_i)`，统计历史序列与当日 `score`
 
 说明：子项评分采用“阈值分段 + 线性插值”，并截断到 `[0, 100]`。时间衰减按天计算，日期越近权重越高。
+稳定性中的 `StabilityScore` 使用稳健波动值 `effective_latency_cv`，不是直接使用原始 `latency_cv`。规则如下：
+
+- 当稳定性延迟样本数 `>= 5` 时，先去掉 1 个最大值和 1 个最小值
+- 用剩余样本计算 `effective_mean_ms` 和 `effective_std_ms`
+- `effective_latency_cv = effective_std_ms / max(effective_mean_ms, 10)`
+- 稳定日判定：`uptime >= 99%` 且 `effective_latency_cv <= 0.20`，并且当日存在有效延迟样本
+
+原始 `latency_mean_ms`、`latency_std_ms`、`latency_cv` 仍会保留，主要用于后台诊断和核对采样质量。
 风险项例外：`RiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty`，其中域名异常记 `30`，SSL 未知记 `5`，证书即将过期按 `5/10/20/30` 分段，投诉按 `3` 分每条封顶 `15`，历史异常按 `10` 分每次封顶 `30`。
 
 ## 技术方案
@@ -107,13 +115,21 @@ SQL 文件：[`backend/sql/schema.sql`](backend/sql/schema.sql)
 npm install
 ```
 
-### 2. 配置后端环境变量
+### 2. 配置环境变量
 
 ```bash
 cp backend/.env.example backend/.env
 ```
 
 按需修改 `backend/.env` 中 MySQL、`ADMIN_UI_PASSWORD`、`ADMIN_API_KEY` 与 `ADMIN_JWT_SECRET`。
+
+前端可选配置放在仓库根目录 `.env`，当前公开站支持这些 `VITE_` 变量：
+
+- `VITE_SITE_URL`: 生成 canonical 和绝对链接时使用的站点地址
+- `VITE_API_BASE`: 前端请求后端 API 的基础地址
+- `VITE_GA_MEASUREMENT_ID`: GA4 测量 ID；未配置时默认回退到 `G-4V9Z53GSP2`
+
+Google Analytics 当前只统计公开站页面，不统计 `/admin`，并且只接入基础 `page_view`，未启用 EEA consent mode。
 
 申请通知优先在管理后台的“系统设置”里配置，支持两种互斥模式：
 
@@ -258,6 +274,21 @@ WEBSITE_URL=https://www.elphantroute.com/ \
 常用环境变量：
 
 - `ADMIN_API_KEY`: 后台接口鉴权 key
+
+## 最近 30 天回刷
+
+稳定性规则升级后，可用下面的脚本按日期升序回刷最近窗口，确保 `stable_days_streak` 按新规则连续重建：
+
+```bash
+cd /path/to/GateRank
+ADMIN_API_KEY=gaterank_admin_key \
+/usr/bin/python3 scripts/backfill_stability_window.py --days 30
+```
+
+可选参数：
+
+- `--end-date YYYY-MM-DD`: 指定窗口结束日期，默认上海时区今天
+- `BACKFILL_DAYS`: 与 `--days` 等价，默认 `30`
 - `AIRPORT_ID`: 机场 ID，推荐显式配置
 - `AIRPORT_KEYWORD`: 可替代 `AIRPORT_ID`，脚本会先查机场再上报
 - `ALL_AIRPORTS`: 设为 `1/true/yes/on` 时批量遍历全部机场

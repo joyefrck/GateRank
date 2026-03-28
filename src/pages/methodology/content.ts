@@ -18,6 +18,9 @@ const STABILITY_RULES = {
   uptimeBaseline: 95,
   streakCapDays: 30,
   maxLatencyCv: 0.2,
+  trimMinSampleCount: 5,
+  trimEdgeSampleCount: 1,
+  effectiveMeanFloorMs: 10,
 } as const;
 
 const TIME_DECAY_LAMBDA = 0.1;
@@ -85,7 +88,7 @@ export const dimensionCards = [
     formula: 'S = 0.5 × UptimeScore + 0.3 × StabilityScore + 0.2 × StreakScore',
     bullets: [
       'UptimeScore 由当日或 30 天可用率换算，95% 以下迅速失分。',
-      'StabilityScore 由延迟波动系数 CV 计算，波动越小越高分。',
+      'StabilityScore 由稳健波动值 effective_latency_cv 计算，低延迟线路会做 10ms 均值地板保护。',
       'StreakScore 由连续稳定天数计算，30 天封顶。',
     ],
     accentClass: 'from-emerald-500/12 to-white',
@@ -219,8 +222,35 @@ function computeStabilityScore(latencyCv: number): number {
   return round2(clamp(100 - latencyCv * 100, 0, 100));
 }
 
+function computeEffectiveLatencyCv(samples: number[]): number {
+  const normalized = samples.slice().sort((left, right) => left - right);
+  const evaluated =
+    normalized.length >= STABILITY_RULES.trimMinSampleCount
+      ? normalized.slice(
+          STABILITY_RULES.trimEdgeSampleCount,
+          normalized.length - STABILITY_RULES.trimEdgeSampleCount,
+        )
+      : normalized;
+  const mean = average(evaluated);
+  const std = standardDeviation(evaluated, mean);
+  return round2(std / Math.max(mean, STABILITY_RULES.effectiveMeanFloorMs));
+}
+
 function computeStreakScore(stableDaysStreak: number): number {
   return round2(clamp((stableDaysStreak / STABILITY_RULES.streakCapDays) * 100, 0, 100));
+}
+
+function average(values: number[]): number {
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+function standardDeviation(values: number[], meanValue: number): number {
+  if (values.length <= 1) {
+    return 0;
+  }
+  const variance =
+    values.reduce((sum, value) => sum + (value - meanValue) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
 }
 
 function calcSslPenalty(sslDaysLeft: number | null): number {
@@ -253,7 +283,7 @@ function calcHistoryPenalty(historyIncidents: number): number {
 const exampleInput = {
   airportName: 'Nebula Air',
   uptimePercent: 99.6,
-  latencyCv: 0.11,
+  latencyCv: computeEffectiveLatencyCv([82, 88, 79, 84, 83]),
   stableDaysStreak: 24,
   medianLatencyMs: 82,
   medianDownloadMbps: 220,

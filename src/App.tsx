@@ -29,6 +29,7 @@ import {
   PageFrame,
   usePageSeo,
 } from './site/publicSite';
+import { trackPageView } from './site/analytics';
 
 type CardType = 'stable' | 'value' | 'risk' | 'new';
 type HomeSectionKey = 'today_pick' | 'most_stable' | 'best_value' | 'new_entries' | 'risk_alerts';
@@ -206,6 +207,13 @@ const sectionOrder: HomeSectionKey[] = [
   'new_entries',
   'risk_alerts',
 ];
+
+function shouldRenderSection(sectionKey: HomeSectionKey, section: HomeSection): boolean {
+  if (sectionKey === 'risk_alerts') {
+    return section.items.length > 0;
+  }
+  return true;
+}
 
 function formatAirportStatus(status: AirportStatus): string {
   switch (status) {
@@ -786,6 +794,9 @@ function HomePage({ date }: { date?: string }) {
 
         {!loading && !error && data && sectionOrder.map((sectionKey) => {
           const section = data.sections[sectionKey];
+          if (!shouldRenderSection(sectionKey, section)) {
+            return null;
+          }
           const display = sectionDisplayConfig[sectionKey];
           const extra = sectionKey === 'today_pick'
             ? (
@@ -1763,6 +1774,14 @@ export default function App() {
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      trackPageView();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [route]);
 
   if (route.kind === 'report' && route.airportId) {
     return <ReportPage airportId={route.airportId} date={route.date} />;

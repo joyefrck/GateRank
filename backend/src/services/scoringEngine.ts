@@ -1,4 +1,5 @@
 import {
+  STABILITY_RULES,
   FINAL_ENGINE_WEIGHTS,
   SCORE_WEIGHTS,
   THRESHOLDS,
@@ -7,6 +8,7 @@ import {
 import type { Airport, DailyMetrics, ScoreBreakdown, TimeSeriesScorePoint } from '../types/domain';
 import {
   computeLatencyStats,
+  computeEffectiveLatencyStats,
   computeSScore,
   computeStabilityScore,
   computeStreakScore,
@@ -40,10 +42,13 @@ export function computeScore(
   historicalScore: number,
 ): ScoreBreakdown {
   const uptimeBasis = metrics.uptime_percent_today ?? metrics.uptime_percent_30d;
-  const latencyStats = computeLatencyStats(metrics.latency_samples_ms || []);
-  const latencyCv = metrics.latency_cv ?? latencyStats.cv;
+  const latencySamples = metrics.latency_samples_ms || [];
+  const latencyStats = computeLatencyStats(latencySamples);
+  const effectiveLatencyStats = computeEffectiveLatencyStats(latencySamples);
+  const rawLatencyCv = metrics.latency_cv ?? latencyStats.cv;
+  const effectiveLatencyCv = effectiveLatencyStats.cv ?? rawLatencyCv;
   const uptimeScore = computeUptimeScore(uptimeBasis);
-  const stabilityScore = computeStabilityScore(latencyCv);
+  const stabilityScore = computeStabilityScore(effectiveLatencyCv);
   const streakScore = computeStreakScore(metrics.stable_days_streak);
 
   const latencyScore = normalizeLinear(
@@ -139,7 +144,10 @@ export function computeScore(
       total_penalty: round2(riskPenalty),
       risk_level: riskLevelFromScore(r),
       uptime_percent_basis: round2(uptimeBasis),
-      latency_cv: round2(latencyCv ?? 0),
+      latency_cv: effectiveLatencyCv === null ? null : round4(effectiveLatencyCv),
+      latency_cv_raw: rawLatencyCv === null ? null : round4(rawLatencyCv),
+      effective_latency_cv: effectiveLatencyCv === null ? null : round4(effectiveLatencyCv),
+      stability_rule_version: STABILITY_RULES.ruleVersion,
     },
   };
 }
@@ -285,6 +293,10 @@ function clamp(value: number, min: number, max: number): number {
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function round4(value: number): number {
+  return Math.round(value * 10000) / 10000;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

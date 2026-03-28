@@ -23,6 +23,10 @@ export const STABILITY_RULES = {
   minDailyUptimePercent: 99,
   maxLatencyCv: 0.2,
   streakCapDays: 30,
+  trimMinSampleCount: 5,
+  trimEdgeSampleCount: 1,
+  effectiveMeanFloorMs: 10,
+  ruleVersion: 'robust_cv_v1',
 } as const;
 
 export const THRESHOLDS = {

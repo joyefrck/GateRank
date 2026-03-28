@@ -141,14 +141,63 @@ export class ManualJobService {
     const isToday = job.date === getDateInTimezone();
 
     if (job.kind === 'full') {
+      const stageFailures: string[] = [];
       if (isToday) {
-        await this.runStabilityScript(job.airport_id);
-        await this.runPerformanceScript(job.airport_id);
-        await this.deps.riskCheckService.inspectAirportForDate(job.airport_id, job.date);
+        const stabilityFailure = await this.captureStageFailure('稳定性采集', async () => {
+          await this.runStabilityScript(job.airport_id);
+        });
+        if (stabilityFailure) {
+          stageFailures.push(stabilityFailure);
+        }
+
+        const performanceFailure = await this.captureStageFailure('性能采集', async () => {
+          await this.runPerformanceScript(job.airport_id);
+        });
+        if (performanceFailure) {
+          stageFailures.push(performanceFailure);
+        }
+
+        const riskFailure = await this.captureStageFailure('风险体检', async () => {
+          await this.deps.riskCheckService.inspectAirportForDate(job.airport_id, job.date);
+        });
+        if (riskFailure) {
+          stageFailures.push(riskFailure);
+        }
       }
-      const aggregateResult = await this.deps.aggregationService.aggregateAirportForDate(job.airport_id, job.date);
-      const recomputeResult = await this.deps.recomputeService.recomputeAirportForDate(job.date, job.airport_id);
-      return `全链路完成：聚合 ${aggregateResult.aggregated} 条，重算 ${recomputeResult.recomputed} 条`;
+
+      let aggregatedCount: number | null = null;
+      let recomputedCount: number | null = null;
+
+      const aggregateFailure = await this.captureStageFailure('聚合', async () => {
+        const result = await this.deps.aggregationService.aggregateAirportForDate(job.airport_id, job.date);
+        aggregatedCount = result.aggregated;
+      });
+      if (aggregateFailure) {
+        stageFailures.push(aggregateFailure);
+      }
+
+      const recomputeFailure = await this.captureStageFailure('时间维度重算', async () => {
+        const result = await this.deps.recomputeService.recomputeAirportForDate(job.date, job.airport_id);
+        recomputedCount = result.recomputed;
+      });
+      if (recomputeFailure) {
+        stageFailures.push(recomputeFailure);
+      }
+
+      if (stageFailures.length > 0) {
+        const successParts: string[] = [];
+        if (aggregatedCount !== null) {
+          successParts.push(`聚合 ${aggregatedCount} 条`);
+        }
+        if (recomputedCount !== null) {
+          successParts.push(`重算 ${recomputedCount} 条`);
+        }
+        const successSummary =
+          successParts.length > 0 ? `已完成 ${successParts.join('，')}。` : '没有成功完成的阶段。';
+        throw new Error(`全链路未完全成功。${successSummary} 失败阶段：${stageFailures.join('；')}`);
+      }
+
+      return `全链路完成：聚合 ${aggregatedCount ?? 0} 条，重算 ${recomputedCount ?? 0} 条`;
     }
 
     if (job.kind === 'stability') {
@@ -185,6 +234,16 @@ export class ManualJobService {
 
     const recomputeResult = await this.deps.recomputeService.recomputeAirportForDate(job.date, job.airport_id);
     return `时间衰减分重算完成：重算 ${recomputeResult.recomputed} 条`;
+  }
+
+  private async captureStageFailure(stageName: string, runner: () => Promise<void>): Promise<string | null> {
+    try {
+      await runner();
+      return null;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return `${stageName}失败（${message}）`;
+    }
   }
 
   private async runStabilityScript(airportId: number): Promise<void> {

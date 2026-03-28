@@ -35,6 +35,7 @@ export function buildRankings(
     .slice(0, LIST_LIMIT);
 
   const risk = rows
+    .filter((row) => row.airport.status === 'risk' || row.airport.status === 'down')
     .slice()
     .sort((a, b) => b.score.risk_penalty - a.score.risk_penalty)
     .slice(0, LIST_LIMIT);

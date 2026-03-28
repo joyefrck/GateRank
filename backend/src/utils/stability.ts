@@ -6,8 +6,15 @@ export interface LatencyStats {
   cv: number | null;
 }
 
+export interface EffectiveLatencyStats extends LatencyStats {
+  sampleCount: number;
+  evaluatedSampleCount: number;
+  evaluatedSamples: number[];
+}
+
 export function computeLatencyStats(samples: number[]): LatencyStats {
-  if (samples.length === 0) {
+  const normalizedSamples = normalizeSamples(samples);
+  if (normalizedSamples.length === 0) {
     return {
       meanMs: null,
       stdMs: null,
@@ -15,14 +22,43 @@ export function computeLatencyStats(samples: number[]): LatencyStats {
     };
   }
 
-  const meanMs = average(samples);
-  const stdMs = standardDeviation(samples, meanMs);
+  const meanMs = average(normalizedSamples);
+  const stdMs = standardDeviation(normalizedSamples, meanMs);
   const cv = meanMs > 0 ? stdMs / meanMs : null;
 
   return {
     meanMs: round2(meanMs),
     stdMs: round2(stdMs),
     cv: cv === null ? null : round4(cv),
+  };
+}
+
+export function computeEffectiveLatencyStats(samples: number[]): EffectiveLatencyStats {
+  const normalizedSamples = normalizeSamples(samples);
+  const evaluatedSamples = trimSamples(normalizedSamples);
+  if (evaluatedSamples.length === 0) {
+    return {
+      meanMs: null,
+      stdMs: null,
+      cv: null,
+      sampleCount: normalizedSamples.length,
+      evaluatedSampleCount: 0,
+      evaluatedSamples: [],
+    };
+  }
+
+  const meanMs = average(evaluatedSamples);
+  const stdMs = standardDeviation(evaluatedSamples, meanMs);
+  const cv =
+    meanMs > 0 ? stdMs / Math.max(meanMs, STABILITY_RULES.effectiveMeanFloorMs) : null;
+
+  return {
+    meanMs: round2(meanMs),
+    stdMs: round2(stdMs),
+    cv: cv === null ? null : round4(cv),
+    sampleCount: normalizedSamples.length,
+    evaluatedSampleCount: evaluatedSamples.length,
+    evaluatedSamples,
   };
 }
 
@@ -57,16 +93,38 @@ export function computeSScore(
 
 export function isStableDay(
   uptimePercent: number,
-  latencyCv: number | null,
-  latencySampleCount: number,
+  latencySamples: number[],
 ): boolean {
   if (uptimePercent < STABILITY_RULES.minDailyUptimePercent) {
     return false;
   }
-  if (latencySampleCount <= 0 || latencyCv === null || !Number.isFinite(latencyCv)) {
+
+  const effectiveStats = computeEffectiveLatencyStats(latencySamples);
+  if (
+    effectiveStats.evaluatedSampleCount <= 0 ||
+    effectiveStats.cv === null ||
+    !Number.isFinite(effectiveStats.cv)
+  ) {
     return false;
   }
-  return latencyCv <= STABILITY_RULES.maxLatencyCv;
+
+  return effectiveStats.cv <= STABILITY_RULES.maxLatencyCv;
+}
+
+function normalizeSamples(samples: number[]): number[] {
+  return samples.filter((sample) => Number.isFinite(sample)).map((sample) => round2(sample));
+}
+
+function trimSamples(samples: number[]): number[] {
+  if (samples.length < STABILITY_RULES.trimMinSampleCount) {
+    return samples.slice();
+  }
+
+  const sorted = samples.slice().sort((left, right) => left - right);
+  return sorted.slice(
+    STABILITY_RULES.trimEdgeSampleCount,
+    sorted.length - STABILITY_RULES.trimEdgeSampleCount,
+  );
 }
 
 function average(values: number[]): number {

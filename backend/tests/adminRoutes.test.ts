@@ -253,6 +253,67 @@ test('GET /airports/:id/dashboard exposes risk breakdown details', async () => {
   }
 });
 
+test('GET /airports/:id/dashboard exposes raw and effective stability diagnostics', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: {
+        ...stubMetricsRepository(),
+        getByAirportAndDate: async () => ({
+          airport_id: 1,
+          date: '2026-03-28',
+          uptime_percent_30d: 99.8,
+          uptime_percent_today: 100,
+          latency_samples_ms: [3.7, 6.03, 3.74, 5.89, 3.48],
+          latency_mean_ms: 4.57,
+          latency_std_ms: 1.14,
+          latency_cv: 0.2498,
+          stable_days_streak: 15,
+          is_stable_day: null,
+        }),
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/dashboard?date=2026-03-28`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { stability: Record<string, unknown> };
+    assert.equal(data.stability.latency_cv, 0.2498);
+    assert.equal(data.stability.effective_latency_cv, 0.1023);
+    assert.equal(data.stability.is_stable_day, true);
+    assert.equal(data.stability.stability_score, 89.77);
+    assert.equal(data.stability.stability_rule_version, 'robust_cv_v1');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /airports/:id/dashboard marks performance metrics as cached when run is inherited', async () => {
   const app = express();
   app.use(express.json());

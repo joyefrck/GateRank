@@ -115,7 +115,7 @@ export class AggregationService {
     const uptimePercent30d = calcUptimePercent(availByDay);
     const latenciesByDay = buildLatencyMap(samples, 'stability');
     const stableDaysStreak = calcStableStreak(availByDay, latenciesByDay, date);
-    const stableDay = isStableDay(uptimePercentToday, latencyStats.cv, stabilityLatencies.length);
+    const stableDay = isStableDay(uptimePercentToday, stabilityLatencies);
 
     await this.deps.metricsRepository.upsertDaily({
       airport_id: airportId,
@@ -200,8 +200,7 @@ function calcStableStreak(
       break;
     }
     const uptimePercent = average(availabilities) * 100;
-    const latencyStats = computeLatencyStats(latencies);
-    if (isStableDay(uptimePercent, latencyStats.cv, latencies.length)) {
+    if (isStableDay(uptimePercent, latencies)) {
       streak += 1;
       continue;
     }

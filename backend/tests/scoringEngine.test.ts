@@ -141,6 +141,76 @@ test('computeScore uses uptime, latency cv and streak formulas for S', () => {
   assert.equal(out.s, 77.27);
 });
 
+test('computeScore uses effective latency cv for low-latency routes', () => {
+  const airport: Airport = {
+    id: 1,
+    name: 'A',
+    website: 'https://a.example.com',
+    status: 'normal',
+    plan_price_month: 20,
+    has_trial: false,
+    tags: [],
+    created_at: '2026-03-20',
+  };
+
+  const metrics: DailyMetrics = {
+    airport_id: 1,
+    date: '2026-03-28',
+    uptime_percent_30d: 99.8,
+    uptime_percent_today: 100,
+    latency_samples_ms: [3.7, 6.03, 3.74, 5.89, 3.48],
+    latency_cv: 0.2498,
+    median_latency_ms: 20,
+    median_download_mbps: 100,
+    packet_loss_percent: 0.2,
+    stable_days_streak: 15,
+    domain_ok: true,
+    ssl_days_left: 30,
+    recent_complaints_count: 0,
+    history_incidents: 0,
+  };
+
+  const out = computeScore(airport, metrics, 0);
+  assert.equal(out.details.latency_cv_raw, 0.2498);
+  assert.equal(out.details.effective_latency_cv, 0.1023);
+  assert.equal(out.details.stability_rule_version, 'robust_cv_v1');
+  assert.equal(out.details.stability_score, 89.77);
+  assert.equal(out.s, 86.93);
+});
+
+test('computeScore does not over-reward genuinely noisy latency samples', () => {
+  const airport: Airport = {
+    id: 1,
+    name: 'A',
+    website: 'https://a.example.com',
+    status: 'normal',
+    plan_price_month: 20,
+    has_trial: false,
+    tags: [],
+    created_at: '2026-03-20',
+  };
+
+  const metrics: DailyMetrics = {
+    airport_id: 1,
+    date: '2026-03-28',
+    uptime_percent_30d: 99.8,
+    uptime_percent_today: 100,
+    latency_samples_ms: [5, 20, 40, 60, 90],
+    median_latency_ms: 80,
+    median_download_mbps: 100,
+    packet_loss_percent: 0.2,
+    stable_days_streak: 0,
+    domain_ok: true,
+    ssl_days_left: 30,
+    recent_complaints_count: 0,
+    history_incidents: 0,
+  };
+
+  const out = computeScore(airport, metrics, 0);
+  assert.equal(out.details.effective_latency_cv, 0.4082);
+  assert.equal(out.details.stability_score, 59.18);
+});
+
 test('risk penalty helpers follow stepped MVP rules', () => {
   assert.equal(calcSslPenalty(null), 5);
   assert.equal(calcSslPenalty(-1), 30);

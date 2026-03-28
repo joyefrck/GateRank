@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { STABILITY_RULES } from '../config/scoring';
 import { HttpError } from '../middleware/errorHandler';
 import { calcPriceScore, computeFinalEngineScore } from '../services/scoringEngine';
 import {
@@ -21,6 +22,7 @@ import type {
   ProbeScope,
 } from '../types/domain';
 import {
+  computeEffectiveLatencyStats,
   computeLatencyStats,
   computeSScore,
   computeStabilityScore,
@@ -600,16 +602,21 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const details = ((scoreObj.details as Record<string, unknown>) || {}) as Record<string, unknown>;
       const latencySamples = numberArrayOrEmpty(metricsObj.latency_samples_ms);
       const latencyStats = computeLatencyStats(latencySamples);
+      const effectiveLatencyStats = computeEffectiveLatencyStats(latencySamples);
       const uptimePercentToday =
         numberOrNull(metricsObj.uptime_percent_today) ??
         numberOrNull(metricsObj.uptime_percent_30d) ??
         0;
       const latencyCv = numberOrNull(metricsObj.latency_cv) ?? latencyStats.cv;
+      const effectiveLatencyCv =
+        numberOrNull(details.effective_latency_cv) ??
+        effectiveLatencyStats.cv ??
+        latencyCv;
       const stableDaysStreak = numberOrNull(metricsObj.stable_days_streak);
       const uptimeScore =
         numberOrNull(details.uptime_score) ?? computeUptimeScore(uptimePercentToday);
       const stabilityScore =
-        numberOrNull(details.stability_score) ?? computeStabilityScore(latencyCv);
+        numberOrNull(details.stability_score) ?? computeStabilityScore(effectiveLatencyCv);
       const streakScore =
         numberOrNull(details.streak_score) ??
         computeStreakScore(stableDaysStreak ?? 0);
@@ -666,15 +673,18 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           latency_mean_ms: numberOrNull(metricsObj.latency_mean_ms) ?? latencyStats.meanMs,
           latency_std_ms: numberOrNull(metricsObj.latency_std_ms) ?? latencyStats.stdMs,
           latency_cv: latencyCv,
+          effective_latency_cv: effectiveLatencyCv,
           download_samples_mbps: numberArrayOrEmpty(metricsObj.download_samples_mbps),
           stable_days_streak: stableDaysStreak,
           is_stable_day:
             boolOrNull(metricsObj.is_stable_day) ??
-            isStableDay(uptimePercentToday, latencyCv, latencySamples.length),
+            isStableDay(uptimePercentToday, latencySamples),
           s: sScore,
           uptime_score: uptimeScore,
           stability_score: stabilityScore,
           streak_score: streakScore,
+          stability_rule_version:
+            stringOrNull(details.stability_rule_version) ?? STABILITY_RULES.ruleVersion,
         },
         performance: {
           median_latency_ms: numberOrNull(metricsObj.median_latency_ms),
@@ -855,11 +865,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         stable_days_streak: mustNumber(payload.stable_days_streak, 'stable_days_streak'),
         is_stable_day:
           optionalBoolean(payload.is_stable_day) ??
-          isStableDay(
-            derivedUptimePercentToday,
-            optionalNumber(payload.latency_cv) ?? latencyStats.cv,
-            latencySamples.length,
-          ),
+          isStableDay(derivedUptimePercentToday, latencySamples),
         domain_ok: Boolean(payload.domain_ok),
         ssl_days_left: optionalNumber(payload.ssl_days_left) ?? null,
         recent_complaints_count: mustNumber(payload.recent_complaints_count ?? 0, 'recent_complaints_count'),

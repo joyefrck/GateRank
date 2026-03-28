@@ -71,6 +71,7 @@ interface AirportDashboardView {
     latency_mean_ms: number | null;
     latency_std_ms: number | null;
     latency_cv: number | null;
+    effective_latency_cv: number | null;
     download_samples_mbps: number[];
     stable_days_streak: number | null;
     is_stable_day: boolean | null;
@@ -78,6 +79,7 @@ interface AirportDashboardView {
     uptime_score: number | null;
     stability_score: number | null;
     streak_score: number | null;
+    stability_rule_version: string | null;
   };
   performance: {
     median_latency_ms: number | null;
@@ -1846,8 +1848,9 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
           <div className="space-y-4">
             <div className="rounded border border-neutral-200 bg-neutral-50 p-4">
               <div className="text-sm font-semibold text-neutral-900">稳定性判定</div>
-              <div className="mt-1 text-xs text-neutral-500">
-                {'稳定日规则：`uptime >= 99%` 且 `latency_cv <= 0.20`，并且当日存在有效延迟样本。'}
+              <div className="mt-1 text-xs text-neutral-500 whitespace-pre-wrap">
+                {'稳定日规则：`uptime >= 99%` 且 `effective_latency_cv <= 0.20`，并且当日存在有效延迟样本。\n'}
+                {'原始 `latency_cv` 仅用于诊断；实际判定会对 5 个及以上样本去掉 1 个最大值和 1 个最小值，并对低延迟均值使用 10ms 地板。'}
               </div>
             </div>
 
@@ -1856,17 +1859,19 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <ReadField label="30天可用率 (uptime_percent_30d)" value={valueOrDash(dashboard.stability.uptime_percent_30d)} />
               <ReadField label="延迟均值ms (latency_mean_ms)" value={valueOrDash(dashboard.stability.latency_mean_ms)} />
               <ReadField label="延迟标准差ms (latency_std_ms)" value={valueOrDash(dashboard.stability.latency_std_ms)} />
-              <ReadField label="延迟CV (latency_cv)" value={valueOrDash(dashboard.stability.latency_cv)} />
+              <ReadField label="延迟CV-原始 (latency_cv)" value={valueOrDash(dashboard.stability.latency_cv)} />
+              <ReadField label="延迟CV-判定 (effective_latency_cv)" value={valueOrDash(dashboard.stability.effective_latency_cv)} />
               <ReadField label="是否稳定日 (is_stable_day)" value={dashboard.stability.is_stable_day === null ? '-' : dashboard.stability.is_stable_day ? '是' : '否'} />
               <ReadField label="连续稳定天数 (stable_days_streak)" value={valueOrDash(dashboard.stability.stable_days_streak)} />
               <ReadField label="延迟采样ms (latency_samples_ms)" value={valueOrDash((dashboard.stability.latency_samples_ms || []).join(', ') || '-')} />
+              <ReadField label="规则版本 (stability_rule_version)" value={dashboard.stability.stability_rule_version || '-'} />
             </div>
 
             <div className="rounded border border-neutral-200 bg-white p-4">
               <div className="text-sm font-semibold text-neutral-900">评分公式</div>
               <div className="mt-2 text-xs text-neutral-500 whitespace-pre-wrap">
                 {'UptimeScore = clamp((Uptime% - 95) * 20, 0, 100)\n'}
-                {'StabilityScore = clamp(100 - latency_cv * 100, 0, 100)\n'}
+                {'StabilityScore = clamp(100 - effective_latency_cv * 100, 0, 100)\n'}
                 {'StreakScore = min(stable_days_streak / 30 * 100, 100)\n'}
                 {'S = 0.5 * UptimeScore + 0.3 * StabilityScore + 0.2 * StreakScore'}
               </div>
