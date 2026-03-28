@@ -190,6 +190,8 @@ News 模块上线要求：
 
 - `gaterank-web` 需要把 `/news`、`/uploads`、`/sitemap.xml` 代理到 `gaterank-api`
 - `gaterank-api` 需要挂载新闻图片持久化目录
+- `gaterank-api` 需要在环境变量里配置 `NEWS_UPLOAD_ROOT_DIR`，并指向上面的持久化挂载路径
+- 如启用第三方封面图库，生产环境还需要配置 `PEXELS_API_KEY`
 
 推荐发布流程：
 
@@ -203,6 +205,8 @@ News 模块上线要求：
 说明：
 
 - 当前线上编排会在启动时重新从 GitHub 拉取最新代码
+- `gaterank-web` 不能直接用 `serve -s dist` 替代网关层；否则 `/news`、`/uploads`、`/sitemap.xml` 不会正确代理到 API
+- `gaterank-api` 若未挂新闻图片持久卷，`/uploads/news` 下的封面会在容器重建后丢失
 - 不要把 1Panel 账号、密码或其他敏感信息写入仓库
 
 ## 午夜自动维护
