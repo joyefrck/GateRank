@@ -1,4 +1,5 @@
 import { HttpError } from '../middleware/errorHandler';
+import type { MediaLibrarySettingsService, PexelsMediaLibraryConfig } from './mediaLibrarySettingsService';
 import { NewsCoverImageService } from './newsCoverImageService';
 
 const SEARCH_ENDPOINT = 'https://api.pexels.com/v1/search';
@@ -62,13 +63,12 @@ export interface ImportPexelsCoverInput {
 
 export class PexelsCoverService {
   constructor(
-    private readonly apiKey: string = process.env.PEXELS_API_KEY?.trim() || '',
-    private readonly timeoutMs: number = DEFAULT_TIMEOUT_MS,
+    private readonly mediaLibrarySettingsService: Pick<MediaLibrarySettingsService, 'getPexelsConfig'>,
     private readonly newsCoverImageService: NewsCoverImageService = new NewsCoverImageService(),
   ) {}
 
   async searchCoverCandidates(query: string, page: number, perPage: number): Promise<PexelsCoverSearchResult> {
-    this.assertConfigured();
+    const config = await this.requireConfigured();
 
     const search = new URLSearchParams({
       query,
@@ -77,7 +77,7 @@ export class PexelsCoverService {
       orientation: 'landscape',
     });
 
-    const response = await this.fetchFromPexels(`${SEARCH_ENDPOINT}?${search.toString()}`);
+    const response = await this.fetchFromPexels(`${SEARCH_ENDPOINT}?${search.toString()}`, config);
     const payload = (await response.json()) as PexelsSearchResponse;
     const items = (payload.photos || []).map((photo) => this.normalizePhoto(photo)).filter(Boolean) as PexelsCoverCandidate[];
 
@@ -90,9 +90,9 @@ export class PexelsCoverService {
   }
 
   async importCoverImage(input: ImportPexelsCoverInput, maxBytes: number): Promise<{ url: string }> {
-    this.assertConfigured();
+    const config = await this.requireConfigured();
     const remoteUrl = this.assertAllowedImageUrl(input.download_url);
-    const response = await this.fetchFromPexels(remoteUrl.toString());
+    const response = await this.fetchFromPexels(remoteUrl.toString(), config);
     const contentType = normalizeContentType(response.headers.get('content-type'));
 
     if (!contentType || !ALLOWED_IMAGE_MIME_TYPES.has(contentType)) {
@@ -151,14 +151,14 @@ export class PexelsCoverService {
     };
   }
 
-  private async fetchFromPexels(url: string): Promise<Response> {
+  private async fetchFromPexels(url: string, config: PexelsMediaLibraryConfig): Promise<Response> {
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+    const timer = setTimeout(() => controller.abort(), config.timeout_ms || DEFAULT_TIMEOUT_MS);
 
     try {
       const response = await fetch(url, {
         headers: {
-          Authorization: this.apiKey,
+          Authorization: config.api_key,
         },
         signal: controller.signal,
       });
@@ -184,10 +184,15 @@ export class PexelsCoverService {
     }
   }
 
-  private assertConfigured(): void {
-    if (!this.apiKey) {
-      throw new HttpError(503, 'PEXELS_NOT_CONFIGURED', '未配置 PEXELS_API_KEY，无法使用封面图库');
+  private async requireConfigured(): Promise<PexelsMediaLibraryConfig> {
+    const config = await this.mediaLibrarySettingsService.getPexelsConfig();
+    if (!config.enabled) {
+      throw new HttpError(503, 'MEDIA_LIBRARY_DISABLED', 'Pexels 图库已禁用，请在后台“系统设置 > 图库设置”中启用');
     }
+    if (!config.api_key.trim()) {
+      throw new HttpError(503, 'MEDIA_LIBRARY_NOT_CONFIGURED', '未在后台“系统设置 > 图库设置”中配置 Pexels API Key，无法使用封面图库');
+    }
+    return config;
   }
 
   private assertAllowedImageUrl(value: string): URL {

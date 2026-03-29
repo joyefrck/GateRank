@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
+import { buildPublishTokenDocsHref } from '../site/publicSite';
 
 type AirportStatus = 'normal' | 'risk' | 'down';
 type AirportApplicationReviewStatus = 'pending' | 'reviewed' | 'rejected';
@@ -22,6 +23,7 @@ type ProbeSampleType = 'latency' | 'download' | 'availability';
 type ProbeScope = 'stability' | 'performance';
 type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
 type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
+type PublishTokenScope = 'news:create' | 'news:update' | 'news:publish' | 'news:archive' | 'news:upload';
 
 interface Airport {
   id: number;
@@ -237,6 +239,72 @@ interface TelegramSettingsFormState {
   };
 }
 
+type SystemSettingsTab = 'notifications' | 'media_libraries' | 'publish_tokens';
+
+interface MediaLibrarySettingsView {
+  providers: {
+    pexels: {
+      enabled: boolean;
+      has_api_key: boolean;
+      api_key_masked: string | null;
+      timeout_ms: number;
+    };
+  };
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+interface MediaLibrarySettingsFormState {
+  providers: {
+    pexels: {
+      enabled: boolean;
+      api_key: string;
+      timeout_ms: string;
+    };
+  };
+}
+
+interface PublishTokenView {
+  id: number;
+  name: string;
+  description: string;
+  token_masked: string;
+  scopes: PublishTokenScope[];
+  status: 'active' | 'revoked';
+  expires_at: string | null;
+  last_used_at: string | null;
+  last_used_ip: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PublishTokenListView {
+  items: PublishTokenView[];
+}
+
+interface PublishTokenCreateResponse {
+  token: PublishTokenView;
+  plain_token: string;
+}
+
+interface PublishTokenCreateFormState {
+  name: string;
+  description: string;
+  expires_at: string;
+  scopes: PublishTokenScope[];
+}
+
+const PUBLISH_TOKEN_SCOPES: Array<{ value: PublishTokenScope; label: string; description: string }> = [
+  { value: 'news:create', label: '创建文章', description: '允许创建新闻草稿或直接发文。' },
+  { value: 'news:update', label: '更新文章', description: '允许修改已有新闻内容。' },
+  { value: 'news:publish', label: '发布文章', description: '允许将文章直接发布上线。' },
+  { value: 'news:archive', label: '归档文章', description: '允许下线或归档文章。' },
+  { value: 'news:upload', label: '上传图片', description: '允许上传正文或封面图片。' },
+];
+
+const DEFAULT_PUBLISH_TOKEN_SCOPES = PUBLISH_TOKEN_SCOPES.map((item) => item.value);
+
 const TOKEN_KEY = 'gaterank_admin_token';
 
 function getApiBase(): string {
@@ -436,6 +504,58 @@ function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
 }
 
 function SystemSettingsPage() {
+  const [activeTab, setActiveTab] = useState<SystemSettingsTab>('notifications');
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold">系统设置</h2>
+          <p className="mt-1 text-sm text-neutral-500">
+            {activeTab === 'notifications'
+              ? '通知设置支持 Telegram 直发和 Webhook 转发，保存后立即生效。'
+              : activeTab === 'media_libraries'
+                ? '图库设置用于托管第三方图库访问凭证，当前新闻封面搜索使用 Pexels。'
+                : '发布令牌用于给第三方系统或 AI 开放受限发文能力，令牌明文只会展示一次。'}
+          </p>
+        </div>
+        <button className="px-3 py-2 rounded border text-sm" onClick={() => setRefreshTick((value) => value + 1)}>
+          刷新
+        </button>
+      </div>
+
+      <div className="inline-flex rounded-2xl border border-neutral-200 bg-white p-1">
+        <button
+          className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'notifications' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+          onClick={() => setActiveTab('notifications')}
+        >
+          通知设置
+        </button>
+        <button
+          className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'media_libraries' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+          onClick={() => setActiveTab('media_libraries')}
+        >
+          图库设置
+        </button>
+        <button
+          className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'publish_tokens' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+          onClick={() => setActiveTab('publish_tokens')}
+        >
+          发布令牌
+        </button>
+      </div>
+
+      {activeTab === 'notifications'
+        ? <NotificationSettingsTab refreshTick={refreshTick} />
+        : activeTab === 'media_libraries'
+          ? <MediaLibrarySettingsTab refreshTick={refreshTick} />
+          : <PublishTokensSettingsTab refreshTick={refreshTick} />}
+    </div>
+  );
+}
+
+function NotificationSettingsTab({ refreshTick }: { refreshTick: number }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -496,7 +616,7 @@ function SystemSettingsPage() {
 
   useEffect(() => {
     void fetchSettings();
-  }, []);
+  }, [refreshTick]);
 
   const buildPayload = () => {
     const payload: Record<string, unknown> = {
@@ -564,265 +684,783 @@ function SystemSettingsPage() {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-lg font-bold">系统设置</h2>
-          <p className="mt-1 text-sm text-neutral-500">申请通知支持 Telegram 直发和 Webhook 转发，保存后立即生效。</p>
-        </div>
-        <button className="px-3 py-2 rounded border text-sm" onClick={() => void fetchSettings()} disabled={loading}>
-          刷新
-        </button>
+    <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">通知设置</div>
+        <p className="mt-1 text-sm text-neutral-500">用于接收新的机场入驻申请提醒。测试不会持久化当前输入的密钥变更。</p>
       </div>
 
-      <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
-        <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">申请通知</div>
-          <p className="mt-1 text-sm text-neutral-500">用于接收新的机场入驻申请提醒。测试不会持久化当前输入的密钥变更。</p>
-        </div>
+      {loading && <div className="text-sm text-neutral-500">加载中...</div>}
 
-        {loading && <div className="text-sm text-neutral-500">加载中...</div>}
+      {!loading && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ReadField label="当前发送模式" value={form.delivery_mode === 'telegram_chat' ? 'Telegram 直发' : 'Webhook 转发'} />
+            <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
+            <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
+            <ReadField label="Telegram Token" value={settings?.telegram_chat.has_bot_token ? `已配置 (${settings?.telegram_chat.bot_token_masked || '-'})` : '未配置'} />
+            <ReadField label="Telegram Chat ID" value={valueOrDash(settings?.telegram_chat.chat_id)} />
+            <ReadField label="Webhook Bearer" value={settings?.webhook.has_bearer_token ? `已配置 (${settings?.webhook.bearer_token_masked || '-'})` : '未配置'} />
+            <ReadField label="Webhook URL" value={valueOrDash(settings?.webhook.url)} />
+          </div>
 
-        {!loading && (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <ReadField label="当前发送模式" value={form.delivery_mode === 'telegram_chat' ? 'Telegram 直发' : 'Webhook 转发'} />
-              <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
-              <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
-              <ReadField label="Telegram Token" value={settings?.telegram_chat.has_bot_token ? `已配置 (${settings?.telegram_chat.bot_token_masked || '-'})` : '未配置'} />
-              <ReadField label="Telegram Chat ID" value={valueOrDash(settings?.telegram_chat.chat_id)} />
-              <ReadField label="Webhook Bearer" value={settings?.webhook.has_bearer_token ? `已配置 (${settings?.webhook.bearer_token_masked || '-'})` : '未配置'} />
-              <ReadField label="Webhook URL" value={valueOrDash(settings?.webhook.url)} />
-            </div>
+          <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
+            <div className="text-sm font-medium text-neutral-900">启用开关</div>
+            <p className="mt-1 text-sm text-neutral-500">关闭后不会自动推送新申请通知，但仍可手动发送测试消息。</p>
+            <label className="mt-4 inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={form.enabled}
+                onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+              />
+              启用申请通知
+            </label>
+          </div>
 
-            <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
-              <div className="text-sm font-medium text-neutral-900">启用开关</div>
-              <p className="mt-1 text-sm text-neutral-500">关闭后不会自动推送新申请通知，但仍可手动发送测试消息。</p>
-              <label className="mt-4 inline-flex items-center gap-3 text-sm font-medium">
+          <div className="rounded-2xl border border-neutral-300 bg-white px-4 py-4 space-y-3">
+            <div className="text-sm font-medium text-neutral-900">发送模式</div>
+            <p className="text-sm text-neutral-500">Telegram 直发适合用户、群组、频道；如果目标是另一个 bot，请改用 Webhook 转发。</p>
+            <div className="flex flex-wrap gap-3">
+              <label className="inline-flex items-center gap-2 text-sm font-medium">
                 <input
-                  type="checkbox"
-                  className="h-4 w-4 rounded border-neutral-300"
-                  checked={form.enabled}
-                  onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+                  type="radio"
+                  name="delivery_mode"
+                  checked={form.delivery_mode === 'telegram_chat'}
+                  onChange={() => setForm({ ...form, delivery_mode: 'telegram_chat' })}
                 />
-                启用申请通知
+                Telegram 直发
+              </label>
+              <label className="inline-flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="radio"
+                  name="delivery_mode"
+                  checked={form.delivery_mode === 'webhook'}
+                  onChange={() => setForm({ ...form, delivery_mode: 'webhook' })}
+                />
+                Webhook 转发
               </label>
             </div>
+          </div>
 
-            <div className="rounded-2xl border border-neutral-300 bg-white px-4 py-4 space-y-3">
-              <div className="text-sm font-medium text-neutral-900">发送模式</div>
-              <p className="text-sm text-neutral-500">Telegram 直发适合用户、群组、频道；如果目标是另一个 bot，请改用 Webhook 转发。</p>
-              <div className="flex flex-wrap gap-3">
-                <label className="inline-flex items-center gap-2 text-sm font-medium">
+          {form.delivery_mode === 'telegram_chat' && (
+            <>
+              <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
+                <div className="text-sm font-medium text-neutral-900">Telegram 直发说明</div>
+                <p className="mt-1 text-sm text-neutral-500">适合直接发给用户、群组、频道。如果目标是另一个 bot，这种方式不可用，请切换到 Webhook 转发。</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                  label="Bot Token"
+                  hint={settings?.telegram_chat.has_bot_token ? '已配置，留空则不修改；如需删除，请勾选下方“清空已保存 Token”。' : '未配置时请直接输入新的 Bot Token。'}
+                >
+                  <div className="space-y-2">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      type="password"
+                      placeholder={settings?.telegram_chat.has_bot_token ? '已配置，留空则不修改' : '输入新的 Bot Token'}
+                      value={form.telegram_chat.bot_token}
+                      onChange={(e) => {
+                        setClearBotToken(false);
+                        setForm({
+                          ...form,
+                          telegram_chat: { ...form.telegram_chat, bot_token: e.target.value },
+                        });
+                      }}
+                    />
+                    {settings?.telegram_chat.has_bot_token && (
+                      <div className="text-xs text-neutral-500">当前已保存：{settings.telegram_chat.bot_token_masked}</div>
+                    )}
+                  </div>
+                </FormField>
+
+                <FormField label="Chat ID" hint="例如群组 chat id 通常是 -100 开头。">
                   <input
-                    type="radio"
-                    name="delivery_mode"
-                    checked={form.delivery_mode === 'telegram_chat'}
-                    onChange={() => setForm({ ...form, delivery_mode: 'telegram_chat' })}
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    placeholder="-1001234567890"
+                    value={form.telegram_chat.chat_id}
+                    onChange={(e) => setForm({
+                      ...form,
+                      telegram_chat: { ...form.telegram_chat, chat_id: e.target.value },
+                    })}
                   />
-                  Telegram 直发
-                </label>
-                <label className="inline-flex items-center gap-2 text-sm font-medium">
+                </FormField>
+
+                <FormField label="API Base" hint="默认使用官方 Telegram API 地址。">
                   <input
-                    type="radio"
-                    name="delivery_mode"
-                    checked={form.delivery_mode === 'webhook'}
-                    onChange={() => setForm({ ...form, delivery_mode: 'webhook' })}
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    placeholder="https://api.telegram.org"
+                    value={form.telegram_chat.api_base}
+                    onChange={(e) => setForm({
+                      ...form,
+                      telegram_chat: { ...form.telegram_chat, api_base: e.target.value },
+                    })}
                   />
-                  Webhook 转发
+                </FormField>
+
+                <FormField label="超时(ms)" hint="请求 Telegram API 的超时控制。">
+                  <input
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.telegram_chat.timeout_ms}
+                    onChange={(e) => setForm({
+                      ...form,
+                      telegram_chat: { ...form.telegram_chat, timeout_ms: e.target.value },
+                    })}
+                  />
+                </FormField>
+              </div>
+
+              {settings?.telegram_chat.has_bot_token && (
+                <label className="inline-flex items-center gap-3 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-neutral-300"
+                    checked={clearBotToken}
+                    onChange={(e) => {
+                      setClearBotToken(e.target.checked);
+                      if (e.target.checked) {
+                        setForm({
+                          ...form,
+                          telegram_chat: { ...form.telegram_chat, bot_token: '' },
+                        });
+                      }
+                    }}
+                  />
+                  清空已保存 Bot Token
                 </label>
+              )}
+            </>
+          )}
+
+          {form.delivery_mode === 'webhook' && (
+            <>
+              <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
+                <div className="text-sm font-medium text-neutral-900">Webhook 转发说明</div>
+                <p className="mt-1 text-sm text-neutral-500">如果你的 bot 需要接收事件，请让 GateRank 调用你控制的 Webhook，再由你的 bot 自己处理这条请求。</p>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField label="Webhook URL" hint="GateRank 会向这个地址 POST 申请通知事件。">
+                  <input
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    placeholder="https://example.com/webhooks/gaterank"
+                    value={form.webhook.url}
+                    onChange={(e) => setForm({
+                      ...form,
+                      webhook: { ...form.webhook, url: e.target.value },
+                    })}
+                  />
+                </FormField>
+
+                <FormField
+                  label="Bearer Token"
+                  hint={settings?.webhook.has_bearer_token ? '已配置，留空则不修改；如需删除，请勾选下方“清空已保存 Bearer Token”。' : '用于 Authorization: Bearer ... 鉴权。'}
+                >
+                  <div className="space-y-2">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      type="password"
+                      placeholder={settings?.webhook.has_bearer_token ? '已配置，留空则不修改' : '输入新的 Bearer Token'}
+                      value={form.webhook.bearer_token}
+                      onChange={(e) => {
+                        setClearWebhookBearerToken(false);
+                        setForm({
+                          ...form,
+                          webhook: { ...form.webhook, bearer_token: e.target.value },
+                        });
+                      }}
+                    />
+                    {settings?.webhook.has_bearer_token && (
+                      <div className="text-xs text-neutral-500">当前已保存：{settings.webhook.bearer_token_masked}</div>
+                    )}
+                  </div>
+                </FormField>
+
+                <FormField label="超时(ms)" hint="请求 Webhook 的超时控制。">
+                  <input
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    type="number"
+                    min="1"
+                    step="1"
+                    value={form.webhook.timeout_ms}
+                    onChange={(e) => setForm({
+                      ...form,
+                      webhook: { ...form.webhook, timeout_ms: e.target.value },
+                    })}
+                  />
+                </FormField>
+              </div>
+
+              {settings?.webhook.has_bearer_token && (
+                <label className="inline-flex items-center gap-3 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 rounded border-neutral-300"
+                    checked={clearWebhookBearerToken}
+                    onChange={(e) => {
+                      setClearWebhookBearerToken(e.target.checked);
+                      if (e.target.checked) {
+                        setForm({
+                          ...form,
+                          webhook: { ...form.webhook, bearer_token: '' },
+                        });
+                      }
+                    }}
+                  />
+                  清空已保存 Bearer Token
+                </label>
+              )}
+            </>
+          )}
+
+          {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+          {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+
+          <div className="flex items-center justify-end gap-3">
+            <button className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50" disabled={testing} onClick={() => void sendTest()}>
+              {testing ? '发送中...' : form.delivery_mode === 'telegram_chat' ? '发送 Telegram 测试消息' : '发送 Webhook 测试请求'}
+            </button>
+            <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
+              {saving ? '保存中...' : '保存配置'}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function MediaLibrarySettingsTab({ refreshTick }: { refreshTick: number }) {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [settings, setSettings] = useState<MediaLibrarySettingsView | null>(null);
+  const [clearPexelsApiKey, setClearPexelsApiKey] = useState(false);
+  const [form, setForm] = useState<MediaLibrarySettingsFormState>({
+    providers: {
+      pexels: {
+        enabled: false,
+        api_key: '',
+        timeout_ms: '8000',
+      },
+    },
+  });
+
+  const applyView = (view: MediaLibrarySettingsView) => {
+    setSettings(view);
+    setForm({
+      providers: {
+        pexels: {
+          enabled: view.providers.pexels.enabled,
+          api_key: '',
+          timeout_ms: String(view.providers.pexels.timeout_ms || 8000),
+        },
+      },
+    });
+    setClearPexelsApiKey(false);
+  };
+
+  const fetchSettings = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/media-libraries')) as MediaLibrarySettingsView;
+      applyView(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载设置失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchSettings();
+  }, [refreshTick]);
+
+  const buildPayload = () => {
+    const payload: Record<string, unknown> = {
+      providers: {
+        pexels: {
+          enabled: form.providers.pexels.enabled,
+          timeout_ms: Number(form.providers.pexels.timeout_ms || 8000),
+        },
+      },
+    };
+
+    if (clearPexelsApiKey) {
+      ((payload.providers as Record<string, unknown>).pexels as Record<string, unknown>).api_key = '';
+    } else if (form.providers.pexels.api_key.trim()) {
+      ((payload.providers as Record<string, unknown>).pexels as Record<string, unknown>).api_key = form.providers.pexels.api_key.trim();
+    }
+
+    return payload;
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/media-libraries', {
+        method: 'PATCH',
+        body: JSON.stringify(buildPayload()),
+      })) as MediaLibrarySettingsView;
+      applyView(data);
+      setSuccess('图库配置已保存');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">图库设置</div>
+        <p className="mt-1 text-sm text-neutral-500">统一管理第三方图库访问凭证。当前新闻封面搜索仅接入 Pexels，但配置结构已为后续扩展预留。</p>
+      </div>
+
+      {loading && <div className="text-sm text-neutral-500">加载中...</div>}
+
+      {!loading && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ReadField label="Pexels 状态" value={form.providers.pexels.enabled ? '已启用' : '已禁用'} />
+            <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
+            <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
+            <ReadField label="Pexels API Key" value={settings?.providers.pexels.has_api_key ? `已配置 (${settings.providers.pexels.api_key_masked || '-'})` : '未配置'} />
+          </div>
+
+          <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
+            <div className="text-sm font-medium text-neutral-900">Pexels 图库</div>
+            <p className="mt-1 text-sm text-neutral-500">用于新闻编辑页的第三方封面搜索与导入。关闭后，现有“从图库选择封面”入口仍显示，但调用会被拒绝。</p>
+            <label className="mt-4 inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={form.providers.pexels.enabled}
+                onChange={(e) => setForm({
+                  providers: {
+                    pexels: {
+                      ...form.providers.pexels,
+                      enabled: e.target.checked,
+                    },
+                  },
+                })}
+              />
+              启用 Pexels 图库
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              label="Pexels API Key"
+              hint={settings?.providers.pexels.has_api_key ? '已配置，留空则不修改；如需删除，请勾选下方“清空已保存 API Key”。' : '请输入新的 Pexels API Key。'}
+            >
+              <div className="space-y-2">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  type="password"
+                  placeholder={settings?.providers.pexels.has_api_key ? '已配置，留空则不修改' : '输入新的 Pexels API Key'}
+                  value={form.providers.pexels.api_key}
+                  onChange={(e) => {
+                    setClearPexelsApiKey(false);
+                    setForm({
+                      providers: {
+                        pexels: {
+                          ...form.providers.pexels,
+                          api_key: e.target.value,
+                        },
+                      },
+                    });
+                  }}
+                />
+                {settings?.providers.pexels.has_api_key && (
+                  <div className="text-xs text-neutral-500">当前已保存：{settings.providers.pexels.api_key_masked}</div>
+                )}
+              </div>
+            </FormField>
+
+            <FormField label="超时(ms)" hint="请求 Pexels API 的超时控制。">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                type="number"
+                min="1"
+                step="1"
+                value={form.providers.pexels.timeout_ms}
+                onChange={(e) => setForm({
+                  providers: {
+                    pexels: {
+                      ...form.providers.pexels,
+                      timeout_ms: e.target.value,
+                    },
+                  },
+                })}
+              />
+            </FormField>
+          </div>
+
+          {settings?.providers.pexels.has_api_key && (
+            <label className="inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={clearPexelsApiKey}
+                onChange={(e) => {
+                  setClearPexelsApiKey(e.target.checked);
+                  if (e.target.checked) {
+                    setForm({
+                      providers: {
+                        pexels: {
+                          ...form.providers.pexels,
+                          api_key: '',
+                        },
+                      },
+                    });
+                  }
+                }}
+              />
+              清空已保存 API Key
+            </label>
+          )}
+
+          {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+          {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+
+          <div className="flex items-center justify-end gap-3">
+            <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
+              {saving ? '保存中...' : '保存配置'}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function PublishTokensSettingsTab({ refreshTick }: { refreshTick: number }) {
+  const [loading, setLoading] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [revokingId, setRevokingId] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [copied, setCopied] = useState('');
+  const [items, setItems] = useState<PublishTokenView[]>([]);
+  const [form, setForm] = useState<PublishTokenCreateFormState>(() => createPublishTokenForm());
+  const [createResult, setCreateResult] = useState<PublishTokenCreateResponse | null>(null);
+  const publishApiBase = useMemo(() => `${getDisplayApiBase()}/api/v1/publish`, []);
+
+  const fetchTokens = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/publish-tokens')) as PublishTokenListView;
+      setItems((data.items || []).filter((item) => item.status === 'active'));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载发布令牌失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchTokens();
+  }, [refreshTick]);
+
+  const toggleScope = (scope: PublishTokenScope) => {
+    setForm((current) => ({
+      ...current,
+      scopes: current.scopes.includes(scope)
+        ? current.scopes.filter((item) => item !== scope)
+        : [...current.scopes, scope],
+    }));
+  };
+
+  const createToken = async () => {
+    setCreating(true);
+    setError('');
+    setSuccess('');
+    setCopied('');
+    try {
+      const payload = {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        scopes: form.scopes,
+        expires_at: form.expires_at ? new Date(form.expires_at).toISOString() : null,
+      };
+      const data = (await apiFetch('/api/v1/admin/system-settings/publish-tokens', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      })) as PublishTokenCreateResponse;
+      setCreateResult(data);
+      setItems((current) => [data.token, ...current.filter((item) => item.id !== data.token.id)]);
+      setForm(createPublishTokenForm());
+      setSuccess('发布令牌已创建，明文仅展示这一次。');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建发布令牌失败');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const revokeToken = async (token: PublishTokenView) => {
+    if (token.status === 'revoked') {
+      return;
+    }
+    if (!window.confirm(`确认吊销令牌「${token.name}」？吊销后无法恢复。`)) {
+      return;
+    }
+
+    setRevokingId(token.id);
+    setError('');
+    setSuccess('');
+    try {
+      const data = (await apiFetch(`/api/v1/admin/system-settings/publish-tokens/${token.id}/revoke`, {
+        method: 'POST',
+      })) as PublishTokenView;
+      setItems((current) => current.filter((item) => item.id !== data.id));
+      setSuccess(`令牌「${token.name}」已吊销`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '吊销失败');
+    } finally {
+      setRevokingId(null);
+    }
+  };
+
+  const copyPlainToken = async () => {
+    if (!createResult?.plain_token || !navigator.clipboard) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(createResult.plain_token);
+      setCopied('已复制到剪贴板');
+    } catch {
+      setCopied('复制失败，请手动复制');
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">发布令牌</div>
+        <p className="mt-1 text-sm text-neutral-500">用于给第三方系统或 AI 开放受限发文能力。令牌只支持 Bearer 调用，明文只在创建成功时返回一次。</p>
+      </div>
+
+      {loading && <div className="text-sm text-neutral-500">加载中...</div>}
+
+      {!loading && (
+        <>
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="text-sm font-medium text-neutral-900">服务说明</div>
+                <button
+                  type="button"
+                  className="rounded-2xl border border-neutral-300 px-4 py-2 text-sm font-medium"
+                  onClick={() => window.open(buildPublishTokenDocsHref(), '_blank', 'noopener,noreferrer')}
+                >
+                  查看详细说明
+                </button>
+              </div>
+              <div className="text-sm leading-6 text-neutral-500">
+                令牌是系统级服务令牌，不复用后台全局 `x-api-key`。每个令牌都支持独立吊销、过期控制和最后使用时间记录。
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <ReadField label="当前令牌数量" value={items.length} />
+                <ReadField label="可用作用域" value={PUBLISH_TOKEN_SCOPES.length} />
+                <ReadField label="封面字段" value="cover_image_url" />
+                <ReadField label="发布模式" value="publish_mode = draft | publish" />
               </div>
             </div>
 
-            {form.delivery_mode === 'telegram_chat' && (
-              <>
-                <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
-                  <div className="text-sm font-medium text-neutral-900">Telegram 直发说明</div>
-                  <p className="mt-1 text-sm text-neutral-500">适合直接发给用户、群组、频道。如果目标是另一个 bot，这种方式不可用，请切换到 Webhook 转发。</p>
-                </div>
+            <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4 space-y-3">
+              <div className="text-sm font-medium text-neutral-900">最短调用示例</div>
+              <pre className="overflow-x-auto rounded-xl bg-neutral-950 px-4 py-3 text-xs leading-6 text-neutral-100">{`curl -X POST '${publishApiBase}/news' \\
+  -H 'Authorization: Bearer <publish_token>' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"title":"新文章","content_markdown":"# Hello","publish_mode":"draft"}'`}</pre>
+              <pre className="overflow-x-auto rounded-xl bg-neutral-950 px-4 py-3 text-xs leading-6 text-neutral-100">{`curl -X POST '${publishApiBase}/news/123/publish' \\
+  -H 'Authorization: Bearer <publish_token>' \\
+  -H 'Content-Type: application/json' \\
+  -d '{}'`}</pre>
+              <div className="text-xs leading-6 text-neutral-500">
+                `cover_image_url` 是封面地址字段。
+                `draft` 表示创建草稿，不在前台公开；
+                `publish` 表示创建后立即发布到前台。
+              </div>
+            </div>
+          </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField
-                    label="Bot Token"
-                    hint={settings?.telegram_chat.has_bot_token ? '已配置，留空则不修改；如需删除，请勾选下方“清空已保存 Token”。' : '未配置时请直接输入新的 Bot Token。'}
-                  >
-                    <div className="space-y-2">
-                      <input
-                        className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                        type="password"
-                        placeholder={settings?.telegram_chat.has_bot_token ? '已配置，留空则不修改' : '输入新的 Bot Token'}
-                        value={form.telegram_chat.bot_token}
-                        onChange={(e) => {
-                          setClearBotToken(false);
-                          setForm({
-                            ...form,
-                            telegram_chat: { ...form.telegram_chat, bot_token: e.target.value },
-                          });
-                        }}
-                      />
-                      {settings?.telegram_chat.has_bot_token && (
-                        <div className="text-xs text-neutral-500">当前已保存：{settings.telegram_chat.bot_token_masked}</div>
-                      )}
-                    </div>
-                  </FormField>
-
-                  <FormField label="Chat ID" hint="例如群组 chat id 通常是 -100 开头。">
-                    <input
-                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                      placeholder="-1001234567890"
-                      value={form.telegram_chat.chat_id}
-                      onChange={(e) => setForm({
-                        ...form,
-                        telegram_chat: { ...form.telegram_chat, chat_id: e.target.value },
-                      })}
-                    />
-                  </FormField>
-
-                  <FormField label="API Base" hint="默认使用官方 Telegram API 地址。">
-                    <input
-                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                      placeholder="https://api.telegram.org"
-                      value={form.telegram_chat.api_base}
-                      onChange={(e) => setForm({
-                        ...form,
-                        telegram_chat: { ...form.telegram_chat, api_base: e.target.value },
-                      })}
-                    />
-                  </FormField>
-
-                  <FormField label="超时(ms)" hint="请求 Telegram API 的超时控制。">
-                    <input
-                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={form.telegram_chat.timeout_ms}
-                      onChange={(e) => setForm({
-                        ...form,
-                        telegram_chat: { ...form.telegram_chat, timeout_ms: e.target.value },
-                      })}
-                    />
-                  </FormField>
-                </div>
-
-                {settings?.telegram_chat.has_bot_token && (
-                  <label className="inline-flex items-center gap-3 text-sm font-medium">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-neutral-300"
-                      checked={clearBotToken}
-                      onChange={(e) => {
-                        setClearBotToken(e.target.checked);
-                        if (e.target.checked) {
-                          setForm({
-                            ...form,
-                            telegram_chat: { ...form.telegram_chat, bot_token: '' },
-                          });
-                        }
-                      }}
-                    />
-                    清空已保存 Bot Token
-                  </label>
-                )}
-              </>
-            )}
-
-            {form.delivery_mode === 'webhook' && (
-              <>
-                <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
-                  <div className="text-sm font-medium text-neutral-900">Webhook 转发说明</div>
-                  <p className="mt-1 text-sm text-neutral-500">如果你的 bot 需要接收事件，请让 GateRank 调用你控制的 Webhook，再由你的 bot 自己处理这条请求。</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <FormField label="Webhook URL" hint="GateRank 会向这个地址 POST 申请通知事件。">
-                    <input
-                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                      placeholder="https://example.com/webhooks/gaterank"
-                      value={form.webhook.url}
-                      onChange={(e) => setForm({
-                        ...form,
-                        webhook: { ...form.webhook, url: e.target.value },
-                      })}
-                    />
-                  </FormField>
-
-                  <FormField
-                    label="Bearer Token"
-                    hint={settings?.webhook.has_bearer_token ? '已配置，留空则不修改；如需删除，请勾选下方“清空已保存 Bearer Token”。' : '用于 Authorization: Bearer ... 鉴权。'}
-                  >
-                    <div className="space-y-2">
-                      <input
-                        className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                        type="password"
-                        placeholder={settings?.webhook.has_bearer_token ? '已配置，留空则不修改' : '输入新的 Bearer Token'}
-                        value={form.webhook.bearer_token}
-                        onChange={(e) => {
-                          setClearWebhookBearerToken(false);
-                          setForm({
-                            ...form,
-                            webhook: { ...form.webhook, bearer_token: e.target.value },
-                          });
-                        }}
-                      />
-                      {settings?.webhook.has_bearer_token && (
-                        <div className="text-xs text-neutral-500">当前已保存：{settings.webhook.bearer_token_masked}</div>
-                      )}
-                    </div>
-                  </FormField>
-
-                  <FormField label="超时(ms)" hint="请求 Webhook 的超时控制。">
-                    <input
-                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                      type="number"
-                      min="1"
-                      step="1"
-                      value={form.webhook.timeout_ms}
-                      onChange={(e) => setForm({
-                        ...form,
-                        webhook: { ...form.webhook, timeout_ms: e.target.value },
-                      })}
-                    />
-                  </FormField>
-                </div>
-
-                {settings?.webhook.has_bearer_token && (
-                  <label className="inline-flex items-center gap-3 text-sm font-medium">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 rounded border-neutral-300"
-                      checked={clearWebhookBearerToken}
-                      onChange={(e) => {
-                        setClearWebhookBearerToken(e.target.checked);
-                        if (e.target.checked) {
-                          setForm({
-                            ...form,
-                            webhook: { ...form.webhook, bearer_token: '' },
-                          });
-                        }
-                      }}
-                    />
-                    清空已保存 Bearer Token
-                  </label>
-                )}
-              </>
-            )}
-
-            {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
-            {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
-
-            <div className="flex items-center justify-end gap-3">
-              <button className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50" disabled={testing} onClick={() => void sendTest()}>
-                {testing ? '发送中...' : form.delivery_mode === 'telegram_chat' ? '发送 Telegram 测试消息' : '发送 Webhook 测试请求'}
-              </button>
-              <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
-                {saving ? '保存中...' : '保存配置'}
+          <div className="rounded-2xl border border-neutral-300 bg-white px-4 py-4 space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-sm font-medium text-neutral-900">创建令牌</div>
+                <p className="mt-1 text-sm text-neutral-500">默认使用“新闻全量管理”预设，你也可以手动取消某些 scope。</p>
+              </div>
+              <button
+                type="button"
+                className="rounded-2xl border border-neutral-300 px-4 py-2 text-sm font-medium"
+                onClick={() => setForm((current) => ({ ...current, scopes: [...DEFAULT_PUBLISH_TOKEN_SCOPES] }))}
+              >
+                应用全量管理预设
               </button>
             </div>
-          </>
-        )}
-      </section>
-    </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="令牌名称" hint="建议按来源系统或用途命名，例如 Openclaw 自动推文。">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  placeholder="Openclaw 自动推文"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
+                />
+              </FormField>
+
+              <FormField label="过期时间" hint="留空表示长期有效，建议给第三方令牌设置生命周期。">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  type="datetime-local"
+                  value={form.expires_at}
+                  onChange={(e) => setForm({ ...form, expires_at: e.target.value })}
+                />
+              </FormField>
+            </div>
+
+            <FormField label="用途描述" hint="仅用于后台展示和审计说明，不会暴露给第三方调用方。">
+              <textarea
+                className="min-h-24 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                placeholder="用于 Openclaw / AI 自动抓取后发稿"
+                value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })}
+              />
+            </FormField>
+
+            <FormField label="作用域" hint="勾选越多权限面越大。直接发文至少需要“创建文章 + 发布文章”。">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {PUBLISH_TOKEN_SCOPES.map((scope) => (
+                  <label key={scope.value} className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm">
+                    <span className="flex items-start gap-3">
+                      <input
+                        type="checkbox"
+                        className="mt-1 h-4 w-4 rounded border-neutral-300"
+                        checked={form.scopes.includes(scope.value)}
+                        onChange={() => toggleScope(scope.value)}
+                      />
+                      <span>
+                        <span className="block font-medium text-neutral-900">{scope.label}</span>
+                        <span className="mt-1 block text-xs leading-5 text-neutral-500">{scope.description}</span>
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </FormField>
+
+            <div className="flex items-center justify-end gap-3">
+              <button
+                className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium"
+                onClick={() => {
+                  setForm(createPublishTokenForm());
+                  setCreateResult(null);
+                  setCopied('');
+                }}
+              >
+                重置表单
+              </button>
+              <button
+                className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50"
+                disabled={creating}
+                onClick={() => void createToken()}
+              >
+                {creating ? '创建中...' : '创建发布令牌'}
+              </button>
+            </div>
+          </div>
+
+          {createResult && (
+            <div className="rounded-2xl border border-emerald-300 bg-emerald-50 px-4 py-4 space-y-3">
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="text-sm font-medium text-emerald-900">新令牌已生成</div>
+                  <p className="mt-1 text-sm text-emerald-800">请立即复制保存，刷新页面后不会再次显示明文。</p>
+                </div>
+                <button
+                  className="rounded-2xl border border-emerald-400 px-4 py-2 text-sm font-medium text-emerald-900"
+                  onClick={() => void copyPlainToken()}
+                >
+                  复制明文令牌
+                </button>
+              </div>
+              <div className="rounded-xl bg-white px-4 py-3 font-mono text-sm break-all text-neutral-900">
+                {createResult.plain_token}
+              </div>
+              {copied && <div className="text-sm text-emerald-800">{copied}</div>}
+            </div>
+          )}
+
+          {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+          {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <div className="text-sm font-medium text-neutral-900">已创建令牌</div>
+                <p className="mt-1 text-sm text-neutral-500">令牌明文不会再次返回，变更权限请吊销后重新创建。</p>
+              </div>
+            </div>
+
+            {items.length === 0 ? (
+              <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 px-4 py-6 text-sm text-neutral-500">
+                还没有创建任何发布令牌。
+              </div>
+            ) : (
+              items.map((token) => (
+                <div key={token.id} className="rounded-2xl border border-neutral-300 bg-white px-4 py-4 space-y-4">
+                  <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div className="space-y-1">
+                      <div className="text-base font-semibold text-neutral-900">{token.name}</div>
+                      <div className="text-sm text-neutral-500">{token.description || '未填写用途描述'}</div>
+                    </div>
+                    <button
+                      className="rounded-2xl border border-rose-300 px-4 py-2 text-sm font-medium text-rose-700 disabled:opacity-50"
+                      disabled={token.status === 'revoked' || revokingId === token.id}
+                      onClick={() => void revokeToken(token)}
+                    >
+                      {revokingId === token.id ? '吊销中...' : token.status === 'revoked' ? '已吊销' : '吊销令牌'}
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                    <ReadField label="Token 标识" value={token.token_masked} />
+                    <ReadField label="状态" value={token.status === 'active' ? '生效中' : '已吊销'} />
+                    <ReadField label="创建人" value={valueOrDash(token.created_by)} />
+                    <ReadField label="作用域" value={formatScopeSummary(token.scopes)} />
+                    <ReadField label="创建时间" value={formatDateTimeInBeijing(token.created_at)} />
+                    <ReadField label="最后使用时间" value={formatDateTimeInBeijing(token.last_used_at)} />
+                    <ReadField label="最后使用 IP" value={valueOrDash(token.last_used_ip)} />
+                    <ReadField label="过期时间" value={formatDateTimeInBeijing(token.expires_at)} />
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {token.scopes.map((scope) => (
+                      <span key={scope} className="rounded-full border border-neutral-300 bg-neutral-50 px-3 py-1 text-xs text-neutral-700">
+                        {formatPublishScopeLabel(scope)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -2162,6 +2800,34 @@ function FormField({
       {children}
     </div>
   );
+}
+
+function createPublishTokenForm(): PublishTokenCreateFormState {
+  return {
+    name: '',
+    description: '',
+    expires_at: '',
+    scopes: [...DEFAULT_PUBLISH_TOKEN_SCOPES],
+  };
+}
+
+function getDisplayApiBase(): string {
+  const fromEnv = getApiBase();
+  if (fromEnv) {
+    return fromEnv.replace(/\/+$/, '');
+  }
+  return window.location.origin.replace(/\/+$/, '');
+}
+
+function formatPublishScopeLabel(scope: PublishTokenScope): string {
+  return PUBLISH_TOKEN_SCOPES.find((item) => item.value === scope)?.label || scope;
+}
+
+function formatScopeSummary(scopes: PublishTokenScope[]): string {
+  if (scopes.length === 0) {
+    return '-';
+  }
+  return scopes.map((scope) => formatPublishScopeLabel(scope)).join(' / ');
 }
 
 function valueOrDash(value: string | number | boolean | null | undefined): string | number {

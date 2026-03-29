@@ -2,7 +2,6 @@ export {};
 
 declare global {
   interface Window {
-    __GATERANK_GA_MEASUREMENT_ID__?: string;
     __GATERANK_GA_INITIALIZED__?: boolean;
     dataLayer: unknown[];
     gtag?: (

@@ -95,6 +95,30 @@ SQL 文件：[`backend/sql/schema.sql`](backend/sql/schema.sql)
 - `POST /api/v1/admin/complaints`
 - `POST /api/v1/admin/incidents`
 
+### 第三方发文接口（`Bearer publish_token`）
+
+- `POST /api/v1/publish/news`
+- `PATCH /api/v1/publish/news/:id`
+- `POST /api/v1/publish/news/:id/publish`
+- `POST /api/v1/publish/news/:id/archive`
+- `POST /api/v1/publish/news/upload-image`
+
+`POST /api/v1/publish/news` 请求体当前支持这些字段：
+
+- `title`: 文章标题
+- `content_markdown`: 正文 Markdown
+- `slug`: 可选，不传则自动生成
+- `excerpt`: 可选，不传则按正文自动提取
+- `cover_image_url`: 可选，封面地址字段
+- `publish_mode`: 可选，`draft | publish`，默认 `draft`
+
+最常见流程：
+
+1. 调 `POST /api/v1/publish/news/upload-image` 上传封面
+2. 把返回的 `url` 填到 `cover_image_url`
+3. 调 `POST /api/v1/publish/news` 创建草稿或直接发布
+4. 如果先创建草稿，再调 `POST /api/v1/publish/news/:id/publish` 上线
+
 `/dashboard` 返回固定结构：`base / stability / performance / risk / time_decay`，用于后台固定 5 Tab。
 
 统一错误结构：
@@ -134,6 +158,64 @@ News 模块补充：
 - `NEWS_UPLOAD_ROOT_DIR`: 可选，新闻图片上传根目录；默认落到 `backend/uploads`
 - 新闻图片会保存在 `${NEWS_UPLOAD_ROOT_DIR}/news`
 - 生产环境需要给 API 容器挂持久卷，否则重启后上传图片会丢失
+
+发布令牌补充：
+
+- 发布令牌在后台“系统设置 -> 发布令牌”里创建
+- 这是系统级 Bearer 令牌，给第三方系统或 AI 调用受限发文接口用，不复用全局 `x-api-key`
+- 公开接入文档页面：`/publish-token-docs`
+- 令牌明文只会在创建成功时展示一次，之后不会再次返回
+- 吊销后令牌立即失效，页面默认也不再显示已吊销项
+- 令牌作用域当前固定支持：
+  - `news:create`
+  - `news:update`
+  - `news:publish`
+  - `news:archive`
+  - `news:upload`
+
+第三方发文约定：
+
+- Base URL: `http://<host>:<port>/api/v1/publish`
+- 鉴权方式：`Authorization: Bearer <publish_token>`
+- 封面字段：`cover_image_url`
+- 发布模式字段：`publish_mode`
+  - `draft`: 只创建草稿，不出现在前台
+  - `publish`: 创建后立即发布到前台，需要令牌同时具备 `news:create` 和 `news:publish`
+
+如果封面图片还没有上传到 GateRank，需要先调用上传接口，再把返回的 `url` 写入 `cover_image_url`。
+
+上传封面示例：
+
+```bash
+curl -X POST 'http://localhost:3000/api/v1/publish/news/upload-image' \
+  -H 'Authorization: Bearer <publish_token>' \
+  -F 'mode=cover' \
+  -F 'file=@/path/to/cover.png'
+```
+
+返回示例：
+
+```json
+{
+  "url": "/uploads/news/1743240000000-cover.webp"
+}
+```
+
+创建文章示例：
+
+```bash
+curl -X POST 'http://localhost:3000/api/v1/publish/news' \
+  -H 'Authorization: Bearer <publish_token>' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "title":"新文章",
+    "slug":"new-article",
+    "excerpt":"可选摘要",
+    "cover_image_url":"/uploads/news/1743240000000-cover.webp",
+    "content_markdown":"# Hello\n\n正文内容",
+    "publish_mode":"draft"
+  }'
+```
 
 Google Analytics 当前只统计公开站页面，不统计 `/admin`，并且只接入基础 `page_view`，未启用 EEA consent mode。
 
@@ -226,7 +308,7 @@ News 模块上线要求：
 - `gaterank-web` 需要把 `/news`、`/uploads`、`/sitemap.xml` 代理到 `gaterank-api`
 - `gaterank-api` 需要挂载新闻图片持久化目录
 - `gaterank-api` 需要在环境变量里配置 `NEWS_UPLOAD_ROOT_DIR`，并指向上面的持久化挂载路径
-- 如启用第三方封面图库，生产环境还需要配置 `PEXELS_API_KEY`
+- 如启用第三方封面图库，需要先在管理后台的“系统设置 -> 图库设置”中配置 Pexels API Key
 
 推荐发布流程：
 

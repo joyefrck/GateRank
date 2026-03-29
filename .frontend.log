@@ -3,7 +3,9 @@
 > vite --port=3000 --host=0.0.0.0
 
 
-  VITE v6.4.1  ready in 187 ms
+  VITE v6.4.1  ready in 161 ms
 
   ➜  Local:   http://localhost:3000/
   ➜  Network: http://192.168.11.227:3000/
+(!) %VITE_GA_MEASUREMENT_ID% is not defined in env variables found in /index.html. Is the variable mistyped?
+(!) %VITE_GA_MEASUREMENT_ID% is not defined in env variables found in /index.html. Is the variable mistyped?

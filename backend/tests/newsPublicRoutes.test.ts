@@ -117,7 +117,7 @@ test('GET /news/:slug returns server-rendered HTML with seo metadata', async () 
           title: '服务端 SEO 测试',
           slug: 'seo-test',
           excerpt: '用于验证文章详情页 meta、canonical 和 JSON-LD。',
-          cover_image_url: 'https://example.com/cover.jpg',
+          cover_image_url: '/uploads/news/cover.webp',
           published_at: '2026-03-28 18:00:00',
           reading_minutes: 6,
           content_html: '<p class="news-paragraph">hello world</p>',
@@ -144,7 +144,14 @@ test('GET /news/:slug returns server-rendered HTML with seo metadata', async () 
     const html = await response.text();
     assert.match(html, /<meta property="og:title" content="服务端 SEO 测试 \| GateRank News"/);
     assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/news\/seo-test"/);
+    assert.match(html, /<meta property="og:image" content="http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/cover\.webp"/);
+    assert.match(html, /<meta property="og:image:secure_url" content="http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/cover\.webp"/);
+    assert.match(html, /<meta property="og:image:type" content="image\/webp"/);
+    assert.match(html, /<meta property="og:image:alt" content="服务端 SEO 测试"/);
+    assert.match(html, /<meta name="twitter:image" content="http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/cover\.webp"/);
+    assert.match(html, /<meta name="twitter:image:alt" content="服务端 SEO 测试"/);
     assert.match(html, /"@type":"Article"/);
+    assert.match(html, /"image":\["http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/cover\.webp"\]/);
     assert.match(html, /分享到 Reddit/);
     assert.match(html, /\.topbar-inner\s*\{[\s\S]*height:\s*72px;/);
     assert.match(html, /\.nav-link\.is-news\s*\{[\s\S]*font-family:\s*var\(--serif\);[\s\S]*font-size:\s*18px;/);

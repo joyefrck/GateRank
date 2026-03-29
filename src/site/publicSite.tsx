@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { ExternalLink, Zap } from 'lucide-react';
 
-export type NavigationKind = 'home' | 'full_ranking' | 'methodology';
+export type NavigationKind = 'home' | 'full_ranking' | 'methodology' | 'docs';
 
 export interface SeoConfig {
   title: string;
@@ -51,6 +51,10 @@ export function buildFullRankingHref(date?: string, page = 1): string {
 
 export function buildMethodologyHref(): string {
   return '/methodology';
+}
+
+export function buildPublishTokenDocsHref(): string {
+  return '/publish-token-docs';
 }
 
 export function buildNewsHref(): string {

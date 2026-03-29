@@ -15,6 +15,7 @@ import {
 import { estimateReadingMinutes, slugifyNewsText } from '../../news/renderMarkdown';
 
 const TOKEN_KEY = 'gaterank_admin_token';
+const COVER_SEARCH_PER_PAGE = 12;
 
 interface NewsArticle {
   id: number;
@@ -285,6 +286,9 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   const [slugTouched, setSlugTouched] = useState(Boolean(articleId));
   const [coverSearchQuery, setCoverSearchQuery] = useState('');
   const [coverSearchResults, setCoverSearchResults] = useState<PexelsCoverCandidate[]>([]);
+  const [coverSearchPage, setCoverSearchPage] = useState(1);
+  const [coverSearchPerPage, setCoverSearchPerPage] = useState(COVER_SEARCH_PER_PAGE);
+  const [coverSearchTotal, setCoverSearchTotal] = useState(0);
   const [coverSearchLoading, setCoverSearchLoading] = useState(false);
   const [coverSearchImportingId, setCoverSearchImportingId] = useState<number | null>(null);
   const [coverSearchError, setCoverSearchError] = useState('');
@@ -528,11 +532,13 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
     }
   }
 
-  async function searchPexelsCovers(): Promise<void> {
+  async function searchPexelsCovers(targetPage = 1): Promise<void> {
     const query = coverSearchQuery.trim();
     if (!query) {
       setCoverSearchError('请输入封面关键词');
       setCoverSearchResults([]);
+      setCoverSearchPage(1);
+      setCoverSearchTotal(0);
       return;
     }
 
@@ -541,16 +547,20 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
     try {
       const search = new URLSearchParams({
         q: query,
-        page: '1',
-        per_page: '12',
+        page: String(targetPage),
+        per_page: String(coverSearchPerPage),
       });
       const result = await apiFetch<PexelsCoverSearchResponse>(`/api/v1/admin/news/cover-search?${search.toString()}`);
       setCoverSearchResults(result.items);
+      setCoverSearchPage(result.page);
+      setCoverSearchPerPage(result.per_page);
+      setCoverSearchTotal(result.total);
       if (result.items.length === 0) {
         setCoverSearchError('没有找到合适的横版封面');
       }
     } catch (err: unknown) {
       setCoverSearchResults([]);
+      setCoverSearchTotal(0);
       setCoverSearchError(err instanceof Error ? err.message : '封面搜索失败');
     } finally {
       setCoverSearchLoading(false);
@@ -782,13 +792,20 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
       <CoverPickerModal
         open={coverPickerOpen}
         query={coverSearchQuery}
+        page={coverSearchPage}
+        perPage={coverSearchPerPage}
+        total={coverSearchTotal}
         results={coverSearchResults}
         loading={coverSearchLoading}
         importingId={coverSearchImportingId}
         error={coverSearchError}
         onClose={() => setCoverPickerOpen(false)}
-        onQueryChange={setCoverSearchQuery}
-        onSearch={() => void searchPexelsCovers()}
+        onQueryChange={(value) => {
+          setCoverSearchQuery(value);
+          setCoverSearchPage(1);
+        }}
+        onSearch={(page) => void searchPexelsCovers(page)}
+        onPageChange={(page) => void searchPexelsCovers(page)}
         onImport={(item) => void importPexelsCover(item)}
       />
     </section>
@@ -798,6 +815,9 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
 function CoverPickerModal({
   open,
   query,
+  page,
+  perPage,
+  total,
   results,
   loading,
   importingId,
@@ -805,17 +825,22 @@ function CoverPickerModal({
   onClose,
   onQueryChange,
   onSearch,
+  onPageChange,
   onImport,
 }: {
   open: boolean;
   query: string;
+  page: number;
+  perPage: number;
+  total: number;
   results: PexelsCoverCandidate[];
   loading: boolean;
   importingId: number | null;
   error: string;
   onClose: () => void;
   onQueryChange: (value: string) => void;
-  onSearch: () => void;
+  onSearch: (page: number) => void;
+  onPageChange: (page: number) => void;
   onImport: (item: PexelsCoverCandidate) => void;
 }) {
   useEffect(() => {
@@ -837,6 +862,8 @@ function CoverPickerModal({
     return null;
   }
 
+  const totalPages = Math.max(1, Math.ceil(total / perPage));
+
   return (
     <div
       className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-end justify-center p-0 md:items-center md:p-4"
@@ -849,7 +876,7 @@ function CoverPickerModal({
         <div className="border-b border-neutral-200 px-5 py-4 md:px-6 md:py-5 flex items-start justify-between gap-4">
           <div className="space-y-1">
             <h3 className="text-xl md:text-2xl font-bold tracking-tight">第三方封面图库</h3>
-            <p className="text-sm text-neutral-500">搜索 Pexels 图片并导入为本站封面，结果只在当前选择器内滚动显示。</p>
+            <p className="text-sm text-neutral-500">搜索 Pexels 图片并导入为本站封面，可在弹窗内继续翻页浏览更多结果。</p>
           </div>
           <button
             type="button"
@@ -875,7 +902,7 @@ function CoverPickerModal({
                     onKeyDown={(event) => {
                       if (event.key === 'Enter') {
                         event.preventDefault();
-                        onSearch();
+                        onSearch(1);
                       }
                     }}
                   />
@@ -883,7 +910,7 @@ function CoverPickerModal({
               </div>
               <button
                 className="inline-flex items-center justify-center rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50"
-                onClick={onSearch}
+                onClick={() => onSearch(1)}
                 disabled={loading}
                 type="button"
               >
@@ -901,55 +928,81 @@ function CoverPickerModal({
           </section>
 
           {results.length > 0 ? (
-            <section className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {results.map((item) => (
-                <div key={item.id} className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
-                  <img className="h-40 w-full object-cover" src={item.preview_url} alt={item.alt || 'Pexels 封面候选'} />
-                  <div className="space-y-3 p-4">
-                    <div className="space-y-1">
-                      <div className="line-clamp-2 text-sm font-semibold text-neutral-900">
-                        {item.alt || '未命名封面'}
+            <section className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {results.map((item) => (
+                  <div key={item.id} className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
+                    <img className="h-40 w-full object-cover" src={item.preview_url} alt={item.alt || 'Pexels 封面候选'} />
+                    <div className="space-y-3 p-4">
+                      <div className="space-y-1">
+                        <div className="line-clamp-2 text-sm font-semibold text-neutral-900">
+                          {item.alt || '未命名封面'}
+                        </div>
+                        <div className="text-xs text-neutral-500">
+                          {item.width} × {item.height}
+                        </div>
                       </div>
-                      <div className="text-xs text-neutral-500">
-                        {item.width} × {item.height}
+                      <div className="text-xs leading-5 text-neutral-600">
+                        摄影师：
+                        {item.photographer_url ? (
+                          <a
+                            className="ml-1 text-neutral-900 underline-offset-2 hover:underline"
+                            href={item.photographer_url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                          >
+                            {item.photographer || '未知'}
+                          </a>
+                        ) : (
+                          <span className="ml-1 text-neutral-900">{item.photographer || '未知'}</span>
+                        )}
                       </div>
-                    </div>
-                    <div className="text-xs leading-5 text-neutral-600">
-                      摄影师：
-                      {item.photographer_url ? (
+                      <div className="flex items-center justify-between gap-2">
                         <a
-                          className="ml-1 text-neutral-900 underline-offset-2 hover:underline"
-                          href={item.photographer_url}
+                          className="text-xs font-medium text-neutral-500 underline-offset-2 hover:text-neutral-900 hover:underline"
+                          href={item.pexels_url}
                           target="_blank"
                           rel="noreferrer noopener"
                         >
-                          {item.photographer || '未知'}
+                          查看来源
                         </a>
-                      ) : (
-                        <span className="ml-1 text-neutral-900">{item.photographer || '未知'}</span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between gap-2">
-                      <a
-                        className="text-xs font-medium text-neutral-500 underline-offset-2 hover:text-neutral-900 hover:underline"
-                        href={item.pexels_url}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                      >
-                        查看来源
-                      </a>
-                      <button
-                        className="inline-flex items-center justify-center rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-                        onClick={() => onImport(item)}
-                        disabled={importingId === item.id}
-                        type="button"
-                      >
-                        {importingId === item.id ? '导入中...' : '导入为封面'}
-                      </button>
+                        <button
+                          className="inline-flex items-center justify-center rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                          onClick={() => onImport(item)}
+                          disabled={importingId === item.id}
+                          type="button"
+                        >
+                          {importingId === item.id ? '导入中...' : '导入为封面'}
+                        </button>
+                      </div>
                     </div>
                   </div>
+                ))}
+              </div>
+              <div className="flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-neutral-500">共 {total} 张结果</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm disabled:opacity-40"
+                    onClick={() => onPageChange(Math.max(1, page - 1))}
+                    disabled={loading || page <= 1}
+                    type="button"
+                  >
+                    上一页
+                  </button>
+                  <div className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-neutral-700">
+                    {page} / {totalPages}
+                  </div>
+                  <button
+                    className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm disabled:opacity-40"
+                    onClick={() => onPageChange(Math.min(totalPages, page + 1))}
+                    disabled={loading || page >= totalPages}
+                    type="button"
+                  >
+                    下一页
+                  </button>
                 </div>
-              ))}
+              </div>
             </section>
           ) : (
             <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 px-6 py-12 text-center text-sm text-neutral-500">

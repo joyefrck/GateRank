@@ -745,6 +745,7 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
     : 'GateRank News | 机场榜';
   const description = 'GateRank News 聚合机场行业观察、测评方法更新与风控动态，采用长文阅读结构与可分享详情页，方便检索与转发。';
   const featured = listView.featured;
+  const featuredCoverImage = featured ? toAbsoluteUrl(siteUrl, featured.cover_image_url) : null;
   const listItems = listView.items.map((item) => renderFeedCard(item)).join('');
   const jsonLd = [
     {
@@ -778,7 +779,9 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
     title,
     description,
     canonicalUrl,
-    ogImage: featured?.cover_image_url,
+    ogImage: featuredCoverImage,
+    ogImageAlt: featured?.title || null,
+    ogImageType: featuredCoverImage ? inferImageMimeType(featuredCoverImage) : null,
     robots: 'index,follow,max-image-preview:large',
     jsonLd,
     body: `
@@ -809,6 +812,7 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
 export function renderNewsArticlePage(options: RenderArticlePageOptions): string {
   const { siteUrl, article, preview = false } = options;
   const hasCover = Boolean(article.cover_image_url && article.cover_image_url.trim());
+  const absoluteCoverImage = hasCover ? toAbsoluteUrl(siteUrl, article.cover_image_url) : null;
   const articlePath = preview ? `/api/v1/admin/news/${article.id}/preview` : `/news/${article.slug}`;
   const canonicalUrl = `${siteUrl}${articlePath}`;
   const title = `${article.title} | GateRank News`;
@@ -832,8 +836,8 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
     },
     mainEntityOfPage: shareUrl,
   };
-  if (hasCover) {
-    articleJsonLd.image = [article.cover_image_url];
+  if (absoluteCoverImage) {
+    articleJsonLd.image = [absoluteCoverImage];
   }
   const jsonLd = [
     articleJsonLd,
@@ -871,7 +875,9 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
     title,
     description,
     canonicalUrl,
-    ogImage: hasCover ? article.cover_image_url : null,
+    ogImage: absoluteCoverImage,
+    ogImageAlt: article.title,
+    ogImageType: absoluteCoverImage ? inferImageMimeType(absoluteCoverImage) : null,
     robots: preview ? 'noindex,nofollow,noarchive' : 'index,follow,max-image-preview:large',
     jsonLd,
     body: `
@@ -1129,6 +1135,8 @@ function renderDocument(options: {
   description: string;
   canonicalUrl: string;
   ogImage?: string | null;
+  ogImageAlt?: string | null;
+  ogImageType?: string | null;
   robots: string;
   jsonLd: unknown;
   body: string;
@@ -1148,10 +1156,14 @@ function renderDocument(options: {
     <meta property="og:description" content="${escapeAttribute(options.description)}" />
     <meta property="og:url" content="${escapeAttribute(options.canonicalUrl)}" />
     ${options.ogImage ? `<meta property="og:image" content="${escapeAttribute(options.ogImage)}" />` : ''}
+    ${options.ogImage ? `<meta property="og:image:secure_url" content="${escapeAttribute(options.ogImage)}" />` : ''}
+    ${options.ogImageType ? `<meta property="og:image:type" content="${escapeAttribute(options.ogImageType)}" />` : ''}
+    ${options.ogImageAlt ? `<meta property="og:image:alt" content="${escapeAttribute(options.ogImageAlt)}" />` : ''}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeAttribute(options.title)}" />
     <meta name="twitter:description" content="${escapeAttribute(options.description)}" />
     ${options.ogImage ? `<meta name="twitter:image" content="${escapeAttribute(options.ogImage)}" />` : ''}
+    ${options.ogImageAlt ? `<meta name="twitter:image:alt" content="${escapeAttribute(options.ogImageAlt)}" />` : ''}
     <style>${sharedStyles}</style>
     <script type="application/ld+json">${JSON.stringify(options.jsonLd)}</script>
   </head>
@@ -1177,4 +1189,40 @@ function escapeHtml(value: string): string {
 
 function escapeAttribute(value: string): string {
   return escapeHtml(value);
+}
+
+function toAbsoluteUrl(siteUrl: string, value: string | null | undefined): string | null {
+  const input = String(value || '').trim();
+  if (!input) {
+    return null;
+  }
+  try {
+    return new URL(input, `${siteUrl}/`).toString();
+  } catch {
+    return null;
+  }
+}
+
+function inferImageMimeType(imageUrl: string): string | null {
+  try {
+    const pathname = new URL(imageUrl).pathname.toLowerCase();
+    if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) {
+      return 'image/jpeg';
+    }
+    if (pathname.endsWith('.png')) {
+      return 'image/png';
+    }
+    if (pathname.endsWith('.webp')) {
+      return 'image/webp';
+    }
+    if (pathname.endsWith('.gif')) {
+      return 'image/gif';
+    }
+    if (pathname.endsWith('.avif')) {
+      return 'image/avif';
+    }
+  } catch {
+    return null;
+  }
+  return null;
 }

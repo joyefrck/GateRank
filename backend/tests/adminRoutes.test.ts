@@ -1033,6 +1033,392 @@ test('POST /system-settings/telegram/test exposes telegram validation errors', a
   }
 });
 
+test('GET /system-settings/media-libraries returns masked media library settings', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+      mediaLibrarySettingsService: {
+        getAdminSettings: async () => ({
+          providers: {
+            pexels: {
+              enabled: true,
+              has_api_key: true,
+              api_key_masked: 'pexe***-key',
+              timeout_ms: 9000,
+            },
+          },
+          updated_at: '2026-03-29 12:00:00',
+          updated_by: 'admin',
+        }),
+        updateAdminSettings: async () => null,
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/media-libraries`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      providers: { pexels: { enabled: boolean; has_api_key: boolean; api_key_masked: string; timeout_ms: number } };
+      updated_by: string;
+    };
+    assert.equal(data.providers.pexels.enabled, true);
+    assert.equal(data.providers.pexels.has_api_key, true);
+    assert.equal(data.providers.pexels.api_key_masked, 'pexe***-key');
+    assert.equal(data.providers.pexels.timeout_ms, 9000);
+    assert.equal(data.updated_by, 'admin');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /system-settings/media-libraries updates settings and writes audit log', async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const audits: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, actor, requestId, payload) => {
+          audits.push({ action, actor, requestId, payload: payload as Record<string, unknown> });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+      mediaLibrarySettingsService: {
+        getAdminSettings: async () => null,
+        updateAdminSettings: async (input, updatedBy) => {
+          updates.push({ ...(input as Record<string, unknown>), updatedBy });
+          return {
+            providers: {
+              pexels: {
+                enabled: true,
+                has_api_key: true,
+                api_key_masked: 'pexe***-key',
+                timeout_ms: 9000,
+              },
+            },
+            updated_at: '2026-03-29 12:00:00',
+            updated_by: updatedBy,
+          };
+        },
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/media-libraries`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({
+        providers: {
+          pexels: {
+            enabled: true,
+            api_key: 'pexels-secret-key',
+            timeout_ms: 9000,
+          },
+        },
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].updatedBy, 'tester');
+    assert.deepEqual(updates[0].providers, {
+      pexels: {
+        enabled: true,
+        api_key: 'pexels-secret-key',
+        timeout_ms: 9000,
+      },
+    });
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, 'update_system_setting_media_libraries');
+    const data = (await response.json()) as {
+      providers: { pexels: { api_key_masked: string } };
+      updated_by: string;
+    };
+    assert.equal(data.providers.pexels.api_key_masked, 'pexe***-key');
+    assert.equal(data.updated_by, 'tester');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /system-settings/publish-tokens returns token list without plaintext', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+      accessTokenService: {
+        listAdminTokens: async () => ({
+          items: [{
+            id: 1,
+            name: 'Openclaw 自动推文',
+            description: '用于 AI 发稿',
+            token_masked: 'grpt_abcd***wxyz',
+            scopes: ['news:create', 'news:publish'],
+            status: 'active',
+            expires_at: null,
+            last_used_at: '2026-03-29 12:00:00',
+            last_used_ip: '127.0.0.1',
+            created_by: 'admin',
+            created_at: '2026-03-29 10:00:00',
+            updated_at: '2026-03-29 12:00:00',
+          }],
+        }),
+        createAdminToken: async () => null,
+        revokeAdminToken: async () => null,
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/publish-tokens`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      items: Array<{ token_masked: string; plain_token?: string }>;
+    };
+    assert.equal(data.items.length, 1);
+    assert.equal(data.items[0]?.token_masked, 'grpt_abcd***wxyz');
+    assert.equal('plain_token' in data.items[0]!, false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /system-settings/publish-tokens returns plaintext once and writes audit log', async () => {
+  const audits: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, actor, requestId, payload) => {
+          audits.push({ action, actor, requestId, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+      accessTokenService: {
+        listAdminTokens: async () => ({ items: [] }),
+        createAdminToken: async (_input, createdBy) => ({
+          token: {
+            id: 8,
+            name: 'Openclaw 自动推文',
+            description: '用于 AI 发稿',
+            token_masked: 'grpt_abcd***wxyz',
+            scopes: ['news:create', 'news:publish'],
+            status: 'active',
+            expires_at: null,
+            last_used_at: null,
+            last_used_ip: null,
+            created_by: createdBy,
+            created_at: '2026-03-29 10:00:00',
+            updated_at: '2026-03-29 10:00:00',
+          },
+          plain_token: 'grpt_abcdefghijklmnopqrstuvwxyz',
+        }),
+        revokeAdminToken: async () => null,
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/publish-tokens`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-actor': 'tester',
+      },
+      body: JSON.stringify({
+        name: 'Openclaw 自动推文',
+        description: '用于 AI 发稿',
+        scopes: ['news:create', 'news:publish'],
+      }),
+    });
+    assert.equal(response.status, 201);
+    const data = (await response.json()) as {
+      token: { id: number; created_by: string };
+      plain_token: string;
+    };
+    assert.equal(data.token.id, 8);
+    assert.equal(data.token.created_by, 'tester');
+    assert.equal(data.plain_token, 'grpt_abcdefghijklmnopqrstuvwxyz');
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, 'create_publish_token');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /system-settings/publish-tokens/:id/revoke updates status and writes audit log', async () => {
+  const audits: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, actor, requestId, payload) => {
+          audits.push({ action, actor, requestId, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+      accessTokenService: {
+        listAdminTokens: async () => ({ items: [] }),
+        createAdminToken: async () => null,
+        revokeAdminToken: async (id) => ({
+          id,
+          name: 'Openclaw 自动推文',
+          description: '用于 AI 发稿',
+          token_masked: 'grpt_abcd***wxyz',
+          scopes: ['news:create', 'news:publish'],
+          status: 'revoked',
+          expires_at: null,
+          last_used_at: null,
+          last_used_ip: null,
+          created_by: 'admin',
+          created_at: '2026-03-29 10:00:00',
+          updated_at: '2026-03-29 11:00:00',
+        }),
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/publish-tokens/8/revoke`, {
+      method: 'POST',
+      headers: {
+        'x-admin-actor': 'tester',
+      },
+    });
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { status: string };
+    assert.equal(data.status, 'revoked');
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, 'revoke_publish_token');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('PATCH /airports persists extended airport fields', async () => {
   const created: Array<Record<string, unknown>> = [];
   const updated: Array<Record<string, unknown>> = [];

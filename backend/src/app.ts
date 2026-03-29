@@ -3,6 +3,7 @@ import { getDbPool } from './db/mysql';
 import { adminAuth } from './middleware/adminAuth';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestContext } from './middleware/requestContext';
+import { AccessTokenRepository } from './repositories/accessTokenRepository';
 import { AirportRepository } from './repositories/airportRepository';
 import { AirportApplicationRepository } from './repositories/airportApplicationRepository';
 import { AuditRepository } from './repositories/auditRepository';
@@ -18,13 +19,17 @@ import { SystemSettingRepository } from './repositories/systemSettingRepository'
 import { createAdminAuthRoutes } from './routes/adminAuthRoutes';
 import { createAdminRoutes } from './routes/adminRoutes';
 import { createNewsAdminRoutes } from './routes/newsAdminRoutes';
+import { createPublishRoutes } from './routes/publishRoutes';
 import { createNewsPublicRoutes } from './routes/newsPublicRoutes';
 import { createPublicRoutes } from './routes/publicRoutes';
+import { AccessTokenService } from './services/accessTokenService';
 import { AdminAuthService } from './services/adminAuthService';
 import { AggregationService } from './services/aggregationService';
 import { ManualJobService } from './services/manualJobService';
+import { MediaLibrarySettingsService } from './services/mediaLibrarySettingsService';
 import { NewsContentService } from './services/newsContentService';
 import { NewsCoverImageService } from './services/newsCoverImageService';
+import { NewsMutationService } from './services/newsMutationService';
 import { PexelsCoverService } from './services/pexelsCoverService';
 import { NewsPublicService } from './services/newsPublicService';
 import { PublicViewService } from './services/publicViewService';
@@ -49,6 +54,8 @@ export async function createApp() {
   await manualJobRepository.ensureSchema();
   const systemSettingRepository = new SystemSettingRepository(pool);
   await systemSettingRepository.ensureSchema();
+  const accessTokenRepository = new AccessTokenRepository(pool);
+  await accessTokenRepository.ensureSchema();
   const newsRepository = new NewsRepository(pool);
   await newsRepository.ensureSchema();
   const scoreRepository = new ScoreRepository(pool);
@@ -89,7 +96,18 @@ export async function createApp() {
   });
   const newsContentService = new NewsContentService();
   const newsCoverImageService = new NewsCoverImageService();
-  const pexelsCoverService = new PexelsCoverService(undefined, undefined, newsCoverImageService);
+  const newsMutationService = new NewsMutationService({
+    newsRepository,
+    newsContentService,
+    newsCoverImageService,
+  });
+  const mediaLibrarySettingsService = new MediaLibrarySettingsService({
+    systemSettingRepository,
+  });
+  const accessTokenService = new AccessTokenService({
+    accessTokenRepository,
+  });
+  const pexelsCoverService = new PexelsCoverService(mediaLibrarySettingsService, newsCoverImageService);
   const newsPublicService = new NewsPublicService(newsRepository, newsContentService);
   const applicationNotificationService = new TelegramNotificationService({
     systemSettingRepository,
@@ -151,6 +169,8 @@ export async function createApp() {
       auditRepository,
       publicViewService,
       telegramNotificationService: applicationNotificationService,
+      mediaLibrarySettingsService,
+      accessTokenService,
     }),
   );
 
@@ -160,10 +180,18 @@ export async function createApp() {
     createNewsAdminRoutes({
       auditRepository,
       newsRepository,
-      newsContentService,
       newsPublicService,
       pexelsCoverService,
-      newsCoverImageService,
+      newsMutationService,
+    }),
+  );
+
+  app.use(
+    '/api/v1',
+    createPublishRoutes({
+      accessTokenService,
+      auditRepository,
+      newsMutationService,
     }),
   );
 

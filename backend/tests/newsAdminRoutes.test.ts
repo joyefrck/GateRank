@@ -530,7 +530,7 @@ test('news admin routes return pexels configuration error', async () => {
       } as never,
       pexelsCoverService: createPexelsServiceStub({
         searchCoverCandidates: async () => {
-          throw new HttpError(503, 'PEXELS_NOT_CONFIGURED', '未配置 PEXELS_API_KEY，无法使用封面图库');
+          throw new HttpError(503, 'MEDIA_LIBRARY_NOT_CONFIGURED', '未在后台“系统设置 > 图库设置”中配置 Pexels API Key，无法使用封面图库');
         },
       }),
       newsCoverImageService: createNewsCoverImageServiceStub(),
@@ -544,8 +544,8 @@ test('news admin routes return pexels configuration error', async () => {
     const response = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/cover-search?q=airport`);
     assert.equal(response.status, 503);
     const data = await response.json() as { code: string; message: string };
-    assert.equal(data.code, 'PEXELS_NOT_CONFIGURED');
-    assert.equal(data.message, '未配置 PEXELS_API_KEY，无法使用封面图库');
+    assert.equal(data.code, 'MEDIA_LIBRARY_NOT_CONFIGURED');
+    assert.equal(data.message, '未在后台“系统设置 > 图库设置”中配置 Pexels API Key，无法使用封面图库');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

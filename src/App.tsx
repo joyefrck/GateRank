@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import {
   Flame,
   Trophy,
@@ -19,18 +19,28 @@ import {
 import { motion } from 'motion/react';
 
 import { TagBadge, TagBadgeGroup } from './components/TagBadge';
-import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import {
   buildAbsoluteUrl,
   buildFullRankingHref,
   buildHomeHref,
   buildMethodologyHref,
+  buildPublishTokenDocsHref,
   buildQuery,
   navigate,
   PageFrame,
   usePageSeo,
 } from './site/publicSite';
 import { trackPageView } from './site/analytics';
+
+const LazyMethodologyPage = lazy(async () => {
+  const module = await import('./pages/methodology/MethodologyPage');
+  return { default: module.MethodologyPage };
+});
+
+const LazyPublishTokenDocsPage = lazy(async () => {
+  const module = await import('./pages/publishTokenDocs/PublishTokenDocsPage');
+  return { default: module.PublishTokenDocsPage };
+});
 
 type CardType = 'stable' | 'value' | 'risk' | 'new';
 type HomeSectionKey = 'today_pick' | 'most_stable' | 'best_value' | 'new_entries' | 'risk_alerts';
@@ -168,7 +178,7 @@ interface CardProps {
 }
 
 interface RouteState {
-  kind: 'home' | 'report' | 'apply' | 'full_ranking' | 'methodology';
+  kind: 'home' | 'report' | 'apply' | 'full_ranking' | 'methodology' | 'publish_token_docs';
   airportId?: number;
   date?: string;
   page?: number;
@@ -543,6 +553,12 @@ function parseRoute(): RouteState {
   if (path === buildMethodologyHref() || path === `${buildMethodologyHref()}/`) {
     return {
       kind: 'methodology',
+    };
+  }
+
+  if (path === buildPublishTokenDocsHref() || path === `${buildPublishTokenDocsHref()}/`) {
+    return {
+      kind: 'publish_token_docs',
     };
   }
 
@@ -1769,7 +1785,19 @@ export default function App() {
   }
 
   if (route.kind === 'methodology') {
-    return <MethodologyPage />;
+    return (
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <LazyMethodologyPage />
+      </Suspense>
+    );
+  }
+
+  if (route.kind === 'publish_token_docs') {
+    return (
+      <Suspense fallback={<RouteLoadingFallback />}>
+        <LazyPublishTokenDocsPage />
+      </Suspense>
+    );
   }
 
   if (route.kind === 'full_ranking') {
@@ -1777,4 +1805,16 @@ export default function App() {
   }
 
   return <HomePage date={route.date} />;
+}
+
+function RouteLoadingFallback() {
+  return (
+    <div className="min-h-screen bg-white">
+      <div className="mx-auto flex min-h-screen max-w-5xl items-center justify-center px-6">
+        <div className="rounded-full border border-neutral-200 bg-neutral-50 px-5 py-2 text-sm font-medium text-neutral-500">
+          正在加载页面
+        </div>
+      </div>
+    </div>
+  );
 }

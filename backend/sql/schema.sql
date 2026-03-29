@@ -189,6 +189,27 @@ CREATE TABLE IF NOT EXISTS admin_system_settings (
   UNIQUE KEY uk_admin_system_settings_key (setting_key)
 );
 
+CREATE TABLE IF NOT EXISTS admin_access_tokens (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  name VARCHAR(128) NOT NULL,
+  description TEXT NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  token_masked VARCHAR(64) NOT NULL,
+  scopes_json JSON NOT NULL,
+  status ENUM('active', 'revoked') NOT NULL DEFAULT 'active',
+  expires_at DATETIME NULL,
+  last_used_at DATETIME NULL,
+  last_used_ip VARCHAR(64) NULL,
+  created_by VARCHAR(128) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_admin_access_tokens_hash (token_hash),
+  INDEX idx_admin_access_tokens_status (status),
+  INDEX idx_admin_access_tokens_last_used_at (last_used_at),
+  INDEX idx_admin_access_tokens_expires_at (expires_at)
+);
+
 CREATE TABLE IF NOT EXISTS admin_manual_jobs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   airport_id BIGINT UNSIGNED NOT NULL,

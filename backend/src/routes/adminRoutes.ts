@@ -10,6 +10,11 @@ import {
   type TelegramNotificationSettingsInput,
   TelegramSendError,
 } from '../services/telegramNotificationService';
+import {
+  DEFAULT_MEDIA_LIBRARY_TIMEOUT_MS,
+  type MediaLibrarySettingsInput,
+} from '../services/mediaLibrarySettingsService';
+import type { AccessTokenScope } from '../utils/accessToken';
 import type {
   AirportApplicationReviewStatus,
   AirportStatus,
@@ -170,6 +175,20 @@ interface AdminDeps {
     updateAdminSettings(input: TelegramNotificationSettingsInput, updatedBy: string): Promise<unknown>;
     sendTestMessage(input: TelegramNotificationSettingsInput): Promise<void>;
   };
+  mediaLibrarySettingsService?: {
+    getAdminSettings(): Promise<unknown>;
+    updateAdminSettings(input: MediaLibrarySettingsInput, updatedBy: string): Promise<unknown>;
+  };
+  accessTokenService?: {
+    listAdminTokens(): Promise<unknown>;
+    createAdminToken(input: {
+      name: string;
+      description?: string;
+      scopes: AccessTokenScope[];
+      expires_at?: string | null;
+    }, createdBy: string): Promise<unknown>;
+    revokeAdminToken(id: number): Promise<unknown>;
+  };
 }
 
 export function createAdminRoutes(deps: AdminDeps): Router {
@@ -218,6 +237,80 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         next(new HttpError(error.status, 'TELEGRAM_TEST_FAILED', error.message));
         return;
       }
+      next(error);
+    }
+  });
+
+  router.get('/system-settings/media-libraries', async (_req, res, next) => {
+    try {
+      res.json(await getMediaLibrarySettingsService(deps).getAdminSettings());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/system-settings/media-libraries', async (req, res, next) => {
+    try {
+      const input = parseMediaLibrarySettingsPayload((req.body ?? {}) as Record<string, unknown>);
+      const result = await getMediaLibrarySettingsService(deps).updateAdminSettings(
+        input,
+        actorFromReq(req),
+      );
+      await deps.auditRepository.log(
+        'update_system_setting_media_libraries',
+        actorFromReq(req),
+        req.requestId,
+        input,
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/system-settings/publish-tokens', async (_req, res, next) => {
+    try {
+      res.json(await getAccessTokenService(deps).listAdminTokens());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/system-settings/publish-tokens', async (req, res, next) => {
+    try {
+      const input = parsePublishTokenPayload((req.body ?? {}) as Record<string, unknown>);
+      const result = await getAccessTokenService(deps).createAdminToken(
+        input,
+        actorFromReq(req),
+      ) as { token: { id: number } };
+      await deps.auditRepository.log(
+        'create_publish_token',
+        actorFromReq(req),
+        req.requestId,
+        {
+          token_id: result.token.id,
+          name: input.name,
+          scopes: input.scopes,
+        },
+      );
+      res.status(201).json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/system-settings/publish-tokens/:id/revoke', async (req, res, next) => {
+    try {
+      const tokenId = toPositiveIntOrThrow(req.params.id, 'token id');
+      const result = await getAccessTokenService(deps).revokeAdminToken(tokenId);
+      await deps.auditRepository.log(
+        'revoke_publish_token',
+        actorFromReq(req),
+        req.requestId,
+        { token_id: tokenId },
+      );
+      res.json(result);
+    } catch (error) {
       next(error);
     }
   });
@@ -1093,6 +1186,62 @@ function parseTelegramSettingsPayload(
   };
 }
 
+function parseMediaLibrarySettingsPayload(
+  payload: Record<string, unknown>,
+): MediaLibrarySettingsInput {
+  const providers = toPlainObject(payload.providers, 'providers');
+  const pexels = parsePexelsMediaLibraryPayload(providers.pexels);
+
+  return {
+    providers: {
+      pexels,
+    },
+  };
+}
+
+function parsePexelsMediaLibraryPayload(
+  value: unknown,
+): NonNullable<MediaLibrarySettingsInput['providers']>['pexels'] {
+  const payload = toPlainObject(value, 'providers.pexels');
+
+  return {
+    enabled: optionalBoolean(payload.enabled),
+    api_key: payload.api_key === undefined ? undefined : String(payload.api_key ?? '').trim(),
+    timeout_ms:
+      payload.timeout_ms === undefined
+        ? DEFAULT_MEDIA_LIBRARY_TIMEOUT_MS
+        : toPositiveIntOrThrow(payload.timeout_ms, 'providers.pexels.timeout_ms'),
+  };
+}
+
+function parsePublishTokenPayload(
+  payload: Record<string, unknown>,
+): {
+  name: string;
+  description?: string;
+  scopes: AccessTokenScope[];
+  expires_at?: string | null;
+} {
+  const name = String(payload.name || '').trim();
+  if (!name) {
+    throw new HttpError(400, 'BAD_REQUEST', 'name 不能为空');
+  }
+
+  const scopes = payload.scopes;
+  if (!Array.isArray(scopes)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'scopes must be array');
+  }
+
+  return {
+    name,
+    description: payload.description === undefined ? undefined : String(payload.description ?? '').trim(),
+    scopes: scopes.map((scope) => String(scope || '').trim()) as AccessTokenScope[],
+    expires_at: payload.expires_at === undefined || payload.expires_at === null
+      ? null
+      : String(payload.expires_at).trim(),
+  };
+}
+
 function parseDeliveryMode(
   value: unknown,
   allowPartial: boolean,
@@ -1362,6 +1511,20 @@ function toManualJobKind(value: unknown): ManualJobKind {
 
 function actorFromReq(req: { header(name: string): string | undefined }): string {
   return req.header('x-admin-actor') || 'admin';
+}
+
+function getMediaLibrarySettingsService(deps: AdminDeps) {
+  if (!deps.mediaLibrarySettingsService) {
+    throw new Error('mediaLibrarySettingsService is not configured');
+  }
+  return deps.mediaLibrarySettingsService;
+}
+
+function getAccessTokenService(deps: AdminDeps) {
+  if (!deps.accessTokenService) {
+    throw new Error('accessTokenService is not configured');
+  }
+  return deps.accessTokenService;
 }
 
 function numberOrNull(value: unknown): number | null {

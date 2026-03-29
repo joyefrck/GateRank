@@ -3,34 +3,6 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Google tag (gtag.js) -->
-    <script>
-      (function () {
-        var fallbackMeasurementId = 'G-4V9Z53GSP2';
-        var configuredMeasurementId = '%VITE_GA_MEASUREMENT_ID%';
-        var measurementId =
-          configuredMeasurementId &&
-          configuredMeasurementId !== '%VITE_GA_MEASUREMENT_ID%'
-            ? configuredMeasurementId
-            : fallbackMeasurementId;
-
-        window.__GATERANK_GA_MEASUREMENT_ID__ = measurementId;
-        window.__GATERANK_GA_INITIALIZED__ = false;
-        window.dataLayer = window.dataLayer || [];
-        window.gtag = window.gtag || function () {
-          window.dataLayer.push(arguments);
-        };
-
-        if (!window.location.pathname.startsWith('/admin')) {
-          var script = document.createElement('script');
-          script.async = true;
-          script.src =
-            'https://www.googletagmanager.com/gtag/js?id=' +
-            encodeURIComponent(measurementId);
-          document.head.appendChild(script);
-        }
-      })();
-    </script>
     <title>机场榜 GateRank | 今日推荐、全量榜单与机场 VPN 测评报告</title>
     <meta name="description" content="机场榜 GateRank 提供今日推荐、全量榜单与单机场 VPN 测评报告，覆盖 VPN、科学上网、魔法、梯子等相关机场参考信息。" />
     <meta name="keywords" content="机场榜,GateRank,机场推荐,机场VPN,VPN,科学上网,魔法,梯子,全量榜单,机场测评,机场报告,风险机场" />

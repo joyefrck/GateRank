@@ -1,18 +1,31 @@
-import {StrictMode} from 'react';
+import {StrictMode, type ComponentType} from 'react';
 import {createRoot} from 'react-dom/client';
-import App from './App.tsx';
-import AdminApp from './admin/AdminApp.tsx';
-import { initializeAnalytics } from './site/analytics.ts';
 import './index.css';
 
 const isAdminPath = window.location.pathname.startsWith('/admin');
+const root = createRoot(document.getElementById('root')!);
 
-if (!isAdminPath) {
-  initializeAnalytics();
+function renderApp(AppComponent: ComponentType): void {
+  root.render(
+    <StrictMode>
+      <AppComponent />
+    </StrictMode>,
+  );
 }
 
-createRoot(document.getElementById('root')!).render(
-  <StrictMode>
-    {isAdminPath ? <AdminApp /> : <App />}
-  </StrictMode>,
-);
+async function bootstrap(): Promise<void> {
+  if (isAdminPath) {
+    const { default: AdminApp } = await import('./admin/AdminApp.tsx');
+    renderApp(AdminApp);
+    return;
+  }
+
+  const [{ initializeAnalytics }, { default: App }] = await Promise.all([
+    import('./site/analytics.ts'),
+    import('./App.tsx'),
+  ]);
+  initializeAnalytics();
+  renderApp(App);
+}
+
+void bootstrap();
