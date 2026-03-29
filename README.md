@@ -149,11 +149,38 @@ Google Analytics 当前只统计公开站页面，不统计 `/admin`，并且只
 - `TELEGRAM_API_BASE`: 可选，默认 `https://api.telegram.org`
 - `TELEGRAM_NOTIFY_TIMEOUT_MS`: 可选，默认 `5000`
 
-### 3. 初始化数据库
+### 3. 准备本地测试数据库
 
-执行 [`backend/sql/schema.sql`](backend/sql/schema.sql)。
+后端会优先读取 `backend/.env`，其次才是仓库根目录 `.env`。本仓库当前本地测试默认连：
 
-### 4. 启动服务
+- `MYSQL_HOST=127.0.0.1`
+- `MYSQL_PORT=3310`
+- `MYSQL_DATABASE=gaterank`
+
+如果你的机器上已经有历史测试数据，默认应该直接复用已有的 MySQL 容器，而不是重新创建空库。当前本地约定容器名为 `gaterank-mysql`。
+
+推荐启动顺序：
+
+```bash
+docker start gaterank-mysql
+docker exec gaterank-mysql mysqladmin ping -uroot -p'<你的 MYSQL_ROOT_PASSWORD>' --silent
+```
+
+如果返回 `mysqld is alive`，再继续启动后端。
+
+重要说明：
+
+- 不要在 `3310` 上直接再 `docker run` 一个新的 MySQL 容器，否则应用很容易连到一个空库，误以为“数据丢了”。
+- 只有在你明确要初始化一套全新的本地测试库时，才新建 MySQL 容器。
+- 如果只是日常开发或联调，优先 `docker start gaterank-mysql`，不要重建。
+
+### 4. 初始化数据库（仅首次新建空库时）
+
+只有在“明确新建了一套空的本地 MySQL”时，才执行 [`backend/sql/schema.sql`](backend/sql/schema.sql)。
+
+如果你复用的是已有测试库，这一步通常不需要再做。
+
+### 5. 启动服务
 
 前端：
 
@@ -172,6 +199,14 @@ npm run server:start
 ```bash
 npm run server:dev
 ```
+
+建议本地联调顺序：
+
+1. 先确认 `gaterank-mysql` 已启动，且 `3310` 端口可连接
+2. 再启动后端 `npm run server:dev`
+3. 最后启动前端 `npm run dev`
+
+这样如果后台页面报空数据，先排查数据库容器和端口，不要先怀疑业务数据被删。
 
 ## 质量检查
 

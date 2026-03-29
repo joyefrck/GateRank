@@ -658,7 +658,37 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
               />
             </Field>
 
-              <Field label="摘要">
+            <Field
+              label="Slug"
+              action={(
+                <button
+                  type="button"
+                  className="text-xs font-medium text-neutral-500 hover:text-neutral-900"
+                  onClick={() => setSlugTouched(false)}
+                >
+                  按标题生成
+                </button>
+              )}
+            >
+              <input
+                className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+                value={form.slug}
+                onChange={(event) => {
+                  const nextValue = event.target.value;
+                  setSlugTouched(nextValue.trim().length > 0);
+                  setForm((current) => ({ ...current, slug: nextValue }));
+                }}
+                placeholder="ji-chang-bang-de-chuang-jian-si-lu"
+                spellCheck={false}
+                autoCapitalize="none"
+                autoCorrect="off"
+              />
+              <div className="mt-2 text-xs leading-5 text-neutral-500">
+                用于文章链接。默认跟随标题自动生成；手动修改后会保持你的输入。
+              </div>
+            </Field>
+
+            <Field label="摘要">
               <textarea
                 className="min-h-[110px] w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
                 value={form.excerpt}
