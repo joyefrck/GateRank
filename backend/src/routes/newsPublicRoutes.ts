@@ -2,7 +2,9 @@ import { Router, type Request, type Response } from 'express';
 import { HttpError } from '../middleware/errorHandler';
 import type { NewsArticleListItem } from '../types/domain';
 import { renderNewsArticlePage, renderNewsIndexPage } from '../services/newsPageRenderer';
+import { renderPublishTokenDocsPage, renderPublishTokenDocsRawMarkdown } from '../services/publishTokenDocsPageRenderer';
 import type { NewsPublicService } from '../services/newsPublicService';
+import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from '../../../shared/publishTokenDocs';
 
 interface NewsPublicDeps {
   newsPublicService: NewsPublicService;
@@ -62,6 +64,28 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
     }
   });
 
+  router.get('/publish-token-docs', (req, res) => {
+    try {
+      res
+        .status(200)
+        .type('html')
+        .send(renderPublishTokenDocsPage(getSiteUrl(req)));
+    } catch {
+      renderHtmlError(res, 500, '发布令牌文档加载失败');
+    }
+  });
+
+  router.get('/publish-token-docs.md', (req, res) => {
+    try {
+      res
+        .status(200)
+        .type('text/markdown; charset=utf-8')
+        .send(renderPublishTokenDocsRawMarkdown(getSiteUrl(req)));
+    } catch {
+      res.status(500).type('text/plain; charset=utf-8').send('发布令牌 Markdown 文档加载失败');
+    }
+  });
+
   router.get('/sitemap.xml', async (req, res) => {
     const siteUrl = getSiteUrl(req);
     const items = await deps.newsPublicService.getSitemapItems();
@@ -70,10 +94,13 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       '/rankings/all',
       '/methodology',
       '/apply',
+      '/publish-token-docs',
       '/news',
       ...items.map((item) => `/news/${item.slug}`),
     ];
-    const xml = buildSitemapXml(siteUrl, urls, items);
+    const xml = buildSitemapXml(siteUrl, urls, items, {
+      '/publish-token-docs': PUBLISH_TOKEN_DOCS_LAST_UPDATED,
+    });
     res.type('application/xml').send(xml);
   });
 
@@ -102,8 +129,16 @@ function renderHtmlError(res: Response, status: number, message: string): void {
     .send(`<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width, initial-scale=1" /><title>${message}</title><style>body{margin:0;padding:40px;background:#f6f2eb;color:#111;font-family:"IBM Plex Sans","PingFang SC","Microsoft YaHei",sans-serif}main{max-width:760px;margin:0 auto;background:rgba(255,255,255,.9);border-radius:28px;padding:36px;box-shadow:0 20px 60px rgba(0,0,0,.08)}</style></head><body><main><h1 style="margin:0 0 14px;font-size:42px;line-height:1.05;">${message}</h1><p style="margin:0;color:rgba(17,17,17,.68);font-size:16px;line-height:1.8;">请返回 <a href="/" style="color:#c93a2e;">GateRank 首页</a>，或稍后再试。</p></main></body></html>`);
 }
 
-function buildSitemapXml(siteUrl: string, urls: string[], newsItems: NewsArticleListItem[]): string {
+function buildSitemapXml(
+  siteUrl: string,
+  urls: string[],
+  newsItems: NewsArticleListItem[],
+  staticLastmodByPath: Record<string, string> = {},
+): string {
   const lastmodByPath = new Map<string, string>();
+  Object.entries(staticLastmodByPath).forEach(([path, lastmod]) => {
+    lastmodByPath.set(path, lastmod);
+  });
   newsItems.forEach((item) => {
     if (item.published_at) {
       lastmodByPath.set(`/news/${item.slug}`, item.published_at.replace(' ', 'T') + '+08:00');

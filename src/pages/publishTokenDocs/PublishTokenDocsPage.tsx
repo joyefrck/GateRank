@@ -17,26 +17,24 @@ import {
   PageFrame,
   usePageSeo,
 } from '../../site/publicSite';
+import {
+  buildPublishTokenDocsMarkdownUrl,
+  buildPublishTokenDocsStructuredData,
+  PUBLISH_TOKEN_DOCS_META,
+  PUBLISH_TOKEN_DOCS_NAV,
+} from '../../../shared/publishTokenDocs';
 
 export function PublishTokenDocsPage() {
   const publishApiBase = `${window.location.origin.replace(/\/+$/, '')}/api/v1/publish`;
-  const docSections = [
-    { id: 'overview', label: '总览' },
-    { id: 'security', label: '鉴权与安全' },
-    { id: 'quickstart', label: '快速开始' },
-    { id: 'workflow', label: '状态流转' },
-    { id: 'create', label: '创建文章' },
-    { id: 'upload', label: '上传封面' },
-    { id: 'manage', label: '后续操作' },
-    { id: 'errors', label: '错误码' },
-    { id: 'scopes', label: '权限矩阵' },
-  ] as const;
+  const siteUrl = window.location.origin.replace(/\/+$/, '');
+  const markdownUrl = buildPublishTokenDocsMarkdownUrl(siteUrl);
 
   usePageSeo({
-    title: '发布令牌接入说明 | 机场榜 GateRank',
-    description: 'GateRank 发布令牌接入说明，包含 Bearer 鉴权、文章创建、封面上传、草稿与发布模式定义。',
-    keywords: 'GateRank, 发布令牌, API, 文档, 新闻发布, Bearer Token',
+    title: PUBLISH_TOKEN_DOCS_META.title,
+    description: PUBLISH_TOKEN_DOCS_META.description,
+    keywords: PUBLISH_TOKEN_DOCS_META.keywords,
     canonicalPath: buildPublishTokenDocsHref(),
+    structuredData: buildPublishTokenDocsStructuredData(siteUrl),
   });
 
   return (
@@ -49,15 +47,14 @@ export function PublishTokenDocsPage() {
               <div className="space-y-5">
                 <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/90 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-neutral-500 shadow-sm backdrop-blur">
                   <BookOpen className="h-3.5 w-3.5" />
-                  Publish Token Docs
+                  {PUBLISH_TOKEN_DOCS_META.heroEyebrow}
                 </div>
                 <h1 className="max-w-4xl text-4xl md:text-5xl lg:text-[58px] font-black leading-[0.95] tracking-tight text-neutral-900">
-                  GateRank 发布令牌接入说明
-                  <span className="block text-neutral-400">给第三方系统与 AI 的正式发文接口文档</span>
+                  {PUBLISH_TOKEN_DOCS_META.shortTitle}
+                  <span className="block text-neutral-400">{PUBLISH_TOKEN_DOCS_META.heroSubtitle}</span>
                 </h1>
                 <p className="max-w-3xl text-sm md:text-base leading-8 text-neutral-600">
-                  这是一份公开接入文档，用于说明 GateRank 当前开放的新闻发布能力、Bearer 鉴权方式、草稿与直接发布的区别、
-                  封面上传流程，以及你在接入时会遇到的常见错误和 scope 约束。
+                  {PUBLISH_TOKEN_DOCS_META.heroSummary}
                 </p>
                 <div className="flex flex-wrap gap-3">
                   <a
@@ -73,6 +70,13 @@ export function PublishTokenDocsPage() {
                   >
                     查看权限矩阵
                     <ListChecks className="h-4 w-4" />
+                  </a>
+                  <a
+                    href={markdownUrl}
+                    className="inline-flex items-center gap-2 rounded-full border border-dashed border-neutral-300 bg-white/70 px-5 py-3 text-sm font-black text-neutral-600 shadow-sm backdrop-blur"
+                  >
+                    Markdown 原文
+                    <ArrowRight className="h-4 w-4" />
                   </a>
                 </div>
               </div>
@@ -94,7 +98,7 @@ export function PublishTokenDocsPage() {
               <div className="rounded-[28px] border border-neutral-200 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.05)]">
                 <div className="px-2 pb-3 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">目录</div>
                 <nav className="space-y-1">
-                  {docSections.map((section) => (
+                  {PUBLISH_TOKEN_DOCS_NAV.map((section) => (
                     <a
                       key={section.id}
                       href={`#${section.id}`}

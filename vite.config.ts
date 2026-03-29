@@ -26,6 +26,9 @@ function emitSeoAssets(siteUrl: string): Plugin {
   <url>
     <loc>${normalizedSiteUrl}/apply</loc>
   </url>
+  <url>
+    <loc>${normalizedSiteUrl}/publish-token-docs</loc>
+  </url>
 </urlset>
 `;
 

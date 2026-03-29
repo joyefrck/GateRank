@@ -99,6 +99,91 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
   }
 });
 
+test('GET /publish-token-docs returns server-rendered HTML with crawlable doc content', async () => {
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async () => ({
+          page: 1,
+          page_size: 12,
+          total: 0,
+          total_pages: 1,
+          featured: null,
+          items: [],
+        }),
+        getArticleViewBySlug: async () => null,
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/publish-token-docs`, {
+      headers: {
+        host: `127.0.0.1:${port}`,
+      },
+    });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<h1>GateRank 发布令牌接入说明<\/h1>/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/publish-token-docs"/);
+    assert.match(html, /<link rel="alternate" type="text\/markdown" href="http:\/\/127\.0\.0\.1:\d+\/publish-token-docs\.md"/);
+    assert.match(html, /<meta name="keywords" content="GateRank, 发布令牌, API, 文档, 新闻发布, Bearer Token"/);
+    assert.match(html, /"@type":"TechArticle"/);
+    assert.match(html, /"encodingFormat":"text\/markdown"/);
+    assert.match(html, /Base URL/);
+    assert.match(html, /Authorization: Bearer &lt;publish_token&gt;/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /publish-token-docs.md returns markdown source', async () => {
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async () => ({
+          page: 1,
+          page_size: 12,
+          total: 0,
+          total_pages: 1,
+          featured: null,
+          items: [],
+        }),
+        getArticleViewBySlug: async () => null,
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/publish-token-docs.md`, {
+      headers: {
+        host: `127.0.0.1:${port}`,
+      },
+    });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') || '', /text\/markdown/);
+    const markdown = await response.text();
+    assert.match(markdown, /^# GateRank 发布令牌接入说明/m);
+    assert.match(markdown, /## 快速开始/);
+    assert.match(markdown, /```bash/);
+    assert.match(markdown, /\/api\/v1\/publish\/news/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /news/:slug returns server-rendered HTML with seo metadata', async () => {
   const app = express();
   app.use(
@@ -237,6 +322,8 @@ test('GET /sitemap.xml includes published news urls', async () => {
     });
     assert.equal(response.status, 200);
     const xml = await response.text();
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/publish-token-docs<\/loc>/);
+    assert.match(xml, /<lastmod>2026-03-29T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news<\/loc>/);
   } finally {
