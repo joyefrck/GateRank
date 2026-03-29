@@ -55,13 +55,6 @@ export const PUBLISH_TOKEN_DOCS_NAV: PublishTokenDocNavSection[] = [
   { id: 'scopes', label: '权限矩阵' },
 ];
 
-export const PUBLISH_TOKEN_DOCS_HERO_METRICS = [
-  { label: '鉴权方式', value: 'Bearer publish_token' },
-  { label: '封面字段', value: 'cover_image_url' },
-  { label: '发布模式', value: 'publish_mode = draft | publish' },
-  { label: '文档状态', value: 'Public · Version 1' },
-];
-
 export const PUBLISH_TOKEN_DOCS_OVERVIEW_FIELDS = [
   { label: '鉴权方式', value: 'Authorization: Bearer <publish_token>' },
   { label: '封面字段', value: 'cover_image_url' },

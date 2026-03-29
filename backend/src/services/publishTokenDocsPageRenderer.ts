@@ -17,7 +17,6 @@ import {
   PUBLISH_TOKEN_DOCS_CREATE_RESPONSE_ROWS,
   PUBLISH_TOKEN_DOCS_ERROR_CODES,
   PUBLISH_TOKEN_DOCS_ERROR_TROUBLESHOOTING,
-  PUBLISH_TOKEN_DOCS_HERO_METRICS,
   PUBLISH_TOKEN_DOCS_INTEGRATION_TIPS,
   PUBLISH_TOKEN_DOCS_LAST_UPDATED,
   PUBLISH_TOKEN_DOCS_MANAGE_ENDPOINTS,
@@ -48,11 +47,6 @@ export function renderPublishTokenDocsPage(siteUrl: string): string {
   const markdownUrl = buildPublishTokenDocsMarkdownUrl(siteUrl);
   const publishApiBase = buildPublishApiBase(siteUrl);
   const jsonLd = buildPublishTokenDocsStructuredData(siteUrl);
-  const heroMetrics = [
-    ...PUBLISH_TOKEN_DOCS_HERO_METRICS,
-    { label: '公开文档 URL', value: canonicalUrl },
-    { label: 'Markdown 原文', value: markdownUrl },
-  ];
 
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -92,16 +86,6 @@ export function renderPublishTokenDocsPage(siteUrl: string): string {
               <a class="button button-ghost" href="${escapeAttribute(markdownUrl)}">Markdown 原文</a>
             </div>
           </div>
-          <aside class="hero-card">
-            ${heroMetrics
-              .map((item) => `
-                <div class="metric-card">
-                  <div class="metric-label">${escapeHtml(item.label)}</div>
-                  <div class="metric-value">${escapeHtml(item.value)}</div>
-                </div>
-              `)
-              .join('')}
-          </aside>
         </div>
 
         <div class="layout">
@@ -165,13 +149,11 @@ export function renderPublishTokenDocsPage(siteUrl: string): string {
             <section id="create" class="doc-section">
               ${renderSectionHeader('05', 'POST /news', '创建文章')}
               ${renderEndpoint(PUBLISH_TOKEN_DOCS_CREATE_ENDPOINT)}
-              <div class="two-col">
+              <div class="doc-stack">
                 <div class="stack">
                   ${renderCodeBlock(buildPublishTokenDocsCreateRequestExample(), 'json')}
                   ${PUBLISH_TOKEN_DOCS_CREATE_RESPONSE_CARDS.map(renderResponseCard).join('')}
                   ${renderCodeBlock(buildPublishTokenDocsCreateResponseExample(), 'json')}
-                </div>
-                <div class="stack">
                   ${renderSchemaTable('Request Body', PUBLISH_TOKEN_DOCS_CREATE_REQUEST_ROWS)}
                   ${renderSchemaTable('Key Response Fields', PUBLISH_TOKEN_DOCS_CREATE_RESPONSE_ROWS)}
                 </div>
@@ -181,12 +163,10 @@ export function renderPublishTokenDocsPage(siteUrl: string): string {
             <section id="upload" class="doc-section">
               ${renderSectionHeader('06', 'POST /news/upload-image', '上传封面')}
               ${renderEndpoint(PUBLISH_TOKEN_DOCS_UPLOAD_ENDPOINT)}
-              <div class="two-col">
+              <div class="doc-stack">
                 <div class="stack">
                   ${renderCodeBlock(buildPublishTokenDocsUploadCurl(siteUrl), 'bash')}
                   ${renderCodeBlock(buildPublishTokenDocsUploadResponseExample(), 'json')}
-                </div>
-                <div class="stack">
                   ${renderSchemaTable('Multipart Fields', PUBLISH_TOKEN_DOCS_UPLOAD_REQUEST_ROWS)}
                   ${renderSchemaTable('Response', PUBLISH_TOKEN_DOCS_UPLOAD_RESPONSE_ROWS)}
                 </div>
@@ -246,6 +226,28 @@ export function renderPublishTokenDocsPage(siteUrl: string): string {
       </main>
       ${renderFooter()}
     </div>
+    <script>
+      document.querySelectorAll('.copy-button').forEach((button) => {
+        button.addEventListener('click', async () => {
+          const code = button.parentElement?.querySelector('code');
+          const label = button.querySelector('.copy-button-label');
+          if (!code || !label || !navigator.clipboard) {
+            return;
+          }
+
+          const original = label.textContent || '复制';
+          try {
+            await navigator.clipboard.writeText(code.textContent || '');
+            label.textContent = '已复制';
+            window.setTimeout(() => {
+              label.textContent = original;
+            }, 1600);
+          } catch {
+            label.textContent = original;
+          }
+        });
+      });
+    </script>
   </body>
 </html>`;
 }
@@ -329,6 +331,9 @@ function renderSchemaTable(title: string, rows: PublishTokenDocSchemaRow[]): str
 function renderCodeBlock(code: string, language: string): string {
   return `
     <section class="code-block">
+      <button class="copy-button" type="button" aria-label="复制代码">
+        <span class="copy-button-label">复制</span>
+      </button>
       <div class="code-lang">${escapeHtml(language)}</div>
       <pre><code>${escapeHtml(code)}</code></pre>
     </section>
@@ -497,9 +502,7 @@ const styles = `
     padding: 40px 0 72px;
   }
   .hero {
-    display: grid;
-    gap: 24px;
-    grid-template-columns: minmax(0, 1.2fr) minmax(320px, 380px);
+    display: block;
     padding: 36px;
     border: 1px solid var(--line);
     border-radius: 36px;
@@ -574,7 +577,6 @@ const styles = `
   .button-ghost {
     background: rgba(255,255,255,0.84);
   }
-  .hero-card,
   .toc,
   .doc-section,
   .panel,
@@ -586,12 +588,6 @@ const styles = `
     background: var(--panel);
     border: 1px solid var(--line);
     border-radius: 28px;
-  }
-  .hero-card {
-    padding: 20px;
-    display: grid;
-    gap: 14px;
-    align-self: start;
   }
   .metric-card,
   .info-card {
@@ -647,24 +643,28 @@ const styles = `
   }
   .content {
     display: grid;
-    gap: 24px;
+    gap: 20px;
   }
   .doc-section {
-    padding: 28px;
+    padding: 24px;
     box-shadow: 0 16px 40px rgba(15,23,42,0.04);
   }
   .section-header h2 {
-    margin-top: 18px;
+    margin-top: 14px;
     font-size: clamp(28px, 4vw, 36px);
     line-height: 1.1;
     letter-spacing: -0.04em;
   }
   .info-grid,
+  .doc-stack,
   .two-col,
   .three-col {
     display: grid;
-    gap: 16px;
-    margin-top: 20px;
+    gap: 14px;
+    margin-top: 16px;
+  }
+  .doc-stack {
+    grid-template-columns: minmax(0, 1fr);
   }
   .info-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -679,16 +679,16 @@ const styles = `
   .endpoint-card,
   .code-block,
   .step-card {
-    padding: 20px;
+    padding: 18px;
   }
   .panel h3 {
-    margin-bottom: 14px;
+    margin-bottom: 12px;
     font-size: 18px;
     line-height: 1.3;
   }
   .stack {
     display: grid;
-    gap: 12px;
+    gap: 10px;
   }
   .stack p {
     font-size: 15px;
@@ -732,16 +732,16 @@ const styles = `
   .endpoint-card p,
   .step-card p,
   .notice {
-    margin-top: 12px;
+    margin-top: 10px;
     font-size: 15px;
     line-height: 1.8;
     color: #334155;
   }
   .steps {
-    margin: 20px 0 0;
+    margin: 16px 0 0;
     padding-left: 22px;
     display: grid;
-    gap: 12px;
+    gap: 10px;
   }
   .steps li {
     padding-left: 4px;
@@ -750,31 +750,57 @@ const styles = `
     color: #334155;
   }
   .code-block {
-    margin-top: 20px;
+    position: relative;
+    margin-top: 14px;
     background: #020617;
     color: #e2e8f0;
     overflow: hidden;
+  }
+  .copy-button {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 999px;
+    background: rgba(255,255,255,0.08);
+    color: #ffffff;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 160ms ease;
+  }
+  .copy-button:hover {
+    background: rgba(255,255,255,0.14);
   }
   .code-lang {
     font-size: 11px;
     color: #94a3b8;
   }
   .code-block pre {
-    margin: 14px 0 0;
+    margin: 12px 0 0;
     overflow-x: auto;
     white-space: pre;
     font-size: 13px;
     line-height: 1.7;
+    padding-right: 68px;
   }
   .table-card {
-    margin-top: 20px;
+    margin-top: 14px;
     overflow: hidden;
   }
   .table-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 16px;
-    padding: 16px 18px;
+    padding: 14px 16px;
     border-top: 1px solid rgba(15,23,42,0.08);
     align-items: start;
   }
@@ -793,8 +819,8 @@ const styles = `
     letter-spacing: 0.14em;
   }
   .notice {
-    margin-top: 20px;
-    padding: 16px 18px;
+    margin-top: 16px;
+    padding: 14px 16px;
     border-radius: 20px;
     background: #f8fafc;
     border: 1px solid rgba(15,23,42,0.08);
@@ -828,7 +854,6 @@ const styles = `
     margin-top: 16px;
   }
   @media (max-width: 1080px) {
-    .hero,
     .layout {
       grid-template-columns: 1fr;
     }
@@ -849,6 +874,7 @@ const styles = `
       display: none;
     }
     .info-grid,
+    .doc-stack,
     .two-col,
     .three-col,
     .table-grid-4,

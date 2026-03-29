@@ -138,6 +138,10 @@ test('GET /publish-token-docs returns server-rendered HTML with crawlable doc co
     assert.match(html, /"encodingFormat":"text\/markdown"/);
     assert.match(html, /Base URL/);
     assert.match(html, /Authorization: Bearer &lt;publish_token&gt;/);
+    assert.match(html, /class="copy-button"/);
+    assert.match(html, /class="copy-button-label">复制<\/span>/);
+    assert.match(html, /<section id="create" class="doc-section">[\s\S]*?<div class="doc-stack">/);
+    assert.match(html, /<section id="upload" class="doc-section">[\s\S]*?<div class="doc-stack">/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

@@ -4,15 +4,10 @@ import {
   BookOpen,
   Check,
   Copy,
-  FileCode2,
-  KeyRound,
   ListChecks,
-  ShieldCheck,
-  Upload,
 } from 'lucide-react';
 
 import {
-  buildAbsoluteUrl,
   buildPublishTokenDocsHref,
   PageFrame,
   usePageSeo,
@@ -43,52 +38,40 @@ export function PublishTokenDocsPage() {
         <div className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-14 md:pb-20">
           <div className="relative overflow-hidden rounded-[36px] border border-neutral-200 bg-[linear-gradient(135deg,#f6f2ea_0%,#ffffff_44%,#eef4ff_100%)] px-6 py-8 md:px-10 md:py-12 shadow-[0_24px_70px_rgba(15,23,42,0.08)]">
             <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle at 12% 20%, rgba(245,158,11,0.12), transparent 24%), radial-gradient(circle at 78% 16%, rgba(59,130,246,0.12), transparent 22%), radial-gradient(circle at 70% 78%, rgba(16,185,129,0.08), transparent 20%)' }} />
-            <div className="relative z-10 grid gap-8 xl:grid-cols-[minmax(0,1fr)_360px]">
-              <div className="space-y-5">
-                <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/90 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-neutral-500 shadow-sm backdrop-blur">
-                  <BookOpen className="h-3.5 w-3.5" />
-                  {PUBLISH_TOKEN_DOCS_META.heroEyebrow}
-                </div>
-                <h1 className="max-w-4xl text-4xl md:text-5xl lg:text-[58px] font-black leading-[0.95] tracking-tight text-neutral-900">
-                  {PUBLISH_TOKEN_DOCS_META.shortTitle}
-                  <span className="block text-neutral-400">{PUBLISH_TOKEN_DOCS_META.heroSubtitle}</span>
-                </h1>
-                <p className="max-w-3xl text-sm md:text-base leading-8 text-neutral-600">
-                  {PUBLISH_TOKEN_DOCS_META.heroSummary}
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  <a
-                    href="#quickstart"
-                    className="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-3 text-sm font-black text-white transition-transform hover:-translate-y-0.5"
-                  >
-                    快速开始
-                    <ArrowRight className="h-4 w-4" />
-                  </a>
-                  <a
-                    href="#scopes"
-                    className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/85 px-5 py-3 text-sm font-black text-neutral-700 shadow-sm backdrop-blur"
-                  >
-                    查看权限矩阵
-                    <ListChecks className="h-4 w-4" />
-                  </a>
-                  <a
-                    href={markdownUrl}
-                    className="inline-flex items-center gap-2 rounded-full border border-dashed border-neutral-300 bg-white/70 px-5 py-3 text-sm font-black text-neutral-600 shadow-sm backdrop-blur"
-                  >
-                    Markdown 原文
-                    <ArrowRight className="h-4 w-4" />
-                  </a>
-                </div>
+            <div className="relative z-10 max-w-5xl space-y-5">
+              <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/90 px-4 py-2 text-[11px] font-black uppercase tracking-[0.22em] text-neutral-500 shadow-sm backdrop-blur">
+                <BookOpen className="h-3.5 w-3.5" />
+                {PUBLISH_TOKEN_DOCS_META.heroEyebrow}
               </div>
-
-              <div className="rounded-[28px] border border-neutral-200 bg-white/90 p-5 shadow-[0_20px_60px_rgba(15,23,42,0.08)] backdrop-blur">
-                <div className="space-y-4">
-                  <DocsKeyMetric icon={<KeyRound className="h-4 w-4" />} label="鉴权方式" value="Bearer publish_token" />
-                  <DocsKeyMetric icon={<FileCode2 className="h-4 w-4" />} label="封面字段" value="cover_image_url" />
-                  <DocsKeyMetric icon={<Upload className="h-4 w-4" />} label="发布模式" value="publish_mode = draft | publish" />
-                  <DocsKeyMetric icon={<BookOpen className="h-4 w-4" />} label="公开文档 URL" value={buildAbsoluteUrl(buildPublishTokenDocsHref())} />
-                  <DocsKeyMetric icon={<ShieldCheck className="h-4 w-4" />} label="文档状态" value="Public · Version 1" />
-                </div>
+              <h1 className="max-w-4xl text-4xl md:text-5xl lg:text-[58px] font-black leading-[0.95] tracking-tight text-neutral-900">
+                {PUBLISH_TOKEN_DOCS_META.shortTitle}
+                <span className="block text-neutral-400">{PUBLISH_TOKEN_DOCS_META.heroSubtitle}</span>
+              </h1>
+              <p className="max-w-3xl text-sm md:text-base leading-8 text-neutral-600">
+                {PUBLISH_TOKEN_DOCS_META.heroSummary}
+              </p>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href="#quickstart"
+                  className="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-3 text-sm font-black text-white transition-transform hover:-translate-y-0.5"
+                >
+                  快速开始
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+                <a
+                  href="#scopes"
+                  className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/85 px-5 py-3 text-sm font-black text-neutral-700 shadow-sm backdrop-blur"
+                >
+                  查看权限矩阵
+                  <ListChecks className="h-4 w-4" />
+                </a>
+                <a
+                  href={markdownUrl}
+                  className="inline-flex items-center gap-2 rounded-full border border-dashed border-neutral-300 bg-white/70 px-5 py-3 text-sm font-black text-neutral-600 shadow-sm backdrop-blur"
+                >
+                  Markdown 原文
+                  <ArrowRight className="h-4 w-4" />
+                </a>
               </div>
             </div>
           </div>
@@ -111,7 +94,7 @@ export function PublishTokenDocsPage() {
               </div>
             </aside>
 
-            <main className="space-y-6">
+            <main className="space-y-5">
               <DocsSection id="overview" index="01" title="总览" subtitle="Authentication & Data Contract">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <ReadonlyInfoCard label="Base URL" value={publishApiBase} />
@@ -217,7 +200,7 @@ export function PublishTokenDocsPage() {
                   scopes="news:create；若 publish_mode=publish，还需要 news:publish"
                   summary="创建一篇新闻草稿，或直接创建并发布。"
                 />
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_400px]">
+                <div className="space-y-3">
                   <CodeBlock code={`{
   "title": "新文章",
   "slug": "new-article",
@@ -226,16 +209,15 @@ export function PublishTokenDocsPage() {
   "content_markdown": "# Hello\\n\\n正文内容",
   "publish_mode": "draft"
 }`} />
-                  <div className="space-y-4">
-                    <ResponseCard
-                      title="返回要点"
-                      lines={[
-                        '返回完整 article 对象，其中包含 article.id。',
-                        '如果 slug 冲突，会返回 NEWS_SLUG_CONFLICT。',
-                        '未传 excerpt 时，会按正文自动提取摘要。',
-                      ]}
-                    />
-                    <CodeBlock code={`{
+                  <ResponseCard
+                    title="返回要点"
+                    lines={[
+                      '返回完整 article 对象，其中包含 article.id。',
+                      '如果 slug 冲突，会返回 NEWS_SLUG_CONFLICT。',
+                      '未传 excerpt 时，会按正文自动提取摘要。',
+                    ]}
+                  />
+                  <CodeBlock code={`{
   "article": {
     "id": 123,
     "title": "新文章",
@@ -245,27 +227,26 @@ export function PublishTokenDocsPage() {
     "published_at": null
   }
 }`} />
-                    <SchemaTable
-                      title="Request Body"
-                      rows={[
-                        ['title', 'string', '是', '文章标题'],
-                        ['content_markdown', 'string', '是', '正文 Markdown'],
-                        ['slug', 'string', '否', '可选，不传自动生成'],
-                        ['excerpt', 'string', '否', '可选，不传自动提取'],
-                        ['cover_image_url', 'string', '否', '封面地址字段'],
-                        ['publish_mode', 'draft | publish', '否', '默认 draft'],
-                      ]}
-                    />
-                    <SchemaTable
-                      title="Key Response Fields"
-                      rows={[
-                        ['article.id', 'number', '是', '文章主键，后续更新/发布/归档都基于此值'],
-                        ['article.status', 'string', '是', 'draft 或 published'],
-                        ['article.slug', 'string', '是', '最终文章 slug'],
-                        ['article.published_at', 'string | null', '是', '未发布时为 null'],
-                      ]}
-                    />
-                  </div>
+                  <SchemaTable
+                    title="Request Body"
+                    rows={[
+                      ['title', 'string', '是', '文章标题'],
+                      ['content_markdown', 'string', '是', '正文 Markdown'],
+                      ['slug', 'string', '否', '可选，不传自动生成'],
+                      ['excerpt', 'string', '否', '可选，不传自动提取'],
+                      ['cover_image_url', 'string', '否', '封面地址字段'],
+                      ['publish_mode', 'draft | publish', '否', '默认 draft'],
+                    ]}
+                  />
+                  <SchemaTable
+                    title="Key Response Fields"
+                    rows={[
+                      ['article.id', 'number', '是', '文章主键，后续更新/发布/归档都基于此值'],
+                      ['article.status', 'string', '是', 'draft 或 published'],
+                      ['article.slug', 'string', '是', '最终文章 slug'],
+                      ['article.published_at', 'string | null', '是', '未发布时为 null'],
+                    ]}
+                  />
                 </div>
               </DocsSection>
 
@@ -276,29 +257,25 @@ export function PublishTokenDocsPage() {
                   scopes="news:upload"
                   summary="上传正文图片或封面图片；如果 mode=cover，会按封面规则压缩处理。"
                 />
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_400px]">
-                  <div className="space-y-4">
-                    <CodeBlock code={`curl -X POST '${publishApiBase}/news/upload-image' \\
+                <div className="space-y-3">
+                  <CodeBlock code={`curl -X POST '${publishApiBase}/news/upload-image' \\
   -H 'Authorization: Bearer <publish_token>' \\
   -F 'mode=cover' \\
   -F 'file=@/path/to/cover.png'`} />
-                    <CodeBlock code={`{"url":"/uploads/news/1743240000000-cover.webp"}`} />
-                  </div>
-                  <div className="space-y-4">
-                    <SchemaTable
-                      title="Multipart Fields"
-                      rows={[
-                        ['file', 'binary', '是', '图片文件本体'],
-                        ['mode', 'cover | inline', '否', '封面建议传 cover；不传时按普通正文图片处理'],
-                      ]}
-                    />
-                    <SchemaTable
-                      title="Response"
-                      rows={[
-                        ['url', 'string', '是', '上传完成后的本站图片地址'],
-                      ]}
-                    />
-                  </div>
+                  <CodeBlock code={`{"url":"/uploads/news/1743240000000-cover.webp"}`} />
+                  <SchemaTable
+                    title="Multipart Fields"
+                    rows={[
+                      ['file', 'binary', '是', '图片文件本体'],
+                      ['mode', 'cover | inline', '否', '封面建议传 cover；不传时按普通正文图片处理'],
+                    ]}
+                  />
+                  <SchemaTable
+                    title="Response"
+                    rows={[
+                      ['url', 'string', '是', '上传完成后的本站图片地址'],
+                    ]}
+                  />
                 </div>
               </DocsSection>
 
@@ -449,12 +426,12 @@ function FlowStep({
   body: string;
 }) {
   return (
-    <div className="rounded-[26px] border border-neutral-200 bg-white p-5">
+    <div className="rounded-[24px] border border-neutral-200 bg-white p-4">
       <div className="inline-flex items-center gap-3 rounded-full border border-neutral-200 bg-neutral-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-500">
         <span className="text-neutral-300">{step}</span>
         <span>{title}</span>
       </div>
-      <p className="mt-4 text-sm leading-7 text-neutral-700">{body}</p>
+      <p className="mt-3 text-sm leading-7 text-neutral-700">{body}</p>
     </div>
   );
 }
@@ -473,13 +450,13 @@ function DocsSection({
   children: React.ReactNode;
 }) {
   return (
-    <section id={id} className="scroll-mt-24 rounded-[30px] border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_100%)] p-6 md:p-8 space-y-5 shadow-[0_16px_40px_rgba(15,23,42,0.04)]">
+    <section id={id} className="scroll-mt-24 rounded-[30px] border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#fafafa_100%)] p-5 md:p-6 space-y-4 shadow-[0_16px_40px_rgba(15,23,42,0.04)]">
       <div>
         <div className="inline-flex items-center gap-3 rounded-full border border-neutral-200 bg-neutral-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-500">
           <span className="text-neutral-300">{index}</span>
           <span>{subtitle}</span>
         </div>
-        <h2 className="mt-4 text-2xl md:text-3xl font-black tracking-tight text-neutral-900">{title}</h2>
+        <h2 className="mt-3 text-2xl md:text-3xl font-black tracking-tight text-neutral-900">{title}</h2>
       </div>
       {children}
     </section>
@@ -488,7 +465,7 @@ function DocsSection({
 
 function ReadonlyInfoCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-white px-5 py-4">
+    <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3.5">
       <div className="text-xs font-black uppercase tracking-[0.18em] text-neutral-400">{label}</div>
       <div className="mt-2 break-all font-mono text-base md:text-lg text-neutral-900">{value}</div>
     </div>
@@ -522,38 +499,18 @@ function CodeBlock({ code }: { code: string }) {
   };
 
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-neutral-950">
+    <div className="relative overflow-hidden rounded-[20px] bg-neutral-950">
       <button
         type="button"
         onClick={() => void copyCode()}
-        className="absolute right-3 top-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.18em] text-white transition-colors hover:bg-white/14"
+        className="absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/8 px-2.5 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-white transition-colors hover:bg-white/14"
       >
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
         {copied ? '已复制' : '复制'}
       </button>
-      <pre className="overflow-x-auto px-4 py-4 pr-24 text-xs md:text-sm leading-6 text-neutral-100">
+      <pre className="overflow-x-auto px-4 py-3.5 pr-20 text-xs md:text-sm leading-6 text-neutral-100">
         {code}
       </pre>
-    </div>
-  );
-}
-
-function DocsKeyMetric({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-4">
-      <div className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">
-        {icon}
-        {label}
-      </div>
-      <div className="mt-3 break-all font-mono text-sm text-neutral-900">{value}</div>
     </div>
   );
 }
@@ -566,9 +523,9 @@ function DocPanel({
   items: Array<{ code: string; text: string }>;
 }) {
   return (
-    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-5">
+    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
       <div className="text-sm font-black text-neutral-900">{title}</div>
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 space-y-2.5">
         {items.map((item) => (
           <React.Fragment key={`${title}-${item.code}`}>
             <DocLine code={item.code} text={item.text} />
@@ -591,7 +548,7 @@ function EndpointCard({
   summary: string;
 }) {
   return (
-    <div className="rounded-[26px] border border-neutral-200 bg-white p-5">
+    <div className="rounded-[24px] border border-neutral-200 bg-white p-4">
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div className="flex items-center gap-3">
           <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-[0.18em] ${method === 'POST' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'}`}>
@@ -603,18 +560,18 @@ function EndpointCard({
           {scopes}
         </div>
       </div>
-      <p className="mt-4 text-sm md:text-base leading-7 text-neutral-700">{summary}</p>
+      <p className="mt-3 text-sm md:text-base leading-7 text-neutral-700">{summary}</p>
     </div>
   );
 }
 
 function ResponseCard({ title, lines }: { title: string; lines: string[] }) {
   return (
-    <div className="rounded-[26px] border border-neutral-200 bg-neutral-50 p-5">
+    <div className="rounded-[24px] border border-neutral-200 bg-neutral-50 p-4">
       <div className="text-sm font-black text-neutral-900">{title}</div>
-      <div className="mt-4 space-y-3">
+      <div className="mt-3 space-y-2.5">
         {lines.map((line) => (
-          <div key={line} className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm leading-7 text-neutral-700">
+          <div key={line} className="rounded-2xl border border-neutral-200 bg-white px-4 py-2.5 text-sm leading-7 text-neutral-700">
             {line}
           </div>
         ))}
@@ -631,18 +588,18 @@ function SchemaTable({
   rows: Array<[string, string, string, string]>;
 }) {
   return (
-    <div className="overflow-hidden rounded-[26px] border border-neutral-200 bg-white">
-      <div className="border-b border-neutral-200 bg-neutral-50 px-5 py-3 text-sm font-black text-neutral-900">{title}</div>
+    <div className="overflow-hidden rounded-[24px] border border-neutral-200 bg-white">
+      <div className="border-b border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-black text-neutral-900">{title}</div>
       <div className="overflow-x-auto">
         <div className="min-w-[760px]">
-          <div className="grid grid-cols-[150px_140px_90px_minmax(0,1fr)] border-b border-neutral-200 bg-neutral-50 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-500">
+          <div className="grid grid-cols-[150px_120px_90px_minmax(0,1fr)] border-b border-neutral-200 bg-neutral-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-500">
             <div>Field</div>
             <div>Type</div>
             <div>Required</div>
             <div>Description</div>
           </div>
           {rows.map(([field, type, required, description]) => (
-            <div key={field} className="grid grid-cols-[150px_140px_90px_minmax(0,1fr)] border-b border-neutral-100 px-5 py-4 text-sm last:border-b-0">
+            <div key={field} className="grid grid-cols-[150px_120px_90px_minmax(0,1fr)] border-b border-neutral-100 px-4 py-3 text-sm last:border-b-0">
               <div className="font-mono text-neutral-900 break-all">{field}</div>
               <div className="font-mono text-neutral-600">{type}</div>
               <div className="text-neutral-700">{required}</div>
