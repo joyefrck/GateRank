@@ -1,7 +1,6 @@
 import 'dotenv/config';
 import type { Server } from 'node:http';
 import { createApp } from './app';
-import { NightlyMaintenanceJob } from './jobs/nightlyMaintenanceJob';
 import { applyBackendEnvToProcessEnv } from './utils/backendEnv';
 
 applyBackendEnvToProcessEnv();
@@ -9,7 +8,7 @@ applyBackendEnvToProcessEnv();
 const port = Number(process.env.PORT || 8787);
 
 let server: Server | null = null;
-let job: NightlyMaintenanceJob | null = null;
+let schedulerService: { startAll(): Promise<void>; stopAll(): void } | null = null;
 
 void bootstrap().catch((error) => {
   console.error('[server] bootstrap failed', error);
@@ -17,23 +16,17 @@ void bootstrap().catch((error) => {
 });
 
 async function bootstrap(): Promise<void> {
-  const { app, airportRepository, recomputeService, aggregationService, riskCheckService } = await createApp();
+  const { app, adminSchedulerService } = await createApp();
   server = app.listen(port, () => {
     console.log(`[server] backend listening on :${port}`);
   });
-
-  job = new NightlyMaintenanceJob({
-    airportRepository,
-    riskCheckService,
-    recomputeService,
-    aggregationService,
-  });
-  job.start();
+  schedulerService = adminSchedulerService;
+  await schedulerService.startAll();
 }
 
 function shutdown(signal: string): void {
   console.log(`[server] received ${signal}, shutting down`);
-  job?.stop();
+  schedulerService?.stopAll();
   if (!server) {
     process.exit(0);
     return;

@@ -7,6 +7,9 @@ export type PerformanceRunStatus = 'success' | 'partial' | 'skipped' | 'failed';
 export type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
 export type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 export type NewsStatus = 'draft' | 'published' | 'archived';
+export type SchedulerTaskKey = 'stability' | 'performance' | 'risk' | 'aggregate_recompute';
+export type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
+export type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
 
 export interface Airport {
   id: number;
@@ -94,6 +97,33 @@ export interface ScoreBreakdown {
   historical_score: number;
   final_score: number;
   details: Record<string, ScoreDetailValue>;
+}
+
+export interface SchedulerTask {
+  task_key: SchedulerTaskKey;
+  name: string;
+  enabled: boolean;
+  schedule_time: string;
+  timezone: string;
+  last_restarted_at: string | null;
+  last_restarted_by: string | null;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SchedulerRun {
+  id: number;
+  task_key: SchedulerTaskKey;
+  run_date: string;
+  trigger_source: SchedulerTriggerSource;
+  status: SchedulerRunStatus;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  message: string | null;
+  detail_json: Record<string, unknown> | null;
+  created_at: string;
 }
 
 export interface AirportScoreDaily extends ScoreBreakdown {

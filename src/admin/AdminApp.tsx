@@ -4,6 +4,8 @@ import {
   Database,
   Bell,
   Newspaper,
+  Activity,
+  RefreshCw,
   LogOut,
   Plus,
   Search,
@@ -24,6 +26,9 @@ type ProbeScope = 'stability' | 'performance';
 type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
 type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 type PublishTokenScope = 'news:create' | 'news:update' | 'news:publish' | 'news:archive' | 'news:upload';
+type SchedulerTaskKey = 'stability' | 'performance' | 'risk' | 'aggregate_recompute';
+type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
+type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
 
 interface Airport {
   id: number;
@@ -295,6 +300,66 @@ interface PublishTokenCreateFormState {
   scopes: PublishTokenScope[];
 }
 
+interface SchedulerRunRecord {
+  id: number;
+  task_key: SchedulerTaskKey;
+  run_date: string;
+  trigger_source: SchedulerTriggerSource;
+  status: SchedulerRunStatus;
+  started_at: string | null;
+  finished_at: string | null;
+  duration_ms: number | null;
+  message: string | null;
+  detail_json: Record<string, unknown> | null;
+  created_at: string;
+}
+
+interface SchedulerTaskView {
+  task_key: SchedulerTaskKey;
+  name: string;
+  enabled: boolean;
+  schedule_time: string;
+  timezone: string;
+  last_restarted_at: string | null;
+  last_restarted_by: string | null;
+  updated_by: string;
+  created_at: string;
+  updated_at: string;
+  description: string;
+  next_run_at: string | null;
+  is_running: boolean;
+  latest_run: SchedulerRunRecord | null;
+}
+
+interface SchedulerTaskListView {
+  items: SchedulerTaskView[];
+}
+
+interface SchedulerRunsResponse {
+  page: number;
+  page_size: number;
+  total: number;
+  items: SchedulerRunRecord[];
+}
+
+interface SchedulerDailyStat {
+  run_date: string;
+  task_key: SchedulerTaskKey;
+  total_runs: number;
+  success_count: number;
+  failed_count: number;
+  total_duration_ms: number;
+  last_status: SchedulerRunStatus;
+  last_started_at: string | null;
+  last_finished_at: string | null;
+}
+
+interface SchedulerDailyStatsResponse {
+  date_from: string;
+  date_to: string;
+  items: SchedulerDailyStat[];
+}
+
 const PUBLISH_TOKEN_SCOPES: Array<{ value: PublishTokenScope; label: string; description: string }> = [
   { value: 'news:create', label: '创建文章', description: '允许创建新闻草稿或直接发文。' },
   { value: 'news:update', label: '更新文章', description: '允许修改已有新闻内容。' },
@@ -412,6 +477,7 @@ export default function AdminApp() {
           <NavItem icon={<Database size={14} />} active={path.startsWith('/admin/airports')} onClick={() => navigate('/admin/airports')} label="机场管理" />
           <NavItem icon={<Shield size={14} />} active={path.startsWith('/admin/applications')} onClick={() => navigate('/admin/applications')} label="入驻申请" />
           <NavItem icon={<Newspaper size={14} />} active={path.startsWith('/admin/news')} onClick={() => navigate('/admin/news')} label="News" />
+          <NavItem icon={<Activity size={14} />} active={path.startsWith('/admin/scheduler')} onClick={() => navigate('/admin/scheduler')} label="任务调度" />
           <NavItem icon={<Bell size={14} />} active={path.startsWith('/admin/settings')} onClick={() => navigate('/admin/settings')} label="系统设置" />
         </aside>
 
@@ -426,6 +492,7 @@ export default function AdminApp() {
               onNavigateToArticle={(id) => navigate(`/admin/news/${id}`)}
             />
           )}
+          {path === '/admin/scheduler' && <SchedulerPage />}
           {path === '/admin/settings' && <SystemSettingsPage />}
           {path.match(/^\/admin\/airports\/\d+\/data$/) && (
             <AirportDataPage airportId={Number(path.split('/')[3])} onBack={() => navigate('/admin/airports')} />
@@ -499,6 +566,365 @@ function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
           {loading ? '登录中...' : '登录'}
         </button>
       </form>
+    </div>
+  );
+}
+
+function SchedulerPage() {
+  const defaultDateTo = today();
+  const defaultDateFrom = shiftDate(defaultDateTo, -6);
+  const [tasks, setTasks] = useState<SchedulerTaskView[]>([]);
+  const [runs, setRuns] = useState<SchedulerRunRecord[]>([]);
+  const [dailyStats, setDailyStats] = useState<SchedulerDailyStat[]>([]);
+  const [scheduleDrafts, setScheduleDrafts] = useState<Partial<Record<SchedulerTaskKey, string>>>({});
+  const [taskFilter, setTaskFilter] = useState<'all' | SchedulerTaskKey>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | SchedulerRunStatus>('all');
+  const [dateFrom, setDateFrom] = useState(defaultDateFrom);
+  const [dateTo, setDateTo] = useState(defaultDateTo);
+  const [runPage, setRunPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [taskActionState, setTaskActionState] = useState<{ taskKey: SchedulerTaskKey; action: 'toggle' | 'restart' } | null>(null);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const loadTasks = async () => {
+    const response = (await apiFetch('/api/v1/admin/scheduler/tasks')) as SchedulerTaskListView;
+    setTasks(response.items || []);
+    setScheduleDrafts((current) => {
+      const next = { ...current };
+      for (const task of response.items || []) {
+        if (!next[task.task_key]) {
+          next[task.task_key] = task.schedule_time;
+        }
+      }
+      return next;
+    });
+  };
+
+  const loadStatsAndRuns = async () => {
+    const query = new URLSearchParams();
+    query.set('date_from', dateFrom);
+    query.set('date_to', dateTo);
+    if (taskFilter !== 'all') {
+      query.set('task_key', taskFilter);
+    }
+
+    const runQuery = new URLSearchParams(query);
+    if (statusFilter !== 'all') {
+      runQuery.set('status', statusFilter);
+    }
+    runQuery.set('page', String(runPage));
+    runQuery.set('page_size', '20');
+
+    const [statsResponse, runsResponse] = await Promise.all([
+      apiFetch(`/api/v1/admin/scheduler/daily-stats?${query.toString()}`) as Promise<SchedulerDailyStatsResponse>,
+      apiFetch(`/api/v1/admin/scheduler/runs?${runQuery.toString()}`) as Promise<SchedulerRunsResponse>,
+    ]);
+
+    setDailyStats(statsResponse.items || []);
+    setRuns(runsResponse.items || []);
+    return runsResponse;
+  };
+
+  const refreshAll = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      await Promise.all([loadTasks(), loadStatsAndRuns()]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '调度数据加载失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void refreshAll();
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      setLoading(true);
+      setError('');
+      try {
+        await loadStatsAndRuns();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : '调度数据加载失败');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [taskFilter, statusFilter, dateFrom, dateTo, runPage]);
+
+  const patchTask = async (taskKey: SchedulerTaskKey, payload: Record<string, unknown>, successMessage: string) => {
+    setTaskActionState({ taskKey, action: 'toggle' });
+    setNotice('');
+    setError('');
+    try {
+      await apiFetch(`/api/v1/admin/scheduler/tasks/${taskKey}`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      });
+      await loadTasks();
+      setNotice(successMessage);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '任务更新失败');
+    } finally {
+      setTaskActionState(null);
+    }
+  };
+
+  const restartTask = async (taskKey: SchedulerTaskKey) => {
+    setTaskActionState({ taskKey, action: 'restart' });
+    setNotice('');
+    setError('');
+    try {
+      await apiFetch(`/api/v1/admin/scheduler/tasks/${taskKey}/restart`, {
+        method: 'POST',
+      });
+      await refreshAll();
+      setNotice(`${formatSchedulerTaskLabel(taskKey)}已重载并执行完成`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '重启调度器失败');
+    } finally {
+      setTaskActionState(null);
+    }
+  };
+
+  const saveScheduleTime = async (task: SchedulerTaskView) => {
+    const draft = scheduleDrafts[task.task_key];
+    if (!draft || draft === task.schedule_time) {
+      return;
+    }
+    await patchTask(task.task_key, { schedule_time: draft }, `${task.name}执行时间已更新`);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold">任务调度</h2>
+          <p className="mt-1 text-sm text-neutral-500">统一管理稳定性采集、性能采集、风险体检和聚合重算四个全局任务。所有时间均按上海时间（UTC+08:00）显示。</p>
+        </div>
+        <button
+          type="button"
+          className="px-3 py-2 rounded border border-neutral-300 text-sm inline-flex items-center gap-2 bg-white"
+          onClick={() => void refreshAll()}
+          disabled={loading}
+        >
+          <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          刷新
+        </button>
+      </div>
+
+      {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+      {notice && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div>}
+
+      <section className="space-y-4">
+        <div>
+          <h3 className="text-base font-semibold">任务列表</h3>
+          <p className="mt-1 text-sm text-neutral-500">支持开启、关闭和重启调度器。点击“重启调度器”会立即执行一次真实任务；修改时间后会立即重载当前任务。</p>
+        </div>
+        <div className="grid gap-5 lg:grid-cols-2">
+          {tasks.map((task) => {
+            const isTaskBusy = taskActionState?.taskKey === task.task_key;
+            const isToggleBusy = isTaskBusy && taskActionState?.action === 'toggle';
+            const isRestartBusy = isTaskBusy && taskActionState?.action === 'restart';
+            return (
+            <div
+              key={task.task_key}
+              className="rounded-[28px] border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#fbfbfb_100%)] p-6 shadow-[0_10px_30px_rgba(15,23,42,0.04)] space-y-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">Scheduler Task</div>
+                  <div className="mt-2 text-[28px] leading-none font-black tracking-tight text-neutral-900">{task.name}</div>
+                  <div className="mt-3 max-w-2xl text-sm leading-7 text-neutral-500">{task.description}</div>
+                </div>
+                <div className={`inline-flex shrink-0 items-center rounded-full px-4 py-2 text-sm font-bold whitespace-nowrap ${
+                  task.enabled
+                    ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200'
+                    : 'bg-neutral-100 text-neutral-600 ring-1 ring-neutral-200'
+                }`}>
+                  {task.enabled ? '已开启' : '已关闭'}
+                </div>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-2 text-sm">
+                <div>
+                  <div className="mb-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">每日执行时间</div>
+                  <input
+                    type="time"
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-base shadow-sm"
+                    value={scheduleDrafts[task.task_key] || task.schedule_time}
+                    onChange={(event) => {
+                      const value = event.target.value;
+                      setScheduleDrafts((current) => ({ ...current, [task.task_key]: value }));
+                    }}
+                    onBlur={() => void saveScheduleTime(task)}
+                  />
+                </div>
+                <ReadField label="下次执行" value={formatDateTimeLabel(task.next_run_at)} />
+                <ReadField label="调度状态" value={task.is_running ? '运行中' : '空闲'} />
+                <ReadField label="最近重载" value={formatDateTimeLabel(task.last_restarted_at)} />
+              </div>
+
+              <div className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-4 text-sm">
+                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">最近一次执行</div>
+                <div className="mt-2 font-medium text-neutral-900">
+                  {task.latest_run
+                    ? `${formatSchedulerRunStatus(task.latest_run.status)} / ${formatSchedulerTrigger(task.latest_run.trigger_source)} / ${formatDateTimeLabel(task.latest_run.started_at)}`
+                    : '暂无执行记录'}
+                </div>
+                {task.latest_run?.message && (
+                  <div className="mt-2 leading-6 text-neutral-500">{task.latest_run.message}</div>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 flex-wrap">
+                <button
+                  type="button"
+                  className={`px-4 py-2.5 rounded-2xl text-sm font-semibold transition-colors ${
+                    task.enabled
+                      ? 'bg-neutral-900 text-white hover:bg-neutral-800'
+                      : 'border border-neutral-300 bg-white hover:bg-neutral-50'
+                  } ${isTaskBusy ? 'cursor-not-allowed opacity-60' : ''}`}
+                  onClick={() => void patchTask(task.task_key, { enabled: !task.enabled }, `${task.name}${task.enabled ? '已关闭' : '已开启'}`)}
+                  disabled={isTaskBusy}
+                >
+                  {isToggleBusy ? (
+                    <span className="inline-flex items-center gap-2">
+                      <RefreshCw size={14} className="animate-spin" />
+                      处理中...
+                    </span>
+                  ) : task.enabled ? '关闭调度' : '开启调度'}
+                </button>
+                <button
+                  type="button"
+                  className={`px-4 py-2.5 rounded-2xl border border-neutral-300 bg-white text-sm font-semibold hover:bg-neutral-50 transition-colors ${isTaskBusy ? 'cursor-not-allowed opacity-60' : ''}`}
+                  onClick={() => void restartTask(task.task_key)}
+                  disabled={isTaskBusy}
+                >
+                  {isRestartBusy ? (
+                    <span className="inline-flex items-center gap-2">
+                      <RefreshCw size={14} className="animate-spin" />
+                      执行中...
+                    </span>
+                  ) : '重启调度器'}
+                </button>
+              </div>
+            </div>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-base font-semibold">每日调度统计</h3>
+            <p className="mt-1 text-sm text-neutral-500">默认展示最近 7 天，统计按执行日志聚合生成。</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <select className="rounded border border-neutral-300 px-3 py-2 text-sm" value={taskFilter} onChange={(event) => { setTaskFilter(event.target.value as 'all' | SchedulerTaskKey); setRunPage(1); }}>
+              <option value="all">全部任务</option>
+              <option value="stability">稳定性采集</option>
+              <option value="performance">性能采集</option>
+              <option value="risk">风险体检</option>
+              <option value="aggregate_recompute">聚合重算</option>
+            </select>
+            <input type="date" className="rounded border border-neutral-300 px-3 py-2 text-sm" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setRunPage(1); }} />
+            <input type="date" className="rounded border border-neutral-300 px-3 py-2 text-sm" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setRunPage(1); }} />
+          </div>
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+          <table className="min-w-full text-sm">
+            <thead className="bg-neutral-50 text-neutral-600">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium">日期</th>
+                <th className="px-4 py-3 text-left font-medium">任务</th>
+                <th className="px-4 py-3 text-left font-medium">执行次数</th>
+                <th className="px-4 py-3 text-left font-medium">成功</th>
+                <th className="px-4 py-3 text-left font-medium">失败</th>
+                <th className="px-4 py-3 text-left font-medium">最后状态</th>
+                <th className="px-4 py-3 text-left font-medium">累计耗时</th>
+              </tr>
+            </thead>
+            <tbody>
+              {dailyStats.length === 0 && (
+                <tr>
+                  <td className="px-4 py-6 text-neutral-500" colSpan={7}>暂无调度统计</td>
+                </tr>
+              )}
+              {dailyStats.map((item) => (
+                <tr key={`${item.run_date}-${item.task_key}`} className="border-t border-neutral-200">
+                  <td className="px-4 py-3">{item.run_date}</td>
+                  <td className="px-4 py-3">{formatSchedulerTaskLabel(item.task_key)}</td>
+                  <td className="px-4 py-3">{item.total_runs}</td>
+                  <td className="px-4 py-3 text-emerald-700">{item.success_count}</td>
+                  <td className="px-4 py-3 text-rose-700">{item.failed_count}</td>
+                  <td className="px-4 py-3">{formatSchedulerRunStatus(item.last_status)}</td>
+                  <td className="px-4 py-3">{formatDuration(item.total_duration_ms)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-base font-semibold">执行日志</h3>
+            <p className="mt-1 text-sm text-neutral-500">支持按任务、日期和状态筛选调度执行记录。</p>
+          </div>
+          <select className="rounded border border-neutral-300 px-3 py-2 text-sm" value={statusFilter} onChange={(event) => { setStatusFilter(event.target.value as 'all' | SchedulerRunStatus); setRunPage(1); }}>
+            <option value="all">全部状态</option>
+            <option value="running">运行中</option>
+            <option value="succeeded">成功</option>
+            <option value="failed">失败</option>
+          </select>
+        </div>
+
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+          <table className="min-w-full text-sm">
+            <thead className="bg-neutral-50 text-neutral-600">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium">开始时间</th>
+                <th className="px-4 py-3 text-left font-medium">任务</th>
+                <th className="px-4 py-3 text-left font-medium">触发来源</th>
+                <th className="px-4 py-3 text-left font-medium">状态</th>
+                <th className="px-4 py-3 text-left font-medium">耗时</th>
+                <th className="px-4 py-3 text-left font-medium">结果</th>
+              </tr>
+            </thead>
+            <tbody>
+              {runs.length === 0 && (
+                <tr>
+                  <td className="px-4 py-6 text-neutral-500" colSpan={6}>暂无执行日志</td>
+                </tr>
+              )}
+              {runs.map((run) => (
+                <tr key={run.id} className="border-t border-neutral-200 align-top">
+                  <td className="px-4 py-3">{formatDateTimeLabel(run.started_at || run.created_at)}</td>
+                  <td className="px-4 py-3">{formatSchedulerTaskLabel(run.task_key)}</td>
+                  <td className="px-4 py-3">{formatSchedulerTrigger(run.trigger_source)}</td>
+                  <td className="px-4 py-3">{formatSchedulerRunStatus(run.status)}</td>
+                  <td className="px-4 py-3">{formatDuration(run.duration_ms)}</td>
+                  <td className="px-4 py-3 text-neutral-600">{run.message || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <div className="flex items-center justify-end gap-2">
+          <button type="button" className="px-3 py-2 rounded border border-neutral-300 text-sm" onClick={() => setRunPage((current) => Math.max(1, current - 1))} disabled={runPage <= 1}>上一页</button>
+          <div className="text-sm text-neutral-500">第 {runPage} 页</div>
+          <button type="button" className="px-3 py-2 rounded border border-neutral-300 text-sm" onClick={() => setRunPage((current) => current + 1)} disabled={runs.length < 20}>下一页</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -2828,6 +3254,59 @@ function formatScopeSummary(scopes: PublishTokenScope[]): string {
     return '-';
   }
   return scopes.map((scope) => formatPublishScopeLabel(scope)).join(' / ');
+}
+
+function formatSchedulerTaskLabel(taskKey: SchedulerTaskKey): string {
+  if (taskKey === 'stability') return '稳定性采集';
+  if (taskKey === 'performance') return '性能采集';
+  if (taskKey === 'risk') return '风险体检';
+  return '聚合重算';
+}
+
+function formatSchedulerRunStatus(status: SchedulerRunStatus): string {
+  if (status === 'running') return '运行中';
+  if (status === 'succeeded') return '成功';
+  return '失败';
+}
+
+function formatSchedulerTrigger(trigger: SchedulerTriggerSource): string {
+  if (trigger === 'schedule') return '定时触发';
+  if (trigger === 'restart') return '重启触发';
+  return '启动恢复';
+}
+
+function formatDateTimeLabel(value: string | null | undefined): string {
+  if (!value) {
+    return '-';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  const label = new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  }).format(date);
+  return `${label} UTC+08:00`;
+}
+
+function formatDuration(value: number | null | undefined): string {
+  if (!value || value <= 0) {
+    return '-';
+  }
+  if (value < 1000) {
+    return `${value} ms`;
+  }
+  if (value < 60_000) {
+    return `${(value / 1000).toFixed(1)} s`;
+  }
+  return `${(value / 60_000).toFixed(1)} min`;
 }
 
 function valueOrDash(value: string | number | boolean | null | undefined): string | number {

@@ -14,6 +14,7 @@ import {
   DEFAULT_MEDIA_LIBRARY_TIMEOUT_MS,
   type MediaLibrarySettingsInput,
 } from '../services/mediaLibrarySettingsService';
+import type { SchedulerDailyStat } from '../repositories/schedulerRunRepository';
 import type { AccessTokenScope } from '../utils/accessToken';
 import type {
   AirportApplicationReviewStatus,
@@ -25,6 +26,8 @@ import type {
   ProbeSampleInput,
   ProbeSampleType,
   ProbeScope,
+  SchedulerRunStatus,
+  SchedulerTaskKey,
 } from '../types/domain';
 import {
   computeEffectiveLatencyStats,
@@ -189,10 +192,125 @@ interface AdminDeps {
     }, createdBy: string): Promise<unknown>;
     revokeAdminToken(id: number): Promise<unknown>;
   };
+  schedulerService?: {
+    listTasks(): Promise<unknown[]>;
+    updateTask(
+      taskKey: SchedulerTaskKey,
+      patch: {
+        enabled?: boolean;
+        schedule_time?: string;
+        updated_by: string;
+      },
+    ): Promise<unknown>;
+    restartTask(taskKey: SchedulerTaskKey, actor: string): Promise<unknown>;
+    listRuns(query: {
+      taskKey?: SchedulerTaskKey;
+      status?: SchedulerRunStatus;
+      dateFrom?: string;
+      dateTo?: string;
+      page?: number;
+      pageSize?: number;
+    }): Promise<{ items: unknown[]; total: number; page: number; page_size: number }>;
+    getDailyStats(query: {
+      taskKey?: SchedulerTaskKey;
+      dateFrom?: string;
+      dateTo?: string;
+    }): Promise<{ date_from: string; date_to: string; items: SchedulerDailyStat[] }>;
+  };
 }
 
 export function createAdminRoutes(deps: AdminDeps): Router {
   const router = Router();
+
+  router.get('/scheduler/tasks', async (_req, res, next) => {
+    try {
+      res.json({ items: await getSchedulerService(deps).listTasks() });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/scheduler/tasks/:taskKey', async (req, res, next) => {
+    try {
+      const taskKey = toSchedulerTaskKey(req.params.taskKey);
+      const payload = (req.body ?? {}) as Record<string, unknown>;
+      const patch: {
+        enabled?: boolean;
+        schedule_time?: string;
+        updated_by: string;
+      } = {
+        updated_by: actorFromReq(req),
+      };
+
+      if (payload.enabled !== undefined) {
+        patch.enabled = Boolean(payload.enabled);
+      }
+      if (payload.schedule_time !== undefined) {
+        patch.schedule_time = parseScheduleTime(payload.schedule_time);
+      }
+      if (patch.enabled === undefined && patch.schedule_time === undefined) {
+        throw new HttpError(400, 'BAD_REQUEST', 'enabled 或 schedule_time 至少传一个');
+      }
+
+      const task = await getSchedulerService(deps).updateTask(taskKey, patch);
+      await deps.auditRepository.log('update_scheduler_task', actorFromReq(req), req.requestId, {
+        task_key: taskKey,
+        patch,
+      });
+      res.json(task);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/scheduler/tasks/:taskKey/restart', async (req, res, next) => {
+    try {
+      const taskKey = toSchedulerTaskKey(req.params.taskKey);
+      const task = await getSchedulerService(deps).restartTask(taskKey, actorFromReq(req));
+      await deps.auditRepository.log('restart_scheduler_task', actorFromReq(req), req.requestId, {
+        task_key: taskKey,
+      });
+      res.json(task);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/scheduler/runs', async (req, res, next) => {
+    try {
+      const taskKey = req.query.task_key ? toSchedulerTaskKey(req.query.task_key) : undefined;
+      const status = req.query.status ? toSchedulerRunStatus(req.query.status) : undefined;
+      const dateFrom = req.query.date_from === undefined ? undefined : parseDate(req.query.date_from);
+      const dateTo = req.query.date_to === undefined ? undefined : parseDate(req.query.date_to);
+      const page = toPositiveInt(req.query.page, 1);
+      const pageSize = toBoundedPositiveInt(req.query.page_size, 20, 100);
+      res.json(await getSchedulerService(deps).listRuns({
+        taskKey,
+        status,
+        dateFrom,
+        dateTo,
+        page,
+        pageSize,
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/scheduler/daily-stats', async (req, res, next) => {
+    try {
+      const taskKey = req.query.task_key ? toSchedulerTaskKey(req.query.task_key) : undefined;
+      const dateFrom = req.query.date_from === undefined ? undefined : parseDate(req.query.date_from);
+      const dateTo = req.query.date_to === undefined ? undefined : parseDate(req.query.date_to);
+      res.json(await getSchedulerService(deps).getDailyStats({
+        taskKey,
+        dateFrom,
+        dateTo,
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get('/system-settings/telegram', async (req, res, next) => {
     try {
@@ -1095,6 +1213,13 @@ function getTelegramNotificationService(deps: AdminDeps): NonNullable<AdminDeps[
   return deps.telegramNotificationService;
 }
 
+function getSchedulerService(deps: AdminDeps): NonNullable<AdminDeps['schedulerService']> {
+  if (!deps.schedulerService) {
+    throw new Error('schedulerService is not configured');
+  }
+  return deps.schedulerService;
+}
+
 function parseDate(value: unknown): string {
   const date = String(value || getDateInTimezone());
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -1160,6 +1285,34 @@ function optionalBoolean(value: unknown): boolean | undefined {
     return undefined;
   }
   return boolOrNull(value) ?? undefined;
+}
+
+function parseScheduleTime(value: unknown): string {
+  const normalized = String(value ?? '').trim();
+  if (!/^\d{2}:\d{2}$/.test(normalized)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'schedule_time must be HH:mm');
+  }
+  const [hour, minute] = normalized.split(':').map((part) => Number(part));
+  if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour < 0 || hour > 23 || minute < 0 || minute > 59) {
+    throw new HttpError(400, 'BAD_REQUEST', 'schedule_time must be HH:mm');
+  }
+  return normalized;
+}
+
+function toSchedulerTaskKey(value: unknown): SchedulerTaskKey {
+  const taskKey = String(value || '').trim();
+  if (taskKey === 'stability' || taskKey === 'performance' || taskKey === 'risk' || taskKey === 'aggregate_recompute') {
+    return taskKey;
+  }
+  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|performance|risk|aggregate_recompute');
+}
+
+function toSchedulerRunStatus(value: unknown): SchedulerRunStatus {
+  const status = String(value || '').trim();
+  if (status === 'running' || status === 'succeeded' || status === 'failed') {
+    return status;
+  }
+  throw new HttpError(400, 'BAD_REQUEST', 'status must be running|succeeded|failed');
 }
 
 function parseTelegramSettingsPayload(

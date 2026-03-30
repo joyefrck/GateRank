@@ -189,6 +189,38 @@ CREATE TABLE IF NOT EXISTS admin_system_settings (
   UNIQUE KEY uk_admin_system_settings_key (setting_key)
 );
 
+CREATE TABLE IF NOT EXISTS admin_scheduler_tasks (
+  task_key ENUM('stability', 'performance', 'risk', 'aggregate_recompute') NOT NULL,
+  name VARCHAR(128) NOT NULL,
+  enabled TINYINT(1) NOT NULL DEFAULT 0,
+  schedule_time CHAR(5) NOT NULL,
+  timezone VARCHAR(64) NOT NULL DEFAULT 'Asia/Shanghai',
+  last_restarted_at DATETIME NULL,
+  last_restarted_by VARCHAR(128) NULL,
+  updated_by VARCHAR(128) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (task_key)
+);
+
+CREATE TABLE IF NOT EXISTS admin_scheduler_runs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  task_key ENUM('stability', 'performance', 'risk', 'aggregate_recompute') NOT NULL,
+  run_date DATE NOT NULL,
+  trigger_source ENUM('schedule', 'restart', 'bootstrap_recover') NOT NULL DEFAULT 'schedule',
+  status ENUM('running', 'succeeded', 'failed') NOT NULL DEFAULT 'running',
+  started_at DATETIME NULL,
+  finished_at DATETIME NULL,
+  duration_ms INT UNSIGNED NULL,
+  message TEXT NULL,
+  detail_json JSON NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_admin_scheduler_runs_task_created (task_key, created_at),
+  INDEX idx_admin_scheduler_runs_date_task (run_date, task_key),
+  INDEX idx_admin_scheduler_runs_status (status)
+);
+
 CREATE TABLE IF NOT EXISTS admin_access_tokens (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   name VARCHAR(128) NOT NULL,

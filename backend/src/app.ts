@@ -13,6 +13,8 @@ import { PerformanceRunRepository } from './repositories/performanceRunRepositor
 import { ProbeSampleRepository } from './repositories/probeSampleRepository';
 import { RankingRepository } from './repositories/rankingRepository';
 import { ScoreRepository } from './repositories/scoreRepository';
+import { SchedulerRunRepository } from './repositories/schedulerRunRepository';
+import { SchedulerTaskRepository } from './repositories/schedulerTaskRepository';
 import { StatsRepository } from './repositories/statsRepository';
 import { ManualJobRepository } from './repositories/manualJobRepository';
 import { SystemSettingRepository } from './repositories/systemSettingRepository';
@@ -35,6 +37,8 @@ import { NewsPublicService } from './services/newsPublicService';
 import { PublicViewService } from './services/publicViewService';
 import { RecomputeService } from './services/recomputeService';
 import { RiskCheckService } from './services/riskCheckService';
+import { AdminSchedulerService } from './services/adminSchedulerService';
+import { SchedulerTaskExecutor } from './services/schedulerTaskExecutor';
 import { TelegramNotificationService } from './services/telegramNotificationService';
 import { getNewsUploadRootDir } from './utils/newsStorage';
 
@@ -52,6 +56,10 @@ export async function createApp() {
   await performanceRunRepository.ensureSchema();
   const manualJobRepository = new ManualJobRepository(pool);
   await manualJobRepository.ensureSchema();
+  const schedulerTaskRepository = new SchedulerTaskRepository(pool);
+  await schedulerTaskRepository.ensureSchema();
+  const schedulerRunRepository = new SchedulerRunRepository(pool);
+  await schedulerRunRepository.ensureSchema();
   const systemSettingRepository = new SystemSettingRepository(pool);
   await systemSettingRepository.ensureSchema();
   const accessTokenRepository = new AccessTokenRepository(pool);
@@ -78,6 +86,17 @@ export async function createApp() {
   const riskCheckService = new RiskCheckService({
     airportRepository,
     metricsRepository,
+  });
+  const schedulerTaskExecutor = new SchedulerTaskExecutor({
+    airportRepository,
+    aggregationService,
+    recomputeService,
+    riskCheckService,
+  });
+  const adminSchedulerService = new AdminSchedulerService({
+    schedulerTaskRepository,
+    schedulerRunRepository,
+    schedulerTaskExecutor,
   });
   const manualJobService = new ManualJobService({
     manualJobRepository,
@@ -166,6 +185,7 @@ export async function createApp() {
       recomputeService,
       aggregationService,
       manualJobService,
+      schedulerService: adminSchedulerService,
       auditRepository,
       publicViewService,
       telegramNotificationService: applicationNotificationService,
@@ -204,5 +224,6 @@ export async function createApp() {
     recomputeService,
     aggregationService,
     riskCheckService,
+    adminSchedulerService,
   };
 }

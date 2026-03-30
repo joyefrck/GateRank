@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
 import express from 'express';
-import { errorHandler } from '../src/middleware/errorHandler';
+import { errorHandler, HttpError } from '../src/middleware/errorHandler';
 import { createAdminRoutes } from '../src/routes/adminRoutes';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
 import type { PerformanceRunInput, ProbeSampleInput } from '../src/types/domain';
@@ -87,6 +87,298 @@ test('POST /performance-runs stores run diagnostics and performance samples', as
     assert.equal(insertedRuns[0].median_latency_ms, 110);
     assert.equal(insertedRuns[0].median_download_mbps, 88.8);
     assert.equal(insertedRuns[0].status, 'partial');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /scheduler/tasks returns task list', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      schedulerService: stubSchedulerService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/scheduler/tasks`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { items: Array<{ task_key: string }> };
+    assert.equal(data.items.length, 4);
+    assert.equal(data.items[0]?.task_key, 'stability');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /scheduler/tasks/:taskKey validates schedule_time', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      schedulerService: stubSchedulerService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/scheduler/tasks/stability`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ schedule_time: '25:99' }),
+    });
+    assert.equal(response.status, 400);
+    const data = (await response.json()) as { message: string };
+    assert.match(data.message, /schedule_time/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /scheduler/tasks/:taskKey/restart returns updated task view', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      schedulerService: stubSchedulerService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/scheduler/tasks/stability/restart`, {
+      method: 'POST',
+    });
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { latest_run: { trigger_source: string } | null };
+    assert.equal(data.latest_run, null);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /scheduler/tasks/:taskKey/restart returns conflict when task is disabled', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      schedulerService: {
+        ...stubSchedulerService(),
+        restartTask: async () => {
+          throw new HttpError(409, 'SCHEDULER_TASK_DISABLED', '任务已关闭，请先开启调度');
+        },
+      },
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/scheduler/tasks/stability/restart`, {
+      method: 'POST',
+    });
+    assert.equal(response.status, 409);
+    const data = (await response.json()) as { code: string; message: string };
+    assert.equal(data.code, 'SCHEDULER_TASK_DISABLED');
+    assert.match(data.message, /先开启调度/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /scheduler/tasks/:taskKey/restart returns conflict when task is already running', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      schedulerService: {
+        ...stubSchedulerService(),
+        restartTask: async () => {
+          throw new HttpError(409, 'SCHEDULER_TASK_RUNNING', '任务执行中，请稍后再试');
+        },
+      },
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/scheduler/tasks/stability/restart`, {
+      method: 'POST',
+    });
+    assert.equal(response.status, 409);
+    const data = (await response.json()) as { code: string; message: string };
+    assert.equal(data.code, 'SCHEDULER_TASK_RUNNING');
+    assert.match(data.message, /任务执行中/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /scheduler/runs returns scheduler logs', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      schedulerService: stubSchedulerService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/scheduler/runs?task_key=stability&status=succeeded`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { items: Array<{ task_key: string; status: string }> };
+    assert.equal(data.items.length, 1);
+    assert.equal(data.items[0]?.task_key, 'stability');
+    assert.equal(data.items[0]?.status, 'succeeded');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -1865,6 +2157,146 @@ function stubManualJobService() {
       updated_at: '2026-03-23 10:00:00',
     }),
     getJob: async () => null,
+  };
+}
+
+function stubSchedulerService(): any {
+  return {
+    listTasks: async () => [
+      {
+        task_key: 'stability',
+        name: '稳定性采集',
+        enabled: true,
+        schedule_time: '00:00',
+        timezone: 'Asia/Shanghai',
+        last_restarted_at: null,
+        last_restarted_by: null,
+        updated_by: 'system',
+        created_at: '2026-03-30T00:00:00+08:00',
+        updated_at: '2026-03-30T00:00:00+08:00',
+        description: '稳定性描述',
+        next_run_at: '2026-03-31T00:00:00+08:00',
+        is_running: false,
+        latest_run: null,
+      },
+      {
+        task_key: 'performance',
+        name: '性能采集',
+        enabled: true,
+        schedule_time: '00:10',
+        timezone: 'Asia/Shanghai',
+        last_restarted_at: null,
+        last_restarted_by: null,
+        updated_by: 'system',
+        created_at: '2026-03-30T00:00:00+08:00',
+        updated_at: '2026-03-30T00:00:00+08:00',
+        description: '性能描述',
+        next_run_at: '2026-03-31T00:10:00+08:00',
+        is_running: false,
+        latest_run: null,
+      },
+      {
+        task_key: 'risk',
+        name: '风险体检',
+        enabled: false,
+        schedule_time: '00:20',
+        timezone: 'Asia/Shanghai',
+        last_restarted_at: null,
+        last_restarted_by: null,
+        updated_by: 'system',
+        created_at: '2026-03-30T00:00:00+08:00',
+        updated_at: '2026-03-30T00:00:00+08:00',
+        description: '风险描述',
+        next_run_at: null,
+        is_running: false,
+        latest_run: null,
+      },
+      {
+        task_key: 'aggregate_recompute',
+        name: '聚合重算',
+        enabled: true,
+        schedule_time: '00:30',
+        timezone: 'Asia/Shanghai',
+        last_restarted_at: null,
+        last_restarted_by: null,
+        updated_by: 'system',
+        created_at: '2026-03-30T00:00:00+08:00',
+        updated_at: '2026-03-30T00:00:00+08:00',
+        description: '聚合描述',
+        next_run_at: '2026-03-31T00:30:00+08:00',
+        is_running: false,
+        latest_run: null,
+      },
+    ],
+    updateTask: async (taskKey: string, patch: { enabled?: boolean; schedule_time?: string }) => ({
+      task_key: taskKey,
+      name: '稳定性采集',
+      enabled: patch.enabled ?? true,
+      schedule_time: patch.schedule_time ?? '00:00',
+      timezone: 'Asia/Shanghai',
+      last_restarted_at: null,
+      last_restarted_by: null,
+      updated_by: 'tester',
+      created_at: '2026-03-30T00:00:00+08:00',
+      updated_at: '2026-03-30T00:00:00+08:00',
+      description: '稳定性描述',
+      next_run_at: '2026-03-31T00:00:00+08:00',
+      is_running: false,
+      latest_run: null,
+    }),
+    restartTask: async (taskKey: string) => ({
+      task_key: taskKey,
+      name: '稳定性采集',
+      enabled: true,
+      schedule_time: '00:00',
+      timezone: 'Asia/Shanghai',
+      last_restarted_at: '2026-03-30T01:00:00+08:00',
+      last_restarted_by: 'tester',
+      updated_by: 'tester',
+      created_at: '2026-03-30T00:00:00+08:00',
+      updated_at: '2026-03-30T01:00:00+08:00',
+      description: '稳定性描述',
+      next_run_at: '2026-03-31T00:00:00+08:00',
+      is_running: false,
+      latest_run: null,
+    }),
+    listRuns: async () => ({
+      page: 1,
+      page_size: 20,
+      total: 1,
+      items: [
+        {
+          id: 1,
+          task_key: 'stability',
+          run_date: '2026-03-30',
+          trigger_source: 'schedule',
+          status: 'succeeded',
+          started_at: '2026-03-30T00:00:00+08:00',
+          finished_at: '2026-03-30T00:01:00+08:00',
+          duration_ms: 60000,
+          message: 'ok',
+          detail_json: { summary: 'ok' },
+          created_at: '2026-03-30T00:00:00+08:00',
+        },
+      ],
+    }),
+    getDailyStats: async () => ({
+      date_from: '2026-03-24',
+      date_to: '2026-03-30',
+      items: [
+        {
+          run_date: '2026-03-30',
+          task_key: 'stability',
+          total_runs: 1,
+          success_count: 1,
+          failed_count: 0,
+          total_duration_ms: 60000,
+          last_status: 'succeeded',
+          last_started_at: '2026-03-30T00:00:00+08:00',
+          last_finished_at: '2026-03-30T00:01:00+08:00',
+        },
+      ],
+    }),
   };
 }
 
