@@ -186,6 +186,89 @@ test('PATCH /scheduler/tasks/:taskKey validates schedule_time', async () => {
   }
 });
 
+test('GET /airports returns list items with latest available total_score', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: {
+        ...stubAirportRepository(),
+        listByQuery: async () => ({
+          items: [
+            {
+              id: 1,
+              name: 'Alpha',
+              website: 'https://alpha.example.com',
+              websites: ['https://alpha.example.com'],
+              status: 'normal',
+              plan_price_month: 12,
+              has_trial: true,
+              subscription_url: 'https://alpha.example.com/sub',
+              tags: ['长期稳定', '新手友好'],
+              manual_tags: ['长期稳定'],
+              auto_tags: ['新手友好'],
+              created_at: '2026-03-20',
+            },
+            {
+              id: 2,
+              name: 'Beta',
+              website: '',
+              websites: [],
+              status: 'risk',
+              plan_price_month: 20,
+              has_trial: false,
+              subscription_url: null,
+              tags: ['风险观察'],
+              manual_tags: [],
+              auto_tags: ['风险观察'],
+              created_at: '2026-03-21',
+            },
+          ],
+          total: 2,
+        }),
+      },
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+        getLatestAvailableDate: async () => '2026-03-30',
+        getPublicDisplayScoresByDate: async () => new Map([[1, 88.6]]),
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { items: Array<{ id: number; total_score: number | null; tags: string[] }> };
+    assert.equal(data.items.length, 2);
+    assert.equal(data.items[0]?.total_score, 88.6);
+    assert.equal(data.items[1]?.total_score, null);
+    assert.deepEqual(data.items[0]?.tags, ['长期稳定', '新手友好']);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /scheduler/tasks/:taskKey/restart returns updated task view', async () => {
   const app = express();
   app.use(express.json());
@@ -469,8 +552,8 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
     assert.equal(data.performance.tested_nodes_count, 1);
     assert.equal((data.performance.selected_nodes as Array<{ name: string }>)[0].name, 'JP-1');
     assert.equal(data.base.price_score, 80);
-    assert.equal(data.base.score_data_days, 2);
-    assert.equal(data.base.total_score, 22.91);
+    assert.equal(data.base.score_data_days, null);
+    assert.equal(data.base.total_score, null);
     assert.deepEqual(data.base.manual_tags, ['老牌机场']);
     assert.deepEqual(data.base.auto_tags, ['观察中']);
     assert.deepEqual(data.base.tags, ['老牌机场', '观察中']);
@@ -604,6 +687,140 @@ test('GET /airports/:id/dashboard exposes raw and effective stability diagnostic
     assert.equal(data.stability.is_stable_day, true);
     assert.equal(data.stability.stability_score, 89.77);
     assert.equal(data.stability.stability_rule_version, 'robust_cv_v1');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/dashboard exposes pending score pipeline state when metrics exist but score is missing', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [{
+          id: 1,
+          airport_id: 1,
+          sampled_at: '2026-03-31T00:00:00+08:00',
+          sample_type: 'latency',
+          probe_scope: 'stability',
+          latency_ms: 8.2,
+          download_mbps: null,
+          availability: null,
+          source: 'scheduler-stability',
+        }],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: {
+        ...stubMetricsRepository(),
+        getByAirportAndDate: async () => ({
+          airport_id: 1,
+          date: '2026-03-31',
+          uptime_percent_30d: 99.8,
+          uptime_percent_today: 100,
+          latency_samples_ms: [8.2, 8.4, 8.1],
+          latency_mean_ms: 8.23,
+          latency_std_ms: 0.15,
+          latency_cv: 0.0182,
+          stable_days_streak: 12,
+          is_stable_day: true,
+        }),
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+        getLatestAvailableDate: async () => '2026-03-30',
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/dashboard?date=2026-03-31`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      pipeline: Record<string, unknown>;
+      base: Record<string, unknown>;
+    };
+    assert.equal(data.pipeline.stage, 'metrics_pending_score');
+    assert.equal(data.pipeline.has_metrics, true);
+    assert.equal(data.pipeline.has_score, false);
+    assert.equal(data.pipeline.public_resolved_date, '2026-03-30');
+    assert.equal(data.pipeline.resolved_from_fallback, true);
+    assert.equal(data.base.total_score, null);
+    assert.equal(data.base.score_data_days, null);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/dashboard exposes pending aggregation pipeline state when only samples exist', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [{
+          id: 1,
+          airport_id: 1,
+          sampled_at: '2026-03-31T00:00:00+08:00',
+          sample_type: 'availability',
+          probe_scope: 'stability',
+          latency_ms: null,
+          download_mbps: null,
+          availability: true,
+          source: 'scheduler-stability',
+        }],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+        getLatestAvailableDate: async () => '2026-03-30',
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/dashboard?date=2026-03-31`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { pipeline: Record<string, unknown> };
+    assert.equal(data.pipeline.stage, 'samples_pending_aggregation');
+    assert.equal(data.pipeline.has_probe_samples, true);
+    assert.equal(data.pipeline.has_metrics, false);
+    assert.equal(data.pipeline.has_score, false);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

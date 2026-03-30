@@ -285,6 +285,7 @@ export class AdminSchedulerService {
       this.logger.warn(`[scheduler] task ${taskKey} skipped because another run is still active`);
       return;
     }
+    const scheduledRunAt = state?.nextRunAt || null;
     if (state?.timer) {
       this.clearTimeoutFn(state.timer);
     }
@@ -296,7 +297,7 @@ export class AdminSchedulerService {
     });
 
     const startedAt = this.nowFn();
-    const runDate = getDateInTimezone(task.timezone || SHANGHAI_TIMEZONE, startedAt);
+    const runDate = resolveRunDate(task, triggerSource, startedAt, scheduledRunAt);
     const run = await this.deps.schedulerRunRepository.createRunning({
       taskKey,
       runDate,
@@ -317,6 +318,9 @@ export class AdminSchedulerService {
         message: result.message,
         detailJson: result.detail,
       });
+      if (shouldTriggerAggregateAfterTask(taskKey, triggerSource, result.status)) {
+        await this.executeTask('aggregate_recompute', 'schedule');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.deps.schedulerRunRepository.markFinished({
@@ -353,6 +357,26 @@ export class AdminSchedulerService {
       latest_run: latestRun,
     };
   }
+}
+
+function resolveRunDate(
+  task: SchedulerTask,
+  triggerSource: SchedulerTriggerSource,
+  startedAt: Date,
+  scheduledRunAt: Date | null,
+): string {
+  if (triggerSource === 'schedule' && scheduledRunAt) {
+    return getDateInTimezone(task.timezone || SHANGHAI_TIMEZONE, scheduledRunAt);
+  }
+  return getDateInTimezone(task.timezone || SHANGHAI_TIMEZONE, startedAt);
+}
+
+function shouldTriggerAggregateAfterTask(
+  taskKey: SchedulerTaskKey,
+  triggerSource: SchedulerTriggerSource,
+  status: SchedulerTaskExecutionResult['status'],
+): boolean {
+  return taskKey === 'risk' && triggerSource === 'schedule' && status === 'succeeded';
 }
 
 export function computeNextRunAt(scheduleTime: string, now: Date, timezone: string): Date {

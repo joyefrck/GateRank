@@ -44,7 +44,10 @@ test('PublicViewService.getHomePageView falls back to latest ranking date', asyn
   });
 
   const result = await service.getHomePageView('2026-03-25');
+  assert.equal(result.requested_date, '2026-03-25');
   assert.equal(result.date, '2026-03-24');
+  assert.equal(result.resolved_from_fallback, true);
+  assert.match(result.fallback_notice || '', /2026-03-25/);
   assert.equal(result.hero.report_time_at, '2026-03-24T10:00:00+08:00');
   assert.deepEqual(statsDates, ['2026-03-24']);
   assert.deepEqual(rankingDates, [
@@ -217,7 +220,9 @@ test('PublicViewService.getHomePageView builds fallback cards from public scores
   });
 
   const result = await service.getHomePageView('2026-03-25');
+  assert.equal(result.requested_date, '2026-03-25');
   assert.equal(result.date, '2026-03-24');
+  assert.equal(result.resolved_from_fallback, true);
   assert.equal(result.hero.report_time_at, '2026-03-24T10:00:00+08:00');
   assert.equal(result.sections.today_pick.items.length, 1);
   assert.equal(result.sections.today_pick.items[0].name, 'Alpha');
@@ -544,6 +549,112 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
   assert.ok(result);
   assert.equal(result.summary_card.type, 'stable');
   assert.equal(result.ranking.risk_alerts_rank, null);
+});
+
+test('PublicViewService.getReportView falls back to latest score date and exposes fallback notice', async () => {
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => ({
+        id: 1,
+        name: 'Alpha',
+        website: 'https://alpha.example.com',
+        status: 'normal' as const,
+        plan_price_month: 12,
+        has_trial: true,
+        tags: ['稳定'],
+        created_at: '2026-01-20',
+      }),
+    },
+    metricsRepository: {
+      getByAirportAndDate: async (_airportId: number, date: string) => ({
+        airport_id: 1,
+        date,
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 30,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 0,
+        history_incidents: 0,
+      }),
+      getTrend: async () => [{
+        airport_id: 1,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 30,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 0,
+        history_incidents: 0,
+      }],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async (_airportId: number, date: string) => ({
+        airport_id: 1,
+        date,
+        s: 82,
+        p: 76,
+        c: 70,
+        r: 95,
+        risk_penalty: 0,
+        score: 80,
+        recent_score: 80,
+        historical_score: 78,
+        final_score: 79,
+        details: {
+          total_score: 83,
+        },
+      }),
+      getPublicDisplayScoreByAirportAndDate: async () => 80,
+      getTrend: async () => [{
+        airport_id: 1,
+        date: '2026-03-24',
+        s: 82,
+        p: 76,
+        c: 70,
+        r: 95,
+        risk_penalty: 0,
+        score: 80,
+        recent_score: 80,
+        historical_score: 78,
+        final_score: 79,
+        details: {
+          total_score: 83,
+        },
+      }],
+      getPublicFullRankingByDate: async () => ({
+        total: 1,
+        items: [],
+      }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({
+        stable: 1,
+      }),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 1,
+        realtime_tests: 8,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getReportView(1, '2026-03-25');
+  assert.ok(result);
+  assert.equal(result?.requested_date, '2026-03-25');
+  assert.equal(result?.date, '2026-03-24');
+  assert.equal(result?.resolved_from_fallback, true);
+  assert.match(result?.fallback_notice || '', /2026-03-24/);
 });
 
 test('PublicViewService.getHomePageView filters stale normal airports from persisted risk ranking', async () => {

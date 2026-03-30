@@ -305,3 +305,108 @@ test('AdminSchedulerService scheduled execution writes run record and finishes i
   assert.equal(runIds.length, 1);
   assert.deepEqual(finishedStatuses, ['succeeded']);
 });
+
+test('AdminSchedulerService scheduled midnight execution uses scheduled slot date for run_date', async () => {
+  const tasks = [createTask({ schedule_time: '00:00' })];
+  const scheduledCallbacks: Array<() => void> = [];
+  const runDates: string[] = [];
+
+  const service = new AdminSchedulerService({
+    schedulerTaskRepository: {
+      listAll: async () => tasks,
+      getByKey: async (taskKey) => tasks.find((task) => task.task_key === taskKey) || null,
+      update: async () => {},
+      markRestarted: async () => {},
+    },
+    schedulerRunRepository: {
+      createRunning: async ({ runDate }) => {
+        runDates.push(runDate);
+        return { id: 1 };
+      },
+      markFinished: async () => {},
+      listLatestByTaskKeys: async () => ({
+        stability: null,
+        performance: null,
+        risk: null,
+        aggregate_recompute: null,
+      }),
+      listByQuery: async () => ({ items: [], total: 0 }),
+      getDailyStats: async () => [],
+    },
+    schedulerTaskExecutor: {
+      runTask: async () => ({ status: 'succeeded', message: 'ok', detail: {} }),
+    },
+    now: () => new Date('2026-03-30T15:59:59.900Z'),
+    setTimeoutFn: ((callback: () => void) => {
+      scheduledCallbacks.push(callback);
+      return { callback } as never;
+    }) as never,
+    clearTimeoutFn: () => {},
+  });
+
+  await service.startAll();
+  await scheduledCallbacks[0]?.();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(runDates, ['2026-03-31']);
+});
+
+test('AdminSchedulerService scheduled risk execution auto-triggers aggregate_recompute', async () => {
+  const tasks = [
+    createTask({ task_key: 'risk', name: '风险体检', schedule_time: '00:20' }),
+    createTask({ task_key: 'aggregate_recompute', name: '聚合重算', schedule_time: '00:30' }),
+  ];
+  const scheduledCallbacks: Array<() => void> = [];
+  const runOrder: string[] = [];
+
+  const service = new AdminSchedulerService({
+    schedulerTaskRepository: {
+      listAll: async () => tasks,
+      getByKey: async (taskKey) => tasks.find((task) => task.task_key === taskKey) || null,
+      update: async () => {},
+      markRestarted: async () => {},
+    },
+    schedulerRunRepository: {
+      createRunning: async ({ taskKey }) => {
+        runOrder.push(`create:${taskKey}`);
+        return { id: runOrder.length };
+      },
+      markFinished: async ({ id, status }) => {
+        runOrder.push(`finish:${id}:${status}`);
+      },
+      listLatestByTaskKeys: async () => ({
+        stability: null,
+        performance: null,
+        risk: null,
+        aggregate_recompute: null,
+      }),
+      listByQuery: async () => ({ items: [], total: 0 }),
+      getDailyStats: async () => [],
+    },
+    schedulerTaskExecutor: {
+      runTask: async (taskKey) => {
+        runOrder.push(`run:${taskKey}`);
+        return { status: 'succeeded', message: 'ok', detail: {} };
+      },
+    },
+    now: () => new Date('2026-03-30T16:19:59.000Z'),
+    setTimeoutFn: ((callback: () => void) => {
+      scheduledCallbacks.push(callback);
+      return { callback } as never;
+    }) as never,
+    clearTimeoutFn: () => {},
+  });
+
+  await service.startAll();
+  await scheduledCallbacks[0]?.();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(runOrder, [
+    'create:risk',
+    'run:risk',
+    'finish:1:succeeded',
+    'create:aggregate_recompute',
+    'run:aggregate_recompute',
+    'finish:4:succeeded',
+  ]);
+});

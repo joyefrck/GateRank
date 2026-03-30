@@ -162,6 +162,7 @@ export class PublicViewService {
 
   async getHomePageView(date: string): Promise<HomePageView> {
     const resolvedDate = (await this.deps.rankingRepository.getLatestAvailableDate(date)) || date;
+    const resolvedFromFallback = resolvedDate !== date;
     const [stats, today, stable, value, newest, rawRisk] = await Promise.all([
       this.deps.statsRepository.getHomeStats(resolvedDate),
       this.deps.rankingRepository.getRanking(resolvedDate, 'today'),
@@ -177,7 +178,10 @@ export class PublicViewService {
         : null;
 
     return {
+      requested_date: date,
       date: resolvedDate,
+      resolved_from_fallback: resolvedFromFallback,
+      fallback_notice: resolvedFromFallback ? buildPublicFallbackNotice(date, resolvedDate) : null,
       generated_at: formatDateTimeInTimezoneIso(new Date(), SHANGHAI_TIMEZONE),
       hero: {
         report_time_at: stats.latest_data_at,
@@ -252,22 +256,27 @@ export class PublicViewService {
   }
 
   async getReportView(airportId: number, date: string): Promise<ReportView | null> {
-    const base = await this.loadCardContext(airportId, date);
+    const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
+    const resolvedFromFallback = resolvedDate !== date;
+    const base = await this.loadCardContext(airportId, resolvedDate);
     if (!base) {
       return null;
     }
 
-    const rawRanking = await this.deps.rankingRepository.getRanksForAirport(airportId, date);
+    const rawRanking = await this.deps.rankingRepository.getRanksForAirport(airportId, resolvedDate);
     const ranking = {
       ...rawRanking,
       risk: isRiskAlertAirport(base.airport) ? rawRanking.risk : undefined,
     };
-    const section = resolveSummarySection(base.airport, base.metrics, base.score, ranking, date);
-    const summaryCard = this.buildCard(section, base, date);
-    const metricsStartDate = dateDaysAgo(date, 29);
+    const section = resolveSummarySection(base.airport, base.metrics, base.score, ranking, resolvedDate);
+    const summaryCard = this.buildCard(section, base, resolvedDate);
+    const metricsStartDate = dateDaysAgo(resolvedDate, 29);
 
     return {
-      date,
+      requested_date: date,
+      date: resolvedDate,
+      resolved_from_fallback: resolvedFromFallback,
+      fallback_notice: resolvedFromFallback ? buildPublicFallbackNotice(date, resolvedDate) : null,
       airport: {
         id: base.airport.id,
         name: base.airport.name,
@@ -601,6 +610,10 @@ function formatPrice(value: number): string {
 function round2(value: number): number {
   const rounded = Math.round(value * 100) / 100;
   return Object.is(rounded, -0) ? 0 : rounded;
+}
+
+function buildPublicFallbackNotice(requestedDate: string, resolvedDate: string): string {
+  return `${requestedDate} 的公开分数尚未生成，当前展示 ${resolvedDate} 的最新已发布结果。`;
 }
 
 function getDisplayScore(score: { final_score: number; details?: Record<string, unknown> }): number {

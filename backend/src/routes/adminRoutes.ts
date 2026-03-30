@@ -147,6 +147,8 @@ interface AdminDeps {
   scoreRepository: {
     getByAirportAndDate(airportId: number, date: string): Promise<unknown | null>;
     getTrend(airportId: number, startDate: string, endDate: string): Promise<unknown[]>;
+    getLatestAvailableDate?(onOrBefore: string): Promise<string | null>;
+    getPublicDisplayScoresByDate?(airportIds: number[], date: string): Promise<Map<number, number>>;
   };
   recomputeService: {
     recomputeForDate(date: string): Promise<{ recomputed: number }>;
@@ -556,7 +558,29 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const keyword = optionalString(req.query.keyword);
       const status = req.query.status ? toStatus(req.query.status) : undefined;
       const result = await deps.airportRepository.listByQuery({ page, pageSize, keyword, status });
-      res.json({ page, page_size: pageSize, total: result.total, items: result.items });
+      const scoreRepository = deps.scoreRepository;
+      const airports = result.items as Array<{ id?: number } & Record<string, unknown>>;
+      let scoreMap = new Map<number, number>();
+
+      if (scoreRepository.getLatestAvailableDate && scoreRepository.getPublicDisplayScoresByDate) {
+        const latestDate = await scoreRepository.getLatestAvailableDate(getDateInTimezone());
+        const airportIds = airports
+          .map((item) => Number(item.id))
+          .filter((id) => Number.isInteger(id) && id > 0);
+        if (latestDate && airportIds.length > 0) {
+          scoreMap = await scoreRepository.getPublicDisplayScoresByDate(airportIds, latestDate);
+        }
+      }
+
+      res.json({
+        page,
+        page_size: pageSize,
+        total: result.total,
+        items: airports.map((item) => ({
+          ...item,
+          total_score: typeof item.id === 'number' ? scoreMap.get(item.id) ?? null : null,
+        })),
+      });
     } catch (error) {
       next(error);
     }
@@ -804,12 +828,14 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     try {
       const airportId = toAirportId(req.params.id);
       const date = parseDate(req.query.date);
-      const [base, metrics, score, performanceRun, latestPerformanceRun] = await Promise.all([
+      const [base, metrics, score, performanceRun, latestPerformanceRun, dayProbeSamples, latestAvailableScoreDate] = await Promise.all([
         deps.airportRepository.getById(airportId),
         deps.metricsRepository.getByAirportAndDate(airportId, date),
         deps.scoreRepository.getByAirportAndDate(airportId, date),
         deps.performanceRunRepository.getLatestByAirportAndDate(airportId, date),
         deps.performanceRunRepository.getLatestByAirportBeforeDate(airportId, date),
+        deps.probeSampleRepository.listProbeSamples(airportId, date, undefined, 1),
+        deps.scoreRepository.getLatestAvailableDate?.(date) ?? null,
       ]);
 
       if (!base) {
@@ -851,19 +877,47 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         date,
       );
       const scoreTrendRows = scoreTrend as Array<Record<string, unknown>>;
-      const finalEngineScore = computeFinalEngineScore({
-        sSeries: scoreTrendRows
-          .filter((row) => numberOrNull(row.s) !== null)
-          .map((row) => ({ date: String(row.date), score: Number(row.s) })),
-        pSeries: scoreTrendRows
-          .filter((row) => numberOrNull(row.p) !== null)
-          .map((row) => ({ date: String(row.date), score: Number(row.p) })),
-        rSeries: scoreTrendRows
-          .filter((row) => numberOrNull(row.r) !== null)
-          .map((row) => ({ date: String(row.date), score: Number(row.r) })),
-        pricePer100gb: Number(baseObj.plan_price_month || 0),
-        referenceDate: date,
-      });
+      const hasScore = Boolean(score);
+      const finalEngineScore = hasScore
+        ? computeFinalEngineScore({
+          sSeries: scoreTrendRows
+            .filter((row) => numberOrNull(row.s) !== null)
+            .map((row) => ({ date: String(row.date), score: Number(row.s) })),
+          pSeries: scoreTrendRows
+            .filter((row) => numberOrNull(row.p) !== null)
+            .map((row) => ({ date: String(row.date), score: Number(row.p) })),
+          rSeries: scoreTrendRows
+            .filter((row) => numberOrNull(row.r) !== null)
+            .map((row) => ({ date: String(row.date), score: Number(row.r) })),
+          pricePer100gb: Number(baseObj.plan_price_month || 0),
+          referenceDate: date,
+        })
+        : null;
+      const hasMetrics = Boolean(metrics);
+      const hasProbeSamples = dayProbeSamples.length > 0;
+      const publicResolvedDate = hasScore ? date : latestAvailableScoreDate;
+      const resolvedFromFallback =
+        !hasScore &&
+        typeof publicResolvedDate === 'string' &&
+        publicResolvedDate.length > 0 &&
+        publicResolvedDate !== date;
+      const pipelineStage = hasScore
+        ? 'ready'
+        : hasMetrics
+          ? 'metrics_pending_score'
+          : hasProbeSamples
+            ? 'samples_pending_aggregation'
+            : 'empty';
+      const pipelineMessage =
+        pipelineStage === 'metrics_pending_score'
+          ? resolvedFromFallback
+            ? `${date} 的日聚合已完成，但公开分数与榜单尚未生成；用户端当前仍会回退展示 ${publicResolvedDate}。`
+            : `${date} 的日聚合已完成，但公开分数与榜单尚未生成。`
+          : pipelineStage === 'samples_pending_aggregation'
+            ? `${date} 的原始样本已采集，但日聚合尚未完成；稳定性卡片正在等待写入每日指标。`
+            : pipelineStage === 'empty'
+              ? `${date} 暂无采样或聚合结果。`
+              : null;
 
       const hasPerformanceMetrics =
         numberOrNull(metricsObj.median_latency_ms) !== null ||
@@ -881,11 +935,20 @@ export function createAdminRoutes(deps: AdminDeps): Router {
 
       res.json({
         date,
+        pipeline: {
+          stage: pipelineStage,
+          message: pipelineMessage,
+          has_probe_samples: hasProbeSamples,
+          has_metrics: hasMetrics,
+          has_score: hasScore,
+          public_resolved_date: publicResolvedDate,
+          resolved_from_fallback: resolvedFromFallback,
+        },
         base: {
           ...baseObj,
-          total_score: finalEngineScore.final_score,
+          total_score: finalEngineScore?.final_score ?? null,
           price_score: calcPriceScore(Number(baseObj.plan_price_month || 0)),
-          score_data_days: finalEngineScore.data_days,
+          score_data_days: finalEngineScore?.data_days ?? null,
         },
         stability: {
           uptime_percent_30d: numberOrNull(metricsObj.uptime_percent_30d),
@@ -955,12 +1018,12 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         },
         time_decay: {
           date,
-          recent_score_cache: numberOrNull(scoreObj.recent_score),
-          historical_score_cache: numberOrNull(scoreObj.historical_score),
-          score: numberOrNull(scoreObj.score),
-          recent_score: numberOrNull(scoreObj.recent_score),
-          historical_score: numberOrNull(scoreObj.historical_score),
-          final_score: numberOrNull(scoreObj.final_score),
+          recent_score_cache: hasScore ? numberOrNull(scoreObj.recent_score) : null,
+          historical_score_cache: hasScore ? numberOrNull(scoreObj.historical_score) : null,
+          score: hasScore ? numberOrNull(scoreObj.score) : null,
+          recent_score: hasScore ? numberOrNull(scoreObj.recent_score) : null,
+          historical_score: hasScore ? numberOrNull(scoreObj.historical_score) : null,
+          final_score: hasScore ? numberOrNull(scoreObj.final_score) : null,
         },
       });
     } catch (error) {

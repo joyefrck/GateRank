@@ -73,6 +73,15 @@ interface AirportFormState {
 
 interface AirportDashboardView {
   date: string;
+  pipeline: {
+    stage: 'ready' | 'metrics_pending_score' | 'samples_pending_aggregation' | 'empty';
+    message: string | null;
+    has_probe_samples: boolean;
+    has_metrics: boolean;
+    has_score: boolean;
+    public_resolved_date: string | null;
+    resolved_from_fallback: boolean;
+  };
   base: Airport;
   stability: {
     uptime_percent_30d: number | null;
@@ -2013,15 +2022,17 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       {error && <div className="text-sm text-rose-600">{error}</div>}
       {loading ? <div className="text-sm text-neutral-500">加载中...</div> : (
         <div className="overflow-x-auto rounded border border-neutral-200">
-          <table className="w-full min-w-[1180px] table-fixed text-sm">
+          <table className="w-full min-w-[1320px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
                 <th className="w-[14%] text-left px-4 py-3">名称</th>
-                <th className="w-[24%] text-left px-4 py-3">网站</th>
+                <th className="w-[8%] text-left px-4 py-3">网站</th>
                 <th className="w-[8%] text-left px-4 py-3">状态</th>
                 <th className="w-[7%] text-left px-4 py-3">月价</th>
+                <th className="w-[8%] text-left px-4 py-3">总分</th>
                 <th className="w-[7%] text-left px-4 py-3">试用</th>
-                <th className="w-[28%] text-left px-4 py-3">订阅链接</th>
+                <th className="w-[8%] text-left px-4 py-3">订阅链接</th>
+                <th className="w-[28%] text-left px-4 py-3">标签</th>
                 <th className="sticky right-0 z-20 w-[12%] text-left px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
                   操作
                 </th>
@@ -2034,26 +2045,17 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                     <div className="font-medium whitespace-nowrap">{it.name}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
-                      <span className="block truncate text-neutral-700" title={formatWebsiteList(it.websites, it.website)}>
-                        {it.website}
-                      </span>
-                      {(it.websites?.length || 0) > 1 && (
-                        <span className="text-xs text-neutral-500">另有 {it.websites!.length - 1} 个备用网址</span>
-                      )}
-                    </div>
+                    <span className="whitespace-nowrap">{hasAirportWebsite(it) ? '有' : '无'}</span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatAirportStatus(it.status)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{it.plan_price_month}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{valueOrDash(it.total_score)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{it.has_trial ? '是' : '否'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    {it.subscription_url ? '有' : '无'}
+                  </td>
                   <td className="px-4 py-3">
-                    {it.subscription_url ? (
-                      <span className="block truncate text-neutral-700" title={it.subscription_url}>
-                        {it.subscription_url}
-                      </span>
-                    ) : (
-                      '-'
-                    )}
+                    <TagBadgeGroup tags={it.tags || []} size="sm" />
                   </td>
                   <td className="sticky right-0 z-10 px-4 py-3 bg-white border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.14)]">
                     <div className="flex items-center gap-3 whitespace-nowrap">
@@ -2782,6 +2784,9 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
     return [d.date, d.recent_score_cache, d.historical_score_cache, d.score, d.recent_score, d.historical_score, d.final_score]
       .some((v) => v !== null && v !== undefined);
   }, [dashboard]);
+  const showStabilityContent = Boolean(
+    dashboard && (hasStabilityData || dashboard.pipeline.stage === 'samples_pending_aggregation'),
+  );
 
   const isTodayDate = date === today();
   const jobPending = job?.status === 'queued' || job?.status === 'running';
@@ -2838,6 +2843,11 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
       kind: 'time_decay' as const,
     };
   }, [tab, isTodayDate]);
+  const pipelineToneClass = dashboard?.pipeline.stage === 'ready'
+    ? 'border border-emerald-200 bg-emerald-50 text-emerald-700'
+    : dashboard?.pipeline.stage === 'empty'
+      ? 'border border-neutral-200 bg-neutral-50 text-neutral-600'
+      : 'border border-amber-200 bg-amber-50 text-amber-700';
 
   return (
     <div className="space-y-4">
@@ -2886,6 +2896,11 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
           当前为历史日期。稳定性、性能和风险页的手动按钮会退化为仅重算已有数据，不会触发实时采集。
         </div>
       )}
+      {dashboard?.pipeline.message ? (
+        <div className={`rounded-2xl px-4 py-3 text-sm ${pipelineToneClass}`}>
+          {dashboard.pipeline.message}
+        </div>
+      ) : null}
 
       <div className="flex gap-2 border-b pb-2">
         {tabs.map((t) => (
@@ -2935,8 +2950,13 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
       )}
 
       {tab === 'stability' && (
-        hasStabilityData && dashboard ? (
+        showStabilityContent && dashboard ? (
           <div className="space-y-4">
+            {dashboard.pipeline.stage === 'samples_pending_aggregation' ? (
+              <div className="rounded border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+                当日样本已经入库，但每日稳定性指标尚未生成；下面先展示最近采样时间线，聚合完成后卡片数值会自动恢复。
+              </div>
+            ) : null}
             <div className="rounded border border-neutral-200 bg-neutral-50 p-4">
               <div className="text-sm font-semibold text-neutral-900">稳定性判定</div>
               <div className="mt-1 text-xs text-neutral-500 whitespace-pre-wrap">
@@ -2945,18 +2965,20 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <ReadField label="今日可用率 (uptime_percent_today)" value={valueOrDash(dashboard.stability.uptime_percent_today)} />
-              <ReadField label="30天可用率 (uptime_percent_30d)" value={valueOrDash(dashboard.stability.uptime_percent_30d)} />
-              <ReadField label="延迟均值ms (latency_mean_ms)" value={valueOrDash(dashboard.stability.latency_mean_ms)} />
-              <ReadField label="延迟标准差ms (latency_std_ms)" value={valueOrDash(dashboard.stability.latency_std_ms)} />
-              <ReadField label="延迟CV-原始 (latency_cv)" value={valueOrDash(dashboard.stability.latency_cv)} />
-              <ReadField label="延迟CV-判定 (effective_latency_cv)" value={valueOrDash(dashboard.stability.effective_latency_cv)} />
-              <ReadField label="是否稳定日 (is_stable_day)" value={dashboard.stability.is_stable_day === null ? '-' : dashboard.stability.is_stable_day ? '是' : '否'} />
-              <ReadField label="连续稳定天数 (stable_days_streak)" value={valueOrDash(dashboard.stability.stable_days_streak)} />
-              <ReadField label="延迟采样ms (latency_samples_ms)" value={valueOrDash((dashboard.stability.latency_samples_ms || []).join(', ') || '-')} />
-              <ReadField label="规则版本 (stability_rule_version)" value={dashboard.stability.stability_rule_version || '-'} />
-            </div>
+            {hasStabilityData ? (
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <ReadField label="今日可用率 (uptime_percent_today)" value={valueOrDash(dashboard.stability.uptime_percent_today)} />
+                <ReadField label="30天可用率 (uptime_percent_30d)" value={valueOrDash(dashboard.stability.uptime_percent_30d)} />
+                <ReadField label="延迟均值ms (latency_mean_ms)" value={valueOrDash(dashboard.stability.latency_mean_ms)} />
+                <ReadField label="延迟标准差ms (latency_std_ms)" value={valueOrDash(dashboard.stability.latency_std_ms)} />
+                <ReadField label="延迟CV-原始 (latency_cv)" value={valueOrDash(dashboard.stability.latency_cv)} />
+                <ReadField label="延迟CV-判定 (effective_latency_cv)" value={valueOrDash(dashboard.stability.effective_latency_cv)} />
+                <ReadField label="是否稳定日 (is_stable_day)" value={dashboard.stability.is_stable_day === null ? '-' : dashboard.stability.is_stable_day ? '是' : '否'} />
+                <ReadField label="连续稳定天数 (stable_days_streak)" value={valueOrDash(dashboard.stability.stable_days_streak)} />
+                <ReadField label="延迟采样ms (latency_samples_ms)" value={valueOrDash((dashboard.stability.latency_samples_ms || []).join(', ') || '-')} />
+                <ReadField label="规则版本 (stability_rule_version)" value={dashboard.stability.stability_rule_version || '-'} />
+              </div>
+            ) : null}
 
             <div className="rounded border border-neutral-200 bg-white p-4">
               <div className="text-sm font-semibold text-neutral-900">评分公式</div>
@@ -2968,12 +2990,14 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <ReadField label="可用率评分 (uptime_score)" value={valueOrDash(dashboard.stability.uptime_score)} />
-              <ReadField label="稳定评分 (stability_score)" value={valueOrDash(dashboard.stability.stability_score)} />
-              <ReadField label="连稳评分 (streak_score)" value={valueOrDash(dashboard.stability.streak_score)} />
-              <ReadField label="稳定性总分 (S)" value={valueOrDash(dashboard.stability.s)} />
-            </div>
+            {hasStabilityData ? (
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <ReadField label="可用率评分 (uptime_score)" value={valueOrDash(dashboard.stability.uptime_score)} />
+                <ReadField label="稳定评分 (stability_score)" value={valueOrDash(dashboard.stability.stability_score)} />
+                <ReadField label="连稳评分 (streak_score)" value={valueOrDash(dashboard.stability.streak_score)} />
+                <ReadField label="稳定性总分 (S)" value={valueOrDash(dashboard.stability.s)} />
+              </div>
+            ) : null}
 
             <div className="rounded border border-neutral-200 bg-white p-4">
               <div className="flex items-center justify-between gap-3">
@@ -3372,6 +3396,10 @@ function toAirportForm(airport: Airport): AirportFormState {
     test_password: airport.test_password || '',
     manual_tags: airport.manual_tags || airport.tags || [],
   };
+}
+
+function hasAirportWebsite(airport: Airport): boolean {
+  return normalizeUrlList([...(airport.websites || []), airport.website || '']).length > 0;
 }
 
 function parseTagInput(value: string): string[] {

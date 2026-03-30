@@ -29,6 +29,7 @@ export interface Airport {
   tags: string[];
   manual_tags?: string[];
   auto_tags?: string[];
+  total_score?: number | null;
   created_at: string;
 }
 
@@ -178,7 +179,10 @@ export interface HomeSectionView {
 }
 
 export interface HomePageView {
+  requested_date: string;
   date: string;
+  resolved_from_fallback: boolean;
+  fallback_notice: string | null;
   generated_at: string;
   hero: {
     report_time_at: string | null;
@@ -224,7 +228,10 @@ export interface FullRankingView {
 }
 
 export interface ReportView {
+  requested_date: string;
   date: string;
+  resolved_from_fallback: boolean;
+  fallback_notice: string | null;
   airport: Pick<Airport, 'id' | 'name' | 'website' | 'status' | 'tags'>;
   summary_card: Omit<PublicCardItem, 'airport_id' | 'report_url' | 'website' | 'score_delta_vs_yesterday'>;
   ranking: {

@@ -75,7 +75,10 @@ interface HomeSection {
 }
 
 interface HomePageResponse {
+  requested_date: string;
   date: string;
+  resolved_from_fallback: boolean;
+  fallback_notice: string | null;
   generated_at: string;
   hero: {
     report_time_at?: string | null;
@@ -115,7 +118,10 @@ interface FullRankingPageResponse {
 }
 
 interface ReportViewResponse {
+  requested_date: string;
   date: string;
+  resolved_from_fallback: boolean;
+  fallback_notice: string | null;
   airport: {
     id: number;
     name: string;
@@ -782,17 +788,25 @@ function HomePage({ date }: { date?: string }) {
           </div>
         </div>
         <div className="flex justify-center">
-          <a
-            href={buildMethodologyHref()}
-            onClick={(event) => {
-              event.preventDefault();
-              navigate(buildMethodologyHref());
-            }}
-            className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-neutral-600 transition-colors hover:border-neutral-900 hover:text-neutral-900"
-          >
-            查看测评方法
-            <ArrowRight className="h-3.5 w-3.5" />
-          </a>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            {data?.resolved_from_fallback && data.fallback_notice ? (
+              <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-[11px] md:text-xs font-black tracking-[0.12em] text-amber-700">
+                <AlertTriangle className="h-3.5 w-3.5" />
+                {data.fallback_notice}
+              </div>
+            ) : null}
+            <a
+              href={buildMethodologyHref()}
+              onClick={(event) => {
+                event.preventDefault();
+                navigate(buildMethodologyHref());
+              }}
+              className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-neutral-600 transition-colors hover:border-neutral-900 hover:text-neutral-900"
+            >
+              查看测评方法
+              <ArrowRight className="h-3.5 w-3.5" />
+            </a>
+          </div>
         </div>
       </header>
 
@@ -1284,8 +1298,16 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
             返回首页
           </button>
           {data && (
-            <div className="text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-neutral-400">
-              报告日期：{data.date}
+            <div className="flex flex-col items-end gap-2">
+              <div className="text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-neutral-400">
+                报告日期：{data.date}
+              </div>
+              {data.resolved_from_fallback && data.fallback_notice ? (
+                <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-[11px] font-black tracking-[0.12em] text-amber-700">
+                  <AlertTriangle className="h-3.5 w-3.5" />
+                  {data.fallback_notice}
+                </div>
+              ) : null}
             </div>
           )}
         </div>
