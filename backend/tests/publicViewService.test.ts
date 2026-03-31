@@ -55,7 +55,6 @@ test('PublicViewService.getHomePageView falls back to latest ranking date', asyn
     '2026-03-24',
     '2026-03-24',
     '2026-03-24',
-    '2026-03-24',
   ]);
 });
 
@@ -775,4 +774,89 @@ test('PublicViewService.getHomePageView filters stale normal airports from persi
 
   const result = await service.getHomePageView('2026-03-25');
   assert.deepEqual(result.sections.risk_alerts.items, []);
+});
+
+test('PublicViewService.getRiskMonitorView includes down airports and risk-watch tags', async () => {
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => null,
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => null,
+      getTrend: async () => [],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => null,
+      getPublicDisplayScoreByAirportAndDate: async () => null,
+      getTrend: async () => [],
+      getPublicFullRankingByDate: async () => ({
+        total: 0,
+        items: [],
+      }),
+      getPublicRiskMonitorByDate: async () => ({
+        total: 2,
+        items: [
+          {
+            airport_id: 1,
+            rank: 1,
+            name: 'Down Airport',
+            website: 'https://down.example.com',
+            status: 'down',
+            tags: ['不推荐'],
+            founded_on: '2025-01-01',
+            plan_price_month: 10,
+            has_trial: false,
+            airport_intro: 'down',
+            created_at: '2026-03-01',
+            score: 11,
+            score_delta_vs_yesterday: { label: '对比昨天', value: -2 },
+            score_date: '2026-03-23',
+            report_url: '/reports/1?date=2026-03-23',
+            monitor_reason: 'down' as const,
+            risk_penalty: 90,
+          },
+          {
+            airport_id: 2,
+            rank: 2,
+            name: 'Watch Airport',
+            website: 'https://watch.example.com',
+            status: 'normal' as const,
+            tags: ['风险观察'],
+            founded_on: '2025-01-01',
+            plan_price_month: 15,
+            has_trial: true,
+            airport_intro: 'watch',
+            created_at: '2026-03-02',
+            score: 44,
+            score_delta_vs_yesterday: { label: '对比昨天', value: -1 },
+            score_date: '2026-03-23',
+            report_url: '/reports/2?date=2026-03-23',
+            monitor_reason: 'risk_watch' as const,
+            risk_penalty: 55,
+          },
+        ],
+      }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 2,
+        realtime_tests: 8,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getRiskMonitorView('2026-03-25', 1, 20);
+  assert.equal(result.date, '2026-03-24');
+  assert.equal(result.total, 2);
+  assert.deepEqual(
+    result.items.map((item) => [item.name, item.monitor_reason]),
+    [['Down Airport', 'down'], ['Watch Airport', 'risk_watch']],
+  );
 });

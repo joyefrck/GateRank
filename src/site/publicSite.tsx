@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
 import { ExternalLink, Zap } from 'lucide-react';
 
-export type NavigationKind = 'home' | 'full_ranking' | 'methodology' | 'docs';
+export type NavigationKind = 'home' | 'full_ranking' | 'risk_monitor' | 'methodology' | 'docs';
 
 export interface SeoConfig {
   title: string;
@@ -44,6 +44,13 @@ export function buildHomeHref(date?: string): string {
 
 export function buildFullRankingHref(date?: string, page = 1): string {
   return `/rankings/all${buildQuery({
+    date,
+    page: page > 1 ? page : undefined,
+  })}`;
+}
+
+export function buildRiskMonitorHref(date?: string, page = 1): string {
+  return `/risk-monitor${buildQuery({
     date,
     page: page > 1 ? page : undefined,
   })}`;
@@ -183,8 +190,14 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
             <PublicNavLink href="/" label="今日推荐" active={active === 'home'} />
             <PublicNavLink href="/rankings/all" label="全量榜单" active={active === 'full_ranking'} />
             <a
-              href="/#risk_alerts"
-              className="inline-flex items-center gap-2 rounded-full px-4 py-2 text-neutral-500 transition-colors hover:text-neutral-900"
+              href={buildRiskMonitorHref()}
+              onClick={(event) => {
+                event.preventDefault();
+                navigate(buildRiskMonitorHref());
+              }}
+              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 transition-colors ${
+                active === 'risk_monitor' ? 'text-neutral-900' : 'text-neutral-500 hover:text-neutral-900'
+              }`}
             >
               跑路监测
               <span className="rounded-md bg-rose-500 px-2 py-1 text-[10px] tracking-[0.18em] text-white">实时</span>
@@ -262,6 +275,7 @@ function SiteFooter() {
         <div className="flex flex-wrap justify-center gap-x-12 gap-y-4 text-sm font-bold text-neutral-600 mb-12">
           <a href={buildHomeHref()} onClick={(event) => { event.preventDefault(); navigate('/'); }} className="hover:text-black transition-colors">今日推荐</a>
           <a href={buildFullRankingHref()} onClick={(event) => { event.preventDefault(); navigate('/rankings/all'); }} className="hover:text-black transition-colors">全量榜单</a>
+          <a href={buildRiskMonitorHref()} onClick={(event) => { event.preventDefault(); navigate(buildRiskMonitorHref()); }} className="hover:text-black transition-colors">跑路监测</a>
           <a href={buildMethodologyHref()} onClick={(event) => { event.preventDefault(); navigate(buildMethodologyHref()); }} className="hover:text-black transition-colors">测评方法</a>
           <a href={buildNewsHref()} className="hover:text-black transition-colors">News</a>
           <a href="/apply" className="hover:text-black transition-colors">申请入驻</a>

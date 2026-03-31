@@ -25,6 +25,7 @@ import {
   buildHomeHref,
   buildMethodologyHref,
   buildPublishTokenDocsHref,
+  buildRiskMonitorHref,
   buildQuery,
   navigate,
   PageFrame,
@@ -117,6 +118,21 @@ interface FullRankingPageResponse {
   items: FullRankingItemResponse[];
 }
 
+interface RiskMonitorItemResponse extends FullRankingItemResponse {
+  monitor_reason: 'down' | 'risk_watch';
+  risk_penalty: number | null;
+}
+
+interface RiskMonitorPageResponse {
+  date: string;
+  generated_at: string;
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  items: RiskMonitorItemResponse[];
+}
+
 interface ReportViewResponse {
   requested_date: string;
   date: string;
@@ -184,7 +200,7 @@ interface CardProps {
 }
 
 interface RouteState {
-  kind: 'home' | 'report' | 'apply' | 'full_ranking' | 'methodology' | 'publish_token_docs';
+  kind: 'home' | 'report' | 'apply' | 'full_ranking' | 'risk_monitor' | 'methodology' | 'publish_token_docs';
   airportId?: number;
   date?: string;
   page?: number;
@@ -243,6 +259,10 @@ function formatAirportStatus(status: AirportStatus): string {
     default:
       return status;
   }
+}
+
+function formatMonitorReason(reason: RiskMonitorItemResponse['monitor_reason']): string {
+  return reason === 'down' ? '管理员确认跑路' : '风险观察';
 }
 
 function getAirportStatusTone(status: AirportStatus): string {
@@ -554,6 +574,7 @@ function parseRoute(): RouteState {
   const path = window.location.pathname;
   const reportMatch = path.match(/^\/reports\/(\d+)$/);
   const fullRankingMatch = path.match(/^\/rankings\/all\/?$/);
+  const riskMonitorMatch = path.match(/^\/risk-monitor\/?$/);
   const params = new URLSearchParams(window.location.search);
 
   if (path === buildMethodologyHref() || path === `${buildMethodologyHref()}/`) {
@@ -587,6 +608,15 @@ function parseRoute(): RouteState {
     const page = Number(params.get('page') || '1');
     return {
       kind: 'full_ranking',
+      date: params.get('date') || undefined,
+      page: Number.isFinite(page) && page > 0 ? page : 1,
+    };
+  }
+
+  if (riskMonitorMatch) {
+    const page = Number(params.get('page') || '1');
+    return {
+      kind: 'risk_monitor',
       date: params.get('date') || undefined,
       page: Number.isFinite(page) && page > 0 ? page : 1,
     };
@@ -1173,6 +1203,311 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                       className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={safePage >= totalPages}
                       onClick={() => navigate(buildFullRankingHref(data.date, safePage + 1))}
+                    >
+                      下一页
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
+                  </div>
+                </nav>
+              </>
+            )}
+          </div>
+        </section>
+      </main>
+    </PageFrame>
+  );
+}
+
+function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
+  const [data, setData] = useState<RiskMonitorPageResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+
+    const query = buildQuery({
+      date,
+      page: page > 1 ? page : undefined,
+    });
+
+    void apiFetch<RiskMonitorPageResponse>(`/api/v1/pages/risk-monitor${query}`)
+      .then((next) => {
+        if (active) {
+          setData(next);
+        }
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setData(null);
+          setError(err instanceof Error ? err.message : '跑路监测加载失败');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [date, page]);
+
+  const rankingDate = data?.date || date || '今日';
+  const safePage = data?.page || page || 1;
+  const totalPages = data?.total_pages || 1;
+  const visiblePages = buildPageWindow(safePage, totalPages);
+  const seoTitle = `${rankingDate} 跑路监测 | 已跑路与风险观察机场列表 | 机场榜 GateRank`;
+  const seoDescription = data
+    ? `${rankingDate} 跑路监测当前收录 ${formatNumber(data.total)} 个机场，覆盖管理员确认跑路与命中风险观察标签的对象，默认将已跑路机场置顶展示。`
+    : '机场榜跑路监测页汇总管理员确认跑路与命中风险观察标签的机场，帮助用户快速识别高风险对象。';
+  const seoStructuredData = useMemo(
+    () => ([
+      {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: seoTitle,
+        description: seoDescription,
+        url: buildAbsoluteUrl(buildRiskMonitorHref(date, safePage)),
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: '今日推荐',
+            item: buildAbsoluteUrl(buildHomeHref()),
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: '跑路监测',
+            item: buildAbsoluteUrl(buildRiskMonitorHref(date, safePage)),
+          },
+        ],
+      },
+    ]),
+    [date, safePage, seoDescription, seoTitle],
+  );
+
+  usePageSeo({
+    title: seoTitle,
+    description: seoDescription,
+    keywords: '跑路监测,风险观察,机场风险,高风险机场,已跑路机场,GateRank',
+    canonicalPath: buildRiskMonitorHref(date, safePage),
+    structuredData: seoStructuredData,
+  });
+
+  return (
+    <PageFrame active="risk_monitor">
+      <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-10">
+        <section className="relative overflow-hidden rounded-[32px] border border-rose-200 bg-[linear-gradient(135deg,#3f0d18_0%,#111827_42%,#fff1f2_100%)] px-6 py-8 md:px-10 md:py-12 text-white shadow-[0_30px_80px_rgba(127,29,29,0.18)]">
+          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at top left, rgba(255,255,255,0.24), transparent 35%)' }} />
+          <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white/80 backdrop-blur">
+                跑路监测
+              </div>
+              <h1 className="mt-5 max-w-4xl text-3xl md:text-5xl lg:text-[56px] font-black leading-[0.95] tracking-tight">
+                {rankingDate} 高风险机场监测列表
+                <span className="block text-white/50">已跑路置顶，风险观察同步纳入</span>
+              </h1>
+              <p className="mt-5 max-w-3xl text-sm md:text-base leading-7 text-white/72">
+                本页只展示两类对象：管理员后台已确认跑路的机场，以及标签命中“风险观察”的机场。已跑路机场会从每日测评、自动调度与手动任务中全部排除，仅保留风险留档展示。
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">监测对象</div>
+                <div className="mt-2 text-3xl font-black text-white">{formatNumber(data?.total || 0)}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">当前分页</div>
+                <div className="mt-2 text-3xl font-black text-white">{safePage}/{totalPages}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">默认页容量</div>
+                <div className="mt-2 text-3xl font-black text-white">{data?.page_size || 20}</div>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">收录规则</div>
+                <div className="mt-2 text-sm font-semibold leading-6 text-white/78">仅包含“已跑路”或“风险观察”</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="mt-10 rounded-[28px] border border-neutral-200 bg-white px-5 py-6 md:px-7 md:py-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
+          <div className="flex flex-col gap-4 border-b border-neutral-100 pb-6 md:flex-row md:items-end md:justify-between">
+            <div>
+              <div className="text-[11px] font-black uppercase tracking-[0.2em] text-neutral-400">Risk Monitor</div>
+              <h2 className="mt-2 text-2xl md:text-3xl font-black tracking-tight text-neutral-900">跑路监测列表</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-7 text-neutral-500">
+                默认每页 20 条。管理员确认跑路的机场会优先显示，其次展示命中“风险观察”的机场。若存在历史测评快照，仍可继续查看旧报告用于风险回溯。
+              </p>
+            </div>
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-500">
+              当前结果范围：第 <span className="font-black text-neutral-900">{safePage}</span> 页，共 <span className="font-black text-neutral-900">{totalPages}</span> 页
+            </div>
+          </div>
+
+          <div className="mt-8">
+            {loading && <EmptySection message="正在加载跑路监测..." />}
+            {error && !loading && <EmptySection message={error} />}
+
+            {!loading && !error && data && data.items.length === 0 && (
+              <EmptySection message="当前日期暂无需展示的跑路监测对象。" />
+            )}
+
+            {!loading && !error && data && data.items.length > 0 && (
+              <>
+                <ol className="space-y-5">
+                  {data.items.map((item) => (
+                    <li key={`${item.airport_id}-${item.rank}`}>
+                      <article className="grid gap-5 rounded-[28px] border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#fff7f7_100%)] p-5 shadow-[0_20px_55px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_65px_rgba(15,23,42,0.08)] lg:grid-cols-[132px_minmax(0,1fr)_240px] lg:items-start">
+                        <div className="rounded-2xl border border-neutral-200 bg-neutral-950 px-4 py-5 text-white">
+                          <div className="text-[11px] font-black uppercase tracking-[0.2em] text-white/55">Rank</div>
+                          <div className="mt-2 text-4xl font-black tracking-tight">#{item.rank}</div>
+                          <div className="mt-5 border-t border-white/10 pt-4">
+                            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-white/55">Score</div>
+                            <div className={`mt-2 text-3xl font-black ${item.score === null ? 'text-white/72' : 'text-rose-300'}`}>
+                              {formatScoreLabel(item.score)}
+                            </div>
+                            <div className="mt-2 text-[11px] font-black tracking-[0.08em] text-white/55">
+                              {item.score_delta_vs_yesterday.label}
+                            </div>
+                            <div className={`mt-1 text-sm font-black font-mono ${getScoreDeltaToneOnDark(item.score_delta_vs_yesterday.value)}`}>
+                              {formatScoreDelta(item.score_delta_vs_yesterday.value)}
+                            </div>
+                            {item.score_date && (
+                              <div className="mt-2 text-[11px] font-semibold tracking-[0.08em] text-white/55">
+                                快照日期 {item.score_date}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div>
+                          <div className="flex flex-wrap items-center gap-3">
+                            <h3 className="text-2xl font-black tracking-tight text-neutral-900">{item.name}</h3>
+                            <span className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${getAirportStatusTone(item.status)}`}>
+                              {formatAirportStatus(item.status)}
+                            </span>
+                            <span className="inline-flex items-center rounded-full border border-rose-200 bg-rose-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-rose-700">
+                              {formatMonitorReason(item.monitor_reason)}
+                            </span>
+                          </div>
+
+                          <p className="mt-4 max-w-3xl text-sm leading-7 text-neutral-600">
+                            {item.monitor_reason === 'down'
+                              ? '该机场已由管理员确认进入跑路状态，系统已停止其日常测评、调度与手动任务，仅保留风险留档展示。'
+                              : '该机场当前命中“风险观察”标签，仍需用户结合官网状态、订阅可用性与历史波动继续判断。'}
+                          </p>
+
+                          <dl className="mt-5 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
+                            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+                              <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">官网链接</dt>
+                              <dd className="mt-1 break-all font-semibold text-neutral-800">{item.website}</dd>
+                            </div>
+                            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+                              <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">成立日期</dt>
+                              <dd className="mt-1 font-semibold text-neutral-800">{formatDateLabel(item.founded_on)}</dd>
+                            </div>
+                            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+                              <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">月付价格</dt>
+                              <dd className="mt-1 font-semibold text-neutral-800">{formatCurrency(item.plan_price_month)}</dd>
+                            </div>
+                            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+                              <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">风险快照</dt>
+                              <dd className="mt-1 font-semibold text-neutral-800">{item.score_date || '暂无快照'}</dd>
+                            </div>
+                            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+                              <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">风险扣分</dt>
+                              <dd className="mt-1 font-semibold text-neutral-800">{item.risk_penalty === null ? '-' : formatMetric(item.risk_penalty)}</dd>
+                            </div>
+                            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+                              <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">试用支持</dt>
+                              <dd className="mt-1 font-semibold text-neutral-800">{item.has_trial ? '支持试用' : '暂不支持'}</dd>
+                            </div>
+                          </dl>
+
+                          <TagBadgeGroup tags={item.tags} size="sm" className="mt-5" />
+                        </div>
+
+                        <div className="flex flex-col gap-3 rounded-[24px] border border-neutral-200 bg-white p-4 lg:sticky lg:top-24">
+                          <div className="rounded-2xl bg-neutral-50 px-4 py-4">
+                            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">风险操作</div>
+                            <p className="mt-2 text-sm leading-6 text-neutral-500">先核查官网与订阅，再决定是否查看历史测评报告。已跑路对象默认不再产生新的当日评分快照。</p>
+                          </div>
+                          <a
+                            href={item.website}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition hover:bg-neutral-800"
+                          >
+                            打开官网
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                          <button
+                            type="button"
+                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-700 transition hover:border-neutral-900 hover:text-neutral-900 disabled:cursor-not-allowed disabled:border-neutral-100 disabled:bg-neutral-50 disabled:text-neutral-400"
+                            disabled={!item.report_url}
+                            onClick={() => {
+                              if (item.report_url) {
+                                navigate(item.report_url);
+                              }
+                            }}
+                          >
+                            {item.report_url ? '查看历史测评' : '暂无历史测评'}
+                            {item.report_url && <ChevronRight className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </article>
+                    </li>
+                  ))}
+                </ol>
+
+                <nav
+                  className="mt-8 flex flex-col gap-4 rounded-[24px] border border-neutral-200 bg-neutral-50 px-4 py-4 md:flex-row md:items-center md:justify-between"
+                  aria-label="跑路监测分页"
+                >
+                  <div className="text-sm text-neutral-500">
+                    第 <span className="font-black text-neutral-900">{safePage}</span> 页，共 <span className="font-black text-neutral-900">{totalPages}</span> 页
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={safePage <= 1}
+                      onClick={() => navigate(buildRiskMonitorHref(data.date, safePage - 1))}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                      上一页
+                    </button>
+                    {visiblePages.map((pageNumber) => (
+                      <button
+                        key={`risk-page-${pageNumber}`}
+                        type="button"
+                        className={`min-h-11 min-w-11 rounded-full px-4 py-2 text-sm font-black transition ${
+                          pageNumber === safePage
+                            ? 'bg-neutral-900 text-white shadow-lg'
+                            : 'border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-900 hover:text-neutral-900'
+                        }`}
+                        onClick={() => navigate(buildRiskMonitorHref(data.date, pageNumber))}
+                      >
+                        {pageNumber}
+                      </button>
+                    ))}
+                    <button
+                      type="button"
+                      className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      disabled={safePage >= totalPages}
+                      onClick={() => navigate(buildRiskMonitorHref(data.date, safePage + 1))}
                     >
                       下一页
                       <ChevronRight className="h-4 w-4" />
@@ -1824,6 +2159,10 @@ export default function App() {
 
   if (route.kind === 'full_ranking') {
     return <FullRankingPage date={route.date} page={route.page} />;
+  }
+
+  if (route.kind === 'risk_monitor') {
+    return <RiskMonitorPage date={route.date} page={route.page} />;
   }
 
   return <HomePage date={route.date} />;

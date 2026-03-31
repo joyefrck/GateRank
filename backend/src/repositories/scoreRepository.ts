@@ -3,6 +3,7 @@ import type {
   AirportScoreDaily,
   AirportStatus,
   FullRankingItem,
+  RiskMonitorItem,
   ScoreBreakdown,
   ScoreDetailValue,
   TimeSeriesScorePoint,
@@ -51,6 +52,22 @@ interface PublicFullRankingRow extends RowDataPacket {
 interface PublicDisplayScoreRow extends RowDataPacket {
   airport_id: number;
   display_score: number | null;
+}
+
+interface PublicRiskMonitorRow extends RowDataPacket {
+  airport_id: number;
+  name: string;
+  website: string;
+  status: AirportStatus;
+  tags_json: unknown;
+  founded_on: unknown;
+  plan_price_month: number;
+  has_trial: number;
+  airport_intro: string | null;
+  created_at: unknown;
+  score_date: unknown;
+  display_score: number | null;
+  risk_penalty: number | null;
 }
 
 export class ScoreRepository {
@@ -331,6 +348,104 @@ export class ScoreRepository {
           },
           score_date: row.score_date ? formatDateOnly(row.score_date) : null,
           report_url: row.score_date ? `/reports/${row.airport_id}?date=${formatDateOnly(row.score_date)}` : null,
+        };
+      }),
+    };
+  }
+
+  async getPublicRiskMonitorByDate(
+    date: string,
+    page: number,
+    pageSize: number,
+  ): Promise<{ total: number; items: RiskMonitorItem[] }> {
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.min(100, Math.max(1, pageSize));
+    const offset = (safePage - 1) * safePageSize;
+
+    const [totalRows] = await this.pool.query<Array<RowDataPacket & { total: number }>>(
+      `SELECT COUNT(*) AS total
+         FROM airports a
+        WHERE a.status = 'down'
+           OR JSON_SEARCH(a.tags_json, 'one', '风险观察') IS NOT NULL`,
+      [],
+    );
+
+    const [rows] = await this.pool.query<PublicRiskMonitorRow[]>(
+      `SELECT
+         a.id AS airport_id,
+         a.name,
+         a.website,
+         a.status,
+         a.tags_json,
+         a.founded_on,
+         a.plan_price_month,
+         a.has_trial,
+         a.airport_intro,
+         a.created_at,
+         s.date AS score_date,
+         COALESCE(
+           CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.total_score')) AS DECIMAL(10,2)),
+           s.final_score
+         ) AS display_score,
+         s.risk_penalty
+       FROM airports a
+       LEFT JOIN airport_scores_daily s
+         ON s.airport_id = a.id
+        AND s.date = (
+          SELECT MAX(s2.date)
+            FROM airport_scores_daily s2
+           WHERE s2.airport_id = a.id
+             AND s2.date <= ?
+        )
+      WHERE a.status = 'down'
+         OR JSON_SEARCH(a.tags_json, 'one', '风险观察') IS NOT NULL
+      ORDER BY
+        CASE WHEN a.status = 'down' THEN 0 ELSE 1 END ASC,
+        CASE WHEN s.date IS NULL THEN 1 ELSE 0 END ASC,
+        COALESCE(s.risk_penalty, -1) DESC,
+        display_score DESC,
+        a.created_at DESC,
+        a.id ASC
+      LIMIT ? OFFSET ?`,
+      [date, safePageSize, offset],
+    );
+
+    const yesterdayDate = shiftDateByDays(date, -1);
+    const yesterdayDisplayScores = await this.getPublicDisplayScoresByDate(
+      rows.map((row) => Number(row.airport_id)),
+      yesterdayDate,
+    );
+
+    return {
+      total: Number(totalRows[0]?.total || 0),
+      items: rows.map((row, index) => {
+        const currentScore = row.display_score === null ? null : Number(row.display_score);
+        const yesterdayScore = yesterdayDisplayScores.get(Number(row.airport_id));
+
+        return {
+          airport_id: row.airport_id,
+          rank: offset + index + 1,
+          name: row.name,
+          website: row.website,
+          status: row.status,
+          tags: safeJsonArray(row.tags_json),
+          founded_on: row.founded_on ? formatDateOnly(row.founded_on) : null,
+          plan_price_month: Number(row.plan_price_month),
+          has_trial: !!row.has_trial,
+          airport_intro: row.airport_intro,
+          created_at: formatDateOnly(row.created_at),
+          score: currentScore,
+          score_delta_vs_yesterday: {
+            label: '对比昨天',
+            value:
+              currentScore === null || yesterdayScore === undefined
+                ? null
+                : round2(currentScore - yesterdayScore),
+          },
+          score_date: row.score_date ? formatDateOnly(row.score_date) : null,
+          report_url: row.score_date ? `/reports/${row.airport_id}?date=${formatDateOnly(row.score_date)}` : null,
+          monitor_reason: row.status === 'down' ? 'down' : 'risk_watch',
+          risk_penalty: row.risk_penalty === null ? null : Number(row.risk_penalty),
         };
       }),
     };

@@ -1946,6 +1946,13 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       setFormError('至少填写一个官网链接');
       return;
     }
+    const confirmDown = editing.status === 'down';
+    if (
+      confirmDown &&
+      !window.confirm('确认将该机场标记为“已跑路”？确认后它会从自动调度、手动任务和每日测评中全部排除。')
+    ) {
+      return;
+    }
 
     const body = {
       name: editing.name.trim(),
@@ -1962,6 +1969,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       test_account: editing.test_account.trim() || null,
       test_password: editing.test_password || null,
       manual_tags: manualTags,
+      confirm_down: confirmDown || undefined,
     };
 
     setSaving(true);
@@ -2848,6 +2856,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
     : dashboard?.pipeline.stage === 'empty'
       ? 'border border-neutral-200 bg-neutral-50 text-neutral-600'
       : 'border border-amber-200 bg-amber-50 text-amber-700';
+  const manualActionsDisabled = dashboard?.base.status === 'down';
 
   return (
     <div className="space-y-4">
@@ -2901,6 +2910,11 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
           {dashboard.pipeline.message}
         </div>
       ) : null}
+      {manualActionsDisabled && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          当前机场已被管理员标记为跑路，手动任务与实时体检入口已禁用。
+        </div>
+      )}
 
       <div className="flex gap-2 border-b pb-2">
         {tabs.map((t) => (
@@ -2910,9 +2924,9 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
 
       <ManualJobActionCard
         title={currentTabAction.title}
-        description={currentTabAction.description}
+        description={manualActionsDisabled ? '已跑路机场不允许再触发任何手动任务。' : currentTabAction.description}
         buttonLabel={currentTabAction.buttonLabel}
-        disabled={jobPending}
+        disabled={jobPending || manualActionsDisabled}
         onRun={() => void createManualJob(currentTabAction.kind)}
       />
 

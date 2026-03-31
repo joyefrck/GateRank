@@ -54,6 +54,7 @@ interface PublicDeps {
   publicViewService: {
     getHomePageView(date: string): Promise<unknown>;
     getFullRankingView(date: string, page: number, pageSize: number): Promise<unknown>;
+    getRiskMonitorView(date: string, page: number, pageSize: number): Promise<unknown>;
     getReportView(airportId: number, date: string): Promise<unknown | null>;
   };
 }
@@ -137,6 +138,18 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       const page = toPositiveInt(req.query.page, 1);
       const pageSize = 20;
       const data = await deps.publicViewService.getFullRankingView(date, page, pageSize);
+      res.json(data);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/pages/risk-monitor', async (req, res, next) => {
+    try {
+      const date = parseDateQuery(req.query.date);
+      const page = toPositiveInt(req.query.page, 1);
+      const pageSize = 20;
+      const data = await deps.publicViewService.getRiskMonitorView(date, page, pageSize);
       res.json(data);
     } catch (error) {
       next(error);

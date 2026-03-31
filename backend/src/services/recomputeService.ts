@@ -47,6 +47,9 @@ export class RecomputeService {
     const scoredRows: Array<{ airport: Airport; metrics: DailyMetrics; score: ScoreBreakdown }> = [];
 
     for (const airport of airports) {
+      if (airport.status === 'down') {
+        continue;
+      }
       const m = metricsMap.get(airport.id);
       if (!m) {
         noMetricsAirportIds.push(airport.id);
@@ -110,6 +113,11 @@ export class RecomputeService {
       throw new Error(`airport ${airportId} not found`);
     }
 
+    if (airport.status === 'down') {
+      await this.rebuildRankingsForDate(date);
+      return { recomputed: 0 };
+    }
+
     if (!metrics) {
       await this.deps.airportRepository.setAutoTags(airportId, ['不推荐']);
       await this.rebuildRankingsForDate(date);
@@ -145,6 +153,9 @@ export class RecomputeService {
     const scoreMap = new Map(scores.map((item) => [item.airport_id, item]));
     const rows: RankedAirportInput[] = [];
     for (const airport of airports) {
+      if (airport.status === 'down') {
+        continue;
+      }
       const metricsRow = metricsMap.get(airport.id);
       const scoreRow = scoreMap.get(airport.id);
       if (!metricsRow || !scoreRow) {

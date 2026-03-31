@@ -203,9 +203,12 @@ export class SchedulerTaskExecutor {
   private async runRiskStage(date: string): Promise<{ stage: string; status: 'succeeded' | 'failed'; detail: string }> {
     try {
       const airports = await this.deps.airportRepository.listAll();
-      const filtered = this.airportStatus
-        ? airports.filter((airport) => airport.status === this.airportStatus)
-        : airports;
+      const filtered = airports.filter((airport) => {
+        if (airport.status === 'down') {
+          return false;
+        }
+        return this.airportStatus ? airport.status === this.airportStatus : true;
+      });
       let successCount = 0;
       let failureCount = 0;
 

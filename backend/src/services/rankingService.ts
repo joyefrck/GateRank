@@ -12,30 +12,31 @@ export function buildRankings(
   date: string,
   rows: RankedAirportInput[],
 ): Record<RankingType, Array<{ airport_id: number; rank: number; score: number; details: Record<string, unknown> }>> {
-  const today = rows
-    .filter((row) => row.airport.status !== 'down')
+  const activeRows = rows.filter((row) => row.airport.status !== 'down');
+
+  const today = activeRows
     .filter((row) => row.score.risk_penalty <= TODAY_MAX_RISK_PENALTY)
     .sort((a, b) => rankingScoreOf(b) - rankingScoreOf(a))
     .slice(0, LIST_LIMIT);
 
-  const stable = rows
+  const stable = activeRows
     .slice()
     .sort((a, b) => b.score.s - a.score.s)
     .slice(0, LIST_LIMIT);
 
-  const value = rows
+  const value = activeRows
     .slice()
     .sort((a, b) => b.score.c - a.score.c)
     .slice(0, LIST_LIMIT);
 
   const newSince = dateDaysAgo(date, NEW_AIRPORT_DAYS);
-  const newest = rows
+  const newest = activeRows
     .filter((row) => row.airport.created_at >= newSince)
     .sort((a, b) => rankingScoreOf(b) - rankingScoreOf(a))
     .slice(0, LIST_LIMIT);
 
-  const risk = rows
-    .filter((row) => row.airport.status === 'risk' || row.airport.status === 'down')
+  const risk = activeRows
+    .filter((row) => row.airport.status === 'risk')
     .slice()
     .sort((a, b) => b.score.risk_penalty - a.score.risk_penalty)
     .slice(0, LIST_LIMIT);

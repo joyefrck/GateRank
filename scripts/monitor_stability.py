@@ -203,9 +203,9 @@ def list_airports(config: Config, status: str | None) -> list[dict[str, Any]]:
             params["status"] = status
         data = get_json(config, f"/api/v1/admin/airports?{urlencode(params)}")
         batch = data.get("items", [])
-        items.extend(batch)
+        items.extend(item for item in batch if str(item.get("status") or "") != "down")
         total = int(data.get("total", len(items)))
-        if len(items) >= total or not batch:
+        if len(batch) == 0 or page * config.page_size >= total:
             break
         page += 1
     return items

@@ -29,6 +29,18 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
       auto_tags: [],
       created_at: '2026-03-21',
     },
+    {
+      id: 3,
+      name: 'C',
+      website: 'https://c.example.com',
+      status: 'down',
+      plan_price_month: 10,
+      has_trial: false,
+      tags: ['不推荐'],
+      manual_tags: ['不推荐'],
+      auto_tags: ['风险观察'],
+      created_at: '2026-03-05',
+    },
   ];
 
   const metrics: DailyMetrics[] = [
@@ -57,6 +69,19 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
       ssl_days_left: 12,
       recent_complaints_count: 3,
       history_incidents: 1,
+    },
+    {
+      airport_id: 3,
+      date: '2026-03-22',
+      uptime_percent_30d: 12,
+      median_latency_ms: 999,
+      median_download_mbps: 0,
+      packet_loss_percent: 100,
+      stable_days_streak: 0,
+      domain_ok: false,
+      ssl_days_left: null,
+      recent_complaints_count: 8,
+      history_incidents: 4,
     },
   ];
 
@@ -137,6 +162,7 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
   assert.equal(out2.recomputed, 2);
   assert.equal(storedScores.size, 2);
   assert.equal(storedAutoTags.size, 2);
+  assert.equal(storedAutoTags.has(3), false);
   assert.ok((storedAutoTags.get(1) || []).includes('性价比高'));
   assert.ok((storedAutoTags.get(2) || []).includes('风险观察'));
   assert.equal(replaced.size, 5);

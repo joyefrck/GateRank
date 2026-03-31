@@ -9,6 +9,8 @@ import type {
   RankingItem,
   RankingType,
   ReportView,
+  RiskMonitorItem,
+  RiskMonitorView,
   ScoreDeltaView,
 } from '../types/domain';
 import {
@@ -77,6 +79,14 @@ interface PublicViewDeps {
     ): Promise<{
       total: number;
       items: FullRankingView['items'];
+    }>;
+    getPublicRiskMonitorByDate?(
+      date: string,
+      page: number,
+      pageSize: number,
+    ): Promise<{
+      total: number;
+      items: RiskMonitorView['items'];
     }>;
   };
   rankingRepository: {
@@ -163,17 +173,22 @@ export class PublicViewService {
   async getHomePageView(date: string): Promise<HomePageView> {
     const resolvedDate = (await this.deps.rankingRepository.getLatestAvailableDate(date)) || date;
     const resolvedFromFallback = resolvedDate !== date;
-    const [stats, today, stable, value, newest, rawRisk] = await Promise.all([
+    const [stats, today, stable, value, newest, riskMonitor] = await Promise.all([
       this.deps.statsRepository.getHomeStats(resolvedDate),
       this.deps.rankingRepository.getRanking(resolvedDate, 'today'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'stable'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'value'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'new'),
-      this.deps.rankingRepository.getRanking(resolvedDate, 'risk'),
+      this.deps.scoreRepository.getPublicRiskMonitorByDate
+        ? this.deps.scoreRepository.getPublicRiskMonitorByDate(
+            resolvedDate,
+            1,
+            SECTION_CONFIG.risk_alerts.limit,
+          )
+        : Promise.resolve({ total: 0, items: [] }),
     ]);
-    const risk = rawRisk.filter((item) => item.status === 'risk' || item.status === 'down');
     const fallbackSections =
-      today.length === 0 || stable.length === 0 || value.length === 0 || newest.length === 0 || risk.length === 0
+      today.length === 0 || stable.length === 0 || value.length === 0 || newest.length === 0
         ? await this.buildFallbackHomeSections(resolvedDate)
         : null;
 
@@ -225,10 +240,7 @@ export class PublicViewService {
         risk_alerts: {
           title: SECTION_CONFIG.risk_alerts.title,
           subtitle: SECTION_CONFIG.risk_alerts.subtitle,
-          items:
-            risk.length > 0
-              ? await this.buildHomeSectionItems('risk_alerts', risk, resolvedDate)
-              : (fallbackSections?.risk_alerts ?? []),
+          items: this.buildRiskAlertHomeItems(riskMonitor.items, resolvedDate),
         },
       },
     };
@@ -243,6 +255,29 @@ export class PublicViewService {
       safePage,
       safePageSize,
     );
+
+    return {
+      date: resolvedDate,
+      generated_at: formatDateTimeInTimezoneIso(new Date(), SHANGHAI_TIMEZONE),
+      page: safePage,
+      page_size: safePageSize,
+      total: result.total,
+      total_pages: Math.max(1, Math.ceil(result.total / safePageSize)),
+      items: result.items,
+    };
+  }
+
+  async getRiskMonitorView(date: string, page: number, pageSize: number): Promise<RiskMonitorView> {
+    const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.max(1, pageSize);
+    const result = this.deps.scoreRepository.getPublicRiskMonitorByDate
+      ? await this.deps.scoreRepository.getPublicRiskMonitorByDate(
+          resolvedDate,
+          safePage,
+          safePageSize,
+        )
+      : { total: 0, items: [] };
 
     return {
       date: resolvedDate,
@@ -441,6 +476,21 @@ export class PublicViewService {
       report_url: `/reports/${context.airport.id}?date=${date}`,
     };
   }
+
+  private buildRiskAlertHomeItems(items: RiskMonitorItem[], date: string): PublicCardItem[] {
+    return items.map((item) => ({
+      type: 'risk',
+      airport_id: item.airport_id,
+      name: item.name,
+      website: item.website,
+      tags: item.tags.slice(0, 3),
+      score: round2(item.score ?? 0),
+      score_delta_vs_yesterday: item.score_delta_vs_yesterday,
+      details: buildRiskMonitorCardDetails(item),
+      conclusion: buildRiskMonitorConclusion(item),
+      report_url: item.report_url || `/risk-monitor?date=${encodeURIComponent(date)}`,
+    }));
+  }
 }
 
 function compareByDisplayScoreDesc(left: CardContext, right: CardContext): number {
@@ -471,6 +521,9 @@ function compareByRiskPriority(left: CardContext, right: CardContext): number {
 }
 
 function getRiskPriority(context: CardContext): number {
+  if (context.airport.status === 'down') {
+    return 5;
+  }
   if (isRiskAlertAirport(context.airport)) {
     return 4;
   }
@@ -478,7 +531,7 @@ function getRiskPriority(context: CardContext): number {
 }
 
 function isRiskAlertAirport(airport: Airport): boolean {
-  return airport.status === 'risk' || airport.status === 'down';
+  return airport.status === 'down' || airport.tags.includes('风险观察');
 }
 
 function isRiskAlertContext(context: CardContext): boolean {
@@ -596,6 +649,28 @@ function getComplaintTrendLabel(count: number): string {
     return '轻微上升';
   }
   return '正常';
+}
+
+function buildRiskMonitorCardDetails(
+  item: RiskMonitorItem,
+): [PublicCardItem['details'][0], PublicCardItem['details'][1]] {
+  return [
+    {
+      label: '监测类型',
+      value: item.monitor_reason === 'down' ? '已跑路' : '风险观察',
+    },
+    {
+      label: '评分快照',
+      value: item.score_date || '暂无历史评分',
+    },
+  ];
+}
+
+function buildRiskMonitorConclusion(item: RiskMonitorItem): string {
+  if (item.monitor_reason === 'down') {
+    return '该机场已由管理员确认标记为跑路状态，已停止日常测评与调度采样。建议暂停续费，并仅将其作为风险留档对象观察。';
+  }
+  return '该机场当前命中“风险观察”标签，尚未进入管理员确认跑路状态。建议优先核查官网、订阅、投诉与近期波动，再决定是否继续使用。';
 }
 
 function formatPercent(value: number): string {

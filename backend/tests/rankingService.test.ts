@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { buildRankings } from '../src/services/rankingService';
 
-test('buildRankings excludes normal airports from risk ranking', () => {
+test('buildRankings excludes normal and down airports from risk ranking', () => {
   const rankings = buildRankings('2026-03-24', [
     {
       airport: {
@@ -78,7 +78,46 @@ test('buildRankings excludes normal airports from risk ranking', () => {
         details: {},
       },
     },
+    {
+      airport: {
+        id: 3,
+        name: 'Down Airport',
+        website: 'https://down.example.com',
+        status: 'down',
+        plan_price_month: 10,
+        has_trial: false,
+        tags: ['不推荐'],
+        created_at: '2025-01-01',
+      },
+      metrics: {
+        airport_id: 3,
+        date: '2026-03-24',
+        uptime_percent_30d: 20,
+        median_latency_ms: 999,
+        median_download_mbps: 0,
+        packet_loss_percent: 100,
+        stable_days_streak: 0,
+        domain_ok: false,
+        ssl_days_left: null,
+        recent_complaints_count: 12,
+        history_incidents: 5,
+      },
+      score: {
+        s: 0,
+        p: 0,
+        c: 0,
+        r: 0,
+        risk_penalty: 100,
+        score: 0,
+        recent_score: 0,
+        historical_score: 0,
+        final_score: 0,
+        details: {},
+      },
+    },
   ]);
 
   assert.deepEqual(rankings.risk.map((item) => item.airport_id), [2]);
+  assert.ok(rankings.today.every((item) => item.airport_id !== 3));
+  assert.ok(rankings.stable.every((item) => item.airport_id !== 3));
 });

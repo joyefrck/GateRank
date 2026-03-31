@@ -606,6 +606,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const websiteBundle = parseWebsiteFields(payload, true);
       const primaryWebsite = websiteBundle.website as string;
       const status = payload.status ? toStatus(payload.status) : 'normal';
+      ensureDownConfirmed(status, payload.confirm_down);
       const planPriceMonth = mustNumber(payload.plan_price_month, 'plan_price_month');
       const hasTrial = Boolean(payload.has_trial);
       const subscriptionUrl = optionalString(payload.subscription_url);
@@ -649,11 +650,13 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const airportId = toAirportId(req.params.id);
       const payload = req.body ?? {};
       const websiteBundle = parseWebsiteFields(payload, false);
+      const nextStatus = payload.status ? toStatus(payload.status) : undefined;
+      ensureDownConfirmed(nextStatus, payload.confirm_down);
       const patch = {
         name: optionalString(payload.name),
         website: websiteBundle.website,
         websites: websiteBundle.websites,
-        status: payload.status ? toStatus(payload.status) : undefined,
+        status: nextStatus,
         plan_price_month:
           payload.plan_price_month === undefined
             ? undefined
@@ -1076,6 +1079,13 @@ export function createAdminRoutes(deps: AdminDeps): Router {
   router.post('/airports/:id/manual-jobs', async (req, res, next) => {
     try {
       const airportId = toAirportId(req.params.id);
+      const airport = (await deps.airportRepository.getById(airportId)) as { status?: AirportStatus } | null;
+      if (!airport) {
+        throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
+      }
+      if (airport.status === 'down') {
+        throw new HttpError(409, 'AIRPORT_DOWN_MANUAL_JOB_DISABLED', '已跑路机场已停止手动测评与风险体检');
+      }
       const payload = req.body ?? {};
       const date = parseDate(payload.date);
       const kind = toManualJobKind(payload.kind);
@@ -1594,6 +1604,12 @@ function toBooleanFlag(value: unknown): boolean {
     return normalized === '1' || normalized === 'true' || normalized === 'yes';
   }
   return false;
+}
+
+function ensureDownConfirmed(status: AirportStatus | undefined, confirmDown: unknown): void {
+  if (status === 'down' && !toBooleanFlag(confirmDown)) {
+    throw new HttpError(409, 'DOWN_STATUS_REQUIRES_CONFIRMATION', '将机场标记为跑路前，必须由管理员显式确认');
+  }
 }
 
 function toStatus(value: unknown): AirportStatus {

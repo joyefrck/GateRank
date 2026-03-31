@@ -227,6 +227,21 @@ export interface FullRankingView {
   items: FullRankingItem[];
 }
 
+export interface RiskMonitorItem extends FullRankingItem {
+  monitor_reason: 'down' | 'risk_watch';
+  risk_penalty: number | null;
+}
+
+export interface RiskMonitorView {
+  date: string;
+  generated_at: string;
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  items: RiskMonitorItem[];
+}
+
 export interface ReportView {
   requested_date: string;
   date: string;

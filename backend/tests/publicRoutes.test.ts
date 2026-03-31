@@ -72,6 +72,15 @@ test('GET /pages/home returns public homepage view', async () => {
           total_pages: 1,
           items: [],
         }),
+        getRiskMonitorView: async () => ({
+          date: '2026-03-23',
+          generated_at: '2026-03-23T10:00:00+08:00',
+          page: 1,
+          page_size: 20,
+          total: 0,
+          total_pages: 1,
+          items: [],
+        }),
         getReportView: async () => null,
       } as any,
     }),
@@ -123,6 +132,9 @@ test('GET /airports/:id/report-view returns report view payload', async () => {
           throw new Error('not used');
         },
         getFullRankingView: async () => {
+          throw new Error('not used');
+        },
+        getRiskMonitorView: async () => {
           throw new Error('not used');
         },
         getReportView: async () => ({
@@ -249,6 +261,9 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
             },
           ],
         }),
+        getRiskMonitorView: async () => {
+          throw new Error('not used');
+        },
         getReportView: async () => null,
       } as any,
     }),
@@ -277,6 +292,92 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
       label: '对比昨天',
       value: 1.2,
     });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /pages/risk-monitor returns paged risk monitor payload', async () => {
+  const app = express();
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async () => 1,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async () => {
+          throw new Error('not used');
+        },
+        getFullRankingView: async () => {
+          throw new Error('not used');
+        },
+        getRiskMonitorView: async (date: string, page: number, pageSize: number) => ({
+          date,
+          generated_at: '2026-03-23T10:00:00+08:00',
+          page,
+          page_size: pageSize,
+          total: 2,
+          total_pages: 1,
+          items: [
+            {
+              airport_id: 7,
+              rank: 1,
+              name: 'Broken Airport',
+              website: 'https://broken.example.com',
+              status: 'down',
+              tags: ['不推荐'],
+              founded_on: '2025-01-01',
+              plan_price_month: 15,
+              has_trial: false,
+              airport_intro: 'Down',
+              created_at: '2026-01-01',
+              score: 12.3,
+              score_delta_vs_yesterday: {
+                label: '对比昨天',
+                value: -5,
+              },
+              score_date: '2026-03-22',
+              report_url: '/reports/7?date=2026-03-22',
+              monitor_reason: 'down',
+              risk_penalty: 88,
+            },
+          ],
+        }),
+        getReportView: async () => null,
+      } as any,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/pages/risk-monitor?date=2026-03-23&page=1`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      page: number;
+      page_size: number;
+      total: number;
+      items: Array<{ monitor_reason: string; risk_penalty: number | null }>;
+    };
+    assert.equal(data.page, 1);
+    assert.equal(data.page_size, 20);
+    assert.equal(data.total, 2);
+    assert.equal(data.items[0]?.monitor_reason, 'down');
+    assert.equal(data.items[0]?.risk_penalty, 88);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -316,6 +417,7 @@ test('POST /airport-applications accepts complete submission payload', async () 
       publicViewService: {
         getHomePageView: async () => null,
         getFullRankingView: async () => null,
+        getRiskMonitorView: async () => null,
         getReportView: async () => null,
       } as any,
     }),
@@ -389,6 +491,7 @@ test('POST /airport-applications still succeeds when telegram notification fails
       publicViewService: {
         getHomePageView: async () => null,
         getFullRankingView: async () => null,
+        getRiskMonitorView: async () => null,
         getReportView: async () => null,
       } as any,
     }),
