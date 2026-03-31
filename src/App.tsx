@@ -705,6 +705,71 @@ function EmptySection({ message }: { message: string }) {
   );
 }
 
+function ListPageHero({
+  eyebrow,
+  title,
+  subtitle,
+  description,
+  stats,
+  tone = 'default',
+}: {
+  eyebrow: string;
+  title: string;
+  subtitle: string;
+  description: string;
+  stats: Array<{ label: string; value: React.ReactNode }>;
+  tone?: 'default' | 'alert';
+}) {
+  const isAlert = tone === 'alert';
+  const sectionClassName = isAlert
+    ? 'relative overflow-hidden rounded-[32px] border border-neutral-200 bg-[linear-gradient(135deg,#3f0f19_0%,#1f172a_34%,#f7f2f4_100%)] px-6 py-8 md:px-10 md:py-12 text-white shadow-[0_30px_80px_rgba(15,23,42,0.16)]'
+    : 'relative overflow-hidden rounded-[32px] border border-neutral-200 bg-[linear-gradient(135deg,#111827_0%,#0f172a_38%,#f8fafc_100%)] px-6 py-8 md:px-10 md:py-12 text-white shadow-[0_30px_80px_rgba(15,23,42,0.16)]';
+  const overlayStyle = isAlert
+    ? {
+        backgroundImage:
+          'radial-gradient(circle at top left, rgba(251,113,133,0.34), transparent 34%), radial-gradient(circle at bottom right, rgba(255,255,255,0.22), transparent 30%)',
+      }
+    : { backgroundImage: 'radial-gradient(circle at top left, rgba(255,255,255,0.28), transparent 35%)' };
+  const eyebrowClassName = isAlert
+    ? 'inline-flex items-center gap-2 rounded-full border border-rose-200/20 bg-rose-200/8 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-rose-50/88 backdrop-blur'
+    : 'inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white/80 backdrop-blur';
+  const statCardClassName = isAlert
+    ? 'rounded-2xl border border-white/10 bg-white/8 p-4 backdrop-blur'
+    : 'rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur';
+  const statLabelClassName = isAlert
+    ? 'text-[11px] uppercase tracking-[0.18em] text-rose-50/62 font-black'
+    : 'text-[11px] uppercase tracking-[0.18em] text-white/60 font-black';
+  const subtitleClassName = isAlert ? 'block text-rose-50/42' : 'block text-white/45';
+
+  return (
+    <section className={sectionClassName}>
+      <div className="absolute inset-0 opacity-20" style={overlayStyle} />
+      <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
+        <div>
+          <div className={eyebrowClassName}>
+            {eyebrow}
+          </div>
+          <h1 className="mt-5 max-w-4xl text-3xl md:text-5xl lg:text-[56px] font-black leading-[0.95] tracking-tight">
+            {title}
+            <span className={subtitleClassName}>{subtitle}</span>
+          </h1>
+          <p className="mt-5 max-w-3xl text-sm md:text-base leading-7 text-white/72">
+            {description}
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          {stats.map((item) => (
+            <div key={item.label} className={statCardClassName}>
+              <div className={statLabelClassName}>{item.label}</div>
+              <div className="mt-2 text-3xl font-black text-white">{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function HomePage({ date }: { date?: string }) {
   const [data, setData] = useState<HomePageResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -797,7 +862,7 @@ function HomePage({ date }: { date?: string }) {
     <PageFrame active="home">
       <header className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-10 md:pb-12 text-center">
         <h1 className="text-[34px] md:text-5xl lg:text-[56px] font-black tracking-tight mb-4 leading-[0.95] text-neutral-900">
-          {homeDate} 机场 VPN 推荐与<span className="text-neutral-400">可靠性榜单</span>
+          机场 VPN 推荐与<span className="text-neutral-400">可靠性榜单</span>
         </h1>
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-center gap-3 md:gap-6 text-neutral-500 mb-6">
           <p className="text-[13px] md:text-sm font-medium tracking-tight leading-7">
@@ -940,7 +1005,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
   const safePage = data?.page || page || 1;
   const totalPages = data?.total_pages || 1;
   const visiblePages = buildPageWindow(safePage, totalPages);
-  const seoTitle = `${rankingDate} 全量机场榜单 | 全部已上线机场评分排名 | 机场榜 GateRank`;
+  const seoTitle = '全量机场榜单 | 全部已上线机场评分排名 | 机场榜 GateRank';
   const seoDescription = data
     ? `${rankingDate} 全量榜单收录 ${formatNumber(data.total)} 个已上线机场，按公开展示分数降序排列，支持分页查看官网、状态、标签、成立日期、月付价格、试用支持与测评报告。`
     : '机场榜全量榜单按公开展示分数降序展示全部已上线机场，包含官网、状态、标签、月付价格、试用支持和测评报告入口。';
@@ -1000,41 +1065,18 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
   return (
     <PageFrame active="full_ranking">
       <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-10">
-        <section className="relative overflow-hidden rounded-[32px] border border-neutral-200 bg-[linear-gradient(135deg,#111827_0%,#0f172a_38%,#f8fafc_100%)] px-6 py-8 md:px-10 md:py-12 text-white shadow-[0_30px_80px_rgba(15,23,42,0.16)]">
-          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at top left, rgba(255,255,255,0.28), transparent 35%)' }} />
-          <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white/80 backdrop-blur">
-                全量榜单
-              </div>
-              <h1 className="mt-5 max-w-4xl text-3xl md:text-5xl lg:text-[56px] font-black leading-[0.95] tracking-tight">
-                {rankingDate} 全部已上线机场
-                <span className="block text-white/45">按公开展示分数降序排列</span>
-              </h1>
-              <p className="mt-5 max-w-3xl text-sm md:text-base leading-7 text-white/72">
-                这里汇总所有已上线机场，并统一展示官网、运行状态、标签、成立日期、月付价格、试用支持、公开分数与测评报告入口。风险机场会保留显著标识，方便用户和 AI 检索系统快速判断。
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">收录机场</div>
-                <div className="mt-2 text-3xl font-black text-white">{formatNumber(data?.total || 0)}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">当前分页</div>
-                <div className="mt-2 text-3xl font-black text-white">{safePage}/{totalPages}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">默认页容量</div>
-                <div className="mt-2 text-3xl font-black text-white">{data?.page_size || 20}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">数据说明</div>
-                <div className="mt-2 text-sm font-semibold leading-6 text-white/78">仅展示 normal 与 risk 状态机场</div>
-              </div>
-            </div>
-          </div>
-        </section>
+        <ListPageHero
+          eyebrow="全量榜单"
+          title="全部已上线机场"
+          subtitle="按公开展示分数降序排列"
+          description="这里汇总所有已上线机场，并统一展示官网、运行状态、标签、成立日期、月付价格、试用支持、公开分数与测评报告入口。风险机场会保留显著标识，方便用户和 AI 检索系统快速判断。"
+          stats={[
+            { label: '收录机场', value: formatNumber(data?.total || 0) },
+            { label: '当前分页', value: `${safePage}/${totalPages}` },
+            { label: '默认页容量', value: data?.page_size || 20 },
+            { label: '数据说明', value: <div className="text-sm font-semibold leading-6 text-white/78">仅展示 normal 与 risk 状态机场</div> },
+          ]}
+        />
 
         <section className="mt-10 rounded-[28px] border border-neutral-200 bg-white px-5 py-6 md:px-7 md:py-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
           <div className="flex flex-col gap-4 border-b border-neutral-100 pb-6 md:flex-row md:items-end md:justify-between">
@@ -1260,7 +1302,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
   const safePage = data?.page || page || 1;
   const totalPages = data?.total_pages || 1;
   const visiblePages = buildPageWindow(safePage, totalPages);
-  const seoTitle = `${rankingDate} 跑路监测 | 已跑路与风险观察机场列表 | 机场榜 GateRank`;
+  const seoTitle = '跑路监测 | 已跑路与风险观察机场列表 | 机场榜 GateRank';
   const seoDescription = data
     ? `${rankingDate} 跑路监测当前收录 ${formatNumber(data.total)} 个机场，覆盖管理员确认跑路与命中风险观察标签的对象，默认将已跑路机场置顶展示。`
     : '机场榜跑路监测页汇总管理员确认跑路与命中风险观察标签的机场，帮助用户快速识别高风险对象。';
@@ -1306,41 +1348,19 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
   return (
     <PageFrame active="risk_monitor">
       <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-10">
-        <section className="relative overflow-hidden rounded-[32px] border border-rose-200 bg-[linear-gradient(135deg,#3f0d18_0%,#111827_42%,#fff1f2_100%)] px-6 py-8 md:px-10 md:py-12 text-white shadow-[0_30px_80px_rgba(127,29,29,0.18)]">
-          <div className="absolute inset-0 opacity-20" style={{ backgroundImage: 'radial-gradient(circle at top left, rgba(255,255,255,0.24), transparent 35%)' }} />
-          <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white/80 backdrop-blur">
-                跑路监测
-              </div>
-              <h1 className="mt-5 max-w-4xl text-3xl md:text-5xl lg:text-[56px] font-black leading-[0.95] tracking-tight">
-                {rankingDate} 高风险机场监测列表
-                <span className="block text-white/50">已跑路置顶，风险观察同步纳入</span>
-              </h1>
-              <p className="mt-5 max-w-3xl text-sm md:text-base leading-7 text-white/72">
-                本页只展示两类对象：管理员后台已确认跑路的机场，以及标签命中“风险观察”的机场。已跑路机场会从每日测评、自动调度与手动任务中全部排除，仅保留风险留档展示。
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">监测对象</div>
-                <div className="mt-2 text-3xl font-black text-white">{formatNumber(data?.total || 0)}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">当前分页</div>
-                <div className="mt-2 text-3xl font-black text-white">{safePage}/{totalPages}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">默认页容量</div>
-                <div className="mt-2 text-3xl font-black text-white">{data?.page_size || 20}</div>
-              </div>
-              <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-                <div className="text-[11px] uppercase tracking-[0.18em] text-white/60 font-black">收录规则</div>
-                <div className="mt-2 text-sm font-semibold leading-6 text-white/78">仅包含“已跑路”或“风险观察”</div>
-              </div>
-            </div>
-          </div>
-        </section>
+        <ListPageHero
+          eyebrow="跑路监测"
+          title="高风险机场监测列表"
+          subtitle="已跑路置顶，风险观察同步纳入"
+          description="本页只展示两类对象：管理员后台已确认跑路的机场，以及标签命中“风险观察”的机场。已跑路机场会从每日测评、自动调度与手动任务中全部排除，仅保留风险留档展示。"
+          tone="alert"
+          stats={[
+            { label: '监测对象', value: formatNumber(data?.total || 0) },
+            { label: '当前分页', value: `${safePage}/${totalPages}` },
+            { label: '默认页容量', value: data?.page_size || 20 },
+            { label: '收录规则', value: <div className="text-sm font-semibold leading-6 text-white/78">仅包含“已跑路”或“风险观察”</div> },
+          ]}
+        />
 
         <section className="mt-10 rounded-[28px] border border-neutral-200 bg-white px-5 py-6 md:px-7 md:py-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
           <div className="flex flex-col gap-4 border-b border-neutral-100 pb-6 md:flex-row md:items-end md:justify-between">
