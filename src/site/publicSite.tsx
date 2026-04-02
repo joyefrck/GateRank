@@ -1,6 +1,8 @@
 import React, { useEffect } from 'react';
 import { ExternalLink, Zap } from 'lucide-react';
 
+import { PUBLIC_SITE_BRAND_NAME } from '../../shared/publicBrand';
+
 export type NavigationKind = 'home' | 'full_ranking' | 'risk_monitor' | 'methodology' | 'docs';
 
 export interface SeoConfig {
@@ -113,7 +115,7 @@ export function usePageSeo(config: SeoConfig) {
     setNamedMeta('keywords', config.keywords);
     setNamedMeta('robots', 'index,follow,max-image-preview:large');
     setPropertyMeta('og:type', 'website');
-    setPropertyMeta('og:site_name', '机场榜 GateRank');
+    setPropertyMeta('og:site_name', PUBLIC_SITE_BRAND_NAME);
     setPropertyMeta('og:title', config.title);
     setPropertyMeta('og:description', config.description);
     setPropertyMeta('og:url', canonicalUrl);
@@ -181,10 +183,7 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
             <div className="w-9 h-9 bg-neutral-900 rounded-lg flex items-center justify-center shadow-xl">
               <Zap className="text-white w-5 h-5" />
             </div>
-            <div className="flex flex-col">
-              <span className="font-black text-lg tracking-tighter leading-none">机场榜</span>
-              <span className="text-[10px] md:text-[11px] font-black uppercase tracking-[0.28em] text-neutral-400">GateRank</span>
-            </div>
+            <span className="font-black text-lg tracking-tighter leading-none">{PUBLIC_SITE_BRAND_NAME}</span>
           </a>
           <div className="hidden lg:flex items-center gap-3 text-[13px] font-black uppercase tracking-[0.18em]">
             <PublicNavLink href="/" label="今日推荐" active={active === 'home'} />
@@ -262,13 +261,11 @@ function SiteFooter() {
             <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
               <Zap className="text-white w-5 h-5" />
             </div>
-            <div className="flex flex-col items-start">
-              <span className="font-black text-xl tracking-tighter leading-none">机场榜</span>
-              <span className="text-[11px] md:text-xs font-black uppercase tracking-[0.24em] text-neutral-400">GateRank</span>
-            </div>
+            <span className="font-black text-xl tracking-tighter leading-none">{PUBLIC_SITE_BRAND_NAME}</span>
           </div>
           <p className="max-w-2xl text-[13px] md:text-sm leading-7 text-neutral-500">
-            GateRank 以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在今日推荐、全量榜单与测评报告之间完成交叉判断。
+            {PUBLIC_SITE_BRAND_NAME}
+            以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在今日推荐、全量榜单与测评报告之间完成交叉判断。
           </p>
         </div>
 
@@ -283,7 +280,7 @@ function SiteFooter() {
 
         <div className="border-t border-neutral-100 pt-8">
           <div className="text-[11px] md:text-xs text-neutral-400 font-medium">
-            © 2026 GateRank. All rights reserved. 评分独立性声明：本站不含任何付费推广排名。
+            © 2026 {PUBLIC_SITE_BRAND_NAME}. All rights reserved. 评分独立性声明：本站不含任何付费推广排名。
           </div>
         </div>
       </div>

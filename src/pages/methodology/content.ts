@@ -1,3 +1,5 @@
+import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
+
 const SCORE_WEIGHTS = {
   stability: { uptime: 0.5, stability: 0.3, streak: 0.2 },
   performance: { latency: 0.4, speed: 0.4, loss: 0.2 },
@@ -26,9 +28,9 @@ const STABILITY_RULES = {
 const TIME_DECAY_LAMBDA = 0.1;
 
 export const methodologySeo = {
-  title: '测评方法 | 机场评分规则、权重与风险扣分说明 | GateRank',
-  description: 'GateRank 测评方法页公开解释机场评分规则，拆解稳定性、性能、价格、风险四个维度，以及时间衰减、风险扣分与最终分数如何计算。',
-  keywords: '机场测评方法,机场评分规则,机场推荐依据,VPN机场测评,机场榜,GateRank',
+  title: `测评方法 | 机场评分规则、权重与风险扣分说明 | ${PUBLIC_SITE_BRAND_NAME}`,
+  description: `${PUBLIC_SITE_BRAND_NAME} 测评方法页公开解释机场评分规则，拆解稳定性、性能、价格、风险四个维度，以及时间衰减、风险扣分与最终分数如何计算。`,
+  keywords: '机场榜GateRank,机场测评方法,机场评分规则,机场推荐依据,VPN机场测评,机场榜,GateRank',
 } as const;
 
 export const heroStats = [

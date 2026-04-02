@@ -1,3 +1,5 @@
+import { PUBLIC_SITE_BRAND_NAME } from './publicBrand';
+
 export interface PublishTokenDocNavSection {
   id: string;
   label: string;
@@ -33,14 +35,14 @@ export const PUBLISH_TOKEN_DOCS_MARKDOWN_PATH = '/publish-token-docs.md';
 export const PUBLISH_TOKEN_DOCS_LAST_UPDATED = '2026-03-29T00:00:00+08:00';
 
 export const PUBLISH_TOKEN_DOCS_META = {
-  title: '发布令牌接入说明 | 机场榜 GateRank',
-  description: 'GateRank 发布令牌接入说明，包含 Bearer 鉴权、文章创建、封面上传、草稿与发布模式定义。',
-  keywords: 'GateRank, 发布令牌, API, 文档, 新闻发布, Bearer Token',
-  shortTitle: 'GateRank 发布令牌接入说明',
+  title: `发布令牌接入说明 | ${PUBLIC_SITE_BRAND_NAME}`,
+  description: `${PUBLIC_SITE_BRAND_NAME} 发布令牌接入说明，包含 Bearer 鉴权、文章创建、封面上传、草稿与发布模式定义。`,
+  keywords: '机场榜GateRank,GateRank,发布令牌,API,文档,新闻发布,Bearer Token',
+  shortTitle: `${PUBLIC_SITE_BRAND_NAME} 发布令牌接入说明`,
   heroEyebrow: 'Publish Token Docs',
   heroSubtitle: '给第三方系统与 AI 的正式发文接口文档',
   heroSummary:
-    '这是一份公开接入文档，用于说明 GateRank 当前开放的新闻发布能力、Bearer 鉴权方式、草稿与直接发布的区别、封面上传流程，以及你在接入时会遇到的常见错误和 scope 约束。',
+    `这是一份公开接入文档，用于说明 ${PUBLIC_SITE_BRAND_NAME} 当前开放的新闻发布能力、Bearer 鉴权方式、草稿与直接发布的区别、封面上传流程，以及你在接入时会遇到的常见错误和 scope 约束。`,
 } as const;
 
 export const PUBLISH_TOKEN_DOCS_NAV: PublishTokenDocNavSection[] = [
@@ -347,11 +349,11 @@ export function buildPublishTokenDocsStructuredData(siteUrl: string): Array<Reco
       dateModified: PUBLISH_TOKEN_DOCS_LAST_UPDATED,
       author: {
         '@type': 'Organization',
-        name: 'GateRank',
+        name: PUBLIC_SITE_BRAND_NAME,
       },
       publisher: {
         '@type': 'Organization',
-        name: 'GateRank',
+        name: PUBLIC_SITE_BRAND_NAME,
       },
       about: [
         'Publish Token',
@@ -380,7 +382,7 @@ export function buildPublishTokenDocsStructuredData(siteUrl: string): Array<Reco
         {
           '@type': 'ListItem',
           position: 1,
-          name: 'GateRank',
+          name: PUBLIC_SITE_BRAND_NAME,
           item: buildAbsoluteUrl(siteUrl, '/'),
         },
         {

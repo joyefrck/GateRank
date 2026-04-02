@@ -191,10 +191,7 @@ export class SchedulerTaskExecutor {
       this.logger.log(`[scheduler] ${stage} stage succeeded${detail ? `: ${detail}` : ''}`);
       return { stage, status: 'succeeded', detail: detail || 'ok' };
     } catch (error) {
-      const detail = normalizeSingBoxError(
-        error instanceof Error ? error.message : String(error),
-        this.singBoxBin,
-      );
+      const detail = summarizeScriptFailure(error, this.singBoxBin);
       this.logger.error(`[scheduler] ${stage} stage failed`, error);
       return { stage, status: 'failed', detail };
     }
@@ -285,6 +282,63 @@ function summarizeScriptOutput(stdout: string, stderr: string): string {
   } catch {
     return output.split('\n').slice(-1)[0].slice(0, 240);
   }
+}
+
+function summarizeScriptFailure(error: unknown, singBoxBin: string): string {
+  const execError = asExecFailure(error);
+  const scriptDetail = summarizeScriptFailureOutput(execError?.stdout, execError?.stderr);
+  if (scriptDetail) {
+    return scriptDetail;
+  }
+  return normalizeSingBoxError(
+    error instanceof Error ? error.message : String(error),
+    singBoxBin,
+  );
+}
+
+function summarizeScriptFailureOutput(stdout?: string, stderr?: string): string {
+  const output = stdout?.trim() || stderr?.trim();
+  if (!output) {
+    return '';
+  }
+
+  try {
+    const parsed = JSON.parse(output) as {
+      airport_count?: number;
+      success_count?: number;
+      failure_count?: number;
+      failures?: Array<{ airport_id?: number; airport_name?: string; error?: string }>;
+    };
+    const airportCount = Number(parsed.airport_count ?? 0);
+    const successCount = Number(parsed.success_count ?? 0);
+    const failureCount = Number(parsed.failure_count ?? 0);
+    const firstFailure = Array.isArray(parsed.failures) ? parsed.failures[0] : null;
+    const firstFailureLabel = firstFailure
+      ? [firstFailure.airport_name, firstFailure.airport_id ? `#${firstFailure.airport_id}` : null]
+        .filter(Boolean)
+        .join(' ')
+      : '';
+    const firstFailureError = firstFailure?.error?.trim() || '';
+    const failureSummary = firstFailureError
+      ? `${firstFailureLabel ? `${firstFailureLabel}: ` : ''}${firstFailureError}`
+      : '';
+    const countSummary = `${successCount}/${airportCount} succeeded, ${failureCount} failed`;
+    return failureSummary ? `${countSummary}; ${failureSummary}` : countSummary;
+  } catch {
+    return output.split('\n').slice(-1)[0].slice(0, 240);
+  }
+}
+
+function asExecFailure(error: unknown): { stdout?: string; stderr?: string } | null {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+
+  const candidate = error as { stdout?: unknown; stderr?: unknown };
+  return {
+    stdout: typeof candidate.stdout === 'string' ? candidate.stdout : undefined,
+    stderr: typeof candidate.stderr === 'string' ? candidate.stderr : undefined,
+  };
 }
 
 function defaultSleep(ms: number): Promise<void> {

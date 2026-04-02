@@ -33,6 +33,7 @@ import {
   totalScoreParts,
   trustPrinciples,
 } from './content';
+import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
 
 const sectionMotion = {
   initial: { opacity: 0, y: 24 },
@@ -127,14 +128,14 @@ export function MethodologyPage() {
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/90 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-600 shadow-sm backdrop-blur">
                 <BrainCircuit className="h-3.5 w-3.5" />
-                GateRank Methodology
+                {PUBLIC_SITE_BRAND_NAME} Methodology
               </div>
               <h1 className="mt-5 max-w-4xl text-4xl md:text-5xl lg:text-[58px] font-black leading-[0.95] tracking-tight text-neutral-900">
                 我们不是拍脑袋推荐
                 <span className="block text-neutral-400">而是按四个维度每天计算机场评分</span>
               </h1>
               <p className="mt-5 max-w-3xl text-sm md:text-base leading-7 text-neutral-600">
-                这个页面公开说明 GateRank 的机场测评方法、评分规则和风险扣分逻辑。你能直接看到总分怎么拆、风险怎么压分、历史数据为什么不会被立刻清空。
+                这个页面公开说明 {PUBLIC_SITE_BRAND_NAME} 的机场测评方法、评分规则和风险扣分逻辑。你能直接看到总分怎么拆、风险怎么压分、历史数据为什么不会被立刻清空。
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <button
@@ -203,7 +204,7 @@ export function MethodologyPage() {
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
             <div className="rounded-[30px] border border-neutral-200 bg-white p-6 md:p-8 shadow-[0_18px_60px_rgba(0,0,0,0.04)]">
               <div className="text-sm md:text-base leading-8 text-neutral-600">
-                先理解一件事：GateRank 的机场评分不是“谁跑得快谁第一”，而是把<span className="font-black text-neutral-900">稳定性、性能、价格、风险</span>四个维度拼成一个最终分。
+                先理解一件事：{PUBLIC_SITE_BRAND_NAME} 的机场评分不是“谁跑得快谁第一”，而是把<span className="font-black text-neutral-900">稳定性、性能、价格、风险</span>四个维度拼成一个最终分。
               </div>
               <div className="mt-6 grid gap-4 md:grid-cols-4">
                 {totalScoreParts.map((item) => (
@@ -376,7 +377,7 @@ export function MethodologyPage() {
               <div className="mt-6 rounded-[28px] border border-neutral-200 bg-neutral-50 p-5">
                 <div className="text-sm font-black text-neutral-900">桥接关系</div>
                 <p className="mt-3 text-sm leading-7 text-neutral-600">
-                  很多人第一次看会误以为 `w` 是直接修正总分。不是。GateRank 的做法是：
+                  很多人第一次看会误以为 `w` 是直接修正总分。不是。{PUBLIC_SITE_BRAND_NAME} 的做法是：
                   <span className="font-black text-neutral-900">先算当天总分</span>，
                   <span className="font-black text-neutral-900">再用 `w` 计算历史衰减分</span>，
                   最后再把这两部分按 70% / 30% 合成最终分。
@@ -409,7 +410,7 @@ export function MethodologyPage() {
                 <p>只看当天，会让一次活动测速或一次短时故障把榜单拉得过于极端。</p>
                 <p>引入时间衰减后，最近表现最重要，但长期表现仍然会保留“记忆”，更接近真实使用体验。</p>
                 <p className="rounded-2xl border border-neutral-200 bg-white px-4 py-4 font-medium text-neutral-900">
-                  这也是 GateRank 不做“今日跑分秀”的原因。
+                  这也是 {PUBLIC_SITE_BRAND_NAME} 不做“今日跑分秀”的原因。
                 </p>
               </div>
             </div>
@@ -510,7 +511,7 @@ export function MethodologyPage() {
                 </div>
                 <h2 className="mt-4 text-2xl md:text-4xl font-black tracking-tight">结论先行：我们更在意“长期可信”，而不是“一次看起来很猛”。</h2>
                 <p className="mt-4 max-w-3xl text-sm md:text-base leading-7 text-white/70">
-                  这就是 GateRank 的机场评分规则。你可以先看榜单，再回到这里理解每一分是怎么来的；如果某个机场分数异常，你也能快速判断它是慢、贵，还是有真实风险。
+                  这就是 {PUBLIC_SITE_BRAND_NAME} 的机场评分规则。你可以先看榜单，再回到这里理解每一分是怎么来的；如果某个机场分数异常，你也能快速判断它是慢、贵，还是有真实风险。
                 </p>
               </div>
               <button
