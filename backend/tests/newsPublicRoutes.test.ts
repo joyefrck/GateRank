@@ -130,10 +130,13 @@ test('GET /publish-token-docs returns server-rendered HTML with crawlable doc co
     });
     assert.equal(response.status, 200);
     const html = await response.text();
-    assert.match(html, /<h1>GateRank 发布令牌接入说明<\/h1>/);
+    assert.match(html, /<h1>机场榜GateRank 发布令牌接入说明<\/h1>/);
     assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/publish-token-docs"/);
     assert.match(html, /<link rel="alternate" type="text\/markdown" href="http:\/\/127\.0\.0\.1:\d+\/publish-token-docs\.md"/);
-    assert.match(html, /<meta name="keywords" content="GateRank, 发布令牌, API, 文档, 新闻发布, Bearer Token"/);
+    assert.match(
+      html,
+      /<meta name="keywords" content="机场榜GateRank,GateRank,发布令牌,API,文档,新闻发布,Bearer Token"/,
+    );
     assert.match(html, /"@type":"TechArticle"/);
     assert.match(html, /"encodingFormat":"text\/markdown"/);
     assert.match(html, /Base URL/);
@@ -179,7 +182,7 @@ test('GET /publish-token-docs.md returns markdown source', async () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') || '', /text\/markdown/);
     const markdown = await response.text();
-    assert.match(markdown, /^# GateRank 发布令牌接入说明/m);
+    assert.match(markdown, /^# 机场榜GateRank 发布令牌接入说明/m);
     assert.match(markdown, /## 快速开始/);
     assert.match(markdown, /```bash/);
     assert.match(markdown, /\/api\/v1\/publish\/news/);

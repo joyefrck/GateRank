@@ -11,7 +11,7 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
       calls.push({ sql, params });
       if (sql.includes('FROM information_schema.COLUMNS')) {
         schemaChecks += 1;
-        return [schemaChecks <= 16 ? [] : [{ 1: 1 }]];
+        return [schemaChecks <= 21 ? [] : [{ 1: 1 }]];
       }
       return [[]];
     },
@@ -27,6 +27,18 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
   );
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airport_applications ADD COLUMN approved_airport_id BIGINT UNSIGNED NULL AFTER test_password')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes("ENUM('awaiting_payment', 'pending', 'reviewed', 'rejected') NOT NULL DEFAULT 'awaiting_payment'")),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes("ALTER TABLE airport_applications ADD COLUMN payment_status ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid' AFTER review_status")),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes("MODIFY COLUMN review_status") && call.sql.includes("ENUM('awaiting_payment', 'pending', 'reviewed', 'rejected')")),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes("MODIFY COLUMN payment_status") && call.sql.includes("ENUM('unpaid', 'paid')")),
   );
   assert.ok(
     calls.some((call) => call.sql.includes('SET websites_json = JSON_ARRAY(website)')),

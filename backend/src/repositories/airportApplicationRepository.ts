@@ -23,6 +23,10 @@ interface AirportApplicationRow extends RowDataPacket {
   test_password: string;
   approved_airport_id: number | null;
   review_status: AirportApplicationReviewStatus;
+  payment_status: 'unpaid' | 'paid';
+  payment_amount: number | null;
+  paid_at: string | null;
+  must_change_password: number | null;
   review_note: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
@@ -47,7 +51,7 @@ export interface CreateAirportApplicationInput {
 }
 
 export interface ReviewAirportApplicationInput {
-  review_status: Exclude<AirportApplicationReviewStatus, 'pending'>;
+  review_status: Exclude<AirportApplicationReviewStatus, 'pending' | 'awaiting_payment'>;
   review_note?: string | null;
   approved_airport_id?: number | null;
   reviewed_by: string;
@@ -75,7 +79,10 @@ export class AirportApplicationRepository {
         test_account VARCHAR(255) NOT NULL,
         test_password VARCHAR(255) NOT NULL,
         approved_airport_id BIGINT UNSIGNED NULL,
-        review_status ENUM('pending', 'reviewed', 'rejected') NOT NULL DEFAULT 'pending',
+        review_status ENUM('awaiting_payment', 'pending', 'reviewed', 'rejected') NOT NULL DEFAULT 'awaiting_payment',
+        payment_status ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid',
+        payment_amount DECIMAL(10,2) NULL,
+        paid_at DATETIME NULL,
         review_note TEXT NULL,
         reviewed_by VARCHAR(128) NULL,
         reviewed_at DATETIME NULL,
@@ -106,11 +113,29 @@ export class AirportApplicationRepository {
     await this.ensureColumn('approved_airport_id', 'BIGINT UNSIGNED NULL AFTER test_password');
     await this.ensureColumn(
       'review_status',
-      "ENUM('pending', 'reviewed', 'rejected') NOT NULL DEFAULT 'pending' AFTER approved_airport_id",
+      "ENUM('awaiting_payment', 'pending', 'reviewed', 'rejected') NOT NULL DEFAULT 'awaiting_payment' AFTER approved_airport_id",
     );
-    await this.ensureColumn('review_note', 'TEXT NULL AFTER review_status');
+    await this.ensureColumn(
+      'payment_status',
+      "ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid' AFTER review_status",
+    );
+    await this.ensureColumn('payment_amount', 'DECIMAL(10,2) NULL AFTER payment_status');
+    await this.ensureColumn('paid_at', 'DATETIME NULL AFTER payment_amount');
+    await this.ensureColumn('review_note', 'TEXT NULL AFTER paid_at');
     await this.ensureColumn('reviewed_by', 'VARCHAR(128) NULL AFTER review_note');
     await this.ensureColumn('reviewed_at', 'DATETIME NULL AFTER reviewed_by');
+    await this.pool.query(
+      `ALTER TABLE airport_applications
+          MODIFY COLUMN review_status
+            ENUM('awaiting_payment', 'pending', 'reviewed', 'rejected')
+            NOT NULL DEFAULT 'awaiting_payment'`,
+    );
+    await this.pool.query(
+      `ALTER TABLE airport_applications
+          MODIFY COLUMN payment_status
+            ENUM('unpaid', 'paid')
+            NOT NULL DEFAULT 'unpaid'`,
+    );
 
     await this.pool.query(
       `UPDATE airport_applications
@@ -137,8 +162,10 @@ export class AirportApplicationRepository {
         founded_on,
         airport_intro,
         test_account,
-        test_password
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        test_password,
+        review_status,
+        payment_status
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_payment', 'unpaid')`,
       [
         input.name,
         websites[0],
@@ -156,6 +183,18 @@ export class AirportApplicationRepository {
       ],
     );
     return result.insertId;
+  }
+
+  async hasBlockingEmail(email: string): Promise<boolean> {
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT 1
+         FROM airport_applications
+        WHERE applicant_email = ?
+          AND review_status IN ('awaiting_payment', 'pending', 'reviewed')
+        LIMIT 1`,
+      [email],
+    );
+    return rows.length > 0;
   }
 
   async listByQuery(query: {
@@ -191,30 +230,36 @@ export class AirportApplicationRepository {
 
     const [rows] = await this.pool.query<AirportApplicationRow[]>(
       `SELECT
-         id,
-         name,
-         website,
-         websites_json,
-         status,
-         plan_price_month,
-         has_trial,
-         subscription_url,
-         applicant_email,
-         applicant_telegram,
-         founded_on,
-         airport_intro,
-         test_account,
-         test_password,
-         approved_airport_id,
-         review_status,
-         review_note,
-         reviewed_by,
-         reviewed_at,
-         created_at,
-         updated_at
+         airport_applications.id,
+         airport_applications.name,
+         airport_applications.website,
+         airport_applications.websites_json,
+         airport_applications.status,
+         airport_applications.plan_price_month,
+         airport_applications.has_trial,
+         airport_applications.subscription_url,
+         airport_applications.applicant_email,
+         airport_applications.applicant_telegram,
+         airport_applications.founded_on,
+         airport_applications.airport_intro,
+         airport_applications.test_account,
+         airport_applications.test_password,
+         airport_applications.approved_airport_id,
+         airport_applications.review_status,
+         airport_applications.payment_status,
+         airport_applications.payment_amount,
+         DATE_FORMAT(airport_applications.paid_at, '%Y-%m-%d %H:%i:%s') AS paid_at,
+         account.must_change_password AS must_change_password,
+         airport_applications.review_note,
+         airport_applications.reviewed_by,
+         airport_applications.reviewed_at,
+         airport_applications.created_at,
+         airport_applications.updated_at
        FROM airport_applications
+       LEFT JOIN applicant_accounts AS account
+         ON account.application_id = airport_applications.id
        ${whereSql}
-       ORDER BY created_at DESC, id DESC
+       ORDER BY airport_applications.created_at DESC, airport_applications.id DESC
        LIMIT ? OFFSET ?`,
       [...args, pageSize, offset],
     );
@@ -228,29 +273,35 @@ export class AirportApplicationRepository {
   async getById(id: number): Promise<AirportApplication | null> {
     const [rows] = await this.pool.query<AirportApplicationRow[]>(
       `SELECT
-         id,
-         name,
-         website,
-         websites_json,
-         status,
-         plan_price_month,
-         has_trial,
-         subscription_url,
-         applicant_email,
-         applicant_telegram,
-         founded_on,
-         airport_intro,
-         test_account,
-         test_password,
-         approved_airport_id,
-         review_status,
-         review_note,
-         reviewed_by,
-         reviewed_at,
-         created_at,
-         updated_at
+         airport_applications.id,
+         airport_applications.name,
+         airport_applications.website,
+         airport_applications.websites_json,
+         airport_applications.status,
+         airport_applications.plan_price_month,
+         airport_applications.has_trial,
+         airport_applications.subscription_url,
+         airport_applications.applicant_email,
+         airport_applications.applicant_telegram,
+         airport_applications.founded_on,
+         airport_applications.airport_intro,
+         airport_applications.test_account,
+         airport_applications.test_password,
+         airport_applications.approved_airport_id,
+         airport_applications.review_status,
+         airport_applications.payment_status,
+         airport_applications.payment_amount,
+         DATE_FORMAT(airport_applications.paid_at, '%Y-%m-%d %H:%i:%s') AS paid_at,
+         account.must_change_password AS must_change_password,
+         airport_applications.review_note,
+         airport_applications.reviewed_by,
+         airport_applications.reviewed_at,
+         airport_applications.created_at,
+         airport_applications.updated_at
        FROM airport_applications
-       WHERE id = ?
+       LEFT JOIN applicant_accounts AS account
+         ON account.application_id = airport_applications.id
+       WHERE airport_applications.id = ?
        LIMIT 1`,
       [id],
     );
@@ -275,6 +326,24 @@ export class AirportApplicationRepository {
         input.reviewed_at,
         id,
       ],
+    );
+
+    return result.affectedRows > 0;
+  }
+
+  async markPaid(id: number, paymentAmount: number, paidAt: string): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE airport_applications
+          SET payment_status = 'paid',
+              payment_amount = ?,
+              paid_at = COALESCE(paid_at, ?),
+              review_status = CASE
+                WHEN review_status = 'awaiting_payment' THEN 'pending'
+                ELSE review_status
+              END
+        WHERE id = ?
+          AND payment_status != 'paid'`,
+      [paymentAmount, paidAt, id],
     );
 
     return result.affectedRows > 0;
@@ -344,6 +413,11 @@ function toAirportApplicationEntity(row: AirportApplicationRow): AirportApplicat
     test_password: row.test_password,
     approved_airport_id: row.approved_airport_id == null ? null : Number(row.approved_airport_id),
     review_status: row.review_status,
+    payment_status: row.payment_status || 'unpaid',
+    payment_amount: row.payment_amount == null ? null : Number(row.payment_amount),
+    paid_at: toDateTimeString(row.paid_at),
+    must_change_password:
+      row.must_change_password == null ? null : Boolean(row.must_change_password),
     review_note: row.review_note,
     reviewed_by: row.reviewed_by,
     reviewed_at: toDateTimeString(row.reviewed_at),

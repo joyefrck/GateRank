@@ -15,6 +15,13 @@ import {
   ShieldCheck,
   BarChart3,
   Clock,
+  LogIn,
+  KeyRound,
+  CreditCard,
+  CheckCircle2,
+  Mail,
+  CircleAlert,
+  LogOut,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -201,7 +208,7 @@ interface CardProps {
 }
 
 interface RouteState {
-  kind: 'home' | 'report' | 'apply' | 'full_ranking' | 'risk_monitor' | 'methodology' | 'publish_token_docs';
+  kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'risk_monitor' | 'methodology' | 'publish_token_docs';
   airportId?: number;
   date?: string;
   page?: number;
@@ -223,6 +230,61 @@ interface ApplicationFormState {
   test_password: string;
 }
 
+interface ApplicationSubmitResponse {
+  application_id: number;
+  review_status: 'awaiting_payment';
+  portal_email: string;
+  initial_password: string;
+  portal_login_url: string;
+}
+
+interface PortalAccountView {
+  id: number;
+  email: string;
+  must_change_password: boolean;
+  last_login_at: string | null;
+}
+
+interface PortalPaymentOrderView {
+  out_trade_no: string;
+  channel: 'alipay' | 'wxpay';
+  amount: number;
+  status: 'created' | 'paid' | 'failed' | 'expired';
+  pay_type: string | null;
+  pay_info: string | null;
+  paid_at: string | null;
+}
+
+interface PortalApplicationView {
+  id: number;
+  name: string;
+  website: string;
+  review_status: 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
+  payment_status: 'unpaid' | 'paid';
+  payment_amount: number | null;
+  paid_at: string | null;
+  applicant_email: string;
+  applicant_telegram: string;
+  founded_on: string;
+  airport_intro: string;
+  created_at: string;
+  review_note?: string | null;
+  reviewed_at?: string | null;
+}
+
+interface PortalViewResponse {
+  account: PortalAccountView;
+  application: PortalApplicationView;
+  latest_payment_order: PortalPaymentOrderView | null;
+  payment_fee_amount: number;
+}
+
+interface PortalLoginResponse {
+  token: string;
+  expires_at: string;
+  account: PortalAccountView;
+}
+
 const sectionDisplayConfig: Record<
   HomeSectionKey,
   { icon: typeof Flame; color: string; bgClass: string }
@@ -241,6 +303,8 @@ const sectionOrder: HomeSectionKey[] = [
   'new_entries',
   'risk_alerts',
 ];
+
+const PORTAL_TOKEN_KEY = 'gaterank_portal_token';
 
 function shouldRenderSection(sectionKey: HomeSectionKey, section: HomeSection): boolean {
   if (sectionKey === 'risk_alerts') {
@@ -541,6 +605,18 @@ function getApiBase(): string {
   return '';
 }
 
+function getPortalToken(): string {
+  return localStorage.getItem(PORTAL_TOKEN_KEY) || '';
+}
+
+function setPortalToken(token: string): void {
+  localStorage.setItem(PORTAL_TOKEN_KEY, token);
+}
+
+function clearPortalToken(): void {
+  localStorage.removeItem(PORTAL_TOKEN_KEY);
+}
+
 async function apiFetch<T>(path: string): Promise<T> {
   const response = await fetch(`${getApiBase()}${path}`);
   if (!response.ok) {
@@ -556,6 +632,27 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
   const response = await fetch(`${getApiBase()}${path}`, { ...init, headers });
+  if (!response.ok) {
+    const data = (await safeJson(response)) as { message?: string } | null;
+    throw new Error(data?.message || `请求失败: ${response.status}`);
+  }
+  return (await safeJson(response)) as T;
+}
+
+async function portalApiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(init.headers || {});
+  const token = getPortalToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  if (!headers.has('Content-Type') && init.body) {
+    headers.set('Content-Type', 'application/json');
+  }
+  const response = await fetch(`${getApiBase()}${path}`, { ...init, headers });
+  if (response.status === 401) {
+    clearPortalToken();
+    throw new Error('登录已失效，请重新登录');
+  }
   if (!response.ok) {
     const data = (await safeJson(response)) as { message?: string } | null;
     throw new Error(data?.message || `请求失败: ${response.status}`);
@@ -593,6 +690,13 @@ function parseRoute(): RouteState {
   if (path === '/apply') {
     return {
       kind: 'apply',
+      date: params.get('date') || undefined,
+    };
+  }
+
+  if (path === '/portal' || path === '/portal/') {
+    return {
+      kind: 'portal',
       date: params.get('date') || undefined,
     };
   }
@@ -1810,7 +1914,7 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
 function ApplicationPage() {
   const [form, setForm] = useState<ApplicationFormState>(() => createApplicationForm());
   const [error, setError] = useState('');
-  const [successMessage, setSuccessMessage] = useState('');
+  const [successPayload, setSuccessPayload] = useState<ApplicationSubmitResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   usePageSeo({
@@ -1841,10 +1945,10 @@ function ApplicationPage() {
 
     setSubmitting(true);
     setError('');
-    setSuccessMessage('');
+    setSuccessPayload(null);
 
     try {
-      await apiRequest('/api/v1/airport-applications', {
+      const result = await apiRequest<ApplicationSubmitResponse>('/api/v1/airport-applications', {
         method: 'POST',
         body: JSON.stringify({
           name: form.name.trim(),
@@ -1862,7 +1966,7 @@ function ApplicationPage() {
         }),
       });
       setForm(createApplicationForm());
-      setSuccessMessage('申请已提交，我们会在后台审核后尽快联系你。');
+      setSuccessPayload(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : '提交失败');
     } finally {
@@ -1903,11 +2007,55 @@ function ApplicationPage() {
             申请入驻测试
           </h1>
           <p className="mt-4 max-w-2xl text-sm md:text-base leading-7 text-neutral-600">
-            填写基础信息和测试资料后，申请会进入后台待审核列表。我们会使用你提供的测试账号进行核验，不会直接加入正式机场榜单。
+            提交后会立即创建你的个人后台账号。首次登录需要修改密码，完成支付后申请才会进入后台待审批列表。
           </p>
         </header>
 
         <form onSubmit={submit} className="space-y-6">
+          {successPayload && (
+            <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 md:p-6 space-y-5">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
+                <div>
+                  <div className="text-base font-black text-emerald-900">申请已提交，个人后台账号已开通</div>
+                  <p className="mt-1 text-sm leading-6 text-emerald-800">
+                    初始密码只会在这里展示一次，同时系统也会发送到你的邮箱。请尽快登录个人后台修改密码并完成支付。
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <StatusPill label="申请编号" value={`#${successPayload.application_id}`} />
+                <StatusPill label="当前状态" value="待支付" />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <ReadonlyCredentialField label="登录邮箱" value={successPayload.portal_email} />
+                <ReadonlyCredentialField label="初始密码" value={successPayload.initial_password} />
+                <ReadonlyCredentialField label="登录地址" value={successPayload.portal_login_url} />
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <a
+                  className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white"
+                  href={successPayload.portal_login_url}
+                >
+                  前往个人后台
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+                <button
+                  type="button"
+                  className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-neutral-300 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-neutral-700"
+                  onClick={() => {
+                    navigate('/portal');
+                  }}
+                >
+                  当前窗口打开后台
+                </button>
+              </div>
+            </section>
+          )}
+
           <section className="rounded-3xl border border-neutral-200 bg-neutral-50/70 p-5 md:p-6 space-y-5">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">机场基础信息</div>
@@ -2084,7 +2232,6 @@ function ApplicationPage() {
           </section>
 
           {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
-          {successMessage && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{successMessage}</div>}
 
           <div className="flex items-center justify-end">
             <button
@@ -2099,6 +2246,387 @@ function ApplicationPage() {
       </div>
     </div>
   );
+}
+
+function PortalPage() {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [view, setView] = useState<PortalViewResponse | null>(null);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
+  const [creatingChannel, setCreatingChannel] = useState<'' | 'alipay' | 'wxpay'>('');
+
+  usePageSeo({
+    title: `申请人后台 | ${PUBLIC_SITE_BRAND_NAME}`,
+    description: 'GateRank 申请人后台用于首次改密、完成支付并查看审批状态。',
+    keywords: 'GateRank,申请人后台,支付,审批状态',
+    canonicalPath: '/portal',
+    structuredData: {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: `申请人后台 | ${PUBLIC_SITE_BRAND_NAME}`,
+      description: 'GateRank 申请人后台用于首次改密、完成支付并查看审批状态。',
+      url: buildAbsoluteUrl('/portal'),
+    },
+  });
+
+  const loadView = async () => {
+    const token = getPortalToken();
+    if (!token) {
+      setView(null);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    try {
+      const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/me');
+      setView(data);
+      setLoginEmail(data.account.email);
+    } catch (err) {
+      clearPortalToken();
+      setView(null);
+      setError(err instanceof Error ? err.message : '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadView();
+  }, []);
+
+  const login = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setLoggingIn(true);
+    setError('');
+    try {
+      const data = await apiRequest<PortalLoginResponse>('/api/v1/portal/login', {
+        method: 'POST',
+        body: JSON.stringify({
+          email: loginEmail.trim(),
+          password: loginPassword,
+        }),
+      });
+      setPortalToken(data.token);
+      setLoginPassword('');
+      await loadView();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '登录失败');
+    } finally {
+      setLoggingIn(false);
+    }
+  };
+
+  const changePassword = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setChangingPassword(true);
+    setError('');
+    try {
+      const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/password/change', {
+        method: 'POST',
+        body: JSON.stringify({
+          current_password: currentPassword,
+          new_password: newPassword,
+        }),
+      });
+      setView(data);
+      setCurrentPassword('');
+      setNewPassword('');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '修改密码失败');
+    } finally {
+      setChangingPassword(false);
+    }
+  };
+
+  const createPaymentOrder = async (channel: 'alipay' | 'wxpay') => {
+    setCreatingChannel(channel);
+    setError('');
+    try {
+      const data = await portalApiRequest<{
+        payment_order: PortalPaymentOrderView | null;
+        application: PortalViewResponse;
+      }>('/api/v1/portal/payment-orders', {
+        method: 'POST',
+        body: JSON.stringify({ channel }),
+      });
+      setView(data.application);
+      const payInfo = data.payment_order?.pay_info || '';
+      if (/^https?:\/\//i.test(payInfo)) {
+        window.open(payInfo, '_blank', 'noopener,noreferrer');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '创建支付订单失败');
+    } finally {
+      setCreatingChannel('');
+      await loadView();
+    }
+  };
+
+  const logout = () => {
+    clearPortalToken();
+    setView(null);
+    setLoginPassword('');
+    setError('');
+  };
+
+  const renderContent = () => {
+    if (loading) {
+      return <div className="text-sm text-neutral-500">加载中...</div>;
+    }
+
+    if (!view) {
+      return (
+        <form onSubmit={login} className="space-y-5">
+          <div>
+            <div className="text-sm font-black text-neutral-900">邮箱登录</div>
+            <p className="mt-1 text-sm leading-6 text-neutral-500">
+              使用提交申请时填写的邮箱和系统发放的初始密码登录。
+            </p>
+          </div>
+          <PublicFormField label="邮箱">
+            <input
+              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+              type="email"
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              placeholder="contact@example.com"
+              required
+            />
+          </PublicFormField>
+          <PublicFormField label="密码">
+            <input
+              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+              type="password"
+              value={loginPassword}
+              onChange={(e) => setLoginPassword(e.target.value)}
+              placeholder="输入密码"
+              required
+            />
+          </PublicFormField>
+          <button
+            type="submit"
+            className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white disabled:opacity-50"
+            disabled={loggingIn}
+          >
+            <LogIn className="h-4 w-4" />
+            {loggingIn ? '登录中...' : '登录后台'}
+          </button>
+        </form>
+      );
+    }
+
+    if (view.account.must_change_password) {
+      return (
+        <form onSubmit={changePassword} className="space-y-5">
+          <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
+            <KeyRound className="mt-0.5 h-5 w-5 text-amber-700" />
+            <div className="text-sm leading-6 text-amber-800">
+              首次登录必须修改密码。修改完成后才能创建支付订单。
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <StatusPill label="登录邮箱" value={view.account.email} />
+            <StatusPill label="当前阶段" value="首次改密" />
+          </div>
+          <PublicFormField label="当前密码">
+            <input
+              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+              type="password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              required
+            />
+          </PublicFormField>
+          <PublicFormField label="新密码" hint="至少 8 位。">
+            <input
+              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+              type="password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              required
+            />
+          </PublicFormField>
+          <button
+            type="submit"
+            className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white disabled:opacity-50"
+            disabled={changingPassword}
+          >
+            <KeyRound className="h-4 w-4" />
+            {changingPassword ? '提交中...' : '保存新密码'}
+          </button>
+        </form>
+      );
+    }
+
+    if (view.application.review_status === 'awaiting_payment' && view.application.payment_status !== 'paid') {
+      return (
+        <div className="space-y-5">
+          <div>
+            <div className="text-sm font-black text-neutral-900">支付入驻费用</div>
+            <p className="mt-1 text-sm leading-6 text-neutral-500">
+              支付完成并通过网关回调后，申请会自动进入后台待审批列表。
+            </p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <StatusPill label="申请编号" value={`#${view.application.id}`} />
+            <StatusPill label="当前状态" value="待支付" />
+            <StatusPill label="应付金额" value={`¥${formatMetric(view.payment_fee_amount)}`} />
+          </div>
+          {view.latest_payment_order?.pay_info && (
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-sm text-neutral-700">
+              <div className="font-medium text-neutral-900">最近支付链接</div>
+              <a
+                className="mt-2 block break-all underline text-neutral-700"
+                href={view.latest_payment_order.pay_info}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {view.latest_payment_order.pay_info}
+              </a>
+            </div>
+          )}
+          <div className="flex flex-wrap gap-3">
+            <button
+              type="button"
+              className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white disabled:opacity-50"
+              disabled={Boolean(creatingChannel)}
+              onClick={() => void createPaymentOrder('alipay')}
+            >
+              <CreditCard className="h-4 w-4" />
+              {creatingChannel === 'alipay' ? '创建中...' : '支付宝支付'}
+            </button>
+            <button
+              type="button"
+              className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-neutral-300 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-neutral-700 disabled:opacity-50"
+              disabled={Boolean(creatingChannel)}
+              onClick={() => void createPaymentOrder('wxpay')}
+            >
+              <CreditCard className="h-4 w-4" />
+              {creatingChannel === 'wxpay' ? '创建中...' : '微信支付'}
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-5">
+        <div>
+          <div className="text-sm font-black text-neutral-900">申请状态</div>
+          <p className="mt-1 text-sm leading-6 text-neutral-500">
+            这里会展示你的支付和审批进度。审批逻辑与后台保持一致。
+          </p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <StatusPill label="机场名称" value={view.application.name} />
+          <StatusPill label="支付状态" value={formatPortalPaymentStatus(view.application.payment_status)} />
+          <StatusPill label="审批状态" value={formatPortalReviewStatus(view.application.review_status)} />
+        </div>
+        <div className="rounded-3xl border border-neutral-200 bg-neutral-50/70 p-5 md:p-6 space-y-4">
+          <ReadOnlyPortalField label="官网" value={view.application.website} />
+          <ReadOnlyPortalField label="联系邮箱" value={view.application.applicant_email} />
+          <ReadOnlyPortalField label="Telegram" value={view.application.applicant_telegram} />
+          <ReadOnlyPortalField label="提交时间" value={view.application.created_at} />
+          <ReadOnlyPortalField label="支付时间" value={view.application.paid_at || '-'} />
+          <ReadOnlyPortalField label="审核时间" value={view.application.reviewed_at || '-'} />
+          <ReadOnlyPortalField label="审核备注" value={view.application.review_note || '-'} />
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="min-h-screen bg-white font-sans relative">
+      <div
+        className="fixed inset-0 opacity-[0.015] pointer-events-none z-0"
+        style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+      />
+
+      <div className="relative z-10 max-w-4xl mx-auto px-4 py-8 md:py-12">
+        <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
+          <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-500">
+            {PUBLIC_SITE_BRAND_NAME} Portal
+          </div>
+          <div className="flex items-center gap-3">
+            <a href="/" className="text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-neutral-400 hover:text-neutral-900">
+              返回首页
+            </a>
+            {view && (
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-2xl border border-neutral-300 px-4 py-2.5 text-sm font-medium text-neutral-700"
+                onClick={logout}
+              >
+                <LogOut className="h-4 w-4" />
+                退出
+              </button>
+            )}
+          </div>
+        </div>
+
+        <header className="mb-8">
+          <h1 className="text-3xl md:text-5xl font-black tracking-tight text-neutral-900">申请人后台</h1>
+          <p className="mt-4 max-w-2xl text-sm md:text-base leading-7 text-neutral-600">
+            使用申请邮箱登录，首次登录修改密码，支付完成后进入待审批状态。
+          </p>
+        </header>
+
+        <section className="rounded-3xl border border-neutral-200 bg-white p-5 md:p-6 space-y-5">
+          {error && (
+            <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              <CircleAlert className="mt-0.5 h-4 w-4" />
+              <div>{error}</div>
+            </div>
+          )}
+          {renderContent()}
+        </section>
+      </div>
+    </div>
+  );
+}
+
+function ReadonlyCredentialField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-4">
+      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">{label}</div>
+      <div className="mt-2 break-all text-sm font-medium text-neutral-900">{value}</div>
+    </div>
+  );
+}
+
+function ReadOnlyPortalField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">{label}</div>
+      <div className="mt-1 text-sm leading-6 text-neutral-900">{value}</div>
+    </div>
+  );
+}
+
+function formatPortalReviewStatus(status: PortalApplicationView['review_status']): string {
+  switch (status) {
+    case 'awaiting_payment':
+      return '待支付';
+    case 'pending':
+      return '待审批';
+    case 'reviewed':
+      return '已审核';
+    case 'rejected':
+      return '已驳回';
+    default:
+      return status;
+  }
+}
+
+function formatPortalPaymentStatus(status: PortalApplicationView['payment_status']): string {
+  return status === 'paid' ? '已支付' : '未支付';
 }
 
 function PublicFormField({
@@ -2182,6 +2710,10 @@ export default function App() {
 
   if (route.kind === 'apply') {
     return <ApplicationPage />;
+  }
+
+  if (route.kind === 'portal') {
+    return <PortalPage />;
   }
 
   if (route.kind === 'methodology') {

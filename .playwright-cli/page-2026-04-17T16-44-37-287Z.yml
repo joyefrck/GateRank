@@ -1,0 +1,12 @@
+- generic [ref=e3]:
+  - generic [ref=e4]: "EPERM: operation not permitted, open '/Users/joyefrack/Documents/GitHub/GateRank/index.html'"
+  - generic [ref=e5]: at async open (node:internal/fs/promises:637:25) at async Object.readFile (node:internal/fs/promises:1269:14) at async viteIndexHtmlMiddleware (file:///Users/joyefrack/Documents/GitHub/GateRank/node_modules/vite/dist/node/chunks/dep-D4NMHUTW.js:37653:22
+  - generic [ref=e6]:
+    - text: Click outside, press Esc key, or fix the code to dismiss.
+    - text: You can also disable this overlay by setting
+    - code [ref=e7]: server.hmr.overlay
+    - text: to
+    - code [ref=e8]: "false"
+    - text: in
+    - code [ref=e9]: vite.config.ts
+    - text: .

@@ -2144,6 +2144,9 @@ test('PATCH /airport-applications/:id/review approves once and creates an airpor
     test_account: 'tester',
     test_password: 'secret',
     approved_airport_id: null,
+    payment_status: 'paid',
+    payment_amount: 1000,
+    paid_at: '2026-03-24 10:05:00',
     review_status: 'pending',
     review_note: null,
     reviewed_by: null,
@@ -2295,6 +2298,66 @@ test('PATCH /airport-applications/:id/review rejects already reviewed applicatio
   }
 });
 
+test('PATCH /airport-applications/:id/review rejects unpaid awaiting payment applications', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async (id) => ({
+          ...(await stubAirportApplicationRepository().getById(id)),
+          review_status: 'awaiting_payment',
+          payment_status: 'unpaid',
+          payment_amount: null,
+          paid_at: null,
+        }),
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/review`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({
+        review_status: 'reviewed',
+        review_note: 'checked',
+      }),
+    });
+    assert.equal(response.status, 409);
+    const data = (await response.json()) as { code: string };
+    assert.equal(data.code, 'AIRPORT_APPLICATION_PAYMENT_REQUIRED');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /airports prefers manual_tags over legacy tags field', async () => {
   const createdInputs: Array<Record<string, unknown>> = [];
 
@@ -2408,6 +2471,9 @@ function stubAirportApplicationRepository() {
           test_account: 'tester',
           test_password: 'secret',
           approved_airport_id: null,
+          payment_status: 'paid',
+          payment_amount: 1000,
+          paid_at: '2026-03-24 10:05:00',
           review_status: 'pending',
           review_note: null,
           reviewed_by: null,
@@ -2434,6 +2500,9 @@ function stubAirportApplicationRepository() {
       test_account: 'tester',
       test_password: 'secret',
       approved_airport_id: null,
+      payment_status: 'paid',
+      payment_amount: 1000,
+      paid_at: '2026-03-24 10:05:00',
       review_status: 'pending',
       review_note: null,
       reviewed_by: null,

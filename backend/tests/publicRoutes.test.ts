@@ -386,6 +386,7 @@ test('GET /pages/risk-monitor returns paged risk monitor payload', async () => {
 test('POST /airport-applications accepts complete submission payload', async () => {
   const created: Array<Record<string, unknown>> = [];
   const notified: Array<Record<string, unknown>> = [];
+  const createdAccounts: Array<Record<string, unknown>> = [];
   const app = express();
   app.use(express.json());
   app.use(
@@ -397,6 +398,13 @@ test('POST /airport-applications accepts complete submission payload', async () 
         create: async (input) => {
           created.push(input as Record<string, unknown>);
           return 88;
+        },
+        hasBlockingEmail: async () => false,
+      },
+      applicantAccountRepository: {
+        create: async (input) => {
+          createdAccounts.push(input as Record<string, unknown>);
+          return 9;
         },
       },
       applicationNotificationService: {
@@ -448,10 +456,23 @@ test('POST /airport-applications accepts complete submission payload', async () 
     });
 
     assert.equal(response.status, 201);
-    const data = (await response.json()) as { application_id: number; review_status: string };
+    const data = (await response.json()) as {
+      application_id: number;
+      review_status: string;
+      portal_email: string;
+      initial_password: string;
+      portal_login_url: string;
+    };
     assert.equal(data.application_id, 88);
-    assert.equal(data.review_status, 'pending');
+    assert.equal(data.review_status, 'awaiting_payment');
+    assert.equal(data.portal_email, 'contact@example.com');
+    assert.equal(typeof data.initial_password, 'string');
+    assert.ok(data.initial_password.length >= 8);
+    assert.ok(data.portal_login_url.endsWith('/portal'));
     assert.equal(created.length, 1);
+    assert.equal(createdAccounts.length, 1);
+    assert.equal(createdAccounts[0].application_id, 88);
+    assert.equal(createdAccounts[0].email, 'contact@example.com');
     assert.deepEqual(created[0].websites, ['https://example.com', 'https://mirror.example.com']);
     assert.equal(notified.length, 1);
     assert.equal(notified[0].applicationId, 88);
@@ -472,6 +493,10 @@ test('POST /airport-applications still succeeds when telegram notification fails
       },
       airportApplicationRepository: {
         create: async () => 89,
+        hasBlockingEmail: async () => false,
+      },
+      applicantAccountRepository: {
+        create: async () => 1,
       },
       applicationNotificationService: {
         notifyNewAirportApplication: async () => {
@@ -526,7 +551,7 @@ test('POST /airport-applications still succeeds when telegram notification fails
     assert.equal(response.status, 201);
     const data = (await response.json()) as { application_id: number; review_status: string };
     assert.equal(data.application_id, 89);
-    assert.equal(data.review_status, 'pending');
+    assert.equal(data.review_status, 'awaiting_payment');
   } finally {
     console.error = originalConsoleError;
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

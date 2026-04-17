@@ -14,6 +14,11 @@ import {
   DEFAULT_MEDIA_LIBRARY_TIMEOUT_MS,
   type MediaLibrarySettingsInput,
 } from '../services/mediaLibrarySettingsService';
+import {
+  DEFAULT_APPLICATION_FEE_AMOUNT,
+  type PaymentGatewaySettingsInput,
+} from '../services/paymentGatewaySettingsService';
+import type { SmtpSettingsInput, SmtpTemplateKey } from '../services/smtpSettingsService';
 import type { SchedulerDailyStat } from '../repositories/schedulerRunRepository';
 import type { AccessTokenScope } from '../utils/accessToken';
 import type {
@@ -98,7 +103,7 @@ interface AdminDeps {
     review(
       id: number,
       input: {
-        review_status: Exclude<AirportApplicationReviewStatus, 'pending'>;
+        review_status: Exclude<AirportApplicationReviewStatus, 'pending' | 'awaiting_payment'>;
         review_note?: string | null;
         approved_airport_id?: number | null;
         reviewed_by: string;
@@ -183,6 +188,18 @@ interface AdminDeps {
   mediaLibrarySettingsService?: {
     getAdminSettings(): Promise<unknown>;
     updateAdminSettings(input: MediaLibrarySettingsInput, updatedBy: string): Promise<unknown>;
+  };
+  paymentGatewaySettingsService?: {
+    getAdminSettings(): Promise<unknown>;
+    updateAdminSettings(input: PaymentGatewaySettingsInput, updatedBy: string): Promise<unknown>;
+  };
+  smtpSettingsService?: {
+    getAdminSettings(): Promise<unknown>;
+    updateAdminSettings(input: SmtpSettingsInput, updatedBy: string): Promise<unknown>;
+  };
+  mailService?: {
+    sendTestMail(input: SmtpSettingsInput & { test_to: string }): Promise<void>;
+    sendApplicationApprovedEmail(input: { to: string; airportName: string }): Promise<void>;
   };
   accessTokenService?: {
     listAdminTokens(): Promise<unknown>;
@@ -369,6 +386,81 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     }
   });
 
+  router.get('/system-settings/payment-gateway', async (_req, res, next) => {
+    try {
+      res.json(await getPaymentGatewaySettingsService(deps).getAdminSettings());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/system-settings/payment-gateway', async (req, res, next) => {
+    try {
+      const input = parsePaymentGatewaySettingsPayload((req.body ?? {}) as Record<string, unknown>);
+      const result = await getPaymentGatewaySettingsService(deps).updateAdminSettings(
+        input,
+        actorFromReq(req),
+      );
+      await deps.auditRepository.log(
+        'update_system_setting_payment_gateway',
+        actorFromReq(req),
+        req.requestId,
+        input,
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/system-settings/smtp', async (_req, res, next) => {
+    try {
+      res.json(await getSmtpSettingsService(deps).getAdminSettings());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/system-settings/smtp', async (req, res, next) => {
+    try {
+      const input = parseSmtpSettingsPayload((req.body ?? {}) as Record<string, unknown>, false);
+      const result = await getSmtpSettingsService(deps).updateAdminSettings(
+        input,
+        actorFromReq(req),
+      );
+      await deps.auditRepository.log(
+        'update_system_setting_smtp',
+        actorFromReq(req),
+        req.requestId,
+        input,
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/system-settings/smtp/test', async (req, res, next) => {
+    try {
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const input = parseSmtpSettingsPayload(payload, true);
+      const testTo = mustString(payload.test_to, 'test_to');
+      await getMailService(deps).sendTestMail({
+        ...input,
+        test_to: testTo,
+      });
+      await deps.auditRepository.log(
+        'test_system_setting_smtp',
+        actorFromReq(req),
+        req.requestId,
+        { ...input, test_to: testTo },
+      );
+      res.json({ ok: true });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.patch('/system-settings/media-libraries', async (req, res, next) => {
     try {
       const input = parseMediaLibrarySettingsPayload((req.body ?? {}) as Record<string, unknown>);
@@ -486,6 +578,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       }
       const currentApplication = application as {
         review_status?: AirportApplicationReviewStatus;
+        payment_status?: 'unpaid' | 'paid';
         approved_airport_id?: number | null;
         name: string;
         website: string;
@@ -501,6 +594,12 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         test_account?: string | null;
         test_password?: string | null;
       };
+      if (currentApplication.review_status === 'awaiting_payment') {
+        throw new HttpError(409, 'AIRPORT_APPLICATION_PAYMENT_REQUIRED', '该申请尚未支付，不能审核');
+      }
+      if (currentApplication.payment_status !== 'paid') {
+        throw new HttpError(409, 'AIRPORT_APPLICATION_PAYMENT_REQUIRED', '该申请尚未完成支付，不能审核');
+      }
       if (currentApplication.review_status && currentApplication.review_status !== 'pending') {
         throw new HttpError(409, 'AIRPORT_APPLICATION_ALREADY_REVIEWED', '该申请已处理，不能再次修改');
       }
@@ -544,6 +643,20 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         approved_airport_id: approvedAirportId,
         reviewed_at: reviewedAt,
       });
+      if (reviewStatus === 'reviewed' && currentApplication.applicant_email && deps.mailService) {
+        try {
+          await deps.mailService.sendApplicationApprovedEmail({
+            to: currentApplication.applicant_email,
+            airportName: currentApplication.name,
+          });
+        } catch (error) {
+          console.error('[mail] failed to send application approved email', {
+            applicationId,
+            requestId: req.requestId,
+            error,
+          });
+        }
+      }
       const reviewedApplication = await deps.airportApplicationRepository.getById(applicationId);
       res.json(reviewedApplication);
     } catch (error) {
@@ -1425,6 +1538,78 @@ function parseMediaLibrarySettingsPayload(
   };
 }
 
+function parsePaymentGatewaySettingsPayload(
+  payload: Record<string, unknown>,
+): PaymentGatewaySettingsInput {
+  return {
+    enabled: optionalBoolean(payload.enabled),
+    pid: payload.pid === undefined ? undefined : String(payload.pid ?? '').trim(),
+    private_key:
+      payload.private_key === undefined ? undefined : String(payload.private_key ?? '').trim(),
+    platform_public_key:
+      payload.platform_public_key === undefined
+        ? undefined
+        : String(payload.platform_public_key ?? '').trim(),
+    application_fee_amount:
+      payload.application_fee_amount === undefined
+        ? DEFAULT_APPLICATION_FEE_AMOUNT
+        : mustNumber(payload.application_fee_amount, 'application_fee_amount'),
+  };
+}
+
+function parseSmtpSettingsPayload(
+  payload: Record<string, unknown>,
+  allowPartial: boolean,
+): SmtpSettingsInput {
+  return {
+    enabled:
+      payload.enabled === undefined
+        ? allowPartial
+          ? undefined
+          : false
+        : optionalBoolean(payload.enabled),
+    host: payload.host === undefined ? undefined : String(payload.host ?? '').trim(),
+    port:
+      payload.port === undefined
+        ? allowPartial
+          ? undefined
+          : 465
+        : toPositiveIntOrThrow(payload.port, 'port'),
+    secure: payload.secure === undefined ? undefined : optionalBoolean(payload.secure),
+    username: payload.username === undefined ? undefined : String(payload.username ?? '').trim(),
+    password: payload.password === undefined ? undefined : String(payload.password ?? '').trim(),
+    from_name: payload.from_name === undefined ? undefined : String(payload.from_name ?? '').trim(),
+    from_email:
+      payload.from_email === undefined ? undefined : String(payload.from_email ?? '').trim(),
+    reply_to: payload.reply_to === undefined ? undefined : String(payload.reply_to ?? '').trim(),
+    templates:
+      payload.templates === undefined
+        ? undefined
+        : parseSmtpTemplatePayload(payload.templates),
+  };
+}
+
+function parseSmtpTemplatePayload(
+  value: unknown,
+): NonNullable<SmtpSettingsInput['templates']> {
+  const payload = toPlainObject(value, 'templates');
+  const keys: SmtpTemplateKey[] = ['applicant_credentials', 'application_approved'];
+  const templates: NonNullable<SmtpSettingsInput['templates']> = {};
+
+  for (const key of keys) {
+    if (payload[key] === undefined) {
+      continue;
+    }
+    const item = toPlainObject(payload[key], `templates.${key}`);
+    templates[key] = {
+      subject: item.subject === undefined ? undefined : String(item.subject ?? '').trim(),
+      body: item.body === undefined ? undefined : String(item.body ?? '').trim(),
+    };
+  }
+
+  return templates;
+}
+
 function parsePexelsMediaLibraryPayload(
   value: unknown,
 ): NonNullable<MediaLibrarySettingsInput['providers']>['pexels'] {
@@ -1620,13 +1805,24 @@ function toStatus(value: unknown): AirportStatus {
 }
 
 function toAirportApplicationReviewStatus(value: unknown): AirportApplicationReviewStatus {
-  if (value === 'pending' || value === 'reviewed' || value === 'rejected') {
+  if (
+    value === 'awaiting_payment'
+    || value === 'pending'
+    || value === 'reviewed'
+    || value === 'rejected'
+  ) {
     return value;
   }
-  throw new HttpError(400, 'BAD_REQUEST', 'review_status must be pending|reviewed|rejected');
+  throw new HttpError(
+    400,
+    'BAD_REQUEST',
+    'review_status must be awaiting_payment|pending|reviewed|rejected',
+  );
 }
 
-function toReviewStatus(value: unknown): Exclude<AirportApplicationReviewStatus, 'pending'> {
+function toReviewStatus(
+  value: unknown,
+): Exclude<AirportApplicationReviewStatus, 'pending' | 'awaiting_payment'> {
   if (value === 'reviewed' || value === 'rejected') {
     return value;
   }
@@ -1750,6 +1946,27 @@ function getMediaLibrarySettingsService(deps: AdminDeps) {
     throw new Error('mediaLibrarySettingsService is not configured');
   }
   return deps.mediaLibrarySettingsService;
+}
+
+function getPaymentGatewaySettingsService(deps: AdminDeps) {
+  if (!deps.paymentGatewaySettingsService) {
+    throw new Error('paymentGatewaySettingsService is not configured');
+  }
+  return deps.paymentGatewaySettingsService;
+}
+
+function getSmtpSettingsService(deps: AdminDeps) {
+  if (!deps.smtpSettingsService) {
+    throw new Error('smtpSettingsService is not configured');
+  }
+  return deps.smtpSettingsService;
+}
+
+function getMailService(deps: AdminDeps) {
+  if (!deps.mailService) {
+    throw new Error('mailService is not configured');
+  }
+  return deps.mailService;
 }
 
 function getAccessTokenService(deps: AdminDeps) {

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { RANKING_TYPES } from '../config/scoring';
 import { HttpError } from '../middleware/errorHandler';
+import { hashPassword, createRandomPassword } from '../utils/password';
 import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { AirportApplicationReviewStatus, AirportStatus } from '../types/domain';
 
@@ -24,6 +25,15 @@ interface PublicDeps {
       test_account: string;
       test_password: string;
     }): Promise<number>;
+    hasBlockingEmail?(email: string): Promise<boolean>;
+  };
+  applicantAccountRepository?: {
+    create(input: {
+      application_id: number;
+      email: string;
+      password_hash: string;
+      must_change_password?: boolean;
+    }): Promise<number>;
   };
   applicationNotificationService?: {
     notifyNewAirportApplication(input: {
@@ -39,6 +49,15 @@ interface PublicDeps {
       applicantTelegram: string;
       foundedOn: string;
       airportIntro: string;
+    }): Promise<void>;
+  };
+  mailService?: {
+    sendApplicantCredentialsEmail(input: {
+      to: string;
+      airportName: string;
+      portalEmail: string;
+      initialPassword: string;
+      portalLoginUrl: string;
     }): Promise<void>;
   };
   metricsRepository: {
@@ -72,6 +91,16 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         throw new HttpError(400, 'BAD_REQUEST', 'founded_on cannot be in the future');
       }
 
+      const applicantEmail = mustEmail(payload.applicant_email, 'applicant_email');
+      const emailBlocked = await deps.airportApplicationRepository.hasBlockingEmail?.(applicantEmail);
+      if (emailBlocked) {
+        throw new HttpError(
+          409,
+          'AIRPORT_APPLICATION_EMAIL_CONFLICT',
+          '该邮箱已有进行中或已通过的申请，请直接登录个人后台处理',
+        );
+      }
+
       const applicationInput = {
         name: mustString(payload.name, 'name'),
         website: websiteBundle.website,
@@ -80,7 +109,7 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         plan_price_month: mustNonNegativeNumber(payload.plan_price_month, 'plan_price_month'),
         has_trial: Boolean(payload.has_trial),
         subscription_url: optionalString(payload.subscription_url) || null,
-        applicant_email: mustEmail(payload.applicant_email, 'applicant_email'),
+        applicant_email: applicantEmail,
         applicant_telegram: mustString(payload.applicant_telegram, 'applicant_telegram'),
         founded_on: foundedOn,
         airport_intro: mustString(payload.airport_intro, 'airport_intro'),
@@ -89,6 +118,19 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       };
 
       const applicationId = await deps.airportApplicationRepository.create(applicationInput);
+      const initialPassword = createRandomPassword();
+      const passwordHash = await hashPassword(initialPassword);
+      if (!deps.applicantAccountRepository) {
+        throw new Error('applicantAccountRepository is not configured');
+      }
+      await deps.applicantAccountRepository.create({
+        application_id: applicationId,
+        email: applicantEmail,
+        password_hash: passwordHash,
+        must_change_password: true,
+      });
+
+      const portalLoginUrl = buildPortalLoginUrl(req);
 
       try {
         await deps.applicationNotificationService?.notifyNewAirportApplication({
@@ -113,9 +155,28 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         });
       }
 
+      try {
+        await deps.mailService?.sendApplicantCredentialsEmail({
+          to: applicantEmail,
+          airportName: applicationInput.name,
+          portalEmail: applicantEmail,
+          initialPassword,
+          portalLoginUrl,
+        });
+      } catch (error) {
+        console.error('[mail] failed to send applicant credentials email', {
+          applicationId,
+          requestId: req.requestId || 'unknown',
+          error,
+        });
+      }
+
       res.status(201).json({
         application_id: applicationId,
-        review_status: 'pending' satisfies AirportApplicationReviewStatus,
+        review_status: 'awaiting_payment' satisfies AirportApplicationReviewStatus,
+        portal_email: applicantEmail,
+        initial_password: initialPassword,
+        portal_login_url: portalLoginUrl,
       });
     } catch (error) {
       next(error);
@@ -243,6 +304,15 @@ export function createPublicRoutes(deps: PublicDeps): Router {
   });
 
   return router;
+}
+
+function buildPortalLoginUrl(req: {
+  protocol?: string;
+  headers?: Record<string, unknown>;
+}): string {
+  const proto = String(req.headers?.['x-forwarded-proto'] || req.protocol || 'http').split(',')[0];
+  const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || '').split(',')[0];
+  return `${proto}://${host}/portal`;
 }
 
 function mustString(value: unknown, fieldName: string): string {

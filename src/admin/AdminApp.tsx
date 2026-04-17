@@ -20,7 +20,7 @@ import { NewsEditorPage, NewsListPage } from './news/NewsPages';
 import { buildPublishTokenDocsHref } from '../site/publicSite';
 
 type AirportStatus = 'normal' | 'risk' | 'down';
-type AirportApplicationReviewStatus = 'pending' | 'reviewed' | 'rejected';
+type AirportApplicationReviewStatus = 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
 type ProbeSampleType = 'latency' | 'download' | 'availability';
 type ProbeScope = 'stability' | 'performance';
 type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
@@ -181,6 +181,10 @@ interface AirportApplication {
   test_password: string;
   approved_airport_id?: number | null;
   review_status: AirportApplicationReviewStatus;
+  payment_status: 'unpaid' | 'paid';
+  payment_amount: number | null;
+  paid_at?: string | null;
+  must_change_password?: boolean | null;
   review_note?: string | null;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
@@ -253,7 +257,68 @@ interface TelegramSettingsFormState {
   };
 }
 
-type SystemSettingsTab = 'notifications' | 'media_libraries' | 'publish_tokens';
+type SystemSettingsTab = 'notifications' | 'payment_gateway' | 'smtp' | 'media_libraries' | 'publish_tokens';
+
+interface PaymentGatewaySettingsView {
+  enabled: boolean;
+  pid: string;
+  has_private_key: boolean;
+  private_key_masked: string | null;
+  platform_public_key: string;
+  application_fee_amount: number;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+interface PaymentGatewaySettingsFormState {
+  enabled: boolean;
+  pid: string;
+  private_key: string;
+  platform_public_key: string;
+  application_fee_amount: string;
+}
+
+interface SmtpSettingsView {
+  enabled: boolean;
+  host: string;
+  port: number;
+  secure: boolean;
+  username: string;
+  has_password: boolean;
+  password_masked: string | null;
+  from_name: string;
+  from_email: string;
+  reply_to: string;
+  templates: SmtpTemplateMap;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+type SmtpTemplateKey = 'applicant_credentials' | 'application_approved';
+
+interface SmtpTemplateItem {
+  subject: string;
+  body: string;
+}
+
+interface SmtpTemplateMap {
+  applicant_credentials: SmtpTemplateItem;
+  application_approved: SmtpTemplateItem;
+}
+
+interface SmtpSettingsFormState {
+  enabled: boolean;
+  host: string;
+  port: string;
+  secure: boolean;
+  username: string;
+  password: string;
+  from_name: string;
+  from_email: string;
+  reply_to: string;
+  test_to: string;
+  templates: SmtpTemplateMap;
+}
 
 interface MediaLibrarySettingsView {
   providers: {
@@ -380,6 +445,43 @@ const PUBLISH_TOKEN_SCOPES: Array<{ value: PublishTokenScope; label: string; des
 const DEFAULT_PUBLISH_TOKEN_SCOPES = PUBLISH_TOKEN_SCOPES.map((item) => item.value);
 
 const TOKEN_KEY = 'gaterank_admin_token';
+const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = ['applicant_credentials', 'application_approved'];
+const SMTP_TEMPLATE_SCENARIOS: Record<
+  SmtpTemplateKey,
+  {
+    title: string;
+    trigger: string;
+    description: string;
+    variables: string[];
+    sampleValues: Record<string, string>;
+  }
+> = {
+  applicant_credentials: {
+    title: '申请账号凭证邮件',
+    trigger: '用户提交入驻申请并创建申请人后台账号后发送。',
+    description: '用于告知申请人后台登录邮箱、初始密码和登录地址。',
+    variables: ['{{airport_name}}', '{{portal_email}}', '{{initial_password}}', '{{portal_login_url}}', '{{applicant_email}}', '{{site_name}}'],
+    sampleValues: {
+      airport_name: '大象网络',
+      portal_email: 'owner@example.com',
+      initial_password: 'Passw0rd!',
+      portal_login_url: 'https://gaterank.example.com/portal',
+      applicant_email: 'owner@example.com',
+      site_name: 'GateRank',
+    },
+  },
+  application_approved: {
+    title: '审批通过邮件',
+    trigger: '管理员审批通过申请后发送。',
+    description: '用于通知申请人申请已审核通过。',
+    variables: ['{{airport_name}}', '{{applicant_email}}', '{{site_name}}'],
+    sampleValues: {
+      airport_name: '大象网络',
+      applicant_email: 'owner@example.com',
+      site_name: 'GateRank',
+    },
+  },
+};
 
 function getApiBase(): string {
   const fromEnv = (import.meta as ImportMeta & { env?: Record<string, string> }).env?.VITE_API_BASE;
@@ -427,6 +529,7 @@ async function safeJson(response: Response): Promise<unknown> {
 
 export default function AdminApp() {
   const [path, setPath] = useState(window.location.pathname);
+  const [adminToken, setAdminToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname);
     window.addEventListener('popstate', onPop);
@@ -445,12 +548,25 @@ export default function AdminApp() {
   };
 
   if (path === '/admin/login') {
-    return <LoginPage onLoggedIn={() => navigate('/admin/airports')} />;
+    return (
+      <LoginPage
+        onLoggedIn={(token) => {
+          setAdminToken(token);
+          navigate('/admin/airports');
+        }}
+      />
+    );
   }
 
-  const hasToken = Boolean(localStorage.getItem(TOKEN_KEY));
-  if (!hasToken) {
-    return <LoginPage onLoggedIn={() => navigate('/admin/airports')} />;
+  if (!adminToken) {
+    return (
+      <LoginPage
+        onLoggedIn={(token) => {
+          setAdminToken(token);
+          navigate('/admin/airports');
+        }}
+      />
+    );
   }
 
   return (
@@ -473,6 +589,7 @@ export default function AdminApp() {
             className="text-sm px-3 py-1.5 rounded bg-neutral-900 text-white"
             onClick={() => {
               localStorage.removeItem(TOKEN_KEY);
+              setAdminToken(null);
               navigate('/admin/login');
             }}
           >
@@ -534,7 +651,7 @@ function NavItem({
   );
 }
 
-function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
+function LoginPage({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -549,7 +666,7 @@ function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
         body: JSON.stringify({ password }),
       })) as { token: string };
       localStorage.setItem(TOKEN_KEY, result.token);
-      onLoggedIn();
+      onLoggedIn(result.token);
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
     } finally {
@@ -950,9 +1067,13 @@ function SystemSettingsPage() {
           <p className="mt-1 text-sm text-neutral-500">
             {activeTab === 'notifications'
               ? '通知设置支持 Telegram 直发和 Webhook 转发，保存后立即生效。'
-              : activeTab === 'media_libraries'
-                ? '图库设置用于托管第三方图库访问凭证，当前新闻封面搜索使用 Pexels。'
-                : '发布令牌用于给第三方系统或 AI 开放受限发文能力，令牌明文只会展示一次。'}
+              : activeTab === 'payment_gateway'
+                ? '支付配置用于申请人后台下单和支付回调验签，申请金额默认 1000 元但可在这里调整。'
+                : activeTab === 'smtp'
+                  ? 'SMTP 配置用于发送申请账号凭证邮件和审批通过邮件。'
+                : activeTab === 'media_libraries'
+                  ? '图库设置用于托管第三方图库访问凭证，当前新闻封面搜索使用 Pexels。'
+                  : '发布令牌用于给第三方系统或 AI 开放受限发文能力，令牌明文只会展示一次。'}
           </p>
         </div>
         <button className="px-3 py-2 rounded border text-sm" onClick={() => setRefreshTick((value) => value + 1)}>
@@ -966,6 +1087,18 @@ function SystemSettingsPage() {
           onClick={() => setActiveTab('notifications')}
         >
           通知设置
+        </button>
+        <button
+          className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'payment_gateway' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+          onClick={() => setActiveTab('payment_gateway')}
+        >
+          支付配置
+        </button>
+        <button
+          className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'smtp' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+          onClick={() => setActiveTab('smtp')}
+        >
+          邮件配置
         </button>
         <button
           className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'media_libraries' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
@@ -983,6 +1116,10 @@ function SystemSettingsPage() {
 
       {activeTab === 'notifications'
         ? <NotificationSettingsTab refreshTick={refreshTick} />
+        : activeTab === 'payment_gateway'
+          ? <PaymentGatewaySettingsTab refreshTick={refreshTick} />
+          : activeTab === 'smtp'
+            ? <SmtpSettingsTab refreshTick={refreshTick} />
         : activeTab === 'media_libraries'
           ? <MediaLibrarySettingsTab refreshTick={refreshTick} />
           : <PublishTokensSettingsTab refreshTick={refreshTick} />}
@@ -1364,6 +1501,665 @@ function NotificationSettingsTab({ refreshTick }: { refreshTick: number }) {
             </button>
           </div>
         </>
+      )}
+    </section>
+  );
+}
+
+function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [settings, setSettings] = useState<PaymentGatewaySettingsView | null>(null);
+  const [clearPrivateKey, setClearPrivateKey] = useState(false);
+  const [form, setForm] = useState<PaymentGatewaySettingsFormState>({
+    enabled: false,
+    pid: '',
+    private_key: '',
+    platform_public_key: '',
+    application_fee_amount: '1000',
+  });
+
+  const applyView = (view: PaymentGatewaySettingsView) => {
+    setSettings(view);
+    setForm({
+      enabled: view.enabled,
+      pid: view.pid || '',
+      private_key: '',
+      platform_public_key: view.platform_public_key || '',
+      application_fee_amount: String(view.application_fee_amount || 1000),
+    });
+    setClearPrivateKey(false);
+  };
+
+  const fetchSettings = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/payment-gateway')) as PaymentGatewaySettingsView;
+      applyView(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载设置失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchSettings();
+  }, [refreshTick]);
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const payload: Record<string, unknown> = {
+        enabled: form.enabled,
+        pid: form.pid.trim(),
+        platform_public_key: form.platform_public_key.trim(),
+        application_fee_amount: Number(form.application_fee_amount || 1000),
+      };
+      if (clearPrivateKey) {
+        payload.private_key = '';
+      } else if (form.private_key.trim()) {
+        payload.private_key = form.private_key.trim();
+      }
+      const data = (await apiFetch('/api/v1/admin/system-settings/payment-gateway', {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      })) as PaymentGatewaySettingsView;
+      applyView(data);
+      setSuccess('支付配置已保存');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">支付配置</div>
+        <p className="mt-1 text-sm text-neutral-500">申请人后台创建支付订单时会读取这里的金额、商户号和密钥配置。</p>
+      </div>
+
+      {loading && <div className="text-sm text-neutral-500">加载中...</div>}
+
+      {!loading && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
+            <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
+            <ReadField label="商户号 PID" value={valueOrDash(settings?.pid)} />
+            <ReadField label="商户私钥" value={settings?.has_private_key ? `已配置 (${settings?.private_key_masked || '-'})` : '未配置'} />
+            <ReadField label="申请金额" value={settings ? `¥${settings.application_fee_amount}` : '-'} />
+          </div>
+
+          <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
+            <label className="inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={form.enabled}
+                onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+              />
+              启用支付
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField label="商户号 PID">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.pid}
+                onChange={(e) => setForm({ ...form, pid: e.target.value })}
+                placeholder="输入商户号"
+              />
+            </FormField>
+            <FormField label="申请金额 (元)" hint="默认 1000 元，后续新建支付订单按这里的金额创建。">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={form.application_fee_amount}
+                onChange={(e) => setForm({ ...form, application_fee_amount: e.target.value })}
+              />
+            </FormField>
+            <FormField
+              label="商户私钥"
+              hint={settings?.has_private_key ? '已配置，留空则不修改；如需删除请勾选下方清空。' : '用于 RSA 下单签名。'}
+            >
+              <div className="space-y-2">
+                <textarea
+                  className="min-h-40 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  value={form.private_key}
+                  onChange={(e) => {
+                    setClearPrivateKey(false);
+                    setForm({ ...form, private_key: e.target.value });
+                  }}
+                  placeholder={settings?.has_private_key ? '已配置，留空则不修改' : '粘贴商户私钥 PEM'}
+                />
+                {settings?.has_private_key && (
+                  <div className="text-xs text-neutral-500">当前已保存：{settings.private_key_masked}</div>
+                )}
+              </div>
+            </FormField>
+            <FormField label="平台公钥" hint="用于验证 V2 下单返回和异步通知签名。">
+              <textarea
+                className="min-h-40 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.platform_public_key}
+                onChange={(e) => setForm({ ...form, platform_public_key: e.target.value })}
+                placeholder="粘贴 V2 接口平台公钥 PEM"
+              />
+            </FormField>
+          </div>
+
+          {settings?.has_private_key && (
+            <label className="inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={clearPrivateKey}
+                onChange={(e) => {
+                  setClearPrivateKey(e.target.checked);
+                  if (e.target.checked) {
+                    setForm({ ...form, private_key: '' });
+                  }
+                }}
+              />
+              清空已保存商户私钥
+            </label>
+          )}
+
+          {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+          {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+
+          <div className="flex items-center justify-end">
+            <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
+              {saving ? '保存中...' : '保存配置'}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function getDefaultSmtpTemplates(): SmtpTemplateMap {
+  return {
+    applicant_credentials: {
+      subject: 'GateRank 申请后台账号已开通 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 的申请已提交成功。',
+        '',
+        '登录邮箱：{{portal_email}}',
+        '初始密码：{{initial_password}}',
+        '登录地址：{{portal_login_url}}',
+        '',
+        '首次登录后请立即修改密码，然后完成支付并等待审批。',
+      ].join('\n'),
+    },
+    application_approved: {
+      subject: 'GateRank 审批通过通知 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 的 GateRank 入驻申请已审批通过。',
+        '',
+        '后续如需补充资料，请联系管理员。',
+      ].join('\n'),
+    },
+  };
+}
+
+function cloneSmtpTemplates(templates?: SmtpTemplateMap | null): SmtpTemplateMap {
+  const defaults = getDefaultSmtpTemplates();
+  return {
+    applicant_credentials: {
+      subject: templates?.applicant_credentials?.subject || defaults.applicant_credentials.subject,
+      body: templates?.applicant_credentials?.body || defaults.applicant_credentials.body,
+    },
+    application_approved: {
+      subject: templates?.application_approved?.subject || defaults.application_approved.subject,
+      body: templates?.application_approved?.body || defaults.application_approved.body,
+    },
+  };
+}
+
+function renderSmtpTemplatePreview(template: SmtpTemplateItem, values: Record<string, string>): SmtpTemplateItem {
+  const render = (text: string) => text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => values[key] ?? '');
+  return {
+    subject: render(template.subject),
+    body: render(template.body),
+  };
+}
+
+function summarizeTemplateBody(body: string): string {
+  const compact = body.replace(/\s+/g, ' ').trim();
+  if (compact.length <= 80) {
+    return compact || '-';
+  }
+  return `${compact.slice(0, 80)}...`;
+}
+
+function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [settings, setSettings] = useState<SmtpSettingsView | null>(null);
+  const [clearPassword, setClearPassword] = useState(false);
+  const [templateEditorKey, setTemplateEditorKey] = useState<SmtpTemplateKey | null>(null);
+  const [templateDraft, setTemplateDraft] = useState<SmtpTemplateItem>({ subject: '', body: '' });
+  const [form, setForm] = useState<SmtpSettingsFormState>({
+    enabled: false,
+    host: '',
+    port: '465',
+    secure: true,
+    username: '',
+    password: '',
+    from_name: 'GateRank',
+    from_email: '',
+    reply_to: '',
+    test_to: '',
+    templates: getDefaultSmtpTemplates(),
+  });
+
+  const applyView = (view: SmtpSettingsView) => {
+    setSettings(view);
+    setForm({
+      enabled: view.enabled,
+      host: view.host || '',
+      port: String(view.port || 465),
+      secure: view.secure,
+      username: view.username || '',
+      password: '',
+      from_name: view.from_name || 'GateRank',
+      from_email: view.from_email || '',
+      reply_to: view.reply_to || '',
+      test_to: '',
+      templates: cloneSmtpTemplates(view.templates),
+    });
+    setClearPassword(false);
+  };
+
+  const fetchSettings = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/smtp')) as SmtpSettingsView;
+      applyView(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载设置失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchSettings();
+  }, [refreshTick]);
+
+  const buildPayload = () => {
+    const payload: Record<string, unknown> = {
+      enabled: form.enabled,
+      host: form.host.trim(),
+      port: Number(form.port || 465),
+      secure: form.secure,
+      username: form.username.trim(),
+      from_name: form.from_name.trim(),
+      from_email: form.from_email.trim(),
+      reply_to: form.reply_to.trim(),
+      templates: cloneSmtpTemplates(form.templates),
+    };
+    if (clearPassword) {
+      payload.password = '';
+    } else if (form.password.trim()) {
+      payload.password = form.password.trim();
+    }
+    return payload;
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/smtp', {
+        method: 'PATCH',
+        body: JSON.stringify(buildPayload()),
+      })) as SmtpSettingsView;
+      applyView(data);
+      setSuccess('SMTP 配置已保存');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const sendTest = async () => {
+    setTesting(true);
+    setError('');
+    setSuccess('');
+    try {
+      await apiFetch('/api/v1/admin/system-settings/smtp/test', {
+        method: 'POST',
+        body: JSON.stringify({
+          ...buildPayload(),
+          test_to: form.test_to.trim(),
+        }),
+      });
+      setSuccess('测试邮件已发送');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '测试发送失败');
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const openTemplateEditor = (key: SmtpTemplateKey) => {
+    setTemplateEditorKey(key);
+    setTemplateDraft({ ...form.templates[key] });
+  };
+
+  const closeTemplateEditor = () => {
+    setTemplateEditorKey(null);
+    setTemplateDraft({ subject: '', body: '' });
+  };
+
+  const applyTemplateDraft = () => {
+    if (!templateEditorKey) {
+      return;
+    }
+    setForm({
+      ...form,
+      templates: {
+        ...form.templates,
+        [templateEditorKey]: {
+          subject: templateDraft.subject.trim(),
+          body: templateDraft.body.trim(),
+        },
+      },
+    });
+    closeTemplateEditor();
+  };
+
+  const activeScenario = templateEditorKey ? SMTP_TEMPLATE_SCENARIOS[templateEditorKey] : null;
+  const templatePreview = templateEditorKey && activeScenario
+    ? renderSmtpTemplatePreview(templateDraft, activeScenario.sampleValues)
+    : null;
+
+  return (
+    <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">邮件配置</div>
+        <p className="mt-1 text-sm text-neutral-500">用于发送账号凭证邮件和审批通过邮件。</p>
+      </div>
+
+      {loading && <div className="text-sm text-neutral-500">加载中...</div>}
+
+      {!loading && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
+            <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
+            <ReadField label="SMTP Host" value={valueOrDash(settings?.host)} />
+            <ReadField label="密码" value={settings?.has_password ? `已配置 (${settings?.password_masked || '-'})` : '未配置'} />
+          </div>
+
+          <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
+            <label className="inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={form.enabled}
+                onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+              />
+              启用 SMTP 发信
+            </label>
+          </div>
+
+          <div className="rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+            启用 SMTP 发信后，`Host / 端口 / 账号 / 密码 / 发件邮箱` 为必填；`发件人名称` 和 `Reply-To` 为选填。
+            `Reply-To` 用于指定“收件人点击回复时，邮件会回到哪个地址”。
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField label="Host" hint="SMTP 服务器地址。启用发信后必填，例如 `smtp.exmail.qq.com`。">
+              <input className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900" value={form.host} onChange={(e) => setForm({ ...form, host: e.target.value })} placeholder="smtp.exmail.qq.com" />
+            </FormField>
+            <FormField label="端口" hint="SMTP 服务端口。启用发信后必填，常见为 `465` 或 `587`。">
+              <input className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900" type="number" min="1" step="1" value={form.port} onChange={(e) => setForm({ ...form, port: e.target.value })} placeholder="465" />
+            </FormField>
+            <FormField label="账号" hint="SMTP 登录账号。启用发信后必填，通常填写完整邮箱地址或服务商给的用户名。">
+              <input className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900" value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} placeholder="noreply@example.com" />
+            </FormField>
+            <FormField label="密码" hint={settings?.has_password ? '启用发信后必填。当前已配置，留空则不修改；如需删除请勾选下方清空。' : 'SMTP 登录密码或授权码。启用发信后必填。'}>
+              <div className="space-y-2">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  type="password"
+                  placeholder="输入 SMTP 密码或授权码"
+                  value={form.password}
+                  onChange={(e) => {
+                    setClearPassword(false);
+                    setForm({ ...form, password: e.target.value });
+                  }}
+                />
+                {settings?.has_password && (
+                  <div className="text-xs text-neutral-500">当前已保存：{settings.password_masked}</div>
+                )}
+              </div>
+            </FormField>
+            <FormField label="发件人名称" hint="收件箱里展示的发件人名称。选填，不填时默认使用 `GateRank`。">
+              <input className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900" value={form.from_name} onChange={(e) => setForm({ ...form, from_name: e.target.value })} placeholder="GateRank" />
+            </FormField>
+            <FormField label="发件邮箱" hint="真正写入邮件 `From` 的地址。启用发信后必填，建议与 SMTP 账号保持一致。">
+              <input className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900" type="email" value={form.from_email} onChange={(e) => setForm({ ...form, from_email: e.target.value })} placeholder="noreply@example.com" />
+            </FormField>
+            <FormField label="Reply-To" hint="收件人点击“回复”时，邮件将回到这个地址。选填；不填时默认回复到发件邮箱。">
+              <input className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900" type="email" value={form.reply_to} onChange={(e) => setForm({ ...form, reply_to: e.target.value })} placeholder="support@example.com" />
+            </FormField>
+            <FormField label="连接方式" hint="大多数邮箱服务建议开启。`465` 通常配合勾选，`587` 视服务商要求决定。">
+              <label className="inline-flex items-center gap-3 text-sm font-medium pt-3">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-neutral-300"
+                  checked={form.secure}
+                  onChange={(e) => setForm({ ...form, secure: e.target.checked })}
+                />
+                使用 TLS / Secure
+              </label>
+            </FormField>
+          </div>
+
+          {settings?.has_password && (
+            <label className="inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={clearPassword}
+                onChange={(e) => {
+                  setClearPassword(e.target.checked);
+                  if (e.target.checked) {
+                    setForm({ ...form, password: '' });
+                  }
+                }}
+              />
+              清空已保存 SMTP 密码
+            </label>
+          )}
+
+          <FormField label="测试收件人邮箱" hint="仅在点击“发送测试邮件”时必填。测试发送会使用当前表单里的配置，不依赖是否已保存。">
+            <input className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900" type="email" value={form.test_to} onChange={(e) => setForm({ ...form, test_to: e.target.value })} placeholder="test@example.com" />
+          </FormField>
+
+          <section className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">邮件场景与模板</div>
+              <p className="mt-1 text-sm text-neutral-500">
+                以下场景会触发系统邮件。模板支持变量替换，修改后需要点击下方“保存配置”才会正式生效。
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+              {SMTP_TEMPLATE_ORDER.map((key) => {
+                const scenario = SMTP_TEMPLATE_SCENARIOS[key];
+                const template = form.templates[key];
+                return (
+                  <div key={key} className="rounded-2xl border border-neutral-200 bg-white p-4 space-y-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-base font-semibold text-neutral-900">{scenario.title}</div>
+                        <div className="mt-1 text-sm text-neutral-500">{scenario.description}</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="shrink-0 rounded-xl border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-50"
+                        onClick={() => openTemplateEditor(key)}
+                      >
+                        编辑模板
+                      </button>
+                    </div>
+                    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+                      <div className="font-medium text-neutral-900">触发时机</div>
+                      <div className="mt-1">{scenario.trigger}</div>
+                    </div>
+                    <ReadField label="邮件主题" value={template.subject} />
+                    <ReadField label="正文摘要" value={summarizeTemplateBody(template.body)} />
+                    <div className="space-y-2">
+                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">可用变量</div>
+                      <div className="flex flex-wrap gap-2">
+                        {scenario.variables.map((variable) => (
+                          <span
+                            key={variable}
+                            className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-700"
+                          >
+                            {variable}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+          {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+
+          <div className="flex items-center justify-end gap-3">
+            <button className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50" disabled={testing} onClick={() => void sendTest()}>
+              {testing ? '发送中...' : '发送测试邮件'}
+            </button>
+            <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
+              {saving ? '保存中...' : '保存配置'}
+            </button>
+          </div>
+        </>
+      )}
+
+      {templateEditorKey && activeScenario && (
+        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl max-h-[90vh] rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col">
+            <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-2xl font-bold tracking-tight">{activeScenario.title}</h3>
+                <p className="text-sm text-neutral-500">{activeScenario.trigger}</p>
+              </div>
+              <button
+                type="button"
+                className="w-10 h-10 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-900"
+                onClick={closeTemplateEditor}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-6 overscroll-contain">
+              <section className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">模板编辑</div>
+                  <p className="mt-1 text-sm text-neutral-500">支持纯文本和变量替换，变量会在发送时注入真实内容。</p>
+                </div>
+                <FormField label="邮件主题">
+                  <input
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    value={templateDraft.subject}
+                    onChange={(e) => setTemplateDraft({ ...templateDraft, subject: e.target.value })}
+                  />
+                </FormField>
+                <FormField label="邮件正文" hint="纯文本模板，换行会按原样保留。">
+                  <textarea
+                    className="min-h-[220px] w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    value={templateDraft.body}
+                    onChange={(e) => setTemplateDraft({ ...templateDraft, body: e.target.value })}
+                  />
+                </FormField>
+              </section>
+
+              <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">可用变量</div>
+                    <p className="mt-1 text-sm text-neutral-500">{activeScenario.description}</p>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {activeScenario.variables.map((variable) => (
+                      <span
+                        key={variable}
+                        className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-700"
+                      >
+                        {variable}
+                      </span>
+                    ))}
+                  </div>
+                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+                    <div className="text-sm font-medium text-neutral-900">示例变量值</div>
+                    <div className="mt-3 grid gap-2">
+                      {Object.entries(activeScenario.sampleValues).map(([key, value]) => (
+                        <div key={key} className="flex items-start justify-between gap-4 text-sm">
+                          <code className="rounded bg-white px-2 py-1 text-xs">{`{{${key}}}`}</code>
+                          <span className="text-right text-neutral-600 break-all">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">预览效果</div>
+                    <p className="mt-1 text-sm text-neutral-500">以下预览使用示例变量渲染，仅用于确认模板内容。</p>
+                  </div>
+                  <ReadField label="预览主题" value={templatePreview?.subject || '-'} />
+                  <ReadField label="预览正文" value={templatePreview?.body || '-'} />
+                </div>
+              </section>
+            </div>
+
+            <div className="border-t border-neutral-200 px-6 py-4 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                className="rounded-2xl border border-neutral-300 px-4 py-2.5 text-sm font-medium hover:bg-neutral-50"
+                onClick={closeTemplateEditor}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="rounded-2xl bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white"
+                onClick={applyTemplateDraft}
+              >
+                应用模板修改
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </section>
   );
@@ -2394,7 +3190,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-lg font-bold">入驻申请</h2>
-          <p className="mt-1 text-sm text-neutral-500">公开申请会先进入待审核列表，确认资料后再人工处理。</p>
+          <p className="mt-1 text-sm text-neutral-500">公开申请会先进入待支付，支付成功后才会进入待审批列表。</p>
         </div>
       </div>
 
@@ -2414,6 +3210,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
           onChange={(e) => setReviewStatus(e.target.value as '' | AirportApplicationReviewStatus)}
         >
           <option value="">全部状态</option>
+          <option value="awaiting_payment">待支付</option>
           <option value="pending">待审核</option>
           <option value="reviewed">已审核</option>
           <option value="rejected">已驳回</option>
@@ -2426,16 +3223,17 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
         <div className="text-sm text-neutral-500">加载中...</div>
       ) : (
         <div className="overflow-x-auto rounded border border-neutral-200">
-          <table className="w-full min-w-[1120px] table-fixed text-sm">
+          <table className="w-full min-w-[1240px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
-                <th className="w-[18%] text-left px-4 py-3">机场名称</th>
-                <th className="w-[18%] text-left px-4 py-3">邮箱</th>
-                <th className="w-[14%] text-left px-4 py-3">Telegram</th>
-                <th className="w-[12%] text-left px-4 py-3">成立日期</th>
-                <th className="w-[16%] text-left px-4 py-3">提交时间</th>
-                <th className="w-[10%] text-left px-4 py-3">审核状态</th>
-                <th className="w-[12%] text-left px-4 py-3">操作</th>
+                <th className="w-[17%] text-left px-4 py-3">机场名称</th>
+                <th className="w-[16%] text-left px-4 py-3">邮箱</th>
+                <th className="w-[12%] text-left px-4 py-3">Telegram</th>
+                <th className="w-[11%] text-left px-4 py-3">成立日期</th>
+                <th className="w-[12%] text-left px-4 py-3">支付状态</th>
+                <th className="w-[12%] text-left px-4 py-3">审批状态</th>
+                <th className="w-[12%] text-left px-4 py-3">提交时间</th>
+                <th className="w-[8%] text-left px-4 py-3">操作</th>
               </tr>
             </thead>
             <tbody>
@@ -2448,8 +3246,9 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                   <td className="px-4 py-3 truncate" title={item.applicant_email}>{item.applicant_email}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.applicant_telegram}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.founded_on}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{item.created_at}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{item.payment_status === 'paid' ? '已支付' : '未支付'}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatApplicationReviewStatus(item.review_status)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{item.created_at}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <button className="underline" onClick={() => void openDetail(item.id)}>查看详情</button>
                   </td>
@@ -2457,7 +3256,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-neutral-500">
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-neutral-500">
                     当前没有匹配的申请记录
                   </td>
                 </tr>
@@ -2504,8 +3303,12 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                       <ReadField label="运行状态" value={`${formatAirportStatus(selected.status)} / ${formatApplicationReviewStatus(selected.review_status)}`} />
                       <ReadField label="月付价格" value={selected.plan_price_month} />
                       <ReadField label="试用支持" value={selected.has_trial ? '是' : '否'} />
+                      <ReadField label="支付状态" value={selected.payment_status === 'paid' ? '已支付' : '未支付'} />
+                      <ReadField label="支付金额" value={selected.payment_amount == null ? '-' : `¥${selected.payment_amount}`} />
                       <ReadField label="订阅链接" value={valueOrDash(selected.subscription_url)} />
                       <ReadField label="成立日期" value={selected.founded_on} />
+                      <ReadField label="支付时间" value={valueOrDash(selected.paid_at)} />
+                      <ReadField label="首次改密" value={selected.must_change_password == null ? '-' : selected.must_change_password ? '未完成' : '已完成'} />
                     </div>
                     <ReadField label="官网列表" value={formatWebsiteList(selected.websites, selected.website)} />
                   </section>
@@ -2527,7 +3330,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                   <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">审核处理</div>
-                      <p className="mt-1 text-sm text-neutral-500">审核会记录操作人、时间和可选备注。</p>
+                      <p className="mt-1 text-sm text-neutral-500">只有已支付且处于待审核状态的申请才允许审批。</p>
                     </div>
                     {isReviewLocked && (
                       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
@@ -3459,6 +4262,9 @@ function formatAirportStatus(status: AirportStatus): string {
 }
 
 function formatApplicationReviewStatus(status: AirportApplicationReviewStatus): string {
+  if (status === 'awaiting_payment') {
+    return '待支付';
+  }
   if (status === 'pending') {
     return '待审核';
   }

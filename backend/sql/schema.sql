@@ -38,7 +38,10 @@ CREATE TABLE IF NOT EXISTS airport_applications (
   test_account VARCHAR(255) NOT NULL,
   test_password VARCHAR(255) NOT NULL,
   approved_airport_id BIGINT UNSIGNED NULL,
-  review_status ENUM('pending', 'reviewed', 'rejected') NOT NULL DEFAULT 'pending',
+  review_status ENUM('awaiting_payment', 'pending', 'reviewed', 'rejected') NOT NULL DEFAULT 'awaiting_payment',
+  payment_status ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid',
+  payment_amount DECIMAL(10,2) NULL,
+  paid_at DATETIME NULL,
   review_note TEXT NULL,
   reviewed_by VARCHAR(128) NULL,
   reviewed_at DATETIME NULL,
@@ -48,6 +51,41 @@ CREATE TABLE IF NOT EXISTS airport_applications (
   INDEX idx_airport_applications_review_status_created_at (review_status, created_at DESC),
   INDEX idx_airport_applications_name (name),
   INDEX idx_airport_applications_applicant_email (applicant_email)
+);
+
+CREATE TABLE IF NOT EXISTS applicant_accounts (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  application_id BIGINT UNSIGNED NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  password_hash VARCHAR(255) NOT NULL,
+  must_change_password TINYINT(1) NOT NULL DEFAULT 1,
+  last_login_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_applicant_accounts_application_id (application_id),
+  UNIQUE KEY uk_applicant_accounts_email (email),
+  INDEX idx_applicant_accounts_email (email)
+);
+
+CREATE TABLE IF NOT EXISTS application_payment_orders (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  application_id BIGINT UNSIGNED NOT NULL,
+  out_trade_no VARCHAR(64) NOT NULL,
+  gateway_trade_no VARCHAR(64) NULL,
+  channel ENUM('alipay', 'wxpay') NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  status ENUM('created', 'paid', 'failed', 'expired') NOT NULL DEFAULT 'created',
+  pay_type VARCHAR(32) NULL,
+  pay_info TEXT NULL,
+  notify_payload_json JSON NULL,
+  paid_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_application_payment_orders_out_trade_no (out_trade_no),
+  INDEX idx_application_payment_orders_application_id (application_id),
+  INDEX idx_application_payment_orders_status_created_at (status, created_at DESC)
 );
 
 CREATE TABLE IF NOT EXISTS airport_metrics_daily (

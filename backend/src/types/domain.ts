@@ -1,5 +1,5 @@
 export type AirportStatus = 'normal' | 'risk' | 'down';
-export type AirportApplicationReviewStatus = 'pending' | 'reviewed' | 'rejected';
+export type AirportApplicationReviewStatus = 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
 export type RankingType = 'today' | 'stable' | 'value' | 'new' | 'risk';
 export type ProbeSampleType = 'latency' | 'download' | 'availability';
 export type ProbeScope = 'stability' | 'performance';
@@ -50,6 +50,10 @@ export interface AirportApplication {
   test_password: string;
   approved_airport_id?: number | null;
   review_status: AirportApplicationReviewStatus;
+  payment_status: 'unpaid' | 'paid';
+  payment_amount: number | null;
+  paid_at?: string | null;
+  must_change_password?: boolean | null;
   review_note?: string | null;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
@@ -392,6 +396,47 @@ export interface PerformanceRunInput {
 export interface AdminAuthResponse {
   token: string;
   expires_at: string;
+}
+
+export interface ApplicantPortalSession {
+  token: string;
+  expires_at: string;
+}
+
+export interface ApplicantPortalView {
+  account: {
+    id: number;
+    email: string;
+    must_change_password: boolean;
+    last_login_at: string | null;
+  };
+  application: AirportApplication;
+  latest_payment_order?: {
+    out_trade_no: string;
+    channel: 'alipay' | 'wxpay';
+    amount: number;
+    status: 'created' | 'paid' | 'failed' | 'expired';
+    pay_type: string | null;
+    pay_info: string | null;
+    paid_at: string | null;
+  } | null;
+  payment_fee_amount: number;
+}
+
+export interface ApplicationPaymentOrder {
+  id: number;
+  application_id: number;
+  out_trade_no: string;
+  gateway_trade_no: string | null;
+  channel: 'alipay' | 'wxpay';
+  amount: number;
+  status: 'created' | 'paid' | 'failed' | 'expired';
+  pay_type: string | null;
+  pay_info: string | null;
+  notify_payload_json: Record<string, unknown> | null;
+  paid_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface ManualJob {
