@@ -125,6 +125,16 @@ export class ApplicantAccountRepository {
     return result.affectedRows > 0;
   }
 
+  async updateEmail(id: number, email: string): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE applicant_accounts
+          SET email = ?
+        WHERE id = ?`,
+      [email, id],
+    );
+    return result.affectedRows > 0;
+  }
+
   async touchLogin(id: number, loggedInAt: string): Promise<boolean> {
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE applicant_accounts

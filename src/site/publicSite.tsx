@@ -276,6 +276,7 @@ function SiteFooter() {
           <a href={buildMethodologyHref()} onClick={(event) => { event.preventDefault(); navigate(buildMethodologyHref()); }} className="hover:text-black transition-colors">测评方法</a>
           <a href={buildNewsHref()} className="hover:text-black transition-colors">News</a>
           <a href="/apply" className="hover:text-black transition-colors">申请入驻</a>
+          <a href="/portal" target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-600 transition-colors">申请人登录</a>
         </div>
 
         <div className="border-t border-neutral-100 pt-8">

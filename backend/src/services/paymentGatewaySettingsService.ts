@@ -1,4 +1,6 @@
 import type { SystemSettingRecord } from '../repositories/systemSettingRepository';
+import { HttpError } from '../middleware/errorHandler';
+import { canParseRsaPrivateKey, canParseRsaPublicKey } from '../utils/rsaSignature';
 import { formatDateTimeInTimezoneIso } from '../utils/time';
 
 export interface PaymentGatewaySettingsInput {
@@ -70,6 +72,7 @@ export class PaymentGatewaySettingsService {
     }
 
     const nextConfig = await this.resolveConfig(input);
+    validatePaymentGatewayConfig(nextConfig, input);
     await this.systemSettingRepository.upsert(PAYMENT_GATEWAY_SETTING_KEY, nextConfig, updatedBy);
     return this.getAdminSettings();
   }
@@ -190,4 +193,79 @@ function normalizeStoredUpdatedAt(value: unknown): string {
   }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? raw : formatDateTimeInTimezoneIso(parsed);
+}
+
+function validatePaymentGatewayConfig(
+  config: PaymentGatewayConfig,
+  input: PaymentGatewaySettingsInput,
+): void {
+  if (config.enabled && !config.pid) {
+    throw new HttpError(400, 'PAYMENT_GATEWAY_PID_REQUIRED', '启用支付前必须填写商户号 PID');
+  }
+
+  const shouldValidatePrivateKey = input.private_key !== undefined || config.enabled;
+  const shouldValidatePlatformPublicKey =
+    input.platform_public_key !== undefined || config.enabled;
+
+  if (shouldValidatePrivateKey) {
+    if (!config.private_key) {
+      throw new HttpError(
+        400,
+        'PAYMENT_GATEWAY_PRIVATE_KEY_REQUIRED',
+        '启用支付前必须填写商户私钥',
+      );
+    }
+    validateMerchantPrivateKey(config.private_key);
+  }
+
+  if (shouldValidatePlatformPublicKey) {
+    if (!config.platform_public_key) {
+      throw new HttpError(
+        400,
+        'PAYMENT_GATEWAY_PLATFORM_PUBLIC_KEY_REQUIRED',
+        '启用支付前必须填写平台公钥',
+      );
+    }
+    validatePlatformPublicKey(config.platform_public_key);
+  }
+}
+
+function validateMerchantPrivateKey(value: string): void {
+  if (canParseRsaPrivateKey(value)) {
+    return;
+  }
+
+  if (canParseRsaPublicKey(value)) {
+    throw new HttpError(
+      400,
+      'PAYMENT_GATEWAY_INVALID_PRIVATE_KEY',
+      '商户私钥格式无效：当前内容看起来是公钥，请粘贴平台生成的商户私钥，不要填写商户公钥或平台公钥',
+    );
+  }
+
+  throw new HttpError(
+    400,
+    'PAYMENT_GATEWAY_INVALID_PRIVATE_KEY',
+    '商户私钥格式无效：请粘贴平台生成的商户私钥，支持平台原始密钥串或 PEM',
+  );
+}
+
+function validatePlatformPublicKey(value: string): void {
+  if (canParseRsaPrivateKey(value)) {
+    throw new HttpError(
+      400,
+      'PAYMENT_GATEWAY_INVALID_PLATFORM_PUBLIC_KEY',
+      '平台公钥格式无效：当前内容看起来是私钥，请填写平台后台显示的平台公钥',
+    );
+  }
+
+  if (canParseRsaPublicKey(value)) {
+    return;
+  }
+
+  throw new HttpError(
+    400,
+    'PAYMENT_GATEWAY_INVALID_PLATFORM_PUBLIC_KEY',
+    '平台公钥格式无效：请粘贴平台后台显示的平台公钥，支持平台原始密钥串或 PEM',
+  );
 }

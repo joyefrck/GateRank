@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { RANKING_TYPES } from '../config/scoring';
 import { HttpError } from '../middleware/errorHandler';
 import { hashPassword, createRandomPassword } from '../utils/password';
+import { getSiteOrigin } from '../utils/siteUrl';
 import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { AirportApplicationReviewStatus, AirportStatus } from '../types/domain';
 
@@ -310,9 +311,7 @@ function buildPortalLoginUrl(req: {
   protocol?: string;
   headers?: Record<string, unknown>;
 }): string {
-  const proto = String(req.headers?.['x-forwarded-proto'] || req.protocol || 'http').split(',')[0];
-  const host = String(req.headers?.['x-forwarded-host'] || req.headers?.host || '').split(',')[0];
-  return `${proto}://${host}/portal`;
+  return `${getSiteOrigin(req)}/portal`;
 }
 
 function mustString(value: unknown, fieldName: string): string {

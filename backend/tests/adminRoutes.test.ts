@@ -4,6 +4,7 @@ import { AddressInfo } from 'node:net';
 import express from 'express';
 import { errorHandler, HttpError } from '../src/middleware/errorHandler';
 import { createAdminRoutes } from '../src/routes/adminRoutes';
+import { SmtpSendError } from '../src/services/mailService';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
 import type { PerformanceRunInput, ProbeSampleInput } from '../src/types/domain';
 
@@ -1714,6 +1715,61 @@ test('GET /system-settings/media-libraries returns masked media library settings
     assert.equal(data.providers.pexels.api_key_masked, 'pexe***-key');
     assert.equal(data.providers.pexels.timeout_ms, 9000);
     assert.equal(data.updated_by, 'admin');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /system-settings/smtp/test returns SMTP validation errors', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+      mailService: {
+        sendTestMail: async () => {
+          throw new SmtpSendError('SMTP 认证失败，请检查用户名和密码：Invalid login', 400);
+        },
+        sendApplicationApprovedEmail: async () => undefined,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/smtp/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ test_to: 'user@example.com' }),
+    });
+    assert.equal(response.status, 400);
+    const data = (await response.json()) as { code: string; message: string };
+    assert.equal(data.code, 'SMTP_TEST_FAILED');
+    assert.match(data.message, /SMTP 认证失败/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

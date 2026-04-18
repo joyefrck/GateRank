@@ -46,56 +46,72 @@ export class PaymentGatewayService {
     input: PaymentGatewayCreateOrderInput,
   ): Promise<PaymentGatewayCreateOrderResult> {
     const config = await this.requireConfigured();
-    const requestParams: Record<string, string> = {
-      pid: config.pid,
-      method: input.method || 'jump',
-      device: input.device || 'pc',
-      type: input.channel,
-      out_trade_no: input.out_trade_no,
-      notify_url: input.notify_url,
-      return_url: input.return_url,
-      name: input.name,
-      money: input.money.toFixed(2),
-      clientip: input.clientip,
-      param: input.param || '',
-      timestamp: String(Math.floor(Date.now() / 1000)),
-      sign_type: 'RSA',
-    };
-    const payload = buildRsaSignPayload(requestParams);
-    requestParams.sign = signWithRsaPrivateKey(payload, config.private_key);
+    try {
+      const requestParams: Record<string, string> = {
+        pid: config.pid,
+        method: input.method || 'jump',
+        device: input.device || 'pc',
+        type: input.channel,
+        out_trade_no: input.out_trade_no,
+        notify_url: input.notify_url,
+        return_url: input.return_url,
+        name: input.name,
+        money: input.money.toFixed(2),
+        clientip: input.clientip,
+        param: input.param || '',
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        sign_type: 'RSA',
+      };
+      const payload = buildRsaSignPayload(requestParams);
+      requestParams.sign = signWithRsaPrivateKey(payload, config.private_key);
 
-    const response = await this.fetchImpl(PAY_CREATE_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams(requestParams).toString(),
-    });
+      const response = await this.fetchImpl(PAY_CREATE_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams(requestParams).toString(),
+      });
 
-    const data = (await response.json()) as Record<string, unknown>;
-    if (!response.ok) {
-      throw new HttpError(
-        502,
-        'PAYMENT_GATEWAY_HTTP_ERROR',
-        String(data.msg || `支付网关请求失败: ${response.status}`),
-      );
+      const rawBody = await response.text();
+      const data = parsePaymentGatewayJson(rawBody);
+      if (!response.ok) {
+        throw new HttpError(
+          502,
+          'PAYMENT_GATEWAY_HTTP_ERROR',
+          String(data?.msg || `支付网关请求失败: HTTP ${response.status}${rawBody ? ` ${truncateGatewayBody(rawBody)}` : ''}`),
+        );
+      }
+
+      if (!data) {
+        throw new HttpError(
+          502,
+          'PAYMENT_GATEWAY_BAD_RESPONSE',
+          `支付网关返回了非 JSON 响应: ${truncateGatewayBody(rawBody)}`,
+        );
+      }
+
+      if (Number(data.code) !== 0) {
+        throw new HttpError(
+          400,
+          'PAYMENT_GATEWAY_CREATE_FAILED',
+          String(data.msg || '支付网关下单失败'),
+        );
+      }
+
+      this.assertVerifiedPayload(data, config.platform_public_key);
+
+      return {
+        trade_no: String(data.trade_no || ''),
+        pay_type: String(data.pay_type || ''),
+        pay_info: String(data.pay_info || ''),
+      };
+    } catch (error) {
+      if (error instanceof HttpError) {
+        throw error;
+      }
+      throw normalizePaymentGatewayTransportError(error);
     }
-
-    this.assertVerifiedPayload(data, config.platform_public_key);
-
-    if (Number(data.code) !== 0) {
-      throw new HttpError(
-        400,
-        'PAYMENT_GATEWAY_CREATE_FAILED',
-        String(data.msg || '支付网关下单失败'),
-      );
-    }
-
-    return {
-      trade_no: String(data.trade_no || ''),
-      pay_type: String(data.pay_type || ''),
-      pay_info: String(data.pay_info || ''),
-    };
   }
 
   async verifyNotificationPayload(payload: Record<string, unknown>): Promise<boolean> {
@@ -113,6 +129,10 @@ export class PaymentGatewayService {
   }
 
   private assertVerifiedPayload(payload: Record<string, unknown>, publicKey: string): void {
+    const sign = String(payload.sign || '').trim();
+    if (!sign) {
+      throw new HttpError(502, 'PAYMENT_GATEWAY_MISSING_SIGNATURE', '支付网关成功返回缺少签名');
+    }
     if (!this.verifyPayload(payload, publicKey)) {
       throw new HttpError(400, 'PAYMENT_GATEWAY_INVALID_SIGNATURE', '支付网关验签失败');
     }
@@ -128,6 +148,52 @@ export class PaymentGatewayService {
     }
     return config;
   }
+}
+
+function parsePaymentGatewayJson(rawBody: string): Record<string, unknown> | null {
+  const body = rawBody.trim();
+  if (!body) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(body);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function truncateGatewayBody(rawBody: string): string {
+  return rawBody.replace(/\s+/g, ' ').trim().slice(0, 240);
+}
+
+function normalizePaymentGatewayTransportError(error: unknown): HttpError {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code || '') : '';
+  const message =
+    typeof error === 'object' && error && 'message' in error
+      ? String(error.message || '')
+      : '支付网关请求失败';
+
+  if (
+    message.includes('private key') ||
+    message.includes('DECODER routines') ||
+    message.includes('unsupported')
+  ) {
+    return new HttpError(
+      400,
+      'PAYMENT_GATEWAY_SIGN_FAILED',
+      `支付签名失败，请检查商户私钥是否填写正确: ${message}`,
+    );
+  }
+
+  if (code === 'ETIMEDOUT' || code === 'ECONNABORTED') {
+    return new HttpError(504, 'PAYMENT_GATEWAY_TIMEOUT', `支付网关请求超时: ${message}`);
+  }
+
+  return new HttpError(502, 'PAYMENT_GATEWAY_UNAVAILABLE', `支付网关请求失败: ${message}`);
 }
 
 export function isPaymentSuccessNotification(payload: Record<string, unknown>): boolean {

@@ -58,6 +58,21 @@ export interface ReviewAirportApplicationInput {
   reviewed_at: string;
 }
 
+export interface UpdateAirportApplicationInput {
+  name: string;
+  website: string;
+  websites?: string[];
+  plan_price_month: number;
+  has_trial: boolean;
+  subscription_url?: string | null;
+  applicant_email: string;
+  applicant_telegram: string;
+  founded_on: string;
+  airport_intro: string;
+  test_account: string;
+  test_password: string;
+}
+
 export class AirportApplicationRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -324,6 +339,43 @@ export class AirportApplicationRepository {
         input.approved_airport_id || null,
         input.reviewed_by,
         input.reviewed_at,
+        id,
+      ],
+    );
+
+    return result.affectedRows > 0;
+  }
+
+  async updateApplicantDraft(id: number, input: UpdateAirportApplicationInput): Promise<boolean> {
+    const websites = normalizeWebsiteList(input.websites, input.website);
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE airport_applications
+          SET name = ?,
+              website = ?,
+              websites_json = ?,
+              plan_price_month = ?,
+              has_trial = ?,
+              subscription_url = ?,
+              applicant_email = ?,
+              applicant_telegram = ?,
+              founded_on = ?,
+              airport_intro = ?,
+              test_account = ?,
+              test_password = ?
+        WHERE id = ?`,
+      [
+        input.name,
+        websites[0],
+        JSON.stringify(websites),
+        input.plan_price_month,
+        input.has_trial ? 1 : 0,
+        input.subscription_url || null,
+        input.applicant_email,
+        input.applicant_telegram,
+        input.founded_on,
+        input.airport_intro,
+        input.test_account,
+        input.test_password,
         id,
       ],
     );

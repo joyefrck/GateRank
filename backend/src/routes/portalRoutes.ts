@@ -5,7 +5,8 @@ import { portalAuth } from '../middleware/portalAuth';
 import type { ApplicantAccount } from '../repositories/applicantAccountRepository';
 import type { ApplicationPaymentOrder } from '../repositories/applicationPaymentOrderRepository';
 import { verifyPassword, hashPassword } from '../utils/password';
-import { formatSqlDateTimeInTimezone } from '../utils/time';
+import { getSiteOrigin } from '../utils/siteUrl';
+import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
 import {
   buildGatewayTrace,
   isPaymentSuccessNotification,
@@ -15,10 +16,29 @@ import {
 interface PortalDeps {
   applicantAccountRepository: {
     getById(id: number): Promise<ApplicantAccount | null>;
+    getByEmail?(email: string): Promise<ApplicantAccount | null>;
     updatePassword(id: number, passwordHash: string, mustChangePassword: boolean): Promise<boolean>;
+    updateEmail?(id: number, email: string): Promise<boolean>;
   };
   airportApplicationRepository: {
     getById(id: number): Promise<any>;
+    updateApplicantDraft?(
+      id: number,
+      input: {
+        name: string;
+        website: string;
+        websites?: string[];
+        plan_price_month: number;
+        has_trial: boolean;
+        subscription_url?: string | null;
+        applicant_email: string;
+        applicant_telegram: string;
+        founded_on: string;
+        airport_intro: string;
+        test_account: string;
+        test_password: string;
+      },
+    ): Promise<boolean>;
     markPaid(id: number, paymentAmount: number, paidAt: string): Promise<boolean>;
   };
   applicationPaymentOrderRepository: {
@@ -133,9 +153,10 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const paymentConfig = await deps.paymentGatewaySettingsService.getConfig();
       const amount = Number(paymentConfig.application_fee_amount || 1000);
       const outTradeNo = `gr_${application.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
-      const origin = getRequestOrigin(req);
-      const notifyUrl = `${origin}/api/v1/portal/payment-notify`;
-      const returnUrl = `${origin}/portal`;
+      const apiOrigin = getRequestOrigin(req);
+      const siteOrigin = getSiteOrigin(req);
+      const notifyUrl = `${apiOrigin}/api/v1/portal/payment-notify`;
+      const returnUrl = `${siteOrigin}/portal`;
       const gatewayOrder = await deps.paymentGatewayService.createOrder({
         out_trade_no: outTradeNo,
         channel,
@@ -165,6 +186,68 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       });
     } catch (error) {
       next(error);
+    }
+  });
+
+  router.patch('/portal/application', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      const application = await requireApplication(deps, account.application_id);
+      if (application.payment_status === 'paid') {
+        throw new HttpError(409, 'PORTAL_APPLICATION_LOCKED', '支付完成后不能再修改申请资料');
+      }
+
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const websiteBundle = parseWebsiteFields(payload, true);
+      const foundedOn = mustDate(payload.founded_on, 'founded_on');
+      const today = getDateInTimezone();
+      if (foundedOn > today) {
+        throw new HttpError(400, 'BAD_REQUEST', 'founded_on cannot be in the future');
+      }
+
+      const applicantEmail = mustEmail(payload.applicant_email, 'applicant_email');
+      if (deps.applicantAccountRepository.getByEmail && applicantEmail !== account.email) {
+        const existing = await deps.applicantAccountRepository.getByEmail(applicantEmail);
+        if (existing && existing.id !== account.id) {
+          throw new HttpError(
+            409,
+            'AIRPORT_APPLICATION_EMAIL_CONFLICT',
+            '该邮箱已有进行中或已通过的申请，请更换其他邮箱',
+          );
+        }
+      }
+
+      const input = {
+        name: mustString(payload.name, 'name'),
+        website: websiteBundle.website,
+        websites: websiteBundle.websites,
+        plan_price_month: mustNonNegativeNumber(payload.plan_price_month, 'plan_price_month'),
+        has_trial: Boolean(payload.has_trial),
+        subscription_url: optionalString(payload.subscription_url) || null,
+        applicant_email: applicantEmail,
+        applicant_telegram: mustString(payload.applicant_telegram, 'applicant_telegram'),
+        founded_on: foundedOn,
+        airport_intro: mustString(payload.airport_intro, 'airport_intro'),
+        test_account: mustString(payload.test_account, 'test_account'),
+        test_password: mustString(payload.test_password, 'test_password'),
+      };
+
+      if (!deps.airportApplicationRepository.updateApplicantDraft) {
+        throw new Error('airportApplicationRepository.updateApplicantDraft is not configured');
+      }
+      await deps.airportApplicationRepository.updateApplicantDraft(application.id, input);
+
+      if (applicantEmail !== account.email) {
+        if (!deps.applicantAccountRepository.updateEmail) {
+          throw new Error('applicantAccountRepository.updateEmail is not configured');
+        }
+        await deps.applicantAccountRepository.updateEmail(account.id, applicantEmail);
+      }
+
+      res.json(await buildPortalView(deps, session.applicant_id));
+    } catch (error) {
+      next(normalizePortalApplicationMutationError(error));
     }
   });
 
@@ -291,12 +374,63 @@ function mustString(value: unknown, fieldName: string): string {
   return value.trim();
 }
 
+function optionalString(value: unknown): string | undefined {
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  return String(value).trim();
+}
+
 function mustEmail(value: unknown, fieldName: string): string {
   const email = mustString(value, fieldName);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be valid email`);
   }
   return email;
+}
+
+function mustNonNegativeNumber(value: unknown, fieldName: string): number {
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be non-negative number`);
+  }
+  return num;
+}
+
+function mustDate(value: unknown, fieldName: string): string {
+  const date = String(value || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be YYYY-MM-DD`);
+  }
+  return date;
+}
+
+function toStringArray(value: unknown, fieldName = 'items'): string[] {
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be array`);
+  }
+  return value.map((v) => String(v));
+}
+
+function parseWebsiteFields(
+  payload: Record<string, unknown>,
+  required: boolean,
+): { website: string; websites: string[] } {
+  const primaryWebsite = optionalString(payload.website);
+  const websiteItems = payload.websites === undefined ? undefined : toStringArray(payload.websites, 'websites');
+  const normalized = [primaryWebsite || '', ...(websiteItems || [])]
+    .map((value) => value.trim())
+    .filter(Boolean);
+  const websites = [...new Set(normalized)];
+
+  if (required && websites.length === 0) {
+    throw new HttpError(400, 'BAD_REQUEST', 'website or websites is required');
+  }
+
+  return {
+    website: websites[0],
+    websites,
+  };
 }
 
 function toPaymentChannel(value: unknown): 'alipay' | 'wxpay' {
@@ -333,4 +467,21 @@ function stringOrNull(value: unknown): string | null {
   }
   const result = String(value).trim();
   return result ? result : null;
+}
+
+function normalizePortalApplicationMutationError(error: unknown): unknown {
+  if (error instanceof HttpError) {
+    return error;
+  }
+
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : '';
+  if (code === 'ER_DUP_ENTRY') {
+    return new HttpError(
+      409,
+      'AIRPORT_APPLICATION_EMAIL_CONFLICT',
+      '该邮箱已有进行中或已通过的申请，请更换其他邮箱',
+    );
+  }
+
+  return error;
 }

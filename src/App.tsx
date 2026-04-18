@@ -1,9 +1,10 @@
-import React, { Suspense, lazy, useEffect, useMemo, useState } from 'react';
+import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Flame,
   Trophy,
   Banknote,
   Plus,
+  X,
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
@@ -17,7 +18,6 @@ import {
   Clock,
   LogIn,
   KeyRound,
-  CreditCard,
   CheckCircle2,
   Mail,
   CircleAlert,
@@ -259,14 +259,20 @@ interface PortalApplicationView {
   id: number;
   name: string;
   website: string;
+  websites: string[];
   review_status: 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
   payment_status: 'unpaid' | 'paid';
+  plan_price_month: number;
+  has_trial: boolean;
+  subscription_url: string | null;
   payment_amount: number | null;
   paid_at: string | null;
   applicant_email: string;
   applicant_telegram: string;
   founded_on: string;
   airport_intro: string;
+  test_account: string;
+  test_password: string;
   created_at: string;
   review_note?: string | null;
   reviewed_at?: string | null;
@@ -763,6 +769,425 @@ function StatusPill({ label, value }: { label: string; value: string | number | 
     </div>
   );
 }
+
+function PortalSectionCard({
+  title,
+  description,
+  aside,
+  children,
+}: {
+  title: string;
+  description: string;
+  aside?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <motion.section
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35, ease: 'easeOut' }}
+      className="rounded-[30px] border border-slate-200/80 bg-white/90 p-5 md:p-7 shadow-[0_24px_80px_rgba(15,23,42,0.06)] backdrop-blur"
+    >
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700">Applicant Portal</div>
+          <h2 className="mt-3 text-xl md:text-2xl font-black tracking-tight text-slate-950">{title}</h2>
+          <p className="mt-2 max-w-2xl text-sm leading-7 text-slate-600">{description}</p>
+        </div>
+        {aside}
+      </div>
+      <div className="mt-6">{children}</div>
+    </motion.section>
+  );
+}
+
+function PortalInfoCard({
+  eyebrow,
+  title,
+  value,
+  tone = 'neutral',
+}: {
+  eyebrow: string;
+  title: string;
+  value: string;
+  tone?: 'neutral' | 'blue' | 'green' | 'amber';
+}) {
+  const toneMap = {
+    neutral: 'border-white/70 bg-white/80 text-slate-900',
+    blue: 'border-sky-100 bg-sky-50/95 text-sky-950',
+    green: 'border-emerald-100 bg-emerald-50/95 text-emerald-950',
+    amber: 'border-amber-100 bg-amber-50/95 text-amber-950',
+  };
+
+  return (
+    <div className={`rounded-[24px] border px-5 py-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] ${toneMap[tone]}`}>
+      <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{eyebrow}</div>
+      <div className="mt-3 text-sm font-medium text-slate-500">{title}</div>
+      <div className="mt-2 text-2xl font-black tracking-tight text-slate-950">{value}</div>
+    </div>
+  );
+}
+
+function PortalMetricTile({
+  label,
+  value,
+  tone = 'neutral',
+}: {
+  label: string;
+  value: string;
+  tone?: 'neutral' | 'blue' | 'green' | 'amber';
+}) {
+  const toneMap = {
+    neutral: 'border-slate-200 bg-slate-50',
+    blue: 'border-sky-100 bg-sky-50',
+    green: 'border-emerald-100 bg-emerald-50',
+    amber: 'border-amber-100 bg-amber-50',
+  };
+
+  return (
+    <div className={`rounded-[22px] border px-4 py-4 ${toneMap[tone]}`}>
+      <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</div>
+      <div className="mt-2 text-base font-black tracking-tight text-slate-950">{value}</div>
+    </div>
+  );
+}
+
+function PortalReadOnlyBlock({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+      <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</div>
+      <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-slate-700">{value || '-'}</div>
+    </div>
+  );
+}
+
+function PaymentBrandArtwork({
+  tone,
+  className = '',
+}: {
+  tone: 'alipay' | 'wechat';
+  className?: string;
+}) {
+  const src = tone === 'alipay' ? '/alipay_logo.png' : '/wechat_logo.png';
+  const scaleClass = tone === 'alipay' ? 'scale-[1.06]' : 'scale-[0.98]';
+
+  return (
+    <img
+      aria-hidden="true"
+      src={src}
+      alt=""
+      className={`block h-full w-full object-contain ${scaleClass} ${className}`}
+    />
+  );
+}
+
+function PaymentMethodCard({
+  title,
+  tone,
+  icon,
+  busy,
+  disabled,
+  buttonLabel,
+  onClick,
+}: {
+  title: string;
+  tone: 'alipay' | 'wechat';
+  icon: React.ReactNode;
+  busy: boolean;
+  disabled: boolean;
+  buttonLabel: string;
+  onClick: () => void;
+}) {
+  const palette = tone === 'alipay'
+    ? {
+        shell: 'border-sky-200 bg-[linear-gradient(135deg,#1677ff_0%,#1153d4_100%)]',
+        logoShell: 'rounded-[28px] border border-white/25 bg-white p-3',
+        cta: 'bg-white text-sky-700 hover:bg-sky-50',
+      }
+    : {
+        shell: 'border-emerald-200 bg-[linear-gradient(135deg,#1cb85b_0%,#169b49_100%)]',
+        logoShell: 'rounded-full border border-white/25 bg-white p-3.5',
+        cta: 'bg-white text-emerald-700 hover:bg-emerald-50',
+      };
+
+  return (
+    <motion.div
+      whileHover={disabled ? undefined : { y: -4 }}
+      transition={{ duration: 0.18, ease: 'easeOut' }}
+      className={`w-full rounded-[24px] border p-4 text-left text-white shadow-[0_18px_40px_rgba(15,23,42,0.10)] ${disabled ? 'opacity-60' : ''} ${palette.shell}`}
+    >
+      <div className="flex h-full flex-col justify-between gap-4">
+        <div className="flex items-start gap-4">
+          <div className={`flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden shadow-[0_12px_24px_rgba(15,23,42,0.12)] ${palette.logoShell}`}>
+            {icon}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="text-[32px] font-black leading-none tracking-tight md:text-[36px]">{title}</div>
+          </div>
+        </div>
+        <div className="flex items-center justify-end">
+          <button
+            type="button"
+            onClick={onClick}
+            disabled={disabled}
+            className={`inline-flex min-h-11 items-center gap-2 rounded-full px-4 py-2.5 text-sm font-black tracking-[0.04em] shadow-[0_12px_26px_rgba(15,23,42,0.16)] transition disabled:opacity-60 ${palette.cta}`}
+          >
+            {busy ? '创建中...' : buttonLabel}
+            <ArrowRight className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function PortalCollapsedApplicationSummary({
+  application,
+  onEdit,
+}: {
+  application: PortalApplicationView;
+  onEdit: () => void;
+}) {
+  return (
+    <PortalSectionCard
+      title="申请资料"
+      description="支付前先聚焦完成支付。资料默认收起，这里仅保留关键摘要；如需修改，可通过弹窗编辑完整信息。"
+      aside={(
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-cyan-50 px-4 py-2 text-[12px] font-black tracking-[0.04em] text-cyan-700 shadow-sm hover:bg-cyan-100"
+          onClick={onEdit}
+        >
+          编辑资料
+        </button>
+      )}
+    >
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <PortalMetricTile label="机场名称" value={application.name} tone="blue" />
+        <PortalMetricTile label="月付价格" value={`¥${formatMetric(application.plan_price_month)}`} tone="amber" />
+        <PortalMetricTile label="试用支持" value={application.has_trial ? '支持' : '不支持'} tone="green" />
+        <PortalMetricTile label="申请邮箱" value={application.applicant_email} />
+      </div>
+    </PortalSectionCard>
+  );
+}
+
+function PortalApplicationEditModal({
+  open,
+  canEdit,
+  applicationForm,
+  setApplicationForm,
+  savingApplication,
+  error,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  canEdit: boolean;
+  applicationForm: ApplicationFormState;
+  setApplicationForm: React.Dispatch<React.SetStateAction<ApplicationFormState>>;
+  savingApplication: boolean;
+  error: string;
+  onClose: () => void;
+  onSubmit: (event: React.FormEvent) => void;
+}) {
+  if (!open || !canEdit) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="w-full max-w-5xl max-h-[90vh] rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col">
+        <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
+          <div className="space-y-1">
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700">Applicant Portal</div>
+            <h3 className="text-2xl font-bold tracking-tight text-slate-950">编辑申请资料</h3>
+            <p className="text-sm text-neutral-500">支付前可修改完整资料，保存后会同步回页面摘要区。</p>
+          </div>
+          <button
+            type="button"
+            className="w-10 h-10 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-900"
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-6 overscroll-contain">
+          {error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+              {error}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <PublicFormField label="机场名称">
+              <input
+                className={portalInputClass}
+                value={applicationForm.name}
+                onChange={(e) => setApplicationForm((current) => ({ ...current, name: e.target.value }))}
+                required
+              />
+            </PublicFormField>
+            <PublicFormField label="月付价格">
+              <input
+                className={portalInputClass}
+                type="number"
+                min="0"
+                step="0.01"
+                value={applicationForm.plan_price_month}
+                onChange={(e) => setApplicationForm((current) => ({ ...current, plan_price_month: e.target.value }))}
+                required
+              />
+            </PublicFormField>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-medium text-neutral-900">官网地址</div>
+                <div className="mt-1 text-xs text-neutral-500">至少保留一个官网地址，支持多个备用网址。</div>
+              </div>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 rounded-2xl border border-neutral-300 bg-white px-3 py-2 text-xs font-black uppercase tracking-[0.18em] text-neutral-700"
+                onClick={() => setApplicationForm((current) => ({ ...current, websites: [...current.websites, ''] }))}
+              >
+                <Plus className="h-3.5 w-3.5" />
+                添加官网
+              </button>
+            </div>
+            <div className="space-y-3">
+              {applicationForm.websites.map((website, index) => (
+                <div key={`portal-modal-website-${index}`} className="flex items-center gap-3">
+                  <input
+                    className={portalInputClass}
+                    value={website}
+                    onChange={(e) => setApplicationForm((current) => ({
+                      ...current,
+                      websites: updateUrlListItem(current.websites, index, e.target.value),
+                    }))}
+                    placeholder="https://example.com"
+                    required
+                  />
+                  <button
+                    type="button"
+                    className="inline-flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm disabled:opacity-40"
+                    disabled={applicationForm.websites.length === 1}
+                    onClick={() => setApplicationForm((current) => ({
+                      ...current,
+                      websites: removeUrlListItem(current.websites, index),
+                    }))}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <PublicFormField label="申请邮箱">
+              <input
+                className={portalInputClass}
+                type="email"
+                value={applicationForm.applicant_email}
+                onChange={(e) => setApplicationForm((current) => ({ ...current, applicant_email: e.target.value }))}
+                required
+              />
+            </PublicFormField>
+            <PublicFormField label="Telegram">
+              <input
+                className={portalInputClass}
+                value={applicationForm.applicant_telegram}
+                onChange={(e) => setApplicationForm((current) => ({ ...current, applicant_telegram: e.target.value }))}
+                required
+              />
+            </PublicFormField>
+            <PublicFormField label="成立时间">
+              <input
+                className={portalInputClass}
+                type="date"
+                value={applicationForm.founded_on}
+                onChange={(e) => setApplicationForm((current) => ({ ...current, founded_on: e.target.value }))}
+                required
+              />
+            </PublicFormField>
+            <PublicFormField label="订阅链接" hint="可选。">
+              <input
+                className={portalInputClass}
+                value={applicationForm.subscription_url}
+                onChange={(e) => setApplicationForm((current) => ({ ...current, subscription_url: e.target.value }))}
+                placeholder="https://subscribe.example.com"
+              />
+            </PublicFormField>
+          </div>
+
+          <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
+            <input
+              id="portal-modal-has-trial"
+              type="checkbox"
+              className="h-4 w-4 rounded border-slate-300 text-cyan-700"
+              checked={applicationForm.has_trial}
+              onChange={(e) => setApplicationForm((current) => ({ ...current, has_trial: e.target.checked }))}
+            />
+            <label htmlFor="portal-modal-has-trial" className="text-sm font-medium text-slate-900">
+              支持试用
+            </label>
+          </div>
+
+          <PublicFormField label="机场简介">
+            <textarea
+              className={`${portalInputClass} min-h-32`}
+              value={applicationForm.airport_intro}
+              onChange={(e) => setApplicationForm((current) => ({ ...current, airport_intro: e.target.value }))}
+              required
+            />
+          </PublicFormField>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <PublicFormField label="测试账号">
+              <input
+                className={portalInputClass}
+                value={applicationForm.test_account}
+                onChange={(e) => setApplicationForm((current) => ({ ...current, test_account: e.target.value }))}
+                required
+              />
+            </PublicFormField>
+            <PublicFormField label="测试密码">
+              <input
+                className={portalInputClass}
+                value={applicationForm.test_password}
+                onChange={(e) => setApplicationForm((current) => ({ ...current, test_password: e.target.value }))}
+                required
+              />
+            </PublicFormField>
+          </div>
+
+          <div className="sticky bottom-0 -mx-6 px-6 py-4 border-t border-neutral-200 bg-white/95 backdrop-blur flex items-center justify-end gap-3">
+            <button
+              type="button"
+              className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-neutral-300 bg-white px-5 py-3 text-sm font-black tracking-[0.04em] text-neutral-700"
+              onClick={onClose}
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className={portalPrimaryButtonClass}
+              disabled={savingApplication}
+            >
+              {savingApplication ? '保存中...' : '保存申请资料'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+const portalInputClass = 'w-full rounded-[20px] border border-slate-200 bg-white/95 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-600 focus:ring-4 focus:ring-cyan-100';
+const portalPrimaryButtonClass = 'inline-flex min-h-12 items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#0f8db3_0%,#0f766e_100%)] px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white disabled:opacity-50 shadow-[0_14px_32px_rgba(15,118,110,0.18)]';
 
 function TrendPanel({
   icon: Icon,
@@ -2273,6 +2698,7 @@ function ApplicationPage() {
 function PortalPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [view, setView] = useState<PortalViewResponse | null>(null);
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
@@ -2281,6 +2707,10 @@ function PortalPage() {
   const [newPassword, setNewPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   const [creatingChannel, setCreatingChannel] = useState<'' | 'alipay' | 'wxpay'>('');
+  const [applicationForm, setApplicationForm] = useState<ApplicationFormState>(createApplicationForm());
+  const [savingApplication, setSavingApplication] = useState(false);
+  const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
+  const passwordChangeRedirectTimerRef = useRef<number | null>(null);
 
   usePageSeo({
     title: `申请人后台 | ${PUBLIC_SITE_BRAND_NAME}`,
@@ -2323,10 +2753,41 @@ function PortalPage() {
     void loadView();
   }, []);
 
+  useEffect(() => {
+    setApplicationForm(createPortalApplicationForm(view?.application));
+  }, [view]);
+
+  useEffect(() => {
+    return () => {
+      if (passwordChangeRedirectTimerRef.current !== null) {
+        window.clearTimeout(passwordChangeRedirectTimerRef.current);
+      }
+    };
+  }, []);
+
+  const resetPortalSession = (options?: { keepSuccess?: boolean }) => {
+    if (passwordChangeRedirectTimerRef.current !== null) {
+      window.clearTimeout(passwordChangeRedirectTimerRef.current);
+      passwordChangeRedirectTimerRef.current = null;
+    }
+    clearPortalToken();
+    setIsApplicationModalOpen(false);
+    setView(null);
+    setLoading(false);
+    setLoginPassword('');
+    setCurrentPassword('');
+    setNewPassword('');
+    setError('');
+    if (!options?.keepSuccess) {
+      setSuccess('');
+    }
+  };
+
   const login = async (event: React.FormEvent) => {
     event.preventDefault();
     setLoggingIn(true);
     setError('');
+    setSuccess('');
     try {
       const data = await apiRequest<PortalLoginResponse>('/api/v1/portal/login', {
         method: 'POST',
@@ -2349,17 +2810,21 @@ function PortalPage() {
     event.preventDefault();
     setChangingPassword(true);
     setError('');
+    setSuccess('');
     try {
-      const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/password/change', {
+      await portalApiRequest<PortalViewResponse>('/api/v1/portal/password/change', {
         method: 'POST',
         body: JSON.stringify({
           current_password: currentPassword,
           new_password: newPassword,
         }),
       });
-      setView(data);
+      setSuccess('密码已更新，请使用新密码重新登录。');
       setCurrentPassword('');
       setNewPassword('');
+      passwordChangeRedirectTimerRef.current = window.setTimeout(() => {
+        resetPortalSession({ keepSuccess: true });
+      }, 1000);
     } catch (err) {
       setError(err instanceof Error ? err.message : '修改密码失败');
     } finally {
@@ -2368,8 +2833,17 @@ function PortalPage() {
   };
 
   const createPaymentOrder = async (channel: 'alipay' | 'wxpay') => {
+    const pendingWindow = typeof window !== 'undefined'
+      ? window.open('', '_blank')
+      : null;
+    if (pendingWindow) {
+      pendingWindow.document.write('<!doctype html><title>正在跳转支付...</title><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:24px;color:#0f172a">正在跳转到支付页面，请稍候...</body>');
+      pendingWindow.document.close();
+    }
+
     setCreatingChannel(channel);
     setError('');
+    setSuccess('');
     try {
       const data = await portalApiRequest<{
         payment_order: PortalPaymentOrderView | null;
@@ -2381,9 +2855,22 @@ function PortalPage() {
       setView(data.application);
       const payInfo = data.payment_order?.pay_info || '';
       if (/^https?:\/\//i.test(payInfo)) {
-        window.open(payInfo, '_blank', 'noopener,noreferrer');
+        if (pendingWindow) {
+          pendingWindow.location.href = payInfo;
+          setSuccess(channel === 'alipay' ? '支付宝支付页已打开，请在新页面完成支付。' : '微信支付页已打开，请在新页面完成支付。');
+        } else {
+          window.location.href = payInfo;
+        }
+      } else {
+        if (pendingWindow && !pendingWindow.closed) {
+          pendingWindow.close();
+        }
+        setSuccess('支付订单已创建，请使用上方最近支付链接继续支付。');
       }
     } catch (err) {
+      if (pendingWindow && !pendingWindow.closed) {
+        pendingWindow.close();
+      }
       setError(err instanceof Error ? err.message : '创建支付订单失败');
     } finally {
       setCreatingChannel('');
@@ -2391,11 +2878,127 @@ function PortalPage() {
     }
   };
 
-  const logout = () => {
-    clearPortalToken();
-    setView(null);
-    setLoginPassword('');
+  const saveApplication = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const websites = normalizeUrlList(applicationForm.websites);
+    if (websites.length === 0) {
+      setError('至少填写一个官网地址');
+      return;
+    }
+
+    setSavingApplication(true);
     setError('');
+    setSuccess('');
+    try {
+      const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/application', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: applicationForm.name.trim(),
+          website: websites[0],
+          websites,
+          plan_price_month: Number(applicationForm.plan_price_month || 0),
+          has_trial: applicationForm.has_trial,
+          subscription_url: applicationForm.subscription_url.trim(),
+          applicant_email: applicationForm.applicant_email.trim(),
+          applicant_telegram: applicationForm.applicant_telegram.trim(),
+          founded_on: applicationForm.founded_on,
+          airport_intro: applicationForm.airport_intro.trim(),
+          test_account: applicationForm.test_account.trim(),
+          test_password: applicationForm.test_password,
+        }),
+      });
+      setView(data);
+      setLoginEmail(data.account.email);
+      setSuccess('申请资料已保存');
+      setIsApplicationModalOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存申请资料失败');
+    } finally {
+      setSavingApplication(false);
+    }
+  };
+
+  const logout = () => {
+    resetPortalSession();
+  };
+
+  const openApplicationModal = () => {
+    setApplicationForm(createPortalApplicationForm(view?.application));
+    setError('');
+    setSuccess('');
+    setIsApplicationModalOpen(true);
+  };
+
+  const closeApplicationModal = () => {
+    setApplicationForm(createPortalApplicationForm(view?.application));
+    setError('');
+    setIsApplicationModalOpen(false);
+  };
+
+  const renderApplicationDetailsSection = (portalView: PortalViewResponse) => {
+    const canEdit = portalView.application.payment_status !== 'paid';
+    const shouldCollapse = canEdit && portalView.application.review_status === 'awaiting_payment';
+
+    if (shouldCollapse) {
+      return (
+        <PortalCollapsedApplicationSummary
+          application={portalView.application}
+          onEdit={openApplicationModal}
+        />
+      );
+    }
+
+    return (
+      <PortalSectionCard
+        title="申请资料"
+        description={`这里展示你提交给 GateRank 的机场信息。${canEdit ? '支付前可直接修改并保存。' : '支付完成后资料已锁定，如需修改请联系管理员。'}`}
+        aside={(
+          <div className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] ${canEdit ? 'border border-amber-100 bg-amber-50 text-amber-700' : 'border border-slate-200 bg-slate-100 text-slate-500'}`}>
+            {canEdit ? '支付前可修改' : '支付后已锁定'}
+          </div>
+        )}
+      >
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+          <PortalMetricTile label="机场名称" value={portalView.application.name} tone="blue" />
+          <PortalMetricTile label="月付价格" value={`¥${formatMetric(portalView.application.plan_price_month)}`} tone="amber" />
+          <PortalMetricTile label="试用支持" value={portalView.application.has_trial ? '支持' : '不支持'} tone="green" />
+          <PortalMetricTile label="提交时间" value={portalView.application.created_at} />
+        </div>
+
+        {canEdit ? (
+          <div className="flex items-center justify-between gap-4 rounded-[22px] border border-cyan-100 bg-cyan-50/80 px-5 py-4">
+            <div>
+              <div className="text-sm font-black text-slate-950">资料已收起</div>
+              <div className="mt-1 text-sm leading-6 text-slate-600">为避免干扰支付，完整表单改为弹窗编辑。你可以随时打开修改后再保存。</div>
+            </div>
+            <button
+              type="button"
+              className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white px-5 py-3 text-sm font-black tracking-[0.04em] text-cyan-700 shadow-sm hover:bg-cyan-50"
+              onClick={openApplicationModal}
+            >
+              编辑完整资料
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <PortalReadOnlyBlock label="官网列表" value={portalView.application.websites.join('\n')} />
+            <PortalReadOnlyBlock label="申请邮箱 / 登录邮箱" value={portalView.application.applicant_email} />
+            <PortalReadOnlyBlock label="Telegram" value={portalView.application.applicant_telegram} />
+            <PortalReadOnlyBlock label="成立时间" value={formatDateLabel(portalView.application.founded_on)} />
+            <PortalReadOnlyBlock label="试用支持" value={portalView.application.has_trial ? '支持' : '不支持'} />
+            <PortalReadOnlyBlock label="订阅链接" value={portalView.application.subscription_url || '-'} />
+            <PortalReadOnlyBlock label="测试账号" value={portalView.application.test_account} />
+            <PortalReadOnlyBlock label="测试密码" value={portalView.application.test_password} />
+            <PortalReadOnlyBlock label="支付时间" value={portalView.application.paid_at || '-'} />
+            <PortalReadOnlyBlock label="审核时间" value={portalView.application.reviewed_at || '-'} />
+            <PortalReadOnlyBlock label="审核备注" value={portalView.application.review_note || '-'} />
+            <div className="xl:col-span-2">
+              <PortalReadOnlyBlock label="机场简介" value={portalView.application.airport_intro} />
+            </div>
+          </div>
+        )}
+      </PortalSectionCard>
+    );
   };
 
   const renderContent = () => {
@@ -2405,185 +3008,195 @@ function PortalPage() {
 
     if (!view) {
       return (
-        <form onSubmit={login} className="space-y-5">
-          <div>
-            <div className="text-sm font-black text-neutral-900">邮箱登录</div>
-            <p className="mt-1 text-sm leading-6 text-neutral-500">
-              使用提交申请时填写的邮箱和系统发放的初始密码登录。
-            </p>
-          </div>
-          <PublicFormField label="邮箱">
-            <input
-              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-              type="email"
-              value={loginEmail}
-              onChange={(e) => setLoginEmail(e.target.value)}
-              placeholder="contact@example.com"
-              required
-            />
-          </PublicFormField>
-          <PublicFormField label="密码">
-            <input
-              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-              type="password"
-              value={loginPassword}
-              onChange={(e) => setLoginPassword(e.target.value)}
-              placeholder="输入密码"
-              required
-            />
-          </PublicFormField>
-          <button
-            type="submit"
-            className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white disabled:opacity-50"
-            disabled={loggingIn}
-          >
-            <LogIn className="h-4 w-4" />
-            {loggingIn ? '登录中...' : '登录后台'}
-          </button>
-        </form>
+        <PortalSectionCard
+          title="邮箱登录"
+          description="使用提交申请时填写的邮箱和系统发放的初始密码登录。首次登录后需要先修改密码。"
+        >
+          <form onSubmit={login} className="space-y-5">
+            <PublicFormField label="邮箱">
+              <input
+                className={portalInputClass}
+                type="email"
+                value={loginEmail}
+                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="contact@example.com"
+                required
+              />
+            </PublicFormField>
+            <PublicFormField label="密码">
+              <input
+                className={portalInputClass}
+                type="password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+                placeholder="输入密码"
+                required
+              />
+            </PublicFormField>
+            <button
+              type="submit"
+              className={portalPrimaryButtonClass}
+              disabled={loggingIn}
+            >
+              <LogIn className="h-4 w-4" />
+              {loggingIn ? '登录中...' : '登录后台'}
+            </button>
+          </form>
+        </PortalSectionCard>
       );
     }
 
+    let stageSection: React.ReactNode;
     if (view.account.must_change_password) {
-      return (
-        <form onSubmit={changePassword} className="space-y-5">
-          <div className="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4">
-            <KeyRound className="mt-0.5 h-5 w-5 text-amber-700" />
-            <div className="text-sm leading-6 text-amber-800">
-              首次登录必须修改密码。修改完成后才能创建支付订单。
+      stageSection = (
+        <PortalSectionCard
+          title="首次改密"
+          description="首次登录必须修改密码。修改完成后才能创建支付订单。你也可以先确认并补充申请资料，再完成改密。"
+          aside={<div className="rounded-full border border-amber-100 bg-amber-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-700">First Login</div>}
+        >
+          <form onSubmit={changePassword} className="space-y-5">
+            <div className="flex items-start gap-3 rounded-[24px] border border-amber-100 bg-amber-50 px-4 py-4">
+              <KeyRound className="mt-0.5 h-5 w-5 text-amber-700" />
+              <div className="text-sm leading-7 text-amber-800">
+                当前账号仍处于首次登录阶段，你可以先确认并补充申请资料，再完成改密和支付。
+              </div>
             </div>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <StatusPill label="登录邮箱" value={view.account.email} />
-            <StatusPill label="当前阶段" value="首次改密" />
-          </div>
-          <PublicFormField label="当前密码">
-            <input
-              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required
-            />
-          </PublicFormField>
-          <PublicFormField label="新密码" hint="至少 8 位。">
-            <input
-              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              required
-            />
-          </PublicFormField>
-          <button
-            type="submit"
-            className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white disabled:opacity-50"
-            disabled={changingPassword}
-          >
-            <KeyRound className="h-4 w-4" />
-            {changingPassword ? '提交中...' : '保存新密码'}
-          </button>
-        </form>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <PortalInfoCard eyebrow="Login Email" title="登录邮箱" value={view.account.email} tone="blue" />
+              <PortalInfoCard eyebrow="Current Stage" title="当前阶段" value="首次改密" tone="amber" />
+            </div>
+            <PublicFormField label="当前密码">
+              <input
+                className={portalInputClass}
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+              />
+            </PublicFormField>
+            <PublicFormField label="新密码" hint="至少 8 位。">
+              <input
+                className={portalInputClass}
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </PublicFormField>
+            <button
+              type="submit"
+              className={portalPrimaryButtonClass}
+              disabled={changingPassword}
+            >
+              <KeyRound className="h-4 w-4" />
+              {changingPassword ? '提交中...' : '保存新密码'}
+            </button>
+          </form>
+        </PortalSectionCard>
       );
-    }
-
-    if (view.application.review_status === 'awaiting_payment' && view.application.payment_status !== 'paid') {
-      return (
-        <div className="space-y-5">
-          <div>
-            <div className="text-sm font-black text-neutral-900">支付入驻费用</div>
-            <p className="mt-1 text-sm leading-6 text-neutral-500">
-              支付完成并通过网关回调后，申请会自动进入后台待审批列表。
-            </p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <StatusPill label="申请编号" value={`#${view.application.id}`} />
-            <StatusPill label="当前状态" value="待支付" />
-            <StatusPill label="应付金额" value={`¥${formatMetric(view.payment_fee_amount)}`} />
-          </div>
-          {view.latest_payment_order?.pay_info && (
-            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4 text-sm text-neutral-700">
-              <div className="font-medium text-neutral-900">最近支付链接</div>
-              <a
-                className="mt-2 block break-all underline text-neutral-700"
-                href={view.latest_payment_order.pay_info}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {view.latest_payment_order.pay_info}
-              </a>
+    } else if (view.application.review_status === 'awaiting_payment' && view.application.payment_status !== 'paid') {
+      stageSection = (
+        <PortalSectionCard
+          title="支付入驻费用"
+          description="支付完成并通过网关回调后，申请会自动进入后台待审批列表。你也可以先继续补充资料，再发起支付。"
+        >
+          <div className="space-y-5">
+            <div className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#f8fcff_0%,#ffffff_100%)] p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700">Service Overview</div>
+                  <div className="mt-2 text-sm font-medium text-slate-500">关于入驻服务，相关信息如下：</div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-700">费用标准</div>
+                  <div className="mt-1 whitespace-nowrap text-3xl font-black tracking-tight text-slate-950">¥{formatMetric(view.payment_fee_amount)} / 年</div>
+                </div>
+              </div>
+              <div className="mt-4 rounded-[22px] border border-slate-200 bg-white px-4 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
+                <div className="text-sm leading-7 text-slate-700">
+                  提供持续、标准化的性能测试与评估，包括稳定性、速度、可用性等核心指标。
+                </div>
+                <div className="mt-4 flex flex-wrap gap-x-6 gap-y-3 text-sm text-slate-600">
+                  <div><span className="font-black text-slate-900">服务周期：</span>1 年</div>
+                  <div><span className="font-black text-slate-900">测试频率：</span>每日自动化测评与数据更新</div>
+                  <div><span className="font-black text-slate-900">费用标准：</span>¥{formatMetric(view.payment_fee_amount)} / 年</div>
+                </div>
+              </div>
+              <div className="mt-4 text-sm leading-7 text-slate-600">支付完成后自动进入后台待审批状态，支付结果会同步到当前页面。</div>
             </div>
-          )}
-          <div className="flex flex-wrap gap-3">
-            <button
-              type="button"
-              className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white disabled:opacity-50"
-              disabled={Boolean(creatingChannel)}
-              onClick={() => void createPaymentOrder('alipay')}
-            >
-              <CreditCard className="h-4 w-4" />
-              {creatingChannel === 'alipay' ? '创建中...' : '支付宝支付'}
-            </button>
-            <button
-              type="button"
-              className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-neutral-300 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-neutral-700 disabled:opacity-50"
-              disabled={Boolean(creatingChannel)}
-              onClick={() => void createPaymentOrder('wxpay')}
-            >
-              <CreditCard className="h-4 w-4" />
-              {creatingChannel === 'wxpay' ? '创建中...' : '微信支付'}
-            </button>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <PaymentMethodCard
+                title="支付宝支付"
+                tone="alipay"
+                icon={<PaymentBrandArtwork tone="alipay" className="h-full w-full" />}
+                busy={creatingChannel === 'alipay'}
+                disabled={Boolean(creatingChannel)}
+                buttonLabel="立即使用支付宝支付"
+                onClick={() => void createPaymentOrder('alipay')}
+              />
+              <PaymentMethodCard
+                title="微信支付"
+                tone="wechat"
+                icon={<PaymentBrandArtwork tone="wechat" className="h-full w-full" />}
+                busy={creatingChannel === 'wxpay'}
+                disabled={Boolean(creatingChannel)}
+                buttonLabel="立即使用微信支付"
+                onClick={() => void createPaymentOrder('wxpay')}
+              />
+            </div>
           </div>
-        </div>
+        </PortalSectionCard>
+      );
+    } else {
+      stageSection = (
+        <PortalSectionCard
+          title="申请状态"
+          description="这里会展示你的支付和审批进度。审批逻辑与后台保持一致。"
+          aside={<div className="rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">{formatPortalReviewStatus(view.application.review_status)}</div>}
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+            <PortalInfoCard eyebrow="Application" title="申请编号" value={`#${view.application.id}`} tone="blue" />
+            <PortalInfoCard eyebrow="Airport" title="机场名称" value={view.application.name} />
+            <PortalInfoCard eyebrow="Payment" title="支付状态" value={formatPortalPaymentStatus(view.application.payment_status)} tone="green" />
+            <PortalInfoCard eyebrow="Review" title="审批状态" value={formatPortalReviewStatus(view.application.review_status)} tone="amber" />
+          </div>
+        </PortalSectionCard>
       );
     }
 
     return (
-      <div className="space-y-5">
-        <div>
-          <div className="text-sm font-black text-neutral-900">申请状态</div>
-          <p className="mt-1 text-sm leading-6 text-neutral-500">
-            这里会展示你的支付和审批进度。审批逻辑与后台保持一致。
-          </p>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <StatusPill label="机场名称" value={view.application.name} />
-          <StatusPill label="支付状态" value={formatPortalPaymentStatus(view.application.payment_status)} />
-          <StatusPill label="审批状态" value={formatPortalReviewStatus(view.application.review_status)} />
-        </div>
-        <div className="rounded-3xl border border-neutral-200 bg-neutral-50/70 p-5 md:p-6 space-y-4">
-          <ReadOnlyPortalField label="官网" value={view.application.website} />
-          <ReadOnlyPortalField label="联系邮箱" value={view.application.applicant_email} />
-          <ReadOnlyPortalField label="Telegram" value={view.application.applicant_telegram} />
-          <ReadOnlyPortalField label="提交时间" value={view.application.created_at} />
-          <ReadOnlyPortalField label="支付时间" value={view.application.paid_at || '-'} />
-          <ReadOnlyPortalField label="审核时间" value={view.application.reviewed_at || '-'} />
-          <ReadOnlyPortalField label="审核备注" value={view.application.review_note || '-'} />
-        </div>
+      <div className="space-y-6">
+        {stageSection}
+        {renderApplicationDetailsSection(view)}
       </div>
     );
   };
 
   return (
-    <div className="min-h-screen bg-white font-sans relative">
-      <div
-        className="fixed inset-0 opacity-[0.015] pointer-events-none z-0"
-        style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}
-      />
+    <div className="min-h-screen bg-[linear-gradient(180deg,#f4fbff_0%,#ffffff_42%,#f4fff8_100%)] font-sans relative overflow-hidden">
+      <div className="absolute inset-0 pointer-events-none">
+        <div className="absolute left-[-120px] top-[-80px] h-72 w-72 rounded-full bg-sky-200/35 blur-3xl" />
+        <div className="absolute right-[-120px] top-20 h-80 w-80 rounded-full bg-emerald-200/35 blur-3xl" />
+        <div
+          className="absolute inset-0 opacity-[0.05]"
+          style={{ backgroundImage: 'linear-gradient(#0f172a 1px, transparent 1px), linear-gradient(90deg, #0f172a 1px, transparent 1px)', backgroundSize: '36px 36px' }}
+        />
+      </div>
 
-      <div className="relative z-10 max-w-4xl mx-auto px-4 py-8 md:py-12">
+      <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 md:py-12">
         <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
-          <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-500">
+          <div className="inline-flex items-center gap-2 rounded-full border border-sky-100 bg-white/85 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 shadow-sm">
             {PUBLIC_SITE_BRAND_NAME} Portal
           </div>
           <div className="flex items-center gap-3">
-            <a href="/" className="text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-neutral-400 hover:text-neutral-900">
+            <a href="/" className="text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-slate-500 hover:text-slate-900">
               返回首页
             </a>
             {view && (
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-2xl border border-neutral-300 px-4 py-2.5 text-sm font-medium text-neutral-700"
+                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm"
                 onClick={logout}
               >
                 <LogOut className="h-4 w-4" />
@@ -2593,16 +3206,15 @@ function PortalPage() {
           </div>
         </div>
 
-        <header className="mb-8">
-          <h1 className="text-3xl md:text-5xl font-black tracking-tight text-neutral-900">申请人后台</h1>
-          <p className="mt-4 max-w-2xl text-sm md:text-base leading-7 text-neutral-600">
-            使用申请邮箱登录，首次登录修改密码，支付完成后进入待审批状态。
-          </p>
-        </header>
-
-        <section className="rounded-3xl border border-neutral-200 bg-white p-5 md:p-6 space-y-5">
+        <section className="space-y-5">
+          {success && (
+            <div className="flex items-start gap-3 rounded-[24px] border border-emerald-200 bg-emerald-50/95 px-4 py-4 text-sm text-emerald-700 shadow-[0_12px_30px_rgba(16,185,129,0.08)]">
+              <CheckCircle2 className="mt-0.5 h-4 w-4" />
+              <div>{success}</div>
+            </div>
+          )}
           {error && (
-            <div className="flex items-start gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div className="flex items-start gap-3 rounded-[24px] border border-rose-200 bg-rose-50/95 px-4 py-4 text-sm text-rose-700 shadow-[0_12px_30px_rgba(244,63,94,0.08)]">
               <CircleAlert className="mt-0.5 h-4 w-4" />
               <div>{error}</div>
             </div>
@@ -2610,6 +3222,16 @@ function PortalPage() {
           {renderContent()}
         </section>
       </div>
+      <PortalApplicationEditModal
+        open={isApplicationModalOpen}
+        canEdit={Boolean(view && view.application.payment_status !== 'paid')}
+        applicationForm={applicationForm}
+        setApplicationForm={setApplicationForm}
+        savingApplication={savingApplication}
+        error={error}
+        onClose={closeApplicationModal}
+        onSubmit={saveApplication}
+      />
     </div>
   );
 }
@@ -2619,15 +3241,6 @@ function ReadonlyCredentialField({ label, value }: { label: string; value: strin
     <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-4">
       <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">{label}</div>
       <div className="mt-2 break-all text-sm font-medium text-neutral-900">{value}</div>
-    </div>
-  );
-}
-
-function ReadOnlyPortalField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">{label}</div>
-      <div className="mt-1 text-sm leading-6 text-neutral-900">{value}</div>
     </div>
   );
 }
@@ -2684,6 +3297,32 @@ function createApplicationForm(): ApplicationFormState {
     airport_intro: '',
     test_account: '',
     test_password: '',
+  };
+}
+
+function createPortalApplicationForm(
+  application?: PortalApplicationView | null,
+): ApplicationFormState {
+  if (!application) {
+    return createApplicationForm();
+  }
+
+  return {
+    name: application.name || '',
+    websites: application.websites && application.websites.length > 0
+      ? application.websites
+      : application.website
+        ? [application.website]
+        : [''],
+    plan_price_month: String(application.plan_price_month ?? ''),
+    has_trial: Boolean(application.has_trial),
+    subscription_url: application.subscription_url || '',
+    applicant_email: application.applicant_email || '',
+    applicant_telegram: application.applicant_telegram || '',
+    founded_on: application.founded_on || '',
+    airport_intro: application.airport_intro || '',
+    test_account: application.test_account || '',
+    test_password: application.test_password || '',
   };
 }
 

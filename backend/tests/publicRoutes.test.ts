@@ -437,7 +437,10 @@ test('POST /airport-applications accepts complete submission payload', async () 
     const port = (server.address() as AddressInfo).port;
     const response = await fetch(`http://127.0.0.1:${port}/airport-applications`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Origin: 'http://localhost:3000',
+      },
       body: JSON.stringify({
         name: 'Cloud Airport',
         website: 'https://example.com',
@@ -468,7 +471,7 @@ test('POST /airport-applications accepts complete submission payload', async () 
     assert.equal(data.portal_email, 'contact@example.com');
     assert.equal(typeof data.initial_password, 'string');
     assert.ok(data.initial_password.length >= 8);
-    assert.ok(data.portal_login_url.endsWith('/portal'));
+    assert.equal(data.portal_login_url, 'http://localhost:3000/portal');
     assert.equal(created.length, 1);
     assert.equal(createdAccounts.length, 1);
     assert.equal(createdAccounts[0].application_id, 88);

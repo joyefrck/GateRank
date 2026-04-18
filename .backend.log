@@ -1,5 +1,0 @@
-
-> react-example@0.0.0 server:dev
-> tsx watch backend/src/server.ts
-
-[server] backend listening on :8787

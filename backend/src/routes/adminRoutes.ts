@@ -14,6 +14,7 @@ import {
   DEFAULT_MEDIA_LIBRARY_TIMEOUT_MS,
   type MediaLibrarySettingsInput,
 } from '../services/mediaLibrarySettingsService';
+import { SmtpSendError } from '../services/mailService';
 import {
   DEFAULT_APPLICATION_FEE_AMOUNT,
   type PaymentGatewaySettingsInput,
@@ -457,6 +458,10 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       );
       res.json({ ok: true });
     } catch (error) {
+      if (error instanceof SmtpSendError) {
+        next(new HttpError(error.status, 'SMTP_TEST_FAILED', error.message));
+        return;
+      }
       next(error);
     }
   });

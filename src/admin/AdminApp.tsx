@@ -1631,7 +1631,9 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
             </FormField>
             <FormField
               label="商户私钥"
-              hint={settings?.has_private_key ? '已配置，留空则不修改；如需删除请勾选下方清空。' : '用于 RSA 下单签名。'}
+              hint={settings?.has_private_key
+                ? '已配置，留空则不修改；如需删除请勾选下方清空。请填写平台生成时返回的商户私钥，不要填写商户公钥或平台公钥。'
+                : '用于 RSA 下单签名。请填写平台生成时返回的商户私钥，不要填写商户公钥或平台公钥。'}
             >
               <div className="space-y-2">
                 <textarea
@@ -1641,19 +1643,19 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
                     setClearPrivateKey(false);
                     setForm({ ...form, private_key: e.target.value });
                   }}
-                  placeholder={settings?.has_private_key ? '已配置，留空则不修改' : '粘贴商户私钥 PEM'}
+                  placeholder={settings?.has_private_key ? '已配置，留空则不修改' : '粘贴商户私钥，支持平台原始密钥串或 PEM'}
                 />
                 {settings?.has_private_key && (
                   <div className="text-xs text-neutral-500">当前已保存：{settings.private_key_masked}</div>
                 )}
               </div>
             </FormField>
-            <FormField label="平台公钥" hint="用于验证 V2 下单返回和异步通知签名。">
+            <FormField label="平台公钥" hint="用于验证 V2 下单返回和异步通知签名。请填写支付平台后台显示的平台公钥，不要填写商户公钥或商户私钥。">
               <textarea
                 className="min-h-40 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
                 value={form.platform_public_key}
                 onChange={(e) => setForm({ ...form, platform_public_key: e.target.value })}
-                placeholder="粘贴 V2 接口平台公钥 PEM"
+                placeholder="粘贴平台公钥，支持平台原始密钥串或 PEM"
               />
             </FormField>
           </div>
