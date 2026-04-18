@@ -1,7 +1,14 @@
 import { Router } from 'express';
 import { RANKING_TYPES } from '../config/scoring';
 import { HttpError } from '../middleware/errorHandler';
+import type {
+  MarketingEventType,
+  MarketingPageKind,
+  MarketingPlacement,
+  MarketingTargetKind,
+} from '../types/domain';
 import { hashPassword, createRandomPassword } from '../utils/password';
+import { buildMarketingEventRecord } from '../utils/marketing';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { AirportApplicationReviewStatus, AirportStatus } from '../types/domain';
@@ -77,7 +84,29 @@ interface PublicDeps {
     getRiskMonitorView(date: string, page: number, pageSize: number): Promise<unknown>;
     getReportView(airportId: number, date: string): Promise<unknown | null>;
   };
+  marketingRepository?: {
+    insertMany(records: ReturnType<typeof buildMarketingEventRecord>[]): Promise<void>;
+  };
 }
+
+const MARKETING_EVENT_TYPES: MarketingEventType[] = ['page_view', 'airport_impression', 'outbound_click'];
+const MARKETING_PAGE_KINDS: MarketingPageKind[] = [
+  'home',
+  'full_ranking',
+  'risk_monitor',
+  'report',
+  'methodology',
+  'news',
+  'apply',
+  'publish_token_docs',
+];
+const MARKETING_PLACEMENTS: MarketingPlacement[] = [
+  'home_card',
+  'full_ranking_item',
+  'risk_monitor_item',
+  'report_header',
+];
+const MARKETING_TARGET_KINDS: MarketingTargetKind[] = ['website', 'subscription_url'];
 
 export function createPublicRoutes(deps: PublicDeps): Router {
   const router = Router();
@@ -179,6 +208,33 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         initial_password: initialPassword,
         portal_login_url: portalLoginUrl,
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/marketing/events', async (req, res, next) => {
+    try {
+      if (!deps.marketingRepository) {
+        throw new Error('marketingRepository is not configured');
+      }
+      const body = (req.body ?? {}) as Record<string, unknown>;
+      if (!Array.isArray(body.events) || body.events.length === 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'events must be a non-empty array');
+      }
+      if (body.events.length > 50) {
+        throw new HttpError(400, 'BAD_REQUEST', 'events cannot exceed 50 items per request');
+      }
+
+      const records = body.events.map((item, index) => {
+        if (!item || typeof item !== 'object' || Array.isArray(item)) {
+          throw new HttpError(400, 'BAD_REQUEST', `events[${index}] must be object`);
+        }
+        return buildMarketingEventRecord(req, validateMarketingEventPayload(item as Record<string, unknown>, index));
+      });
+
+      await deps.marketingRepository.insertMany(records);
+      res.status(201).json({ inserted: records.length });
     } catch (error) {
       next(error);
     }
@@ -402,4 +458,121 @@ function toAirportId(value: string): number {
     throw new HttpError(400, 'BAD_REQUEST', `invalid airport id: ${value}`);
   }
   return id;
+}
+
+function validateMarketingEventPayload(
+  payload: Record<string, unknown>,
+  index: number,
+): {
+  occurred_at?: string;
+  event_type: MarketingEventType;
+  page_path: string;
+  page_kind: MarketingPageKind;
+  referrer_path?: string | null;
+  airport_id?: number | null;
+  placement?: MarketingPlacement | null;
+  target_kind?: MarketingTargetKind | null;
+  target_url?: string | null;
+  client_session_id?: string | null;
+} {
+  const eventType = String(payload.event_type || '') as MarketingEventType;
+  if (!MARKETING_EVENT_TYPES.includes(eventType)) {
+    throw new HttpError(400, 'BAD_REQUEST', `events[${index}].event_type is invalid`);
+  }
+
+  const pageKind = String(payload.page_kind || '') as MarketingPageKind;
+  if (!MARKETING_PAGE_KINDS.includes(pageKind)) {
+    throw new HttpError(400, 'BAD_REQUEST', `events[${index}].page_kind is invalid`);
+  }
+
+  const pagePath = mustString(payload.page_path, `events[${index}].page_path`);
+  const occurredAt = payload.occurred_at === undefined ? undefined : mustIsoDateTime(payload.occurred_at, `events[${index}].occurred_at`);
+  const referrerPath = payload.referrer_path === undefined || payload.referrer_path === null
+    ? null
+    : mustString(payload.referrer_path, `events[${index}].referrer_path`);
+  const clientSessionId = payload.client_session_id === undefined || payload.client_session_id === null
+    ? null
+    : mustString(payload.client_session_id, `events[${index}].client_session_id`);
+
+  const airportId = payload.airport_id === undefined || payload.airport_id === null
+    ? null
+    : mustPositiveInt(payload.airport_id, `events[${index}].airport_id`);
+  const placement = payload.placement === undefined || payload.placement === null
+    ? null
+    : mustMarketingPlacement(payload.placement, `events[${index}].placement`);
+  const targetKind = payload.target_kind === undefined || payload.target_kind === null
+    ? null
+    : mustMarketingTargetKind(payload.target_kind, `events[${index}].target_kind`);
+  const targetUrl = payload.target_url === undefined || payload.target_url === null
+    ? null
+    : mustString(payload.target_url, `events[${index}].target_url`);
+
+  if (eventType === 'airport_impression') {
+    if (!airportId) {
+      throw new HttpError(400, 'BAD_REQUEST', `events[${index}].airport_id is required for airport_impression`);
+    }
+    if (!placement) {
+      throw new HttpError(400, 'BAD_REQUEST', `events[${index}].placement is required for airport_impression`);
+    }
+  }
+
+  if (eventType === 'outbound_click') {
+    if (!airportId) {
+      throw new HttpError(400, 'BAD_REQUEST', `events[${index}].airport_id is required for outbound_click`);
+    }
+    if (!placement) {
+      throw new HttpError(400, 'BAD_REQUEST', `events[${index}].placement is required for outbound_click`);
+    }
+    if (!targetKind) {
+      throw new HttpError(400, 'BAD_REQUEST', `events[${index}].target_kind is required for outbound_click`);
+    }
+    if (!targetUrl) {
+      throw new HttpError(400, 'BAD_REQUEST', `events[${index}].target_url is required for outbound_click`);
+    }
+  }
+
+  return {
+    occurred_at: occurredAt,
+    event_type: eventType,
+    page_path: pagePath,
+    page_kind: pageKind,
+    referrer_path: referrerPath,
+    airport_id: airportId,
+    placement,
+    target_kind: targetKind,
+    target_url: targetUrl,
+    client_session_id: clientSessionId,
+  };
+}
+
+function mustIsoDateTime(value: unknown, fieldName: string): string {
+  const text = mustString(value, fieldName);
+  if (Number.isNaN(Date.parse(text))) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be valid ISO datetime`);
+  }
+  return text;
+}
+
+function mustPositiveInt(value: unknown, fieldName: string): number {
+  const num = Number(value);
+  if (!Number.isInteger(num) || num <= 0) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be positive integer`);
+  }
+  return num;
+}
+
+function mustMarketingPlacement(value: unknown, fieldName: string): MarketingPlacement {
+  const text = String(value || '') as MarketingPlacement;
+  if (!MARKETING_PLACEMENTS.includes(text)) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} is invalid`);
+  }
+  return text;
+}
+
+function mustMarketingTargetKind(value: unknown, fieldName: string): MarketingTargetKind {
+  const text = String(value || '') as MarketingTargetKind;
+  if (!MARKETING_TARGET_KINDS.includes(text)) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} is invalid`);
+  }
+  return text;
 }

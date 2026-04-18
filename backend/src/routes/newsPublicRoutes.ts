@@ -4,10 +4,14 @@ import type { NewsArticleListItem } from '../types/domain';
 import { renderNewsArticlePage, renderNewsIndexPage } from '../services/newsPageRenderer';
 import { renderPublishTokenDocsPage, renderPublishTokenDocsRawMarkdown } from '../services/publishTokenDocsPageRenderer';
 import type { NewsPublicService } from '../services/newsPublicService';
+import { buildServerPageViewRecord } from '../utils/marketing';
 import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from '../../../shared/publishTokenDocs';
 
 interface NewsPublicDeps {
   newsPublicService: NewsPublicService;
+  marketingRepository?: {
+    insertMany(records: ReturnType<typeof buildServerPageViewRecord>[]): Promise<void>;
+  };
 }
 
 export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
@@ -39,6 +43,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
     try {
       const page = toPositiveInt(req.query.page, 1);
       const view = await deps.newsPublicService.getListView(page, 12);
+      trackMarketingPageView(deps, req, '/news', 'news');
       res
         .status(200)
         .type('html')
@@ -55,6 +60,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
         renderHtmlError(res, 404, '文章不存在或尚未发布');
         return;
       }
+      trackMarketingPageView(deps, req, req.path, 'news');
       res
         .status(200)
         .type('html')
@@ -66,6 +72,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
 
   router.get('/publish-token-docs', (req, res) => {
     try {
+      trackMarketingPageView(deps, req, '/publish-token-docs', 'publish_token_docs');
       res
         .status(200)
         .type('html')
@@ -167,4 +174,26 @@ function escapeXml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+function trackMarketingPageView(
+  deps: NewsPublicDeps,
+  req: Request,
+  pagePath: string,
+  pageKind: 'news' | 'publish_token_docs',
+): void {
+  if (!deps.marketingRepository) {
+    return;
+  }
+
+  void deps.marketingRepository
+    .insertMany([buildServerPageViewRecord(req, { page_kind: pageKind, page_path: pagePath })])
+    .catch((error) => {
+      console.error('[marketing] failed to record server-side page view', {
+        pagePath,
+        pageKind,
+        requestId: req.requestId || 'unknown',
+        error,
+      });
+    });
 }

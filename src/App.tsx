@@ -39,6 +39,14 @@ import {
   usePageSeo,
 } from './site/publicSite';
 import { trackPageView } from './site/analytics';
+import {
+  createTrackedOutboundClickHandler,
+  flushMarketingEvents,
+  type MarketingPageKind,
+  type MarketingPlacement,
+  trackMarketingPageView,
+  useMarketingImpression,
+} from './site/marketing';
 import { PUBLIC_SITE_BRAND_NAME } from '../shared/publicBrand';
 
 const LazyMethodologyPage = lazy(async () => {
@@ -205,6 +213,7 @@ interface CardProps {
   conclusion: string;
   icon?: React.ReactNode;
   onOpen?: () => void;
+  onWebsiteClick?: () => void;
 }
 
 interface RouteState {
@@ -457,6 +466,7 @@ const ConclusionCard = ({
   conclusion,
   icon,
   onOpen,
+  onWebsiteClick,
 }: CardProps) => {
   const styles = {
     stable: 'border-emerald-500/30 bg-white shadow-[4px_4px_0px_0px_rgba(16,185,129,0.1)]',
@@ -550,6 +560,7 @@ const ConclusionCard = ({
           href={website}
           target="_blank"
           rel="noreferrer"
+          onClick={onWebsiteClick}
           className="w-full min-h-11 mt-3 px-4 py-3 rounded-lg border border-neutral-200 bg-white text-neutral-700 text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 hover:border-neutral-900 hover:text-neutral-900 transition-colors relative z-10"
         >
           打开官网
@@ -559,6 +570,34 @@ const ConclusionCard = ({
     </motion.div>
   );
 };
+
+function MarketingImpressionWrapper({
+  airportId,
+  placement,
+  pageKind,
+  pagePath,
+  dedupeKey,
+  children,
+}: {
+  airportId: number;
+  placement: MarketingPlacement;
+  pageKind: MarketingPageKind;
+  pagePath?: string;
+  dedupeKey?: string;
+  children: React.ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  useMarketingImpression({
+    ref,
+    airportId,
+    placement,
+    pageKind,
+    pagePath,
+    dedupeKey,
+  });
+
+  return <div ref={ref}>{children}</div>;
+}
 
 const SectionHeader = ({
   icon: Icon,
@@ -749,6 +788,17 @@ function formatMetric(value: number): string {
 
 function buildReportHref(airportId: number, date?: string): string {
   return `/reports/${airportId}${buildQuery({ date })}`;
+}
+
+function toMarketingPageKind(routeKind: RouteState['kind']): MarketingPageKind | null {
+  if (routeKind === 'home') return 'home';
+  if (routeKind === 'report') return 'report';
+  if (routeKind === 'apply') return 'apply';
+  if (routeKind === 'full_ranking') return 'full_ranking';
+  if (routeKind === 'risk_monitor') return 'risk_monitor';
+  if (routeKind === 'methodology') return 'methodology';
+  if (routeKind === 'publish_token_docs') return 'publish_token_docs';
+  return null;
 }
 
 function buildPageWindow(currentPage: number, totalPages: number): number[] {
@@ -1478,17 +1528,31 @@ function HomePage({ date }: { date?: string }) {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {section.items.map((item) => (
                     <div key={`${sectionKey}-${item.airport_id}`}>
-                      <ConclusionCard
-                        type={item.type}
-                        name={item.name}
-                        website={item.website}
-                        tags={item.tags}
-                        score={item.score}
-                        scoreDeltaVsYesterday={item.score_delta_vs_yesterday}
-                        details={item.details}
-                        conclusion={item.conclusion}
-                        onOpen={() => navigate(item.report_url)}
-                      />
+                      <MarketingImpressionWrapper
+                        airportId={item.airport_id}
+                        placement="home_card"
+                        pageKind="home"
+                        dedupeKey={`home|${sectionKey}|${item.airport_id}`}
+                      >
+                        <ConclusionCard
+                          type={item.type}
+                          name={item.name}
+                          website={item.website}
+                          tags={item.tags}
+                          score={item.score}
+                          scoreDeltaVsYesterday={item.score_delta_vs_yesterday}
+                          details={item.details}
+                          conclusion={item.conclusion}
+                          onOpen={() => navigate(item.report_url)}
+                          onWebsiteClick={createTrackedOutboundClickHandler({
+                            airportId: item.airport_id,
+                            pageKind: 'home',
+                            placement: 'home_card',
+                            targetKind: 'website',
+                            targetUrl: item.website,
+                          })}
+                        />
+                      </MarketingImpressionWrapper>
                     </div>
                   ))}
                 </div>
@@ -1643,7 +1707,13 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                 <ol className="space-y-5">
                   {data.items.map((item) => (
                     <li key={`${item.airport_id}-${item.rank}`}>
-                      <article className="grid gap-5 rounded-[28px] border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-[0_20px_55px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_65px_rgba(15,23,42,0.08)] lg:grid-cols-[132px_minmax(0,1fr)_240px] lg:items-start">
+                      <MarketingImpressionWrapper
+                        airportId={item.airport_id}
+                        placement="full_ranking_item"
+                        pageKind="full_ranking"
+                        dedupeKey={`full_ranking|${item.airport_id}|${item.rank}|${safePage}`}
+                      >
+                        <article className="grid gap-5 rounded-[28px] border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-[0_20px_55px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_65px_rgba(15,23,42,0.08)] lg:grid-cols-[132px_minmax(0,1fr)_240px] lg:items-start">
                           <div className="rounded-2xl border border-neutral-200 bg-neutral-950 px-4 py-5 text-white">
                             <div className="text-[11px] font-black uppercase tracking-[0.2em] text-white/55">Rank</div>
                             <div className="mt-2 text-4xl font-black tracking-tight">#{item.rank}</div>
@@ -1723,6 +1793,13 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                             href={item.website}
                             target="_blank"
                             rel="noreferrer"
+                            onClick={createTrackedOutboundClickHandler({
+                              airportId: item.airport_id,
+                              pageKind: 'full_ranking',
+                              placement: 'full_ranking_item',
+                              targetKind: 'website',
+                              targetUrl: item.website,
+                            })}
                             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition hover:bg-neutral-800"
                           >
                             打开官网
@@ -1742,7 +1819,8 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                             {item.report_url && <ChevronRight className="w-3.5 h-3.5" />}
                           </button>
                         </div>
-                      </article>
+                        </article>
+                      </MarketingImpressionWrapper>
                     </li>
                   ))}
                 </ol>
@@ -1927,7 +2005,13 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                 <ol className="space-y-5">
                   {data.items.map((item) => (
                     <li key={`${item.airport_id}-${item.rank}`}>
-                      <article className="grid gap-5 rounded-[28px] border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#fff7f7_100%)] p-5 shadow-[0_20px_55px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_65px_rgba(15,23,42,0.08)] lg:grid-cols-[132px_minmax(0,1fr)_240px] lg:items-start">
+                      <MarketingImpressionWrapper
+                        airportId={item.airport_id}
+                        placement="risk_monitor_item"
+                        pageKind="risk_monitor"
+                        dedupeKey={`risk_monitor|${item.airport_id}|${item.rank}|${safePage}`}
+                      >
+                        <article className="grid gap-5 rounded-[28px] border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#fff7f7_100%)] p-5 shadow-[0_20px_55px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_65px_rgba(15,23,42,0.08)] lg:grid-cols-[132px_minmax(0,1fr)_240px] lg:items-start">
                         <div className="rounded-2xl border border-neutral-200 bg-neutral-950 px-4 py-5 text-white">
                           <div className="text-[11px] font-black uppercase tracking-[0.2em] text-white/55">Rank</div>
                           <div className="mt-2 text-4xl font-black tracking-tight">#{item.rank}</div>
@@ -2006,6 +2090,13 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                             href={item.website}
                             target="_blank"
                             rel="noreferrer"
+                            onClick={createTrackedOutboundClickHandler({
+                              airportId: item.airport_id,
+                              pageKind: 'risk_monitor',
+                              placement: 'risk_monitor_item',
+                              targetKind: 'website',
+                              targetUrl: item.website,
+                            })}
                             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition hover:bg-neutral-800"
                           >
                             打开官网
@@ -2025,7 +2116,8 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                             {item.report_url && <ChevronRight className="w-3.5 h-3.5" />}
                           </button>
                         </div>
-                      </article>
+                        </article>
+                      </MarketingImpressionWrapper>
                     </li>
                   ))}
                 </ol>
@@ -2210,7 +2302,13 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
 
         {!loading && !error && data && (
           <div className="space-y-10">
-            <header className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] gap-6 items-start">
+            <MarketingImpressionWrapper
+              airportId={data.airport.id}
+              placement="report_header"
+              pageKind="report"
+              dedupeKey={`report|${data.airport.id}`}
+            >
+              <header className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] gap-6 items-start">
               <div>
                 <div className="flex items-center gap-3 mb-4">
                   <div className="w-11 h-11 rounded-xl bg-neutral-900 text-white flex items-center justify-center shadow-xl">
@@ -2242,7 +2340,19 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
                   <span className={`px-3 py-1 rounded-sm border text-[11px] font-black uppercase tracking-[0.16em] ${getAirportStatusTone(data.airport.status)}`}>
                     {formatAirportStatus(data.airport.status)}
                   </span>
-                  <a href={data.airport.website} target="_blank" rel="noreferrer" className="px-3 py-1 rounded-sm border border-neutral-200 text-[11px] font-black uppercase tracking-[0.16em] text-neutral-600">
+                  <a
+                    href={data.airport.website}
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={createTrackedOutboundClickHandler({
+                      airportId: data.airport.id,
+                      pageKind: 'report',
+                      placement: 'report_header',
+                      targetKind: 'website',
+                      targetUrl: data.airport.website,
+                    })}
+                    className="px-3 py-1 rounded-sm border border-neutral-200 text-[11px] font-black uppercase tracking-[0.16em] text-neutral-600"
+                  >
                     官网
                   </a>
                 </div>
@@ -2257,7 +2367,8 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
                 details={data.summary_card.details}
                 conclusion={data.summary_card.conclusion}
               />
-            </header>
+              </header>
+            </MarketingImpressionWrapper>
 
             <section className="space-y-4">
               <SectionHeader
@@ -3360,10 +3471,20 @@ export default function App() {
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       trackPageView();
+      const marketingPageKind = toMarketingPageKind(route.kind);
+      if (marketingPageKind) {
+        trackMarketingPageView(marketingPageKind);
+      }
     }, 0);
 
     return () => window.clearTimeout(timeoutId);
   }, [route]);
+
+  useEffect(() => {
+    const flush = () => flushMarketingEvents();
+    window.addEventListener('pagehide', flush);
+    return () => window.removeEventListener('pagehide', flush);
+  }, []);
 
   if (route.kind === 'report' && route.airportId) {
     return <ReportPage airportId={route.airportId} date={route.date} />;

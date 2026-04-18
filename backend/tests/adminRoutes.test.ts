@@ -138,6 +138,136 @@ test('GET /scheduler/tasks returns task list', async () => {
   }
 });
 
+test('GET /marketing/overview returns overview payload', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      marketingRepository: {
+        getOverview: async ({ dateFrom, dateTo, granularity }) => ({
+          date_from: dateFrom,
+          date_to: dateTo,
+          granularity,
+          totals: {
+            page_views: 120,
+            unique_visitors: 88,
+            airport_impressions: 65,
+            outbound_clicks: 17,
+            ctr: 17 / 65,
+          },
+          trends: [],
+        }),
+        getPageStats: async () => [],
+        getAirportStats: async () => [],
+        getAirportDetail: async () => null,
+      },
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/marketing/overview?granularity=week&date_from=2026-04-01&date_to=2026-04-18`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { granularity: string; totals: { page_views: number; outbound_clicks: number } };
+    assert.equal(data.granularity, 'week');
+    assert.equal(data.totals.page_views, 120);
+    assert.equal(data.totals.outbound_clicks, 17);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /marketing/airports/:id returns airport detail payload', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      marketingRepository: {
+        getOverview: async () => ({ totals: {}, trends: [] }),
+        getPageStats: async () => [],
+        getAirportStats: async () => [],
+        getAirportDetail: async ({ airportId, dateFrom, dateTo, granularity }) => ({
+          airport_id: airportId,
+          airport_name: 'Alpha',
+          date_from: dateFrom,
+          date_to: dateTo,
+          granularity,
+          summary: {
+            airport_impressions: 44,
+            outbound_clicks: 12,
+            ctr: 12 / 44,
+            site_click_share: 0.25,
+            last_clicked_at: '2026-04-18T18:00:00+08:00',
+          },
+          trends: [],
+          placement_breakdown: [],
+          target_breakdown: [],
+        }),
+      },
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/marketing/airports/1?granularity=month&date_from=2026-03-01&date_to=2026-04-18`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { airport_id: number; granularity: string; summary: { outbound_clicks: number } };
+    assert.equal(data.airport_id, 1);
+    assert.equal(data.granularity, 'month');
+    assert.equal(data.summary.outbound_clicks, 12);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('PATCH /scheduler/tasks/:taskKey validates schedule_time', async () => {
   const app = express();
   app.use(express.json());

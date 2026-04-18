@@ -3,6 +3,7 @@ import {
   Shield,
   Database,
   Bell,
+  BarChart3,
   Newspaper,
   Activity,
   RefreshCw,
@@ -258,6 +259,100 @@ interface TelegramSettingsFormState {
 }
 
 type SystemSettingsTab = 'notifications' | 'payment_gateway' | 'smtp' | 'media_libraries' | 'publish_tokens';
+
+type MarketingGranularity = 'day' | 'week' | 'month';
+type MarketingAirportSortBy = 'ctr' | 'clicks' | 'impressions' | 'last_clicked_at';
+type MarketingSortOrder = 'asc' | 'desc';
+type MarketingPageKind = 'home' | 'full_ranking' | 'risk_monitor' | 'report' | 'methodology' | 'news' | 'apply' | 'publish_token_docs';
+type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header';
+type MarketingTargetKind = 'website' | 'subscription_url';
+
+interface MarketingTrendPoint {
+  period_start: string;
+  page_views: number;
+  unique_visitors: number;
+  airport_impressions: number;
+  outbound_clicks: number;
+  ctr: number | null;
+}
+
+interface MarketingOverviewResponse {
+  date_from: string;
+  date_to: string;
+  granularity: MarketingGranularity;
+  totals: {
+    page_views: number;
+    unique_visitors: number;
+    airport_impressions: number;
+    outbound_clicks: number;
+    ctr: number | null;
+  };
+  trends: MarketingTrendPoint[];
+}
+
+interface MarketingPageStatsItem {
+  page_path: string;
+  page_kind: MarketingPageKind;
+  page_views: number;
+  unique_visitors: number;
+  outbound_clicks: number;
+  last_visited_at: string | null;
+}
+
+interface MarketingPagesResponse {
+  date_from: string;
+  date_to: string;
+  items: MarketingPageStatsItem[];
+}
+
+interface MarketingAirportConversionItem {
+  airport_id: number;
+  airport_name: string;
+  airport_impressions: number;
+  outbound_clicks: number;
+  ctr: number | null;
+  primary_placement: MarketingPlacement | null;
+  last_clicked_at: string | null;
+}
+
+interface MarketingAirportsResponse {
+  date_from: string;
+  date_to: string;
+  sort_by: MarketingAirportSortBy;
+  sort_order: MarketingSortOrder;
+  keyword: string;
+  items: MarketingAirportConversionItem[];
+}
+
+interface MarketingPlacementBreakdownItem {
+  placement: MarketingPlacement | null;
+  airport_impressions: number;
+  outbound_clicks: number;
+  ctr: number | null;
+}
+
+interface MarketingTargetBreakdownItem {
+  target_kind: MarketingTargetKind | null;
+  outbound_clicks: number;
+}
+
+interface MarketingAirportDetailResponse {
+  airport_id: number;
+  airport_name: string;
+  date_from: string;
+  date_to: string;
+  granularity: MarketingGranularity;
+  summary: {
+    airport_impressions: number;
+    outbound_clicks: number;
+    ctr: number | null;
+    site_click_share: number | null;
+    last_clicked_at: string | null;
+  };
+  trends: MarketingTrendPoint[];
+  placement_breakdown: MarketingPlacementBreakdownItem[];
+  target_breakdown: MarketingTargetBreakdownItem[];
+}
 
 interface PaymentGatewaySettingsView {
   enabled: boolean;
@@ -603,6 +698,7 @@ export default function AdminApp() {
           <NavItem icon={<Database size={14} />} active={path.startsWith('/admin/airports')} onClick={() => navigate('/admin/airports')} label="机场管理" />
           <NavItem icon={<Shield size={14} />} active={path.startsWith('/admin/applications')} onClick={() => navigate('/admin/applications')} label="入驻申请" />
           <NavItem icon={<Newspaper size={14} />} active={path.startsWith('/admin/news')} onClick={() => navigate('/admin/news')} label="News" />
+          <NavItem icon={<BarChart3 size={14} />} active={path.startsWith('/admin/marketing')} onClick={() => navigate('/admin/marketing')} label="营销" />
           <NavItem icon={<Activity size={14} />} active={path.startsWith('/admin/scheduler')} onClick={() => navigate('/admin/scheduler')} label="任务调度" />
           <NavItem icon={<Bell size={14} />} active={path.startsWith('/admin/settings')} onClick={() => navigate('/admin/settings')} label="系统设置" />
         </aside>
@@ -611,6 +707,7 @@ export default function AdminApp() {
           {path === '/admin/airports' && <AirportsPage onOpenAirport={(id) => navigate(`/admin/airports/${id}/data`)} />}
           {path === '/admin/applications' && <ApplicationsPage onOpenAirports={() => navigate('/admin/airports')} />}
           {path === '/admin/news' && <NewsListPage onCreate={() => navigate('/admin/news/new')} onEdit={(id) => navigate(`/admin/news/${id}`)} />}
+          {path === '/admin/marketing' && <MarketingPage />}
           {(path === '/admin/news/new' || path.match(/^\/admin\/news\/\d+$/)) && (
             <NewsEditorPage
               articleId={path === '/admin/news/new' ? undefined : Number(path.split('/')[3])}
@@ -1051,6 +1148,511 @@ function SchedulerPage() {
           <button type="button" className="px-3 py-2 rounded border border-neutral-300 text-sm" onClick={() => setRunPage((current) => current + 1)} disabled={runs.length < 20}>下一页</button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function MarketingPage() {
+  const [granularity, setGranularity] = useState<MarketingGranularity>('day');
+  const [dateFrom, setDateFrom] = useState(() => shiftDate(today(), -29));
+  const [dateTo, setDateTo] = useState(() => today());
+  const [keyword, setKeyword] = useState('');
+  const [keywordInput, setKeywordInput] = useState('');
+  const [sortBy, setSortBy] = useState<MarketingAirportSortBy>('clicks');
+  const [sortOrder, setSortOrder] = useState<MarketingSortOrder>('desc');
+  const [overview, setOverview] = useState<MarketingOverviewResponse | null>(null);
+  const [pagesData, setPagesData] = useState<MarketingPagesResponse | null>(null);
+  const [airportsData, setAirportsData] = useState<MarketingAirportsResponse | null>(null);
+  const [selectedAirportId, setSelectedAirportId] = useState<number | null>(null);
+  const [selectedDetail, setSelectedDetail] = useState<MarketingAirportDetailResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [detailError, setDetailError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setError('');
+    const params = new URLSearchParams({
+      granularity,
+      date_from: dateFrom,
+      date_to: dateTo,
+    });
+    const airportParams = new URLSearchParams({
+      date_from: dateFrom,
+      date_to: dateTo,
+      sort_by: sortBy,
+      sort_order: sortOrder,
+    });
+    if (keyword) {
+      airportParams.set('keyword', keyword);
+    }
+
+    void Promise.all([
+      apiFetch(`/api/v1/admin/marketing/overview?${params.toString()}`) as Promise<MarketingOverviewResponse>,
+      apiFetch(`/api/v1/admin/marketing/pages?date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}`) as Promise<MarketingPagesResponse>,
+      apiFetch(`/api/v1/admin/marketing/airports?${airportParams.toString()}`) as Promise<MarketingAirportsResponse>,
+    ])
+      .then(([nextOverview, nextPages, nextAirports]) => {
+        if (!active) {
+          return;
+        }
+        setOverview(nextOverview);
+        setPagesData(nextPages);
+        setAirportsData(nextAirports);
+        setSelectedAirportId((current) => {
+          if (nextAirports.items.length === 0) {
+            return null;
+          }
+          if (current && nextAirports.items.some((item) => item.airport_id === current)) {
+            return current;
+          }
+          return nextAirports.items[0].airport_id;
+        });
+      })
+      .catch((err) => {
+        if (!active) {
+          return;
+        }
+        setOverview(null);
+        setPagesData(null);
+        setAirportsData(null);
+        setSelectedAirportId(null);
+        setError(err instanceof Error ? err.message : '营销数据加载失败');
+      })
+      .finally(() => {
+        if (active) {
+          setLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [dateFrom, dateTo, granularity, keyword, sortBy, sortOrder]);
+
+  useEffect(() => {
+    if (!selectedAirportId) {
+      setSelectedDetail(null);
+      setDetailError('');
+      return;
+    }
+
+    let active = true;
+    setDetailLoading(true);
+    setDetailError('');
+    const params = new URLSearchParams({
+      granularity,
+      date_from: dateFrom,
+      date_to: dateTo,
+    });
+    void apiFetch(`/api/v1/admin/marketing/airports/${selectedAirportId}?${params.toString()}`)
+      .then((detail) => {
+        if (active) {
+          setSelectedDetail(detail as MarketingAirportDetailResponse);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          setSelectedDetail(null);
+          setDetailError(err instanceof Error ? err.message : '机场详情加载失败');
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setDetailLoading(false);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [dateFrom, dateTo, granularity, selectedAirportId]);
+
+  const trendItems = overview?.trends || [];
+  const pageItems = pagesData?.items || [];
+  const airportItems = airportsData?.items || [];
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h2 className="text-lg font-bold">营销</h2>
+            <p className="mt-1 text-sm text-neutral-500">统计 GateRank 公共站访问量、机场曝光、外链点击与点击转化率。</p>
+          </div>
+          <button
+            type="button"
+            className="px-3 py-2 rounded border border-neutral-300 text-sm"
+            onClick={() => {
+              setDateFrom(shiftDate(today(), -29));
+              setDateTo(today());
+              setGranularity('day');
+              setSortBy('clicks');
+              setSortOrder('desc');
+              setKeyword('');
+              setKeywordInput('');
+            }}
+          >
+            恢复默认
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[auto_auto_auto_auto_1fr_auto]">
+          <select className="rounded border border-neutral-300 px-3 py-2 text-sm" value={granularity} onChange={(event) => setGranularity(event.target.value as MarketingGranularity)}>
+            <option value="day">按天</option>
+            <option value="week">按周</option>
+            <option value="month">按月</option>
+          </select>
+          <input type="date" className="rounded border border-neutral-300 px-3 py-2 text-sm" value={dateFrom} onChange={(event) => setDateFrom(event.target.value)} />
+          <input type="date" className="rounded border border-neutral-300 px-3 py-2 text-sm" value={dateTo} onChange={(event) => setDateTo(event.target.value)} />
+          <select className="rounded border border-neutral-300 px-3 py-2 text-sm" value={sortBy} onChange={(event) => setSortBy(event.target.value as MarketingAirportSortBy)}>
+            <option value="clicks">机场排序：点击量</option>
+            <option value="ctr">机场排序：CTR</option>
+            <option value="impressions">机场排序：曝光量</option>
+            <option value="last_clicked_at">机场排序：最近点击</option>
+          </select>
+          <div className="flex gap-2">
+            <input
+              className="w-full rounded border border-neutral-300 px-3 py-2 text-sm"
+              value={keywordInput}
+              onChange={(event) => setKeywordInput(event.target.value)}
+              placeholder="搜索机场"
+            />
+            <button type="button" className="rounded bg-neutral-900 px-3 py-2 text-sm text-white" onClick={() => setKeyword(keywordInput.trim())}>筛选</button>
+          </div>
+          <select className="rounded border border-neutral-300 px-3 py-2 text-sm" value={sortOrder} onChange={(event) => setSortOrder(event.target.value as MarketingSortOrder)}>
+            <option value="desc">降序</option>
+            <option value="asc">升序</option>
+          </select>
+        </div>
+      </section>
+
+      {error && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+          {error}
+        </div>
+      )}
+
+      <section className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
+        <MarketingMetricCard label="总访问 PV" value={loading ? '...' : formatCountValue(overview?.totals.page_views)} hint={`${dateFrom} ~ ${dateTo}`} />
+        <MarketingMetricCard label="估算 UV" value={loading ? '...' : formatCountValue(overview?.totals.unique_visitors)} hint="匿名 visitor hash 去重" />
+        <MarketingMetricCard label="机场曝光" value={loading ? '...' : formatCountValue(overview?.totals.airport_impressions)} hint="卡片 / 条目 / 报告头部" />
+        <MarketingMetricCard label="外链点击" value={loading ? '...' : formatCountValue(overview?.totals.outbound_clicks)} hint="跳转官网或订阅链接" />
+        <MarketingMetricCard label="整体 CTR" value={loading ? '...' : formatRatioValue(overview?.totals.ctr)} hint="外链点击 / 机场曝光" />
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+          <div>
+            <h3 className="text-base font-semibold">趋势区</h3>
+            <p className="mt-1 text-sm text-neutral-500">左侧按访问和点击展示趋势，右侧补充区间内每个时间桶的明细值。</p>
+          </div>
+          <MarketingTrendChart items={trendItems} />
+        </div>
+
+        <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+          <div>
+            <h3 className="text-base font-semibold">趋势明细</h3>
+            <p className="mt-1 text-sm text-neutral-500">支持快速核对每个时间桶的 PV、曝光、点击和 CTR。</p>
+          </div>
+          <div className="max-h-[320px] overflow-auto rounded-2xl border border-neutral-200">
+            <table className="min-w-full text-sm">
+              <thead className="bg-neutral-50 text-neutral-600">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">时间</th>
+                  <th className="px-4 py-3 text-left font-medium">PV</th>
+                  <th className="px-4 py-3 text-left font-medium">曝光</th>
+                  <th className="px-4 py-3 text-left font-medium">点击</th>
+                  <th className="px-4 py-3 text-left font-medium">CTR</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trendItems.length === 0 && !loading && (
+                  <tr>
+                    <td className="px-4 py-6 text-neutral-500" colSpan={5}>当前区间暂无营销趋势数据</td>
+                  </tr>
+                )}
+                {trendItems.map((item) => (
+                  <tr key={item.period_start} className="border-t border-neutral-200">
+                    <td className="px-4 py-3">{item.period_start}</td>
+                    <td className="px-4 py-3">{formatCountValue(item.page_views)}</td>
+                    <td className="px-4 py-3">{formatCountValue(item.airport_impressions)}</td>
+                    <td className="px-4 py-3">{formatCountValue(item.outbound_clicks)}</td>
+                    <td className="px-4 py-3">{formatRatioValue(item.ctr)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-base font-semibold">热门页面</h3>
+            <p className="mt-1 text-sm text-neutral-500">按页面路径聚合展示访问量，并补充页面上发生的机场外链点击。</p>
+          </div>
+          <div className="text-sm text-neutral-500">页面数：{formatCountValue(pageItems.length)}</div>
+        </div>
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+          <table className="min-w-full text-sm">
+            <thead className="bg-neutral-50 text-neutral-600">
+              <tr>
+                <th className="px-4 py-3 text-left font-medium">页面类型</th>
+                <th className="px-4 py-3 text-left font-medium">路径</th>
+                <th className="px-4 py-3 text-left font-medium">PV</th>
+                <th className="px-4 py-3 text-left font-medium">UV</th>
+                <th className="px-4 py-3 text-left font-medium">相关点击</th>
+                <th className="px-4 py-3 text-left font-medium">最近访问</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pageItems.length === 0 && !loading && (
+                <tr>
+                  <td className="px-4 py-6 text-neutral-500" colSpan={6}>暂无页面访问统计</td>
+                </tr>
+              )}
+              {pageItems.map((item) => (
+                <tr key={`${item.page_kind}-${item.page_path}`} className="border-t border-neutral-200">
+                  <td className="px-4 py-3">{formatMarketingPageKind(item.page_kind)}</td>
+                  <td className="px-4 py-3 font-mono text-xs text-neutral-700">{item.page_path}</td>
+                  <td className="px-4 py-3">{formatCountValue(item.page_views)}</td>
+                  <td className="px-4 py-3">{formatCountValue(item.unique_visitors)}</td>
+                  <td className="px-4 py-3">{formatCountValue(item.outbound_clicks)}</td>
+                  <td className="px-4 py-3">{formatDateTimeInBeijing(item.last_visited_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <div>
+              <h3 className="text-base font-semibold">机场转化表</h3>
+              <p className="mt-1 text-sm text-neutral-500">按曝光、点击和 CTR 查看每个机场在站内导流表现，点击行可查看详情。</p>
+            </div>
+            <div className="text-sm text-neutral-500">机场数：{formatCountValue(airportItems.length)}</div>
+          </div>
+          <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+            <table className="min-w-full text-sm">
+              <thead className="bg-neutral-50 text-neutral-600">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">机场</th>
+                  <th className="px-4 py-3 text-left font-medium">曝光</th>
+                  <th className="px-4 py-3 text-left font-medium">点击</th>
+                  <th className="px-4 py-3 text-left font-medium">CTR</th>
+                  <th className="px-4 py-3 text-left font-medium">主要来源位</th>
+                  <th className="px-4 py-3 text-left font-medium">最近点击</th>
+                </tr>
+              </thead>
+              <tbody>
+                {airportItems.length === 0 && !loading && (
+                  <tr>
+                    <td className="px-4 py-6 text-neutral-500" colSpan={6}>暂无机场转化数据</td>
+                  </tr>
+                )}
+                {airportItems.map((item) => {
+                  const active = item.airport_id === selectedAirportId;
+                  return (
+                    <tr
+                      key={item.airport_id}
+                      className={`border-t border-neutral-200 cursor-pointer ${active ? 'bg-neutral-50' : 'hover:bg-neutral-50/70'}`}
+                      onClick={() => setSelectedAirportId(item.airport_id)}
+                    >
+                      <td className="px-4 py-3 font-medium text-neutral-900">{item.airport_name}</td>
+                      <td className="px-4 py-3">{formatCountValue(item.airport_impressions)}</td>
+                      <td className="px-4 py-3">{formatCountValue(item.outbound_clicks)}</td>
+                      <td className="px-4 py-3">{formatRatioValue(item.ctr)}</td>
+                      <td className="px-4 py-3">{formatMarketingPlacement(item.primary_placement)}</td>
+                      <td className="px-4 py-3">{formatDateTimeInBeijing(item.last_clicked_at)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+          <div>
+            <h3 className="text-base font-semibold">单机场详情</h3>
+            <p className="mt-1 text-sm text-neutral-500">查看所选机场在当前区间内的趋势、来源位分布和点击目标拆分。</p>
+          </div>
+
+          {detailError && (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {detailError}
+            </div>
+          )}
+
+          {!selectedAirportId && (
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-6 text-sm text-neutral-500">
+              当前没有可查看的机场详情。
+            </div>
+          )}
+
+          {selectedAirportId && detailLoading && (
+            <div className="rounded-xl border border-neutral-200 bg-neutral-50 px-4 py-6 text-sm text-neutral-500">
+              正在加载机场详情...
+            </div>
+          )}
+
+          {selectedDetail && !detailLoading && (
+            <div className="space-y-4">
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4">
+                <div className="text-sm font-semibold text-neutral-900">{selectedDetail.airport_name}</div>
+                <div className="mt-1 text-xs text-neutral-500">{selectedDetail.date_from} ~ {selectedDetail.date_to} / {formatGranularityLabel(selectedDetail.granularity)}</div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <MarketingMetricCard label="曝光" value={formatCountValue(selectedDetail.summary.airport_impressions)} />
+                <MarketingMetricCard label="点击" value={formatCountValue(selectedDetail.summary.outbound_clicks)} />
+                <MarketingMetricCard label="CTR" value={formatRatioValue(selectedDetail.summary.ctr)} />
+                <MarketingMetricCard label="站内点击占比" value={formatRatioValue(selectedDetail.summary.site_click_share)} />
+              </div>
+
+              <div className="rounded-2xl border border-neutral-200 bg-white p-4 space-y-3">
+                <div className="text-sm font-semibold text-neutral-900">该机场趋势</div>
+                <MarketingTrendChart items={selectedDetail.trends} compact />
+                <div className="text-xs text-neutral-500">最近点击：{formatDateTimeInBeijing(selectedDetail.summary.last_clicked_at)}</div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+                <div className="rounded-2xl border border-neutral-200 bg-white p-4 space-y-3">
+                  <div className="text-sm font-semibold text-neutral-900">来源位分析</div>
+                  <div className="overflow-x-auto rounded-xl border border-neutral-200">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-neutral-50 text-neutral-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">来源位</th>
+                          <th className="px-3 py-2 text-left font-medium">曝光</th>
+                          <th className="px-3 py-2 text-left font-medium">点击</th>
+                          <th className="px-3 py-2 text-left font-medium">CTR</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedDetail.placement_breakdown.map((item) => (
+                          <tr key={item.placement || 'unknown'} className="border-t border-neutral-200">
+                            <td className="px-3 py-2">{formatMarketingPlacement(item.placement)}</td>
+                            <td className="px-3 py-2">{formatCountValue(item.airport_impressions)}</td>
+                            <td className="px-3 py-2">{formatCountValue(item.outbound_clicks)}</td>
+                            <td className="px-3 py-2">{formatRatioValue(item.ctr)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-neutral-200 bg-white p-4 space-y-3">
+                  <div className="text-sm font-semibold text-neutral-900">目标链接拆分</div>
+                  <div className="overflow-x-auto rounded-xl border border-neutral-200">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-neutral-50 text-neutral-600">
+                        <tr>
+                          <th className="px-3 py-2 text-left font-medium">目标类型</th>
+                          <th className="px-3 py-2 text-left font-medium">点击</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedDetail.target_breakdown.length === 0 && (
+                          <tr>
+                            <td className="px-3 py-4 text-neutral-500" colSpan={2}>暂无目标链接点击数据</td>
+                          </tr>
+                        )}
+                        {selectedDetail.target_breakdown.map((item) => (
+                          <tr key={item.target_kind || 'unknown'} className="border-t border-neutral-200">
+                            <td className="px-3 py-2">{formatMarketingTargetKind(item.target_kind)}</td>
+                            <td className="px-3 py-2">{formatCountValue(item.outbound_clicks)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function MarketingMetricCard({
+  label,
+  value,
+  hint,
+}: {
+  label: string;
+  value: string;
+  hint?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-4">
+      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">{label}</div>
+      <div className="mt-3 text-2xl font-black tracking-tight text-neutral-900">{value}</div>
+      {hint && <div className="mt-2 text-xs text-neutral-500">{hint}</div>}
+    </div>
+  );
+}
+
+function MarketingTrendChart({
+  items,
+  compact = false,
+}: {
+  items: MarketingTrendPoint[];
+  compact?: boolean;
+}) {
+  if (items.length === 0) {
+    return (
+      <div className={`rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 text-sm text-neutral-500 ${compact ? 'px-4 py-8' : 'px-5 py-16'}`}>
+        当前区间暂无可展示的趋势数据。
+      </div>
+    );
+  }
+
+  const width = 640;
+  const height = compact ? 180 : 260;
+  const padding = 24;
+  const maxValue = Math.max(
+    1,
+    ...items.flatMap((item) => [item.page_views, item.airport_impressions, item.outbound_clicks]),
+  );
+  const xStep = items.length > 1 ? (width - padding * 2) / (items.length - 1) : 0;
+  const buildPolyline = (selector: (item: MarketingTrendPoint) => number) =>
+    items.map((item, index) => {
+      const x = padding + xStep * index;
+      const y = height - padding - ((selector(item) || 0) / maxValue) * (height - padding * 2);
+      return `${x},${Math.max(padding, Math.min(height - padding, y)).toFixed(2)}`;
+    }).join(' ');
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap gap-3 text-xs text-neutral-500">
+        <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-neutral-900" />访问 PV</span>
+        <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-500" />机场曝光</span>
+        <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />外链点击</span>
+      </div>
+      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-neutral-50/70">
+        <svg viewBox={`0 0 ${width} ${height}`} className="h-[220px] min-w-[640px] w-full">
+          <polyline fill="none" stroke="#171717" strokeWidth="3" points={buildPolyline((item) => item.page_views)} />
+          <polyline fill="none" stroke="#0ea5e9" strokeWidth="3" points={buildPolyline((item) => item.airport_impressions)} />
+          <polyline fill="none" stroke="#10b981" strokeWidth="3" points={buildPolyline((item) => item.outbound_clicks)} />
+        </svg>
+      </div>
+      <div className="grid grid-cols-2 gap-3 text-xs text-neutral-500 md:grid-cols-4">
+        <div className="rounded-xl border border-neutral-200 bg-white px-3 py-2">时间桶数：<span className="font-semibold text-neutral-900">{items.length}</span></div>
+        <div className="rounded-xl border border-neutral-200 bg-white px-3 py-2">峰值 PV：<span className="font-semibold text-neutral-900">{formatCountValue(Math.max(...items.map((item) => item.page_views)))}</span></div>
+        <div className="rounded-xl border border-neutral-200 bg-white px-3 py-2">峰值曝光：<span className="font-semibold text-neutral-900">{formatCountValue(Math.max(...items.map((item) => item.airport_impressions)))}</span></div>
+        <div className="rounded-xl border border-neutral-200 bg-white px-3 py-2">峰值点击：<span className="font-semibold text-neutral-900">{formatCountValue(Math.max(...items.map((item) => item.outbound_clicks)))}</span></div>
+      </div>
     </div>
   );
 }
@@ -4326,4 +4928,53 @@ function formatDateTimeInBeijing(value: string | null | undefined): string {
     second: '2-digit',
     timeZone: 'Asia/Shanghai',
   });
+}
+
+function formatCountValue(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+  return new Intl.NumberFormat('zh-CN').format(value);
+}
+
+function formatRatioValue(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return '-';
+  }
+  return `${(value * 100).toFixed(2)}%`;
+}
+
+function formatGranularityLabel(value: MarketingGranularity): string {
+  if (value === 'week') {
+    return '按周';
+  }
+  if (value === 'month') {
+    return '按月';
+  }
+  return '按天';
+}
+
+function formatMarketingPageKind(value: MarketingPageKind): string {
+  if (value === 'home') return '首页';
+  if (value === 'full_ranking') return '全量榜单';
+  if (value === 'risk_monitor') return '风险监测';
+  if (value === 'report') return '机场报告';
+  if (value === 'methodology') return '测评方法';
+  if (value === 'news') return 'News';
+  if (value === 'apply') return '申请页';
+  return '发布文档';
+}
+
+function formatMarketingPlacement(value: MarketingPlacement | null): string {
+  if (value === 'home_card') return '首页卡片';
+  if (value === 'full_ranking_item') return '全量榜单条目';
+  if (value === 'risk_monitor_item') return '风险榜条目';
+  if (value === 'report_header') return '报告头部';
+  return '-';
+}
+
+function formatMarketingTargetKind(value: MarketingTargetKind | null): string {
+  if (value === 'website') return '官网';
+  if (value === 'subscription_url') return '订阅链接';
+  return '-';
 }

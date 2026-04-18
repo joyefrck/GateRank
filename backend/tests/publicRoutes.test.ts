@@ -4,6 +4,159 @@ import { AddressInfo } from 'node:net';
 import express from 'express';
 import { errorHandler } from '../src/middleware/errorHandler';
 import { createPublicRoutes } from '../src/routes/publicRoutes';
+import type { MarketingEventInsertRecord } from '../src/utils/marketing';
+
+test('POST /marketing/events stores validated marketing events', async () => {
+  const insertedRecords: MarketingEventInsertRecord[] = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async () => 1,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async () => ({}),
+        getFullRankingView: async () => ({}),
+        getRiskMonitorView: async () => ({}),
+        getReportView: async () => null,
+      } as any,
+      marketingRepository: {
+        insertMany: async (records) => {
+          insertedRecords.push(...records);
+        },
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/marketing/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'user-agent': 'test-agent/1.0' },
+      body: JSON.stringify({
+        events: [
+          {
+            event_type: 'page_view',
+            page_kind: 'home',
+            page_path: '/',
+            occurred_at: '2026-04-18T10:00:00.000Z',
+            client_session_id: 'session-1',
+          },
+          {
+            event_type: 'airport_impression',
+            page_kind: 'home',
+            page_path: '/',
+            airport_id: 7,
+            placement: 'home_card',
+            occurred_at: '2026-04-18T10:00:01.000Z',
+            client_session_id: 'session-1',
+          },
+          {
+            event_type: 'outbound_click',
+            page_kind: 'report',
+            page_path: '/reports/7',
+            airport_id: 7,
+            placement: 'report_header',
+            target_kind: 'website',
+            target_url: 'https://airport.example.com',
+            occurred_at: '2026-04-18T10:00:02.000Z',
+            client_session_id: 'session-1',
+          },
+        ],
+      }),
+    });
+
+    assert.equal(response.status, 201);
+    assert.equal(insertedRecords.length, 3);
+    assert.equal(insertedRecords[0]?.event_type, 'page_view');
+    assert.equal(insertedRecords[1]?.placement, 'home_card');
+    assert.equal(insertedRecords[2]?.target_kind, 'website');
+    assert.equal(insertedRecords[0]?.event_date, '2026-04-18');
+    assert.equal(insertedRecords[2]?.page_path, '/reports/7');
+    assert.equal(insertedRecords[0]?.visitor_hash.length, 64);
+    assert.equal(insertedRecords[0]?.session_hash.length, 64);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /marketing/events rejects invalid outbound click payload', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async () => 1,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async () => ({}),
+        getFullRankingView: async () => ({}),
+        getRiskMonitorView: async () => ({}),
+        getReportView: async () => null,
+      } as any,
+      marketingRepository: {
+        insertMany: async () => undefined,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/marketing/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        events: [
+          {
+            event_type: 'outbound_click',
+            page_kind: 'home',
+            page_path: '/',
+            airport_id: 7,
+            placement: 'home_card',
+            target_kind: 'website',
+          },
+        ],
+      }),
+    });
+
+    assert.equal(response.status, 400);
+    const data = (await response.json()) as { message: string };
+    assert.match(data.message, /target_url/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
 
 test('GET /pages/home returns public homepage view', async () => {
   const app = express();

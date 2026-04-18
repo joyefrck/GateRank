@@ -285,6 +285,92 @@ export interface ReportView {
   };
 }
 
+export type MarketingEventType = 'page_view' | 'airport_impression' | 'outbound_click';
+export type MarketingGranularity = 'day' | 'week' | 'month';
+export type MarketingPageKind =
+  | 'home'
+  | 'full_ranking'
+  | 'risk_monitor'
+  | 'report'
+  | 'methodology'
+  | 'news'
+  | 'apply'
+  | 'publish_token_docs';
+export type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header';
+export type MarketingTargetKind = 'website' | 'subscription_url';
+
+export interface MarketingTrendPoint {
+  period_start: string;
+  page_views: number;
+  unique_visitors: number;
+  airport_impressions: number;
+  outbound_clicks: number;
+  ctr: number | null;
+}
+
+export interface MarketingOverviewView {
+  date_from: string;
+  date_to: string;
+  granularity: MarketingGranularity;
+  totals: {
+    page_views: number;
+    unique_visitors: number;
+    airport_impressions: number;
+    outbound_clicks: number;
+    ctr: number | null;
+  };
+  trends: MarketingTrendPoint[];
+}
+
+export interface MarketingPageStatsItem {
+  page_path: string;
+  page_kind: MarketingPageKind;
+  page_views: number;
+  unique_visitors: number;
+  outbound_clicks: number;
+  last_visited_at: string | null;
+}
+
+export interface MarketingAirportConversionItem {
+  airport_id: number;
+  airport_name: string;
+  airport_impressions: number;
+  outbound_clicks: number;
+  ctr: number | null;
+  primary_placement: MarketingPlacement | null;
+  last_clicked_at: string | null;
+}
+
+export interface MarketingPlacementBreakdownItem {
+  placement: MarketingPlacement | null;
+  airport_impressions: number;
+  outbound_clicks: number;
+  ctr: number | null;
+}
+
+export interface MarketingTargetBreakdownItem {
+  target_kind: MarketingTargetKind | null;
+  outbound_clicks: number;
+}
+
+export interface MarketingAirportDetailView {
+  airport_id: number;
+  airport_name: string;
+  date_from: string;
+  date_to: string;
+  granularity: MarketingGranularity;
+  summary: {
+    airport_impressions: number;
+    outbound_clicks: number;
+    ctr: number | null;
+    site_click_share: number | null;
+    last_clicked_at: string | null;
+  };
+  trends: MarketingTrendPoint[];
+  placement_breakdown: MarketingPlacementBreakdownItem[];
+  target_breakdown: MarketingTargetBreakdownItem[];
+}
+
 export interface ApiErrorBody {
   code: string;
   message: string;

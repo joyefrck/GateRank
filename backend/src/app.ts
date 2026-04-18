@@ -19,6 +19,7 @@ import { SchedulerRunRepository } from './repositories/schedulerRunRepository';
 import { SchedulerTaskRepository } from './repositories/schedulerTaskRepository';
 import { StatsRepository } from './repositories/statsRepository';
 import { ManualJobRepository } from './repositories/manualJobRepository';
+import { MarketingEventRepository } from './repositories/marketingEventRepository';
 import { SystemSettingRepository } from './repositories/systemSettingRepository';
 import { createAdminAuthRoutes } from './routes/adminAuthRoutes';
 import { createAdminRoutes } from './routes/adminRoutes';
@@ -76,6 +77,8 @@ export async function createApp() {
   await systemSettingRepository.ensureSchema();
   const accessTokenRepository = new AccessTokenRepository(pool);
   await accessTokenRepository.ensureSchema();
+  const marketingEventRepository = new MarketingEventRepository(pool);
+  await marketingEventRepository.ensureSchema();
   const newsRepository = new NewsRepository(pool);
   await newsRepository.ensureSchema();
   const scoreRepository = new ScoreRepository(pool);
@@ -191,6 +194,7 @@ export async function createApp() {
       scoreRepository,
       rankingRepository,
       publicViewService,
+      marketingRepository: marketingEventRepository,
     }),
   );
 
@@ -208,6 +212,7 @@ export async function createApp() {
   app.use(
     createNewsPublicRoutes({
       newsPublicService,
+      marketingRepository: marketingEventRepository,
     }),
   );
 
@@ -227,6 +232,7 @@ export async function createApp() {
       aggregationService,
       manualJobService,
       schedulerService: adminSchedulerService,
+      marketingRepository: marketingEventRepository,
       auditRepository,
       publicViewService,
       telegramNotificationService: applicationNotificationService,

@@ -259,6 +259,30 @@ CREATE TABLE IF NOT EXISTS admin_scheduler_runs (
   INDEX idx_admin_scheduler_runs_status (status)
 );
 
+CREATE TABLE IF NOT EXISTS marketing_events (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  occurred_at DATETIME NOT NULL,
+  event_date DATE NOT NULL,
+  event_type ENUM('page_view', 'airport_impression', 'outbound_click') NOT NULL,
+  page_path VARCHAR(1024) NOT NULL,
+  page_kind ENUM('home', 'full_ranking', 'risk_monitor', 'report', 'methodology', 'news', 'apply', 'publish_token_docs') NOT NULL,
+  referrer_path VARCHAR(1024) NULL,
+  airport_id BIGINT UNSIGNED NULL,
+  placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header') NULL,
+  target_kind ENUM('website', 'subscription_url') NULL,
+  target_url VARCHAR(2048) NULL,
+  visitor_hash CHAR(64) NOT NULL,
+  session_hash CHAR(64) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_marketing_events_date_type (event_date, event_type),
+  INDEX idx_marketing_events_airport_date_type (airport_id, event_date, event_type),
+  INDEX idx_marketing_events_page_kind_date (page_kind, event_date),
+  INDEX idx_marketing_events_page_path (page_path(255)),
+  INDEX idx_marketing_events_occurred_at (occurred_at),
+  CONSTRAINT fk_marketing_events_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
+);
+
 CREATE TABLE IF NOT EXISTS admin_access_tokens (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   name VARCHAR(128) NOT NULL,
