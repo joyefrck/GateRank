@@ -1,0 +1,63 @@
+- generic [ref=e9]:
+  - banner [ref=e10]:
+    - generic [ref=e11]:
+      - img [ref=e13]
+      - text: GateRank Admin
+    - generic [ref=e15]:
+      - link "前台首页" [ref=e16] [cursor=pointer]:
+        - /url: /
+      - button "退出" [ref=e17]:
+        - generic [ref=e18]:
+          - img [ref=e19]
+          - text: 退出
+  - generic [ref=e22]:
+    - complementary [ref=e23]:
+      - button "机场管理" [ref=e24]:
+        - img [ref=e25]
+        - text: 机场管理
+      - button "入驻申请" [ref=e29]:
+        - img [ref=e30]
+        - text: 入驻申请
+      - button "News" [ref=e32]:
+        - img [ref=e33]
+        - text: News
+      - button "营销" [ref=e36]:
+        - img [ref=e37]
+        - text: 营销
+      - button "任务调度" [ref=e39]:
+        - img [ref=e40]
+        - text: 任务调度
+      - button "系统设置" [ref=e42]:
+        - img [ref=e43]
+        - text: 系统设置
+    - main [ref=e46]:
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - heading "机场管理" [level=2] [ref=e49]
+          - button "新增机场" [ref=e50]:
+            - generic [ref=e51]:
+              - img [ref=e52]
+              - text: 新增机场
+        - generic [ref=e53]:
+          - generic [ref=e54]:
+            - img [ref=e55]
+            - textbox "搜索名称 / 官网 / 备用网址" [ref=e58]
+          - combobox [ref=e59]:
+            - option "全部状态" [selected]
+            - option "正常"
+            - option "风险"
+            - option "跑路"
+          - button "查询" [ref=e60]
+        - table [ref=e62]:
+          - rowgroup [ref=e63]:
+            - row "名称 网站 状态 月价 总分 试用 订阅链接 标签 操作" [ref=e64]:
+              - columnheader "名称" [ref=e65]
+              - columnheader "网站" [ref=e66]
+              - columnheader "状态" [ref=e67]
+              - columnheader "月价" [ref=e68]
+              - columnheader "总分" [ref=e69]
+              - columnheader "试用" [ref=e70]
+              - columnheader "订阅链接" [ref=e71]
+              - columnheader "标签" [ref=e72]
+              - columnheader "操作" [ref=e73]
+          - rowgroup

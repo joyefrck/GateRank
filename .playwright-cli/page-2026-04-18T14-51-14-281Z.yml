@@ -1,0 +1,176 @@
+- generic [ref=e9]:
+  - banner [ref=e10]:
+    - generic [ref=e11]:
+      - img [ref=e13]
+      - text: GateRank Admin
+    - generic [ref=e15]:
+      - link "前台首页" [ref=e16] [cursor=pointer]:
+        - /url: /
+      - button "退出" [ref=e17]:
+        - generic [ref=e18]:
+          - img [ref=e19]
+          - text: 退出
+  - generic [ref=e22]:
+    - complementary [ref=e23]:
+      - button "机场管理" [ref=e24]:
+        - img [ref=e25]
+        - text: 机场管理
+      - button "入驻申请" [ref=e29]:
+        - img [ref=e30]
+        - text: 入驻申请
+      - button "News" [ref=e32]:
+        - img [ref=e33]
+        - text: News
+      - button "营销" [active] [ref=e36]:
+        - img [ref=e37]
+        - text: 营销
+      - button "任务调度" [ref=e39]:
+        - img [ref=e40]
+        - text: 任务调度
+      - button "系统设置" [ref=e42]:
+        - img [ref=e43]
+        - text: 系统设置
+    - main [ref=e46]:
+      - generic [ref=e96]:
+        - generic [ref=e97]:
+          - generic [ref=e98]:
+            - generic [ref=e99]:
+              - heading "营销" [level=2] [ref=e100]
+              - paragraph [ref=e101]: 统计 GateRank 公共站访问量、机场曝光、外链点击与点击转化率。
+            - button "恢复默认" [ref=e102]
+          - generic [ref=e103]:
+            - combobox [ref=e104]:
+              - option "按天"
+              - option "按周"
+              - option "按月" [selected]
+              - option "自定义"
+            - textbox [disabled] [ref=e105]: 2026-03-20
+            - textbox [disabled] [ref=e106]: 2026-04-18
+            - generic [ref=e107]:
+              - textbox "搜索机场" [ref=e108]
+              - button "筛选" [ref=e109]
+        - generic [ref=e110]:
+          - generic [ref=e112]:
+            - generic [ref=e113]: 总访问 PV
+            - generic [ref=e114]: "10"
+            - generic [ref=e115]: 2026-03-20 ~ 2026-04-18
+          - generic [ref=e117]:
+            - generic [ref=e118]: 估算 UV
+            - generic [ref=e119]: "5"
+            - generic [ref=e120]: 匿名 visitor hash 去重
+          - generic [ref=e122]:
+            - generic [ref=e123]: 机场曝光
+            - generic [ref=e124]: "4"
+            - generic [ref=e125]: 卡片 / 条目 / 报告头部
+          - generic [ref=e127]:
+            - generic [ref=e128]: 外链点击
+            - generic [ref=e129]: "3"
+            - generic [ref=e130]: 跳转官网或订阅链接
+          - generic [ref=e132]:
+            - generic [ref=e133]: 整体 CTR
+            - generic [ref=e134]: 75.00%
+            - generic [ref=e135]: 外链点击 / 机场曝光
+        - generic [ref=e136]:
+          - generic [ref=e137]:
+            - generic [ref=e138]:
+              - heading "趋势区" [level=3] [ref=e139]
+              - paragraph [ref=e140]: 左侧按访问和点击展示趋势，右侧补充区间内每个时间桶的明细值。
+            - generic [ref=e141]:
+              - generic [ref=e142]:
+                - generic [ref=e143]: 访问 PV
+                - generic [ref=e145]: 机场曝光
+                - generic [ref=e147]: 外链点击
+              - img [ref=e150]
+              - generic [ref=e154]:
+                - generic [ref=e155]: 时间桶数：1
+                - generic [ref=e156]: 峰值 PV：10
+                - generic [ref=e157]: 峰值曝光：4
+                - generic [ref=e158]: 峰值点击：3
+          - generic [ref=e159]:
+            - generic [ref=e160]:
+              - heading "趋势明细" [level=3] [ref=e161]
+              - paragraph [ref=e162]: 支持快速核对每个时间桶的 PV、曝光、点击和 CTR。
+            - table [ref=e164]:
+              - rowgroup [ref=e165]:
+                - row "时间 PV 曝光 点击 CTR" [ref=e166]:
+                  - columnheader "时间" [ref=e167]
+                  - columnheader "PV" [ref=e168]
+                  - columnheader "曝光" [ref=e169]
+                  - columnheader "点击" [ref=e170]
+                  - columnheader "CTR" [ref=e171]
+              - rowgroup [ref=e172]:
+                - row "2026-04-18 10 4 3 75.00%" [ref=e173]:
+                  - cell "2026-04-18" [ref=e174]
+                  - cell "10" [ref=e175]
+                  - cell "4" [ref=e176]
+                  - cell "3" [ref=e177]
+                  - cell "75.00%" [ref=e178]
+        - generic [ref=e179]:
+          - generic [ref=e180]:
+            - generic [ref=e181]:
+              - heading "热门页面" [level=3] [ref=e182]
+              - paragraph [ref=e183]: 按页面路径聚合展示访问量，并补充页面上发生的机场外链点击。
+            - generic [ref=e184]: 页面数：3
+          - table [ref=e186]:
+            - rowgroup [ref=e187]:
+              - row "页面类型 路径 PV UV 相关点击 最近访问" [ref=e188]:
+                - columnheader "页面类型" [ref=e189]
+                - columnheader "路径" [ref=e190]
+                - columnheader "PV" [ref=e191]
+                - columnheader "UV" [ref=e192]
+                - columnheader "相关点击" [ref=e193]
+                - columnheader "最近访问" [ref=e194]
+            - rowgroup [ref=e195]:
+              - row "首页 / 8 4 1 2026/04/18 22:42:17" [ref=e196]:
+                - cell "首页" [ref=e197]
+                - cell / [ref=e198]
+                - cell "8" [ref=e199]
+                - cell "4" [ref=e200]
+                - cell "1" [ref=e201]
+                - cell "2026/04/18 22:42:17" [ref=e202]
+              - row "全量榜单 /rankings 1 1 1 2026/04/18 14:05:00" [ref=e203]:
+                - cell "全量榜单" [ref=e204]
+                - cell "/rankings" [ref=e205]
+                - cell "1" [ref=e206]
+                - cell "1" [ref=e207]
+                - cell "1" [ref=e208]
+                - cell "2026/04/18 14:05:00" [ref=e209]
+              - row "机场报告 /reports/1 1 1 1 2026/04/18 21:30:00" [ref=e210]:
+                - cell "机场报告" [ref=e211]
+                - cell "/reports/1" [ref=e212]
+                - cell "1" [ref=e213]
+                - cell "1" [ref=e214]
+                - cell "1" [ref=e215]
+                - cell "2026/04/18 21:30:00" [ref=e216]
+        - generic [ref=e217]:
+          - generic [ref=e218]:
+            - generic [ref=e219]:
+              - heading "机场转化表" [level=3] [ref=e220]
+              - paragraph [ref=e221]: 按曝光、点击和 CTR 查看每个机场在站内导流表现，通过右侧按钮打开居中详情页。
+            - generic [ref=e222]:
+              - generic [ref=e223]: 机场数：1
+              - generic [ref=e224]: 每页 20 条
+          - table [ref=e226]:
+            - rowgroup [ref=e227]:
+              - row "机场 曝光 点击 CTR 主要来源位 最近点击 操作" [ref=e228]:
+                - columnheader "机场" [ref=e229]
+                - columnheader "曝光" [ref=e230]
+                - columnheader "点击" [ref=e231]
+                - columnheader "CTR" [ref=e232]
+                - columnheader "主要来源位" [ref=e233]
+                - columnheader "最近点击" [ref=e234]
+                - columnheader "操作" [ref=e235]
+            - rowgroup [ref=e236]:
+              - row "测试机场 A 4 3 75.00% 全量榜单条目 2026/04/18 21:35:00 查看详情" [ref=e237]:
+                - cell "测试机场 A" [ref=e238]
+                - cell "4" [ref=e239]
+                - cell "3" [ref=e240]
+                - cell "75.00%" [ref=e241]
+                - cell "全量榜单条目" [ref=e242]
+                - cell "2026/04/18 21:35:00" [ref=e243]
+                - cell "查看详情" [ref=e244]:
+                  - button "查看详情" [ref=e245]
+          - generic [ref=e246]:
+            - button "上一页" [disabled] [ref=e247]
+            - generic [ref=e248]: 第 1 / 1 页
+            - button "下一页" [disabled] [ref=e249]

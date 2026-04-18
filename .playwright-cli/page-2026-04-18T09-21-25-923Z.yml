@@ -1,0 +1,266 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e59]:
+    - button [ref=e60] [cursor=pointer]:
+      - img [ref=e62]
+    - generic [ref=e65]:
+      - img [ref=e67]
+      - img [ref=e73] [cursor=pointer]
+      - menubar [ref=e82]:
+        - menuitem "概览" [ref=e83] [cursor=pointer]:
+          - img [ref=e85]
+          - generic [ref=e87]: 概览
+        - menuitem "应用商店" [ref=e88] [cursor=pointer]:
+          - img [ref=e90]
+          - generic [ref=e92]: 应用商店
+        - menuitem "网站" [ref=e93]:
+          - generic [ref=e94] [cursor=pointer]:
+            - img [ref=e96]
+            - generic [ref=e98]: 网站
+            - img [ref=e100]
+        - menuitem "AI" [ref=e102]:
+          - generic [ref=e103] [cursor=pointer]:
+            - img [ref=e105]
+            - generic [ref=e107]: AI
+            - img [ref=e109]
+        - menuitem "数据库" [ref=e111] [cursor=pointer]:
+          - img [ref=e113]
+          - generic [ref=e115]: 数据库
+        - menuitem "容器" [ref=e116] [cursor=pointer]:
+          - img [ref=e118]
+          - generic [ref=e120]: 容器
+        - menuitem "系统" [ref=e121]:
+          - generic [ref=e122] [cursor=pointer]:
+            - img [ref=e124]
+            - generic [ref=e126]: 系统
+            - img [ref=e128]
+        - menuitem "终端" [ref=e130] [cursor=pointer]:
+          - img [ref=e132]
+          - generic [ref=e134]: 终端
+        - menuitem "计划任务" [ref=e135] [cursor=pointer]:
+          - img [ref=e137]
+          - generic [ref=e139]: 计划任务
+        - menuitem "工具箱" [ref=e140] [cursor=pointer]:
+          - img [ref=e142]
+          - generic [ref=e144]: 工具箱
+        - menuitem "高级功能" [ref=e145]:
+          - generic [ref=e146] [cursor=pointer]:
+            - img [ref=e148]
+            - generic [ref=e150]: 高级功能
+            - img [ref=e152]
+        - menuitem "日志审计" [ref=e154] [cursor=pointer]:
+          - img [ref=e156]
+          - generic [ref=e158]: 日志审计
+        - menuitem "面板设置" [ref=e159] [cursor=pointer]:
+          - img [ref=e161]
+          - generic [ref=e163]: 面板设置
+      - button "主节点" [ref=e167] [cursor=pointer]:
+        - generic [ref=e168]:
+          - img [ref=e169]
+          - generic [ref=e171]: 主节点
+    - generic [ref=e172]:
+      - generic [ref=e173]:
+        - generic [ref=e176]:
+          - radiogroup "radio-group" [ref=e177]:
+            - generic [ref=e178]:
+              - radio "概览" [checked] [ref=e179]
+              - generic [ref=e180] [cursor=pointer]: 概览
+          - button "升级专业版" [ref=e183] [cursor=pointer]:
+            - generic [ref=e184]: 升级专业版
+        - generic [ref=e185]:
+          - generic [ref=e186]:
+            - generic [ref=e189]:
+              - generic [ref=e190]:
+                - generic [ref=e192]: 概览
+                - button [ref=e194] [cursor=pointer]:
+                  - img [ref=e196]
+              - generic [ref=e200]:
+                - generic [ref=e201]:
+                  - text: 网站
+                  - generic [ref=e202]: "4"
+                - generic [ref=e203]:
+                  - text: 数据库 - 所有
+                  - generic [ref=e204]: "2"
+                - generic [ref=e205]:
+                  - text: 计划任务
+                  - generic [ref=e206]: "0"
+                - generic [ref=e207]:
+                  - text: 已安装应用
+                  - generic [ref=e208]: "4"
+            - generic [ref=e211]:
+              - generic [ref=e214]: 状态
+              - generic [ref=e216]:
+                - generic [ref=e221]: 运行流畅
+                - generic [ref=e227]: ( 0.38 / 2 ) 核
+                - generic [ref=e232]: 1.93 GB / 3.53 GB
+                - generic [ref=e237]: 27.54 GB / 39.02 GB
+            - generic [ref=e240]:
+              - generic [ref=e241]:
+                - generic [ref=e243]: 监控
+                - generic [ref=e244]:
+                  - radiogroup "radio-group" [ref=e245]:
+                    - generic [ref=e246]:
+                      - radio "流量" [checked] [ref=e247]
+                      - generic [ref=e248] [cursor=pointer]: 流量
+                    - generic [ref=e249]:
+                      - radio "磁盘 IO" [ref=e250]
+                      - generic [ref=e251] [cursor=pointer]: 磁盘 IO
+                  - generic [ref=e253] [cursor=pointer]:
+                    - generic [ref=e254]: 网卡
+                    - generic:
+                      - combobox [ref=e256]
+                      - generic [ref=e257]: 所有
+                    - img [ref=e260]
+              - generic [ref=e264]:
+                - generic [ref=e266] [cursor=pointer]: "上行: 2.47 KB/s"
+                - generic [ref=e268] [cursor=pointer]: "下行: 1.96 KB/s"
+                - generic [ref=e270] [cursor=pointer]: "总发送: 152.4 GB"
+                - generic [ref=e272] [cursor=pointer]: "总接收: 107.21 GB"
+          - generic [ref=e277]:
+            - generic [ref=e283]:
+              - generic [ref=e284]:
+                - generic [ref=e286]: 系统信息
+                - generic [ref=e287]:
+                  - button [ref=e288] [cursor=pointer]:
+                    - img [ref=e290]
+                  - button [ref=e292] [cursor=pointer]:
+                    - img [ref=e294]
+                  - button [ref=e296] [cursor=pointer]:
+                    - img [ref=e298]
+              - table [ref=e307]:
+                - rowgroup [ref=e308]:
+                  - row "主机名称 iZj6c4ohudqzn2bbd9o8yxZ" [ref=e309]:
+                    - cell "主机名称" [ref=e310]
+                    - cell "iZj6c4ohudqzn2bbd9o8yxZ" [ref=e311]
+                  - row "发行版本 Debian GNU/Linux 12" [ref=e312]:
+                    - cell "发行版本" [ref=e313]
+                    - cell "Debian GNU/Linux 12" [ref=e314]
+                  - row "内核版本 6.1.0-21-amd64" [ref=e315]:
+                    - cell "内核版本" [ref=e316]
+                    - cell "6.1.0-21-amd64" [ref=e317]
+                  - row "系统类型 x86_64" [ref=e318]:
+                    - cell "系统类型" [ref=e319]
+                    - cell "x86_64" [ref=e320]
+                  - row "主机地址 172.19.15.5" [ref=e321]:
+                    - cell "主机地址" [ref=e322]
+                    - cell "172.19.15.5" [ref=e323]
+                  - row "启动时间 2026-02-16 16:02:57" [ref=e324]:
+                    - cell "启动时间" [ref=e325]
+                    - cell "2026-02-16 16:02:57" [ref=e326]
+                  - row "运行时间 61天 1小时 18分钟 27秒" [ref=e327]:
+                    - cell "运行时间" [ref=e328]
+                    - cell "61天 1小时 18分钟 27秒" [ref=e329]
+            - generic [ref=e333]:
+              - generic [ref=e334]:
+                - generic [ref=e336]: 应用
+                - button [ref=e338] [cursor=pointer]:
+                  - img [ref=e340]
+              - generic [ref=e345]:
+                - generic [ref=e347] [cursor=pointer]:
+                  - img [ref=e350]
+                  - generic [ref=e352]:
+                    - button "openresty" [ref=e355]:
+                      - generic [ref=e356]:
+                        - text: openresty
+                        - img [ref=e358]
+                    - 'button "版本: 1.27.1.2-5-1-focal" [ref=e361]':
+                      - generic [ref=e362]: "版本: 1.27.1.2-5-1-focal"
+                    - generic [ref=e363]:
+                      - button "关闭" [ref=e364]:
+                        - generic [ref=e365]: 关闭
+                      - button "重启" [ref=e366]:
+                        - generic [ref=e367]: 重启
+                      - button "目录" [ref=e368]:
+                        - generic [ref=e369]: 目录
+                  - button "安装" [disabled] [ref=e371]:
+                    - generic [ref=e372]: 安装
+                - generic [ref=e375] [cursor=pointer]:
+                  - img [ref=e378]
+                  - generic [ref=e380]:
+                    - button "mysql" [ref=e383]:
+                      - generic [ref=e384]:
+                        - text: mysql
+                        - img [ref=e386]
+                    - 'button "版本: 8.4.7" [ref=e389]':
+                      - generic [ref=e390]: "版本: 8.4.7"
+                    - generic [ref=e391]:
+                      - button "关闭" [ref=e392]:
+                        - generic [ref=e393]: 关闭
+                      - button "重启" [ref=e394]:
+                        - generic [ref=e395]: 重启
+                      - button "目录" [ref=e396]:
+                        - generic [ref=e397]: 目录
+                  - button "安装" [ref=e399]:
+                    - generic [ref=e400]: 安装
+                - generic [ref=e403] [cursor=pointer]:
+                  - img [ref=e406]
+                  - generic [ref=e408]:
+                    - button "halo" [ref=e411]:
+                      - generic [ref=e412]:
+                        - text: halo
+                        - img [ref=e414]
+                    - 'button "版本: 2.22.2" [ref=e417]':
+                      - generic [ref=e418]: "版本: 2.22.2"
+                    - generic [ref=e419]:
+                      - button "关闭" [ref=e420]:
+                        - generic [ref=e421]: 关闭
+                      - button "重启" [ref=e422]:
+                        - generic [ref=e423]: 重启
+                      - button "目录" [ref=e424]:
+                        - generic [ref=e425]: 目录
+                  - button "安装" [ref=e427]:
+                    - generic [ref=e428]: 安装
+                - generic [ref=e431] [cursor=pointer]:
+                  - img [ref=e434]
+                  - generic [ref=e436]:
+                    - generic [ref=e437]:
+                      - text: Redis
+                      - img [ref=e438]
+                    - generic [ref=e440]: 高性能的开源键值数据库
+                  - button "安装" [ref=e442]:
+                    - generic [ref=e443]: 安装
+                - generic [ref=e446] [cursor=pointer]:
+                  - img [ref=e449]
+                  - generic [ref=e451]:
+                    - generic [ref=e452]:
+                      - text: OpenClaw
+                      - img [ref=e453]
+                    - generic [ref=e455]: 开源、自托管的个人 AI 助理
+                  - button "安装" [ref=e457]:
+                    - generic [ref=e458]: 安装
+                - generic [ref=e461] [cursor=pointer]:
+                  - img [ref=e464]
+                  - generic [ref=e466]:
+                    - generic [ref=e467]:
+                      - text: ClawSwarm
+                      - img [ref=e468]
+                    - generic [ref=e470]: 面向 OpenClaw 的开源群体智能协作编排系统
+                  - button "安装" [ref=e472]:
+                    - generic [ref=e473]: 安装
+                - generic [ref=e476] [cursor=pointer]:
+                  - img [ref=e479]
+                  - generic [ref=e481]:
+                    - generic [ref=e482]:
+                      - text: QwenPaw
+                      - img [ref=e483]
+                    - generic [ref=e485]: 阿里开源的 AI 个人助理
+                  - button "安装" [ref=e487]:
+                    - generic [ref=e488]: 安装
+      - generic [ref=e491]:
+        - link "Copyright © 2014-2026 飞致云" [ref=e493] [cursor=pointer]:
+          - /url: https://fit2cloud.com/
+        - generic [ref=e497]:
+          - generic [ref=e498]:
+            - generic [ref=e501] [cursor=pointer]: 论坛求助
+            - separator [ref=e502]
+            - generic [ref=e505] [cursor=pointer]: 使用手册
+            - separator [ref=e506]
+            - generic [ref=e509] [cursor=pointer]: 项目地址
+            - separator [ref=e510]
+          - generic [ref=e511]:
+            - generic [ref=e514] [cursor=pointer]: 社区版
+            - generic [ref=e516] [cursor=pointer]: v2.0.15
+            - generic [ref=e519] [cursor=pointer]: 更新
+  - alert [ref=e520]:
+    - img [ref=e522]
+    - paragraph [ref=e524]: 登录成功
+    - img [ref=e526] [cursor=pointer]

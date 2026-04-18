@@ -1,0 +1,435 @@
+- generic [ref=e1]:
+  - generic [ref=e59]:
+    - button [ref=e60] [cursor=pointer]:
+      - img [ref=e62]
+    - generic [ref=e65]:
+      - img [ref=e67]
+      - img [ref=e73] [cursor=pointer]
+      - menubar [ref=e82]:
+        - menuitem "概览" [ref=e83] [cursor=pointer]:
+          - img [ref=e85]
+          - generic [ref=e87]: 概览
+        - menuitem "应用商店" [ref=e88] [cursor=pointer]:
+          - img [ref=e90]
+          - generic [ref=e92]: 应用商店
+        - menuitem "网站" [ref=e93]:
+          - generic [ref=e94] [cursor=pointer]:
+            - img [ref=e96]
+            - generic [ref=e98]: 网站
+            - img [ref=e100]
+        - menuitem "AI" [ref=e102]:
+          - generic [ref=e103] [cursor=pointer]:
+            - img [ref=e105]
+            - generic [ref=e107]: AI
+            - img [ref=e109]
+        - menuitem "数据库" [ref=e111] [cursor=pointer]:
+          - img [ref=e113]
+          - generic [ref=e115]: 数据库
+        - menuitem "容器" [ref=e116] [cursor=pointer]:
+          - img [ref=e118]
+          - generic [ref=e120]: 容器
+        - menuitem "系统" [ref=e121]:
+          - generic [ref=e122] [cursor=pointer]:
+            - img [ref=e124]
+            - generic [ref=e126]: 系统
+            - img [ref=e128]
+        - menuitem "终端" [ref=e130] [cursor=pointer]:
+          - img [ref=e132]
+          - generic [ref=e134]: 终端
+        - menuitem "计划任务" [ref=e135] [cursor=pointer]:
+          - img [ref=e137]
+          - generic [ref=e139]: 计划任务
+        - menuitem "工具箱" [ref=e140] [cursor=pointer]:
+          - img [ref=e142]
+          - generic [ref=e144]: 工具箱
+        - menuitem "高级功能" [ref=e145]:
+          - generic [ref=e146] [cursor=pointer]:
+            - img [ref=e148]
+            - generic [ref=e150]: 高级功能
+            - img [ref=e152]
+        - menuitem "日志审计" [ref=e154] [cursor=pointer]:
+          - img [ref=e156]
+          - generic [ref=e158]: 日志审计
+        - menuitem "面板设置" [ref=e159] [cursor=pointer]:
+          - img [ref=e161]
+          - generic [ref=e163]: 面板设置
+      - button "主节点" [ref=e167] [cursor=pointer]:
+        - generic [ref=e168]:
+          - img [ref=e169]
+          - generic [ref=e171]: 主节点
+    - generic [ref=e172]:
+      - generic [ref=e680]:
+        - radiogroup "radio-group" [ref=e684]:
+          - generic [ref=e685]:
+            - radio "概览" [ref=e686]
+            - generic [ref=e687] [cursor=pointer]: 概览
+          - generic [ref=e688]:
+            - radio "容器" [ref=e689]
+            - generic [ref=e690] [cursor=pointer]: 容器
+          - generic [ref=e691]:
+            - radio "编排" [checked] [ref=e692]
+            - generic [ref=e693] [cursor=pointer]: 编排
+          - generic [ref=e694]:
+            - radio "镜像" [ref=e695]
+            - generic [ref=e696] [cursor=pointer]: 镜像
+          - generic [ref=e697]:
+            - radio "网络" [ref=e698]
+            - generic [ref=e699] [cursor=pointer]: 网络
+          - generic [ref=e700]:
+            - radio "存储卷" [ref=e701]
+            - generic [ref=e702] [cursor=pointer]: 存储卷
+          - generic [ref=e703]:
+            - radio "仓库" [ref=e704]
+            - generic [ref=e705] [cursor=pointer]: 仓库
+          - generic [ref=e706]:
+            - radio "编排模版" [ref=e707]
+            - generic [ref=e708] [cursor=pointer]: 编排模版
+          - generic [ref=e709]:
+            - radio "配置" [ref=e710]
+            - generic [ref=e711] [cursor=pointer]: 配置
+        - generic [ref=e717]:
+          - generic [ref=e719]:
+            - button "创建编排" [ref=e721] [cursor=pointer]:
+              - generic [ref=e722]: 创建编排
+            - generic [ref=e723]:
+              - generic [ref=e727]:
+                - textbox "搜索" [ref=e728]
+                - img [ref=e731]
+              - button [ref=e733] [cursor=pointer]:
+                - img [ref=e735]
+              - button "不刷新" [ref=e739] [cursor=pointer]:
+                - generic [ref=e740]: 不刷新
+          - generic [ref=e742]:
+            - table [ref=e752]:
+              - rowgroup [ref=e755]:
+                - row "gaterank 1Panel 2026-03-29 21:50:42 运行中 ( 2 / 2 ) 目录 启动 停止 重启 删除" [ref=e756]:
+                  - cell "gaterank 1Panel 2026-03-29 21:50:42 运行中 ( 2 / 2 ) 目录 启动 停止 重启 删除" [ref=e757]:
+                    - generic [ref=e759] [cursor=pointer]:
+                      - generic [ref=e760]: gaterank
+                      - generic [ref=e761]:
+                        - generic [ref=e762]: 1Panel
+                        - separator [ref=e763]
+                        - generic [ref=e764]: 2026-03-29 21:50:42
+                        - separator [ref=e765]
+                        - generic [ref=e766]: 运行中 ( 2 / 2 )
+                      - button "目录" [ref=e767]:
+                        - generic [ref=e768]: 目录
+                      - button "启动" [ref=e769]:
+                        - generic [ref=e770]: 启动
+                      - button "停止" [ref=e771]:
+                        - generic [ref=e772]: 停止
+                      - button "重启" [ref=e773]:
+                        - generic [ref=e774]: 重启
+                      - button "删除" [ref=e775]:
+                        - generic [ref=e776]: 删除
+                - row "vpn-check 1Panel 2026-03-20 22:56:18 运行中 ( 0 / 1 ) 目录 启动 停止 重启 删除" [ref=e777]:
+                  - cell "vpn-check 1Panel 2026-03-20 22:56:18 运行中 ( 0 / 1 ) 目录 启动 停止 重启 删除" [ref=e778]:
+                    - generic [ref=e780] [cursor=pointer]:
+                      - generic [ref=e781]: vpn-check
+                      - generic [ref=e782]:
+                        - generic [ref=e783]: 1Panel
+                        - separator [ref=e784]
+                        - generic [ref=e785]: 2026-03-20 22:56:18
+                        - separator [ref=e786]
+                        - generic [ref=e787]: 运行中 ( 0 / 1 )
+                      - button "目录" [ref=e788]:
+                        - generic [ref=e789]: 目录
+                      - button "启动" [ref=e790]:
+                        - generic [ref=e791]: 启动
+                      - button "停止" [ref=e792]:
+                        - generic [ref=e793]: 停止
+                      - button "重启" [ref=e794]:
+                        - generic [ref=e795]: 重启
+                      - button "删除" [ref=e796]:
+                        - generic [ref=e797]: 删除
+                - row "caipincheck 1Panel 2026-02-21 18:27:37 运行中 ( 1 / 1 ) 目录 启动 停止 重启 删除" [ref=e798]:
+                  - cell "caipincheck 1Panel 2026-02-21 18:27:37 运行中 ( 1 / 1 ) 目录 启动 停止 重启 删除" [ref=e799]:
+                    - generic [ref=e801] [cursor=pointer]:
+                      - generic [ref=e802]: caipincheck
+                      - generic [ref=e803]:
+                        - generic [ref=e804]: 1Panel
+                        - separator [ref=e805]
+                        - generic [ref=e806]: 2026-02-21 18:27:37
+                        - separator [ref=e807]
+                        - generic [ref=e808]: 运行中 ( 1 / 1 )
+                      - button "目录" [ref=e809]:
+                        - generic [ref=e810]: 目录
+                      - button "启动" [ref=e811]:
+                        - generic [ref=e812]: 启动
+                      - button "停止" [ref=e813]:
+                        - generic [ref=e814]: 停止
+                      - button "重启" [ref=e815]:
+                        - generic [ref=e816]: 重启
+                      - button "删除" [ref=e817]:
+                        - generic [ref=e818]: 删除
+                - row "ip-check 本地 2026-02-08 20:00:27 运行中 ( 1 / 1 ) 目录 启动 停止 重启 删除" [ref=e819]:
+                  - cell "ip-check 本地 2026-02-08 20:00:27 运行中 ( 1 / 1 ) 目录 启动 停止 重启 删除" [ref=e820]:
+                    - generic [ref=e822] [cursor=pointer]:
+                      - generic [ref=e823]: ip-check
+                      - generic [ref=e824]:
+                        - generic [ref=e825]: 本地
+                        - separator [ref=e826]
+                        - generic [ref=e827]: 2026-02-08 20:00:27
+                        - separator [ref=e828]
+                        - generic [ref=e829]: 运行中 ( 1 / 1 )
+                      - button "目录" [ref=e830]:
+                        - generic [ref=e831]: 目录
+                      - button "启动" [ref=e832]:
+                        - generic [ref=e833]: 启动
+                      - button "停止" [ref=e834]:
+                        - generic [ref=e835]: 停止
+                      - button "重启" [ref=e836]:
+                        - generic [ref=e837]: 重启
+                      - button "删除" [ref=e838]:
+                        - generic [ref=e839]: 删除
+                - row "openresty 应用商店 2025-12-28 12:27:01 运行中 ( 1 / 1 ) 目录 启动 停止 重启 删除" [ref=e840]:
+                  - cell "openresty 应用商店 2025-12-28 12:27:01 运行中 ( 1 / 1 ) 目录 启动 停止 重启 删除" [ref=e841]:
+                    - generic [ref=e843] [cursor=pointer]:
+                      - generic [ref=e844]: openresty
+                      - generic [ref=e845]:
+                        - generic [ref=e846]: 应用商店
+                        - separator [ref=e847]
+                        - generic [ref=e848]: 2025-12-28 12:27:01
+                        - separator [ref=e849]
+                        - generic [ref=e850]: 运行中 ( 1 / 1 )
+                      - button "目录" [ref=e851]:
+                        - generic [ref=e852]: 目录
+                      - button "启动" [ref=e853]:
+                        - generic [ref=e854]: 启动
+                      - button "停止" [ref=e855]:
+                        - generic [ref=e856]: 停止
+                      - button "重启" [ref=e857]:
+                        - generic [ref=e858]: 重启
+                      - button "删除" [ref=e859]:
+                        - generic [ref=e860]: 删除
+                - row "halo 应用商店 2025-12-28 12:12:28 运行中 ( 1 / 1 ) 目录 启动 停止 重启 删除" [ref=e861]:
+                  - cell "halo 应用商店 2025-12-28 12:12:28 运行中 ( 1 / 1 ) 目录 启动 停止 重启 删除" [ref=e862]:
+                    - generic [ref=e864] [cursor=pointer]:
+                      - generic [ref=e865]: halo
+                      - generic [ref=e866]:
+                        - generic [ref=e867]: 应用商店
+                        - separator [ref=e868]
+                        - generic [ref=e869]: 2025-12-28 12:12:28
+                        - separator [ref=e870]
+                        - generic [ref=e871]: 运行中 ( 1 / 1 )
+                      - button "目录" [ref=e872]:
+                        - generic [ref=e873]: 目录
+                      - button "启动" [ref=e874]:
+                        - generic [ref=e875]: 启动
+                      - button "停止" [ref=e876]:
+                        - generic [ref=e877]: 停止
+                      - button "重启" [ref=e878]:
+                        - generic [ref=e879]: 重启
+                      - button "删除" [ref=e880]:
+                        - generic [ref=e881]: 删除
+                - row "mysql 应用商店 2025-12-22 00:50:23 运行中 ( 1 / 1 ) 目录 启动 停止 重启 删除" [ref=e882]:
+                  - cell "mysql 应用商店 2025-12-22 00:50:23 运行中 ( 1 / 1 ) 目录 启动 停止 重启 删除" [ref=e883]:
+                    - generic [ref=e885] [cursor=pointer]:
+                      - generic [ref=e886]: mysql
+                      - generic [ref=e887]:
+                        - generic [ref=e888]: 应用商店
+                        - separator [ref=e889]
+                        - generic [ref=e890]: 2025-12-22 00:50:23
+                        - separator [ref=e891]
+                        - generic [ref=e892]: 运行中 ( 1 / 1 )
+                      - button "目录" [ref=e893]:
+                        - generic [ref=e894]: 目录
+                      - button "启动" [ref=e895]:
+                        - generic [ref=e896]: 启动
+                      - button "停止" [ref=e897]:
+                        - generic [ref=e898]: 停止
+                      - button "重启" [ref=e899]:
+                        - generic [ref=e900]: 重启
+                      - button "删除" [ref=e901]:
+                        - generic [ref=e902]: 删除
+            - generic [ref=e905]:
+              - generic [ref=e907]:
+                - table [ref=e909]:
+                  - rowgroup [ref=e915]:
+                    - row "名称 状态 资源使用率 操作" [ref=e916]:
+                      - columnheader "名称" [ref=e917]:
+                        - generic [ref=e918]: 名称
+                      - columnheader "状态" [ref=e919]:
+                        - generic [ref=e920]: 状态
+                      - columnheader "资源使用率" [ref=e921]:
+                        - generic [ref=e922]: 资源使用率
+                      - columnheader "操作" [ref=e923]:
+                        - generic [ref=e924]: 操作
+                - table [ref=e929]:
+                  - rowgroup [ref=e935]:
+                    - 'row "gaterank-api 已启动 CPU: 0.02% 内存: 4.71% 终端 日志" [ref=e936]':
+                      - cell "gaterank-api" [ref=e937]:
+                        - generic [ref=e939] [cursor=pointer]: gaterank-api
+                      - cell "已启动" [ref=e940]:
+                        - generic [ref=e946] [cursor=pointer]: 已启动
+                      - 'cell "CPU: 0.02% 内存: 4.71%" [ref=e947]':
+                        - generic [ref=e949]:
+                          - generic [ref=e950]: "CPU: 0.02%"
+                          - generic [ref=e951]: "内存: 4.71%"
+                          - img [ref=e952] [cursor=pointer]
+                      - cell "终端 日志" [ref=e954]:
+                        - generic [ref=e955]:
+                          - button "终端" [ref=e956] [cursor=pointer]:
+                            - generic [ref=e957]: 终端
+                          - button "日志" [ref=e958] [cursor=pointer]:
+                            - generic [ref=e959]: 日志
+                    - 'row "gaterank-web 已启动 CPU: 0.00% 内存: 2.00% 终端 日志" [ref=e960]':
+                      - cell "gaterank-web" [ref=e961]:
+                        - generic [ref=e963] [cursor=pointer]: gaterank-web
+                      - cell "已启动" [ref=e964]:
+                        - generic [ref=e970] [cursor=pointer]: 已启动
+                      - 'cell "CPU: 0.00% 内存: 2.00%" [ref=e971]':
+                        - generic [ref=e973]:
+                          - generic [ref=e974]: "CPU: 0.00%"
+                          - generic [ref=e975]: "内存: 2.00%"
+                          - img [ref=e976] [cursor=pointer]
+                      - cell "终端 日志" [ref=e978]:
+                        - generic [ref=e979]:
+                          - button "终端" [ref=e980] [cursor=pointer]:
+                            - generic [ref=e981]: 终端
+                          - button "日志" [ref=e982] [cursor=pointer]:
+                            - generic [ref=e983]: 日志
+              - radiogroup "radio-group" [ref=e984]:
+                - generic [ref=e985]:
+                  - radio "编排" [checked] [ref=e986]
+                  - generic [ref=e987] [cursor=pointer]: 编排
+                - generic [ref=e988]:
+                  - radio "日志" [ref=e989]
+                  - generic [ref=e990] [cursor=pointer]: 日志
+              - generic [ref=e991]:
+                - generic [ref=e995]:
+                  - generic [ref=e997]:
+                    - generic [ref=e998]: "1"
+                    - generic [ref=e999]: "2"
+                    - generic [ref=e1000]: "3"
+                    - generic [ref=e1001]: "4"
+                    - generic [ref=e1002]: "5"
+                    - generic [ref=e1003]: "6"
+                    - generic [ref=e1004]: "7"
+                    - generic [ref=e1005]: "8"
+                    - generic [ref=e1006]: "9"
+                    - generic [ref=e1007]: "10"
+                    - generic [ref=e1008]: "11"
+                    - generic [ref=e1009]: "12"
+                    - generic [ref=e1010]: "13"
+                    - generic [ref=e1011]: "14"
+                    - generic [ref=e1012]: "15"
+                    - generic [ref=e1013]: "16"
+                    - generic [ref=e1014]: "17"
+                    - generic [ref=e1015]: "18"
+                    - generic [ref=e1016]: "19"
+                    - generic [ref=e1017]: "20"
+                    - generic [ref=e1018]: "21"
+                    - generic [ref=e1019]: "22"
+                    - generic [ref=e1020]: "23"
+                    - generic [ref=e1021]: "24"
+                    - generic [ref=e1022]: "25"
+                    - generic [ref=e1023]: "26"
+                    - generic [ref=e1024]: "27"
+                    - generic [ref=e1025]: "28"
+                    - generic [ref=e1026]: "29"
+                    - generic [ref=e1027]: "30"
+                    - generic [ref=e1028]: "31"
+                    - generic [ref=e1029]: "32"
+                    - generic [ref=e1030]: "33"
+                    - generic [ref=e1031]: "34"
+                    - generic [ref=e1032]: "35"
+                    - generic [ref=e1033]: "36"
+                    - generic [ref=e1034]: "37"
+                    - generic [ref=e1035]: "38"
+                    - generic [ref=e1036]: "39"
+                    - generic [ref=e1037]: "40"
+                    - generic [ref=e1038]: "41"
+                    - generic [ref=e1039]: "42"
+                    - generic [ref=e1040]: "43"
+                    - generic [ref=e1041]: "44"
+                    - generic [ref=e1042]: "45"
+                  - textbox [ref=e1045]:
+                    - generic [ref=e1046]: "services:"
+                    - generic [ref=e1047]: "gaterank-web:"
+                    - generic [ref=e1048]: "image: node:20-alpine"
+                    - generic [ref=e1049]: "container_name: gaterank-web"
+                    - generic [ref=e1050]: "restart: unless-stopped"
+                    - generic [ref=e1051]: "command: >"
+                    - generic [ref=e1052]: sh -c "apk add --no-cache git nginx &&
+                    - generic [ref=e1053]: rm -rf /srv/gaterank-web &&
+                    - generic [ref=e1054]: git clone --depth=1 https://github.com/joyefrck/GateRank.git /srv/gaterank-web &&
+                    - generic [ref=e1055]: cd /srv/gaterank-web &&
+                    - generic [ref=e1056]: npm install &&
+                    - generic [ref=e1057]: npm run build &&
+                    - generic [ref=e1058]: cp nginx.conf /etc/nginx/http.d/default.conf &&
+                    - generic [ref=e1059]: mkdir -p /usr/share/nginx/html /run/nginx &&
+                    - generic [ref=e1060]: rm -rf /usr/share/nginx/html/* &&
+                    - generic [ref=e1061]: cp -r dist/. /usr/share/nginx/html/ &&
+                    - generic [ref=e1062]: nginx -g 'daemon off;'"
+                    - generic [ref=e1063]: "ports:"
+                    - generic [ref=e1064]: "- \"18088:80\""
+                    - generic [ref=e1065]: "env_file:"
+                    - generic [ref=e1066]: "- 1panel.env"
+                    - generic [ref=e1068]: "gaterank-api:"
+                    - generic [ref=e1069]: "image: node:20-alpine"
+                    - generic [ref=e1070]: "container_name: gaterank-api"
+                    - generic [ref=e1071]: "restart: unless-stopped"
+                    - generic [ref=e1072]: "extra_hosts:"
+                    - generic [ref=e1073]: "- \"host.docker.internal:host-gateway\""
+                    - generic [ref=e1074]: "command: >"
+                    - generic [ref=e1075]: sh -c "apk add --no-cache git python3 py3-pip sing-box &&
+                    - generic [ref=e1076]: rm -rf /srv/gaterank-api &&
+                    - generic [ref=e1077]: git clone --depth=1 https://github.com/joyefrck/GateRank.git /srv/gaterank-api &&
+                    - generic [ref=e1078]: cd /srv/gaterank-api &&
+                    - generic [ref=e1079]: npm install &&
+                    - generic [ref=e1080]: npm run server:start"
+                    - generic [ref=e1081]: "ports:"
+                    - generic [ref=e1082]: "- \"18787:8787\""
+                    - generic [ref=e1083]: "env_file:"
+                    - generic [ref=e1084]: "- 1panel.env"
+                    - generic [ref=e1085]: "volumes:"
+                    - generic [ref=e1086]: "- gaterank_news_uploads:/data/news-uploads"
+                    - generic [ref=e1088]: "volumes:"
+                    - generic [ref=e1089]: "gaterank_news_uploads:"
+                - generic [ref=e1091]:
+                  - generic [ref=e1092]:
+                    - generic [ref=e1093]: 环境变量
+                    - textbox "环境变量" [ref=e1096]:
+                      - /placeholder: "一行一个，例： \nkey1=value1\nkey2=value2"
+                  - generic [ref=e1097]: 注意：环境变量保存至 1panel.env 文件，需在 compose 中通过 env_file 引用。 变量仅在容器内部生效，不参与 compose 文件的 $ 替换。
+                  - generic [ref=e1101]:
+                    - generic [ref=e1103]:
+                      - generic [ref=e1104]: "1"
+                      - generic [ref=e1105]: "2"
+                    - textbox [ref=e1108]:
+                      - generic [ref=e1109]: "env_file:"
+                      - generic [ref=e1110]: "- 1panel.env"
+                - button "保存" [ref=e1111] [cursor=pointer]:
+                  - generic [ref=e1112]: 保存
+      - generic [ref=e491]:
+        - link "Copyright © 2014-2026 飞致云" [ref=e493] [cursor=pointer]:
+          - /url: https://fit2cloud.com/
+        - generic [ref=e497]:
+          - generic [ref=e498]:
+            - generic [ref=e501] [cursor=pointer]: 论坛求助
+            - separator [ref=e502]
+            - generic [ref=e505] [cursor=pointer]: 使用手册
+            - separator [ref=e506]
+            - generic [ref=e509] [cursor=pointer]: 项目地址
+            - separator [ref=e510]
+          - generic [ref=e511]:
+            - generic [ref=e514] [cursor=pointer]: 社区版
+            - generic [ref=e516] [cursor=pointer]: v2.0.15
+            - generic [ref=e517]:
+              - generic [ref=e519] [cursor=pointer]: 更新
+              - superscript [ref=e530]
+  - dialog "重启" [ref=e1114]:
+    - generic [ref=e1115]:
+      - generic [ref=e1116]:
+        - generic [ref=e1117]: 重启
+        - button "关闭此对话框" [ref=e1118] [cursor=pointer]:
+          - img [ref=e1120]
+      - generic [ref=e1123]:
+        - img [ref=e1125]
+        - paragraph [ref=e1128]: 将对 gaterank 进行 重启 操作，是否继续？
+      - generic [ref=e1129]:
+        - button "取消" [ref=e1130] [cursor=pointer]:
+          - generic [ref=e1131]: 取消
+        - button "确认" [active] [ref=e1132] [cursor=pointer]:
+          - generic [ref=e1133]: 确认

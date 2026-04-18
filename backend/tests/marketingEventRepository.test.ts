@@ -22,16 +22,36 @@ test('MarketingEventRepository.getOverview uses requested granularity and comput
   const repository = new MarketingEventRepository({
     query: async (sql: string, params?: unknown[]) => {
       queryCalls.push({ sql, params });
+      if (sql.includes('GROUP BY period_start')) {
+        return [[{
+          period_start: '2026-04-14',
+          page_views: 30,
+          unique_visitors: 20,
+          airport_impressions: 10,
+          outbound_clicks: 5,
+        }]];
+      }
+      if (sql.includes('GROUP BY source_type, source_label')) {
+        return [[{
+          source_type: 'google',
+          source_label: 'Google',
+          page_views: 40,
+          unique_visitors: 25,
+          airport_impressions: 15,
+          outbound_clicks: 6,
+        }]];
+      }
+      if (sql.includes('GROUP BY country_code, country_name')) {
+        return [[{
+          country_code: 'US',
+          country_name: 'United States',
+          page_views: 50,
+          unique_visitors: 30,
+          airport_impressions: 12,
+          outbound_clicks: 4,
+        }]];
+      }
       if (sql.includes('COUNT(DISTINCT CASE WHEN event_type = \'page_view\'')) {
-        if (sql.includes('GROUP BY period_start')) {
-          return [[{
-            period_start: '2026-04-14',
-            page_views: 30,
-            unique_visitors: 20,
-            airport_impressions: 10,
-            outbound_clicks: 5,
-          }]];
-        }
         return [[{
           page_views: 120,
           unique_visitors: 88,
@@ -54,6 +74,8 @@ test('MarketingEventRepository.getOverview uses requested granularity and comput
   assert.equal(result.totals.unique_visitors, 88);
   assert.equal(result.totals.ctr, 0.25);
   assert.equal(result.trends[0]?.period_start, '2026-04-14');
+  assert.equal(result.top_sources[0]?.source_label, 'Google');
+  assert.equal(result.top_countries[0]?.country_code, 'US');
 
   const trendQuery = queryCalls.find((call) => call.sql.includes('GROUP BY period_start'));
   assert.ok(trendQuery);

@@ -1,0 +1,59 @@
+[      72ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[     221ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "new-password"): (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:3000/admin/login:0
+[  943529ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1094558ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1122205ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1194240ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1288866ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1309124ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1335991ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1365396ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1489363ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/src/admin/AdminApp.tsx?t=1776525680176:0
+[ 1489364ms] [ERROR] [vite] Failed to reload /src/admin/AdminApp.tsx. This could be due to syntax errors or importing non-existent modules. (see errors above) @ http://127.0.0.1:3000/@vite/client:881
+[ 1538663ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1538681ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/src/admin/AdminApp.tsx?t=1776525680176:0
+[ 1538683ms] Failed to fetch dynamically imported module: http://127.0.0.1:3000/src/admin/AdminApp.tsx?t=1776525680176
+[ 1561626ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1561648ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/src/admin/AdminApp.tsx?t=1776525680176:0
+[ 1561650ms] Failed to fetch dynamically imported module: http://127.0.0.1:3000/src/admin/AdminApp.tsx?t=1776525680176
+[ 1620611ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1620888ms] TypeError: Cannot read properties of undefined (reading 'sources')
+    at MarketingPage (http://127.0.0.1:3000/src/admin/AdminApp.tsx?t=1776525811330:1390:42)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:18509:20)
+    at renderWithHooks (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:5654:24)
+    at updateFunctionComponent (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:7475:21)
+    at beginWork (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:8525:20)
+    at runWithFiberInDEV (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:997:72)
+    at performUnitOfWork (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:12561:98)
+    at workLoopSync (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:12424:43)
+    at renderRootSync (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:12408:13)
+    at performWorkOnRoot (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:11827:37)
+[ 1620888ms] [WARNING] %s
+
+%s
+ An error occurred in the <MarketingPage> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:6965
+[ 1632419ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1632465ms] TypeError: Cannot read properties of undefined (reading 'sources')
+    at MarketingPage (http://127.0.0.1:3000/src/admin/AdminApp.tsx?t=1776525811330:1390:42)
+    at Object.react_stack_bottom_frame (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:18509:20)
+    at renderWithHooks (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:5654:24)
+    at updateFunctionComponent (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:7475:21)
+    at beginWork (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:8525:20)
+    at runWithFiberInDEV (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:997:72)
+    at performUnitOfWork (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:12561:98)
+    at workLoopSync (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:12424:43)
+    at renderRootSync (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:12408:13)
+    at performWorkOnRoot (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:11827:37)
+[ 1632465ms] [WARNING] %s
+
+%s
+ An error occurred in the <MarketingPage> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:6965
+[ 1869859ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[ 1869886ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/v1/admin/marketing/overview?granularity=day&date_from=2026-03-20&date_to=2026-04-18:0
+[ 1869887ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/v1/admin/marketing/pages?granularity=day&date_from=2026-03-20&date_to=2026-04-18:0
+[ 1869888ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/v1/admin/marketing/airports?date_from=2026-03-20&date_to=2026-04-18&sort_by=clicks&sort_order=desc:0
+[ 1869888ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/v1/admin/marketing/overview?granularity=day&date_from=2026-03-20&date_to=2026-04-18:0
+[ 1869894ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/v1/admin/marketing/pages?granularity=day&date_from=2026-03-20&date_to=2026-04-18:0
+[ 1869894ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/v1/admin/marketing/airports?date_from=2026-03-20&date_to=2026-04-18&sort_by=clicks&sort_order=desc:0

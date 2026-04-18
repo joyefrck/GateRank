@@ -244,10 +244,14 @@ interface AdminDeps {
       dateFrom: string;
       dateTo: string;
       granularity: MarketingGranularity;
+      sourceLabel?: string;
+      countryCode?: string;
     }): Promise<unknown>;
     getPageStats(query: {
       dateFrom: string;
       dateTo: string;
+      sourceLabel?: string;
+      countryCode?: string;
     }): Promise<unknown[]>;
     getAirportStats(query: {
       dateFrom: string;
@@ -255,12 +259,16 @@ interface AdminDeps {
       keyword?: string;
       sortBy?: 'ctr' | 'clicks' | 'impressions' | 'last_clicked_at';
       sortOrder?: 'asc' | 'desc';
+      sourceLabel?: string;
+      countryCode?: string;
     }): Promise<MarketingAirportConversionItem[]>;
     getAirportDetail(query: {
       airportId: number;
       dateFrom: string;
       dateTo: string;
       granularity: MarketingGranularity;
+      sourceLabel?: string;
+      countryCode?: string;
     }): Promise<unknown | null>;
   };
 }
@@ -362,10 +370,14 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     try {
       const range = parseMarketingDateRange(req.query.date_from, req.query.date_to);
       const granularity = parseMarketingGranularity(req.query.granularity);
+      const sourceLabel = parseMarketingSourceLabel(req.query.source_label);
+      const countryCode = parseMarketingCountryCode(req.query.country_code);
       res.json(await getMarketingRepository(deps).getOverview({
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
         granularity,
+        sourceLabel,
+        countryCode,
       }));
     } catch (error) {
       next(error);
@@ -375,12 +387,16 @@ export function createAdminRoutes(deps: AdminDeps): Router {
   router.get('/marketing/pages', async (req, res, next) => {
     try {
       const range = parseMarketingDateRange(req.query.date_from, req.query.date_to);
+      const sourceLabel = parseMarketingSourceLabel(req.query.source_label);
+      const countryCode = parseMarketingCountryCode(req.query.country_code);
       res.json({
         date_from: range.dateFrom,
         date_to: range.dateTo,
         items: await getMarketingRepository(deps).getPageStats({
           dateFrom: range.dateFrom,
           dateTo: range.dateTo,
+          sourceLabel,
+          countryCode,
         }),
       });
     } catch (error) {
@@ -394,6 +410,8 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const keyword = optionalString(req.query.keyword);
       const sortBy = parseMarketingAirportSortBy(req.query.sort_by);
       const sortOrder = parseSortOrder(req.query.sort_order);
+      const sourceLabel = parseMarketingSourceLabel(req.query.source_label);
+      const countryCode = parseMarketingCountryCode(req.query.country_code);
       res.json({
         date_from: range.dateFrom,
         date_to: range.dateTo,
@@ -406,6 +424,8 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           keyword,
           sortBy,
           sortOrder,
+          sourceLabel,
+          countryCode,
         }),
       });
     } catch (error) {
@@ -418,11 +438,15 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const airportId = toAirportId(req.params.id);
       const range = parseMarketingDateRange(req.query.date_from, req.query.date_to);
       const granularity = parseMarketingGranularity(req.query.granularity);
+      const sourceLabel = parseMarketingSourceLabel(req.query.source_label);
+      const countryCode = parseMarketingCountryCode(req.query.country_code);
       const detail = await getMarketingRepository(deps).getAirportDetail({
         airportId,
         dateFrom: range.dateFrom,
         dateTo: range.dateTo,
         granularity,
+        sourceLabel,
+        countryCode,
       });
       if (!detail) {
         throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
@@ -1588,10 +1612,10 @@ function optionalBoolean(value: unknown): boolean | undefined {
 
 function parseMarketingGranularity(value: unknown): MarketingGranularity {
   const normalized = String(value || 'day').trim();
-  if (normalized === 'day' || normalized === 'week' || normalized === 'month') {
+  if (normalized === 'hour' || normalized === 'day' || normalized === 'week' || normalized === 'month') {
     return normalized;
   }
-  throw new HttpError(400, 'BAD_REQUEST', 'granularity must be day, week, or month');
+  throw new HttpError(400, 'BAD_REQUEST', 'granularity must be hour, day, week, or month');
 }
 
 function parseMarketingDateRange(dateFromValue: unknown, dateToValue: unknown): { dateFrom: string; dateTo: string } {
@@ -1603,6 +1627,22 @@ function parseMarketingDateRange(dateFromValue: unknown, dateToValue: unknown): 
     throw new HttpError(400, 'BAD_REQUEST', 'date_from cannot be after date_to');
   }
   return { dateFrom, dateTo };
+}
+
+function parseMarketingSourceLabel(value: unknown): string | undefined {
+  const label = optionalString(value);
+  return label || undefined;
+}
+
+function parseMarketingCountryCode(value: unknown): string | undefined {
+  const countryCode = optionalString(value)?.toUpperCase();
+  if (!countryCode) {
+    return undefined;
+  }
+  if (!/^[A-Z]{2}$/.test(countryCode)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'country_code must be ISO 3166-1 alpha-2');
+  }
+  return countryCode;
 }
 
 function parseMarketingAirportSortBy(

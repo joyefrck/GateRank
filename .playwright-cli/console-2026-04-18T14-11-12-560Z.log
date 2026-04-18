@@ -1,0 +1,18 @@
+[      77ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:20102
+[     222ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "new-password"): (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:3000/admin/marketing:0
+[  452974ms] ReferenceError: getMarketingPresetDateFrom is not defined
+    at http://127.0.0.1:3000/src/admin/AdminApp.tsx?t=1776521925146:1276:26
+    at Object.react_stack_bottom_frame (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:18567:20)
+    at runWithFiberInDEV (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:997:72)
+    at commitHookEffectListMount (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:9411:163)
+    at commitHookPassiveMountEffects (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:9465:60)
+    at commitPassiveMountOnFiber (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:11040:29)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:11010:13)
+    at commitPassiveMountOnFiber (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:11201:13)
+    at recursivelyTraversePassiveMountEffects (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:11010:13)
+    at commitPassiveMountOnFiber (http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:11201:13)
+[  452974ms] [WARNING] %s
+
+%s
+ An error occurred in the <MarketingPage> component. Consider adding an error boundary to your tree to customize error handling behavior.
+Visit https://react.dev/link/error-boundaries to learn more about error boundaries. @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=26d9b727:6965

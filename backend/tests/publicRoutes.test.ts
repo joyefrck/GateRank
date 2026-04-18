@@ -57,6 +57,9 @@ test('POST /marketing/events stores validated marketing events', async () => {
             page_path: '/',
             occurred_at: '2026-04-18T10:00:00.000Z',
             client_session_id: 'session-1',
+            external_referrer_host: 'www.google.com',
+            utm_source: 'google',
+            utm_campaign: 'spring_launch',
           },
           {
             event_type: 'airport_impression',
@@ -89,6 +92,11 @@ test('POST /marketing/events stores validated marketing events', async () => {
     assert.equal(insertedRecords[2]?.target_kind, 'website');
     assert.equal(insertedRecords[0]?.event_date, '2026-04-18');
     assert.equal(insertedRecords[2]?.page_path, '/reports/7');
+    assert.equal(insertedRecords[0]?.external_referrer_host, 'google.com');
+    assert.equal(insertedRecords[0]?.source_type, 'google');
+    assert.equal(insertedRecords[0]?.source_label, 'Google');
+    assert.equal(insertedRecords[0]?.utm_campaign, 'spring_launch');
+    assert.equal(insertedRecords[0]?.country_code, 'ZZ');
     assert.equal(insertedRecords[0]?.visitor_hash.length, 64);
     assert.equal(insertedRecords[0]?.session_hash.length, 64);
   } finally {

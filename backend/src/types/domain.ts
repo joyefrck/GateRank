@@ -286,7 +286,17 @@ export interface ReportView {
 }
 
 export type MarketingEventType = 'page_view' | 'airport_impression' | 'outbound_click';
-export type MarketingGranularity = 'day' | 'week' | 'month';
+export type MarketingGranularity = 'hour' | 'day' | 'week' | 'month';
+export type MarketingSourceType =
+  | 'google'
+  | 'baidu'
+  | 'x'
+  | 'bing'
+  | 'reddit'
+  | 'telegram'
+  | 'wechat'
+  | 'direct_or_unknown'
+  | 'other_referral';
 export type MarketingPageKind =
   | 'home'
   | 'full_ranking'
@@ -320,6 +330,46 @@ export interface MarketingOverviewView {
     ctr: number | null;
   };
   trends: MarketingTrendPoint[];
+  source_breakdown: MarketingSourceBreakdownItem[];
+  country_breakdown: MarketingCountryBreakdownItem[];
+  top_sources: MarketingSourceBreakdownItem[];
+  top_countries: MarketingCountryBreakdownItem[];
+  filters: {
+    sources: MarketingSourceFilterItem[];
+    countries: MarketingCountryFilterItem[];
+  };
+}
+
+export interface MarketingSourceFilterItem {
+  source_type: MarketingSourceType;
+  source_label: string;
+}
+
+export interface MarketingCountryFilterItem {
+  country_code: string;
+  country_name: string;
+}
+
+export interface MarketingSourceBreakdownItem {
+  source_type: MarketingSourceType;
+  source_label: string;
+  page_views: number;
+  unique_visitors: number;
+  airport_impressions: number;
+  outbound_clicks: number;
+  ctr: number | null;
+  traffic_share: number | null;
+}
+
+export interface MarketingCountryBreakdownItem {
+  country_code: string;
+  country_name: string;
+  page_views: number;
+  unique_visitors: number;
+  airport_impressions: number;
+  outbound_clicks: number;
+  ctr: number | null;
+  traffic_share: number | null;
 }
 
 export interface MarketingPageStatsItem {

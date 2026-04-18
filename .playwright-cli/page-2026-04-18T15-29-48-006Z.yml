@@ -1,0 +1,6 @@
+- generic [ref=e4]:
+  - heading "管理后台登录" [level=1] [ref=e5]
+  - paragraph [ref=e6]: 输入管理员密码获取后台访问令牌
+  - textbox "管理员密码" [ref=e7]: gaterank_admin_key
+  - generic [ref=e9]: 登录已过期，请重新登录
+  - button "登录" [ref=e8]

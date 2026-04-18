@@ -1,0 +1,171 @@
+- generic [ref=e59]:
+  - button [ref=e60] [cursor=pointer]:
+    - img [ref=e62]
+  - generic [ref=e65]:
+    - img [ref=e67]
+    - img [ref=e73] [cursor=pointer]
+    - menubar [ref=e82]:
+      - menuitem "概览" [ref=e83] [cursor=pointer]:
+        - img [ref=e85]
+        - generic [ref=e87]: 概览
+      - menuitem "应用商店" [ref=e88] [cursor=pointer]:
+        - img [ref=e90]
+        - generic [ref=e92]: 应用商店
+      - menuitem "网站" [ref=e93]:
+        - generic [ref=e94] [cursor=pointer]:
+          - img [ref=e96]
+          - generic [ref=e98]: 网站
+          - img [ref=e100]
+      - menuitem "AI" [ref=e102]:
+        - generic [ref=e103] [cursor=pointer]:
+          - img [ref=e105]
+          - generic [ref=e107]: AI
+          - img [ref=e109]
+      - menuitem "数据库" [ref=e111] [cursor=pointer]:
+        - img [ref=e113]
+        - generic [ref=e115]: 数据库
+      - menuitem "容器" [active] [ref=e116] [cursor=pointer]:
+        - img [ref=e118]
+        - generic [ref=e120]: 容器
+      - menuitem "系统" [ref=e121]:
+        - generic [ref=e122] [cursor=pointer]:
+          - img [ref=e124]
+          - generic [ref=e126]: 系统
+          - img [ref=e128]
+      - menuitem "终端" [ref=e130] [cursor=pointer]:
+        - img [ref=e132]
+        - generic [ref=e134]: 终端
+      - menuitem "计划任务" [ref=e135] [cursor=pointer]:
+        - img [ref=e137]
+        - generic [ref=e139]: 计划任务
+      - menuitem "工具箱" [ref=e140] [cursor=pointer]:
+        - img [ref=e142]
+        - generic [ref=e144]: 工具箱
+      - menuitem "高级功能" [ref=e145]:
+        - generic [ref=e146] [cursor=pointer]:
+          - img [ref=e148]
+          - generic [ref=e150]: 高级功能
+          - img [ref=e152]
+      - menuitem "日志审计" [ref=e154] [cursor=pointer]:
+        - img [ref=e156]
+        - generic [ref=e158]: 日志审计
+      - menuitem "面板设置" [ref=e159] [cursor=pointer]:
+        - img [ref=e161]
+        - generic [ref=e163]: 面板设置
+    - button "主节点" [ref=e167] [cursor=pointer]:
+      - generic [ref=e168]:
+        - img [ref=e169]
+        - generic [ref=e171]: 主节点
+  - generic [ref=e172]:
+    - generic [ref=e533]:
+      - radiogroup "radio-group" [ref=e537]:
+        - generic [ref=e538]:
+          - radio "概览" [checked] [ref=e539]
+          - generic [ref=e540] [cursor=pointer]: 概览
+        - generic [ref=e541]:
+          - radio "容器" [ref=e542]
+          - generic [ref=e543] [cursor=pointer]: 容器
+        - generic [ref=e544]:
+          - radio "编排" [ref=e545]
+          - generic [ref=e546] [cursor=pointer]: 编排
+        - generic [ref=e547]:
+          - radio "镜像" [ref=e548]
+          - generic [ref=e549] [cursor=pointer]: 镜像
+        - generic [ref=e550]:
+          - radio "网络" [ref=e551]
+          - generic [ref=e552] [cursor=pointer]: 网络
+        - generic [ref=e553]:
+          - radio "存储卷" [ref=e554]
+          - generic [ref=e555] [cursor=pointer]: 存储卷
+        - generic [ref=e556]:
+          - radio "仓库" [ref=e557]
+          - generic [ref=e558] [cursor=pointer]: 仓库
+        - generic [ref=e559]:
+          - radio "编排模版" [ref=e560]
+          - generic [ref=e561] [cursor=pointer]: 编排模版
+        - generic [ref=e562]:
+          - radio "配置" [ref=e563]
+          - generic [ref=e564] [cursor=pointer]: 配置
+      - generic [ref=e567]:
+        - generic [ref=e570]:
+          - generic [ref=e572]:
+            - generic [ref=e573]: 容器
+            - generic [ref=e575] [cursor=pointer]: 所有 * 8
+            - generic [ref=e577] [cursor=pointer]: 已启动 * 7
+            - generic [ref=e579] [cursor=pointer]: 已停止 * 1
+          - generic [ref=e580]: "8"
+        - generic [ref=e581]:
+          - generic [ref=e585]:
+            - generic [ref=e588]: 编排
+            - generic [ref=e589]: "7"
+          - generic [ref=e593]:
+            - generic [ref=e596]: 编排模版
+            - generic [ref=e597]: "0"
+          - generic [ref=e601]:
+            - generic [ref=e604]: 镜像
+            - generic [ref=e605]: "8"
+        - generic [ref=e606]:
+          - generic [ref=e610]:
+            - generic [ref=e613]: 镜像仓库
+            - generic [ref=e614]: "1"
+          - generic [ref=e618]:
+            - generic [ref=e621]: 网络
+            - generic [ref=e622]: "8"
+          - generic [ref=e626]:
+            - generic [ref=e629]: 存储卷
+            - generic [ref=e630]: "2"
+        - generic [ref=e633]:
+          - generic [ref=e636]: 磁盘占用
+          - table [ref=e640]:
+            - rowgroup [ref=e641]:
+              - row "镜像 容器 本地存储卷 构建缓存" [ref=e642]:
+                - columnheader "镜像" [ref=e643]
+                - columnheader "容器" [ref=e644]
+                - columnheader "本地存储卷" [ref=e645]
+                - columnheader "构建缓存" [ref=e646]
+              - row "已占用：9.15 GB, 可释放：4.53 GB 释放 已占用：1.04 GB, 可释放：4.04 MB 释放 已占用：197.84 KB, 可释放：0 B 已占用：15.15 GB, 可释放：15.15 GB 释放" [ref=e647]:
+                - cell "已占用：9.15 GB, 可释放：4.53 GB 释放" [ref=e648]:
+                  - text: 已占用：9.15 GB, 可释放：4.53 GB
+                  - button "释放" [ref=e649] [cursor=pointer]:
+                    - generic [ref=e650]: 释放
+                - cell "已占用：1.04 GB, 可释放：4.04 MB 释放" [ref=e651]:
+                  - text: 已占用：1.04 GB, 可释放：4.04 MB
+                  - button "释放" [ref=e652] [cursor=pointer]:
+                    - generic [ref=e653]: 释放
+                - cell "已占用：197.84 KB, 可释放：0 B" [ref=e654]
+                - cell "已占用：15.15 GB, 可释放：15.15 GB 释放" [ref=e655]:
+                  - text: 已占用：15.15 GB, 可释放：15.15 GB
+                  - button "释放" [ref=e656] [cursor=pointer]:
+                    - generic [ref=e657]: 释放
+        - generic [ref=e660]:
+          - generic [ref=e663]: 配置
+          - generic [ref=e664]:
+            - table [ref=e667]:
+              - rowgroup [ref=e668]:
+                - row "Socket 路径 unix:///var/run/docker.sock" [ref=e669]:
+                  - cell "Socket 路径" [ref=e670]
+                  - cell "unix:///var/run/docker.sock" [ref=e671]
+                - row "镜像加速" [ref=e672]:
+                  - cell "镜像加速" [ref=e673]
+                  - cell [ref=e674]
+            - button "去修改" [ref=e675] [cursor=pointer]:
+              - generic [ref=e676]:
+                - img [ref=e678]
+                - text: 去修改
+    - generic [ref=e491]:
+      - link "Copyright © 2014-2026 飞致云" [ref=e493] [cursor=pointer]:
+        - /url: https://fit2cloud.com/
+      - generic [ref=e497]:
+        - generic [ref=e498]:
+          - generic [ref=e501] [cursor=pointer]: 论坛求助
+          - separator [ref=e502]
+          - generic [ref=e505] [cursor=pointer]: 使用手册
+          - separator [ref=e506]
+          - generic [ref=e509] [cursor=pointer]: 项目地址
+          - separator [ref=e510]
+        - generic [ref=e511]:
+          - generic [ref=e514] [cursor=pointer]: 社区版
+          - generic [ref=e516] [cursor=pointer]: v2.0.15
+          - generic [ref=e517]:
+            - generic [ref=e519] [cursor=pointer]: 更新
+            - superscript [ref=e530]

@@ -469,10 +469,16 @@ function validateMarketingEventPayload(
   page_path: string;
   page_kind: MarketingPageKind;
   referrer_path?: string | null;
+  external_referrer_host?: string | null;
   airport_id?: number | null;
   placement?: MarketingPlacement | null;
   target_kind?: MarketingTargetKind | null;
   target_url?: string | null;
+  utm_source?: string | null;
+  utm_medium?: string | null;
+  utm_campaign?: string | null;
+  utm_content?: string | null;
+  utm_term?: string | null;
   client_session_id?: string | null;
 } {
   const eventType = String(payload.event_type || '') as MarketingEventType;
@@ -490,9 +496,27 @@ function validateMarketingEventPayload(
   const referrerPath = payload.referrer_path === undefined || payload.referrer_path === null
     ? null
     : mustString(payload.referrer_path, `events[${index}].referrer_path`);
+  const externalReferrerHost = payload.external_referrer_host === undefined || payload.external_referrer_host === null
+    ? null
+    : mustString(payload.external_referrer_host, `events[${index}].external_referrer_host`);
   const clientSessionId = payload.client_session_id === undefined || payload.client_session_id === null
     ? null
     : mustString(payload.client_session_id, `events[${index}].client_session_id`);
+  const utmSource = payload.utm_source === undefined || payload.utm_source === null
+    ? null
+    : mustString(payload.utm_source, `events[${index}].utm_source`);
+  const utmMedium = payload.utm_medium === undefined || payload.utm_medium === null
+    ? null
+    : mustString(payload.utm_medium, `events[${index}].utm_medium`);
+  const utmCampaign = payload.utm_campaign === undefined || payload.utm_campaign === null
+    ? null
+    : mustString(payload.utm_campaign, `events[${index}].utm_campaign`);
+  const utmContent = payload.utm_content === undefined || payload.utm_content === null
+    ? null
+    : mustString(payload.utm_content, `events[${index}].utm_content`);
+  const utmTerm = payload.utm_term === undefined || payload.utm_term === null
+    ? null
+    : mustString(payload.utm_term, `events[${index}].utm_term`);
 
   const airportId = payload.airport_id === undefined || payload.airport_id === null
     ? null
@@ -537,10 +561,16 @@ function validateMarketingEventPayload(
     page_path: pagePath,
     page_kind: pageKind,
     referrer_path: referrerPath,
+    external_referrer_host: externalReferrerHost,
     airport_id: airportId,
     placement,
     target_kind: targetKind,
     target_url: targetUrl,
+    utm_source: utmSource,
+    utm_medium: utmMedium,
+    utm_campaign: utmCampaign,
+    utm_content: utmContent,
+    utm_term: utmTerm,
     client_session_id: clientSessionId,
   };
 }
