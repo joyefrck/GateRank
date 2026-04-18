@@ -1931,6 +1931,72 @@ function ApplicationPage() {
     },
   });
 
+  if (successPayload) {
+    return (
+      <div className="min-h-screen bg-white font-sans relative">
+        <div
+          className="fixed inset-0 opacity-[0.015] pointer-events-none z-0"
+          style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}
+        />
+
+        <div className="relative z-10 max-w-6xl mx-auto px-4 py-10 md:py-14">
+          <header className="mb-10 md:mb-12">
+            <h1 className="text-4xl md:text-6xl font-black tracking-tight text-neutral-900">
+              申请入驻测试
+            </h1>
+            <p className="mt-5 max-w-4xl text-lg leading-9 text-neutral-600">
+              提交后会立即创建你的个人后台账号。首次登录需要修改密码，完成支付后申请才会进入后台待审批列表。
+            </p>
+          </header>
+
+          <section className="rounded-[2rem] border border-emerald-200 bg-emerald-50/70 p-6 md:p-10">
+            <div className="flex items-start gap-3 md:gap-4">
+              <CheckCircle2 className="mt-1 h-7 w-7 text-emerald-600" />
+              <div>
+                <div className="text-2xl font-black text-emerald-900">申请已提交，个人后台账号已开通</div>
+                <p className="mt-3 max-w-4xl text-base leading-8 text-emerald-800">
+                  初始密码只会在这里展示一次，同时系统也会发送到你的邮箱。请尽快登录个人后台修改密码并完成支付。
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-8 grid grid-cols-1 md:grid-cols-2 gap-5">
+              <StatusPill label="申请编号" value={`#${successPayload.application_id}`} />
+              <StatusPill label="当前状态" value="待支付" />
+            </div>
+
+            <div className="mt-5 grid grid-cols-1 md:grid-cols-3 gap-5">
+              <ReadonlyCredentialField label="登录邮箱" value={successPayload.portal_email} />
+              <ReadonlyCredentialField label="初始密码" value={successPayload.initial_password} />
+              <ReadonlyCredentialField label="登录地址" value={successPayload.portal_login_url} />
+            </div>
+
+            <div className="mt-8 flex flex-wrap gap-4">
+              <a
+                className="inline-flex min-h-14 items-center gap-3 rounded-[1.4rem] bg-neutral-900 px-7 py-3 text-base font-black text-white"
+                href={successPayload.portal_login_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                前往个人后台
+                <ArrowRight className="h-5 w-5" />
+              </a>
+              <button
+                type="button"
+                className="inline-flex min-h-14 items-center gap-3 rounded-[1.4rem] border border-emerald-200 bg-white/70 px-7 py-3 text-base font-black text-neutral-700"
+                onClick={() => {
+                  navigate('/portal');
+                }}
+              >
+                当前窗口打开后台
+              </button>
+            </div>
+          </section>
+        </div>
+      </div>
+    );
+  }
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     const websites = normalizeUrlList(form.websites);
@@ -2012,50 +2078,6 @@ function ApplicationPage() {
         </header>
 
         <form onSubmit={submit} className="space-y-6">
-          {successPayload && (
-            <section className="rounded-3xl border border-emerald-200 bg-emerald-50 p-5 md:p-6 space-y-5">
-              <div className="flex items-start gap-3">
-                <CheckCircle2 className="mt-0.5 h-5 w-5 text-emerald-600" />
-                <div>
-                  <div className="text-base font-black text-emerald-900">申请已提交，个人后台账号已开通</div>
-                  <p className="mt-1 text-sm leading-6 text-emerald-800">
-                    初始密码只会在这里展示一次，同时系统也会发送到你的邮箱。请尽快登录个人后台修改密码并完成支付。
-                  </p>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <StatusPill label="申请编号" value={`#${successPayload.application_id}`} />
-                <StatusPill label="当前状态" value="待支付" />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <ReadonlyCredentialField label="登录邮箱" value={successPayload.portal_email} />
-                <ReadonlyCredentialField label="初始密码" value={successPayload.initial_password} />
-                <ReadonlyCredentialField label="登录地址" value={successPayload.portal_login_url} />
-              </div>
-
-              <div className="flex flex-wrap gap-3">
-                <a
-                  className="inline-flex min-h-12 items-center gap-2 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white"
-                  href={successPayload.portal_login_url}
-                >
-                  前往个人后台
-                  <ArrowRight className="h-4 w-4" />
-                </a>
-                <button
-                  type="button"
-                  className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-neutral-300 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-neutral-700"
-                  onClick={() => {
-                    navigate('/portal');
-                  }}
-                >
-                  当前窗口打开后台
-                </button>
-              </div>
-            </section>
-          )}
-
           <section className="rounded-3xl border border-neutral-200 bg-neutral-50/70 p-5 md:p-6 space-y-5">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">机场基础信息</div>
