@@ -1,3 +1,6 @@
+import { lookup } from 'node:dns/promises';
+import http from 'node:http';
+import https from 'node:https';
 import tls from 'node:tls';
 import type { Airport, DailyMetrics } from '../types/domain';
 
@@ -27,55 +30,161 @@ export class RiskCheckService {
     ]);
     const base = currentMetrics || latestMetrics || createDefaultMetrics(airportId, date);
     const website = chooseWebsite(airport);
-    const domainOk = await checkHttpOk(website);
-    const sslDaysLeft = await getSslDaysLeft(website);
+    const probe = await probeWebsite(website);
 
     await this.deps.metricsRepository.upsertDaily({
       ...base,
       airport_id: airportId,
       date,
-      domain_ok: domainOk,
-      ssl_days_left: sslDaysLeft,
+      domain_ok: probe.domain_ok,
+      ssl_days_left: probe.ssl_days_left,
     });
 
     return {
-      domain_ok: domainOk,
-      ssl_days_left: sslDaysLeft,
+      domain_ok: probe.domain_ok,
+      ssl_days_left: probe.ssl_days_left,
     };
   }
 }
 
-async function checkHttpOk(url: string): Promise<boolean> {
-  try {
-    const response = await fetch(url, {
-      method: 'GET',
-      redirect: 'follow',
-      headers: { 'User-Agent': 'GateRank-Risk-Check/1.0' },
-      signal: AbortSignal.timeout(8000),
-    });
-    return [200, 301, 302, 403].includes(response.status);
-  } catch {
-    return false;
-  }
+type AddressFamily = 4 | 6;
+
+interface ResolvedAddress {
+  address: string;
+  family: AddressFamily;
 }
 
-async function getSslDaysLeft(url: string): Promise<number | null> {
+interface WebsiteProbeDeps {
+  resolveAddresses(url: URL): Promise<ResolvedAddress[]>;
+  requestUrl(url: URL, address: ResolvedAddress, timeoutMs: number): Promise<boolean>;
+  getSslDaysLeft(url: URL, address: ResolvedAddress, timeoutMs: number): Promise<number | null>;
+}
+
+const DEFAULT_PROBE_TIMEOUT_MS = 8000;
+
+export async function probeWebsite(
+  rawUrl: string,
+  deps: Partial<WebsiteProbeDeps> = {},
+): Promise<{ domain_ok: boolean; ssl_days_left: number | null }> {
   let parsed: URL;
   try {
-    parsed = new URL(url);
+    parsed = new URL(rawUrl);
   } catch {
-    return null;
+    return { domain_ok: false, ssl_days_left: null };
   }
+
+  const resolvedAddresses = deps.resolveAddresses || resolveAddresses;
+  const requestUrl = deps.requestUrl || requestUrlByAddress;
+  const getSslDaysLeftForAddress = deps.getSslDaysLeft || getSslDaysLeftByAddress;
+  const addresses = (await resolvedAddresses(parsed).catch(() => [])).sort((left, right) => left.family - right.family);
+
+  const httpReachable = await probeHttpReachability(parsed, addresses, requestUrl);
+  const sslDaysLeft = await probeSslDaysLeft(parsed, addresses, getSslDaysLeftForAddress);
+
+  return {
+    domain_ok: httpReachable || sslDaysLeft !== null,
+    ssl_days_left: sslDaysLeft,
+  };
+}
+
+async function probeHttpReachability(
+  parsed: URL,
+  addresses: ResolvedAddress[],
+  requestUrl: WebsiteProbeDeps['requestUrl'],
+): Promise<boolean> {
+  for (const candidate of buildHttpCandidates(parsed)) {
+    for (const address of addresses) {
+      if (await requestUrl(candidate, address, DEFAULT_PROBE_TIMEOUT_MS)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+async function probeSslDaysLeft(
+  parsed: URL,
+  addresses: ResolvedAddress[],
+  getSslDaysLeft: WebsiteProbeDeps['getSslDaysLeft'],
+): Promise<number | null> {
   if (parsed.protocol !== 'https:') {
     return null;
   }
 
-  const port = parsed.port ? Number(parsed.port) : 443;
-  const host = parsed.hostname;
+  for (const address of addresses) {
+    const sslDaysLeft = await getSslDaysLeft(parsed, address, DEFAULT_PROBE_TIMEOUT_MS);
+    if (sslDaysLeft !== null) {
+      return sslDaysLeft;
+    }
+  }
+
+  return null;
+}
+
+async function resolveAddresses(parsed: URL): Promise<ResolvedAddress[]> {
+  const resolved = await lookup(parsed.hostname, { all: true, verbatim: false });
+  return resolved
+    .map((item) => ({
+      address: item.address,
+      family: (item.family === 6 ? 6 : 4) as AddressFamily,
+    }));
+}
+
+function buildHttpCandidates(parsed: URL): URL[] {
+  const exact = new URL(parsed.toString());
+  const root = new URL(`${parsed.protocol}//${parsed.host}/`);
+  return exact.toString() === root.toString() ? [exact] : [exact, root];
+}
+
+async function requestUrlByAddress(url: URL, address: ResolvedAddress, timeoutMs: number): Promise<boolean> {
+  const client = url.protocol === 'https:' ? https : http;
+
+  return new Promise((resolve) => {
+    const request = client.request(
+      {
+        host: address.address,
+        family: address.family,
+        port: url.port ? Number(url.port) : url.protocol === 'https:' ? 443 : 80,
+        method: 'GET',
+        path: `${url.pathname}${url.search}`,
+        servername: url.hostname,
+        rejectUnauthorized: false,
+        headers: {
+          Host: url.host,
+          'User-Agent': 'GateRank-Risk-Check/1.0',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8',
+        },
+      },
+      (response) => {
+        response.resume();
+        resolve(typeof response.statusCode === 'number');
+      },
+    );
+
+    request.setTimeout(timeoutMs, () => {
+      request.destroy();
+      resolve(false);
+    });
+    request.on('error', () => {
+      resolve(false);
+    });
+    request.end();
+  });
+}
+
+async function getSslDaysLeftByAddress(
+  url: URL,
+  address: ResolvedAddress,
+  timeoutMs: number,
+): Promise<number | null> {
+  const port = url.port ? Number(url.port) : 443;
+  const host = url.hostname;
+
   return new Promise((resolve) => {
     const socket = tls.connect(
       {
-        host,
+        host: address.address,
         port,
         servername: host,
         rejectUnauthorized: false,
@@ -97,7 +206,7 @@ async function getSslDaysLeft(url: string): Promise<number | null> {
       },
     );
 
-    socket.setTimeout(8000);
+    socket.setTimeout(timeoutMs);
     socket.on('timeout', () => {
       socket.destroy();
       resolve(null);
