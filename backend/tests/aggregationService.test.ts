@@ -112,10 +112,12 @@ test('aggregateForDate converts samples to daily metrics', async () => {
   assert.equal(written[0].latency_cv, 0.0909);
   assert.equal(written[0].is_stable_day, true);
   assert.equal(written[0].stable_days_streak, 1);
+  assert.equal(written[0].healthy_days_streak, 1);
+  assert.equal(written[0].stability_tier, 'stable');
   assert.equal(written[0].ssl_days_left, null);
 });
 
-test('aggregateForDate keeps raw latency_cv but judges low-latency jitter as stable', async () => {
+test('aggregateForDate keeps raw latency_cv and classifies healthy jitter separately from strict stable days', async () => {
   const written: DailyMetrics[] = [];
   const samples: ProbeSample[] = [
     {
@@ -230,4 +232,124 @@ test('aggregateForDate keeps raw latency_cv but judges low-latency jitter as sta
   assert.equal(written[0].latency_cv, 0.2498);
   assert.equal(written[0].is_stable_day, true);
   assert.equal(written[0].stable_days_streak, 2);
+  assert.equal(written[0].healthy_days_streak, 2);
+  assert.equal(written[0].stability_tier, 'stable');
+});
+
+test('aggregateForDate keeps healthy streak across minor fluctuation days while strict streak resets', async () => {
+  const written: DailyMetrics[] = [];
+  const samples: ProbeSample[] = [
+    {
+      id: 1,
+      airport_id: 1,
+      sampled_at: '2026-04-02T01:00:00.000Z',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 10,
+      download_mbps: null,
+      availability: null,
+      source: 'agent',
+    },
+    {
+      id: 2,
+      airport_id: 1,
+      sampled_at: '2026-04-02T01:05:00.000Z',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 12,
+      download_mbps: null,
+      availability: null,
+      source: 'agent',
+    },
+    {
+      id: 3,
+      airport_id: 1,
+      sampled_at: '2026-04-02T01:10:00.000Z',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 22,
+      download_mbps: null,
+      availability: null,
+      source: 'agent',
+    },
+    {
+      id: 4,
+      airport_id: 1,
+      sampled_at: '2026-04-02T01:15:00.000Z',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 20,
+      download_mbps: null,
+      availability: null,
+      source: 'agent',
+    },
+    {
+      id: 5,
+      airport_id: 1,
+      sampled_at: '2026-04-02T01:20:00.000Z',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 14,
+      download_mbps: null,
+      availability: null,
+      source: 'agent',
+    },
+    {
+      id: 6,
+      airport_id: 1,
+      sampled_at: '2026-04-02T01:25:00.000Z',
+      sample_type: 'availability',
+      probe_scope: 'stability',
+      latency_ms: null,
+      download_mbps: null,
+      availability: true,
+      source: 'agent',
+    },
+    {
+      id: 7,
+      airport_id: 1,
+      sampled_at: '2026-04-01T01:00:00.000Z',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 4,
+      download_mbps: null,
+      availability: null,
+      source: 'agent',
+    },
+    {
+      id: 8,
+      airport_id: 1,
+      sampled_at: '2026-04-01T01:05:00.000Z',
+      sample_type: 'availability',
+      probe_scope: 'stability',
+      latency_ms: null,
+      download_mbps: null,
+      availability: true,
+      source: 'agent',
+    },
+  ];
+
+  const service = new AggregationService({
+    airportRepository: {
+      listAll: async () => [{ id: 1 }],
+    },
+    probeSampleRepository: {
+      getProbeSamplesInRange: async () => samples,
+      getPacketLossSamplesByDate: async () => [],
+    },
+    metricsRepository: {
+      getLatestByAirportBeforeDate: async () => null,
+      upsertDaily: async (input) => {
+        written.push(input);
+      },
+    },
+  });
+
+  const result = await service.aggregateForDate('2026-04-02');
+  assert.equal(result.aggregated, 1);
+  assert.equal(written.length, 1);
+  assert.equal(written[0].stability_tier, 'minor_fluctuation');
+  assert.equal(written[0].is_stable_day, false);
+  assert.equal(written[0].stable_days_streak, 0);
+  assert.equal(written[0].healthy_days_streak, 2);
 });

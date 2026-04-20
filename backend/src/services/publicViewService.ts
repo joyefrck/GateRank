@@ -324,6 +324,7 @@ export class PublicViewService {
         name: summaryCard.name,
         tags: summaryCard.tags,
         score: summaryCard.score,
+        stability_tier: summaryCard.stability_tier,
         details: summaryCard.details,
         conclusion: summaryCard.conclusion,
       },
@@ -348,6 +349,8 @@ export class PublicViewService {
         median_download_mbps: round2(base.metrics.median_download_mbps),
         packet_loss_percent: round2(base.metrics.packet_loss_percent),
         stable_days_streak: Number(base.metrics.stable_days_streak || 0),
+        healthy_days_streak: Number(base.metrics.healthy_days_streak ?? base.metrics.stable_days_streak ?? 0),
+        stability_tier: getCardStabilityTier(base.metrics),
         recent_complaints_count: Number(base.metrics.recent_complaints_count || 0),
         history_incidents: Number(base.metrics.history_incidents || 0),
       },
@@ -471,6 +474,7 @@ export class PublicViewService {
         context.score.display_score,
         context.score.yesterday_display_score,
       ),
+      stability_tier: getCardStabilityTier(context.metrics),
       details: buildCardDetails(section, context, date),
       conclusion: buildConclusion(section, context, date),
       report_url: `/reports/${context.airport.id}?date=${date}`,
@@ -486,6 +490,7 @@ export class PublicViewService {
       tags: item.tags.slice(0, 3),
       score: round2(item.score ?? 0),
       score_delta_vs_yesterday: item.score_delta_vs_yesterday,
+      stability_tier: 'volatile',
       details: buildRiskMonitorCardDetails(item),
       conclusion: buildRiskMonitorConclusion(item),
       report_url: item.report_url || `/risk-monitor?date=${encodeURIComponent(date)}`,
@@ -548,7 +553,12 @@ function buildCardDetails(
   date: string,
 ): [PublicCardItem['details'][0], PublicCardItem['details'][1]] {
   const streakDays = Math.max(0, Number(context.metrics.stable_days_streak || 0));
-  const unstableDays30d = context.metricsTrend30d.filter((row) => row.is_stable_day === false).length;
+  const healthyStreakDays = Math.max(
+    0,
+    Number(context.metrics.healthy_days_streak ?? context.metrics.stable_days_streak ?? 0),
+  );
+  const minorDays30d = getMinorFluctuationDays30d(context.metricsTrend30d);
+  const volatileDays30d = getVolatileDays30d(context.metricsTrend30d);
   const trackingDays = Math.max(1, diffDays(context.airport.created_at, date) + 1);
   const primaryRiskReason = getPrimaryRiskReason(context.metrics);
   const complaintTrendLabel = getComplaintTrendLabel(context.metrics.recent_complaints_count);
@@ -557,8 +567,8 @@ function buildCardDetails(
   switch (section) {
     case 'today_pick':
       return [
-        { label: '稳定记录', value: `${streakDays} 天` },
-        { label: '最近30天', value: `${unstableDays30d} 波动` },
+        { label: '健康记录', value: `${healthyStreakDays} 天` },
+        { label: '最近30天', value: `${volatileDays30d} 异常 · ${minorDays30d} 轻微` },
       ];
     case 'most_stable':
       return [
@@ -586,15 +596,27 @@ function buildCardDetails(
 function buildConclusion(section: HomeSectionKey, context: CardContext, date: string): string {
   const uptimeText = `${formatPercent(context.metrics.uptime_percent_30d)}%`;
   const streakDays = Math.max(0, Number(context.metrics.stable_days_streak || 0));
+  const healthyStreakDays = Math.max(
+    0,
+    Number(context.metrics.healthy_days_streak ?? context.metrics.stable_days_streak ?? 0),
+  );
   const priceText = `¥${formatPrice(context.airport.plan_price_month)}/月`;
   const trackingDays = Math.max(1, diffDays(context.airport.created_at, date) + 1);
   const trendLabel = getTrendLabel(context.scoreTrend30d);
   const primaryRiskReason = getPrimaryRiskReason(context.metrics);
   const complaintTrendLabel = getComplaintTrendLabel(context.metrics.recent_complaints_count);
+  const minorDays30d = getMinorFluctuationDays30d(context.metricsTrend30d);
+  const volatileDays30d = getVolatileDays30d(context.metricsTrend30d);
+  const stabilityTier = getCardStabilityTier(context.metrics);
 
   switch (section) {
     case 'today_pick':
-      return `综合表现最均衡，当前稳定记录已达 ${streakDays} 天，适合大多数用户优先考虑。长期使用风险低，整体可靠性突出。`;
+      return `${buildTodayPickHighlight(context, healthyStreakDays)} ${buildTodayPickReminder(
+        context,
+        stabilityTier,
+        volatileDays30d,
+        minorDays30d,
+      )}`;
     case 'most_stable':
       return `近阶段可用率维持在 ${uptimeText}，连续稳定记录达到 ${streakDays} 天，适合对长期在线质量要求更高的用户。`;
     case 'best_value':
@@ -649,6 +671,106 @@ function getComplaintTrendLabel(count: number): string {
     return '轻微上升';
   }
   return '正常';
+}
+
+function getCardStabilityTier(metrics: DailyMetrics): PublicCardItem['stability_tier'] {
+  if (
+    metrics.stability_tier === 'stable' ||
+    metrics.stability_tier === 'minor_fluctuation' ||
+    metrics.stability_tier === 'volatile'
+  ) {
+    return metrics.stability_tier;
+  }
+  if (metrics.is_stable_day === true || Number(metrics.stable_days_streak || 0) > 0) {
+    return 'stable';
+  }
+  return 'volatile';
+}
+
+function getMinorFluctuationDays30d(items: DailyMetrics[]): number {
+  return items.filter((row) => getCardStabilityTier(row) === 'minor_fluctuation').length;
+}
+
+function getVolatileDays30d(items: DailyMetrics[]): number {
+  return items.filter((row) => getCardStabilityTier(row) === 'volatile').length;
+}
+
+function buildTodayPickHighlight(context: CardContext, healthyStreakDays: number): string {
+  const preferredTag = getPreferredHighlightTag(context.airport.tags);
+  if (preferredTag) {
+    switch (preferredTag) {
+      case '长期稳定':
+        return `亮点：当前已连续保持 ${healthyStreakDays} 天健康记录，长期使用更省心。`;
+      case '新手友好':
+        return '亮点：门槛更低、风险更可控，适合作为大多数用户的优先候选。';
+      case '性价比高':
+        return '亮点：当前价格与实际表现更均衡，预算和体验之间更容易兼顾。';
+      case '高性能':
+        return '亮点：当前性能维度更突出，适合更看重速度和线路响应的用户。';
+      case '高端路线':
+        return '亮点：当前综合体验更偏高端路线，适合愿意为稳定体验付溢价的用户。';
+      case '新入榜':
+        return '亮点：近期表现足够靠前，属于值得继续重点观察的新晋候选。';
+    }
+    return `亮点：当前已连续保持 ${healthyStreakDays} 天健康记录，整体表现仍然值得优先关注。`;
+  }
+
+  const strongestDimension = getStrongestScoreDimension(context.score);
+  switch (strongestDimension) {
+    case 's':
+      return `亮点：稳定性仍是当前最强项，健康记录已经来到 ${healthyStreakDays} 天。`;
+    case 'p':
+      return '亮点：性能维度当前最突出，延迟与速度表现更有竞争力。';
+    case 'c':
+      return '亮点：价格维度当前最突出，整体成本效率更有优势。';
+    case 'r':
+      return '亮点：当前风险侧较干净，基础信任面相对更稳。';
+  }
+}
+
+function buildTodayPickReminder(
+  context: CardContext,
+  stabilityTier: PublicCardItem['stability_tier'],
+  volatileDays30d: number,
+  minorDays30d: number,
+): string {
+  if (stabilityTier === 'volatile') {
+    return '提醒：当前处于异常波动状态，建议优先确认登录、订阅与高峰时段可用性。';
+  }
+  if (stabilityTier === 'minor_fluctuation') {
+    return '提醒：当前可以正常使用，但存在轻微抖动，建议继续观察高峰时段延迟。';
+  }
+  if (volatileDays30d > 0) {
+    return `提醒：最近30天出现 ${volatileDays30d} 天异常波动、${minorDays30d} 天轻微抖动，短期稳定性仍需继续跟踪。`;
+  }
+  if (context.metrics.recent_complaints_count > 0) {
+    return `提醒：近期投诉有 ${context.metrics.recent_complaints_count} 条，继续使用前建议交叉核对官网和订阅状态。`;
+  }
+  if (context.metrics.history_incidents > 0) {
+    return `提醒：历史异常累计 ${context.metrics.history_incidents} 次，长期使用前仍建议结合完整报告复核。`;
+  }
+  return '提醒：当前没有明显异常记录，适合作为近期优先观察和试用的主力候选。';
+}
+
+function getPreferredHighlightTag(tags: string[]): string | null {
+  const preferredTags = ['长期稳定', '新手友好', '性价比高', '高性能', '高端路线', '新入榜'];
+  for (const tag of preferredTags) {
+    if (tags.includes(tag)) {
+      return tag;
+    }
+  }
+  return null;
+}
+
+function getStrongestScoreDimension(score: CardContext['score']): 's' | 'p' | 'c' | 'r' {
+  const dimensions: Array<{ key: 's' | 'p' | 'c' | 'r'; value: number }> = [
+    { key: 's', value: score.s },
+    { key: 'p', value: score.p },
+    { key: 'c', value: score.c },
+    { key: 'r', value: score.r },
+  ];
+  dimensions.sort((left, right) => right.value - left.value);
+  return dimensions[0]?.key ?? 's';
 }
 
 function buildRiskMonitorCardDetails(

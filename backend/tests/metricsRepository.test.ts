@@ -19,7 +19,9 @@ test('MetricsRepository normalizes DATE columns to YYYY-MM-DD', async () => {
         median_download_mbps: 88.8,
         packet_loss_percent: 0,
         stable_days_streak: 3,
+        healthy_days_streak: 5,
         is_stable_day: 1,
+        stability_tier: 'minor_fluctuation',
         domain_ok: 1,
         ssl_days_left: 30,
         recent_complaints_count: 0,
@@ -31,4 +33,6 @@ test('MetricsRepository normalizes DATE columns to YYYY-MM-DD', async () => {
   const metrics = await repository.getByAirportAndDate(1, '2026-03-22');
   assert.ok(metrics);
   assert.equal(metrics.date, '2026-03-22');
+  assert.equal(metrics?.healthy_days_streak, 5);
+  assert.equal(metrics?.stability_tier, 'minor_fluctuation');
 });

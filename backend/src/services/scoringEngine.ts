@@ -49,7 +49,8 @@ export function computeScore(
   const effectiveLatencyCv = effectiveLatencyStats.cv ?? rawLatencyCv;
   const uptimeScore = computeUptimeScore(uptimeBasis);
   const stabilityScore = computeStabilityScore(effectiveLatencyCv);
-  const streakScore = computeStreakScore(metrics.stable_days_streak);
+  const streakBasisDays = metrics.healthy_days_streak ?? metrics.stable_days_streak;
+  const streakScore = computeStreakScore(streakBasisDays);
 
   const latencyScore = normalizeLinear(
     metrics.median_latency_ms,
@@ -144,9 +145,11 @@ export function computeScore(
       total_penalty: round2(riskPenalty),
       risk_level: riskLevelFromScore(r),
       uptime_percent_basis: round2(uptimeBasis),
+      streak_basis_days: round2(streakBasisDays),
       latency_cv: effectiveLatencyCv === null ? null : round4(effectiveLatencyCv),
       latency_cv_raw: rawLatencyCv === null ? null : round4(rawLatencyCv),
       effective_latency_cv: effectiveLatencyCv === null ? null : round4(effectiveLatencyCv),
+      stability_tier: metrics.stability_tier ?? null,
       stability_rule_version: STABILITY_RULES.ruleVersion,
     },
   };

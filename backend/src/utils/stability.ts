@@ -1,4 +1,5 @@
 import { STABILITY_RULES, SCORE_WEIGHTS } from '../config/scoring';
+import type { StabilityTier } from '../types/domain';
 
 export interface LatencyStats {
   meanMs: number | null;
@@ -95,8 +96,22 @@ export function isStableDay(
   uptimePercent: number,
   latencySamples: number[],
 ): boolean {
-  if (uptimePercent < STABILITY_RULES.minDailyUptimePercent) {
-    return false;
+  return getStabilityTier(uptimePercent, latencySamples) === 'stable';
+}
+
+export function isHealthyDay(
+  uptimePercent: number,
+  latencySamples: number[],
+): boolean {
+  return getStabilityTier(uptimePercent, latencySamples) !== 'volatile';
+}
+
+export function getStabilityTier(
+  uptimePercent: number,
+  latencySamples: number[],
+): StabilityTier {
+  if (uptimePercent < STABILITY_RULES.minHealthyDailyUptimePercent) {
+    return 'volatile';
   }
 
   const effectiveStats = computeEffectiveLatencyStats(latencySamples);
@@ -105,10 +120,21 @@ export function isStableDay(
     effectiveStats.cv === null ||
     !Number.isFinite(effectiveStats.cv)
   ) {
-    return false;
+    return 'volatile';
   }
 
-  return effectiveStats.cv <= STABILITY_RULES.maxLatencyCv;
+  if (
+    uptimePercent >= STABILITY_RULES.minDailyUptimePercent &&
+    effectiveStats.cv <= STABILITY_RULES.maxLatencyCv
+  ) {
+    return 'stable';
+  }
+
+  if (effectiveStats.cv <= STABILITY_RULES.maxMinorLatencyCv) {
+    return 'minor_fluctuation';
+  }
+
+  return 'volatile';
 }
 
 function normalizeSamples(samples: number[]): number[] {

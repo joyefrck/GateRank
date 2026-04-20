@@ -18,8 +18,11 @@ const THRESHOLDS = {
 
 const STABILITY_RULES = {
   uptimeBaseline: 95,
+  minHealthyDailyUptimePercent: 95,
+  minDailyUptimePercent: 99,
   streakCapDays: 30,
   maxLatencyCv: 0.2,
+  maxMinorLatencyCv: 0.35,
   trimMinSampleCount: 5,
   trimEdgeSampleCount: 1,
   effectiveMeanFloorMs: 10,
@@ -46,7 +49,7 @@ export const totalScoreParts = [
     title: '稳定性',
     weight: SCORE_WEIGHTS.final.s,
     percent: 40,
-    description: '看可用率、波动和连续稳定天数，不让一次偶然测速决定全局。',
+    description: '看可用率、波动分档和连续健康天数，不让一次偶然测速决定全局。',
     accentClass: 'bg-emerald-500',
     softClass: 'bg-emerald-50 border-emerald-200 text-emerald-800',
   },
@@ -91,7 +94,8 @@ export const dimensionCards = [
     bullets: [
       'UptimeScore 由当日或 30 天可用率换算，95% 以下迅速失分。',
       'StabilityScore 由稳健波动值 effective_latency_cv 计算，低延迟线路会做 10ms 均值地板保护。',
-      'StreakScore 由连续稳定天数计算，30 天封顶。',
+      '首页把单日状态拆成稳定 / 轻微波动 / 异常波动三档，只有异常波动才会打断连续健康记录。',
+      'StreakScore 使用连续健康天数计算，30 天封顶。',
     ],
     accentClass: 'from-emerald-500/12 to-white',
     borderClass: 'border-emerald-200',
@@ -182,6 +186,10 @@ export const methodologyFaq = [
     answer: '不会。性能只占 30%，如果可用率差、波动大或风险项明显，最终分数仍然会被拉低。',
   },
   {
+    question: '首页的“波动天数”是不是等于登录失败天数？',
+    answer: '不是。首页只把“异常波动”计入波动天数；如果当天仍可正常登录，但延迟存在轻微抖动，会标记为“轻微波动”，不会打断连续健康记录。',
+  },
+  {
     question: '为什么新机场可能排不高？',
     answer: '因为历史样本不足，时间衰减后的最终分会更保守；这是为了避免新机场靠短期表现直接冲榜。',
   },
@@ -242,6 +250,24 @@ function computeStreakScore(stableDaysStreak: number): number {
   return round2(clamp((stableDaysStreak / STABILITY_RULES.streakCapDays) * 100, 0, 100));
 }
 
+function describeStabilityTier(uptimePercent: number, latencyCv: number | null): '稳定' | '轻微波动' | '异常波动' {
+  if (
+    uptimePercent >= STABILITY_RULES.minDailyUptimePercent &&
+    latencyCv !== null &&
+    latencyCv <= STABILITY_RULES.maxLatencyCv
+  ) {
+    return '稳定';
+  }
+  if (
+    uptimePercent >= STABILITY_RULES.minHealthyDailyUptimePercent &&
+    latencyCv !== null &&
+    latencyCv <= STABILITY_RULES.maxMinorLatencyCv
+  ) {
+    return '轻微波动';
+  }
+  return '异常波动';
+}
+
 function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
 }
@@ -286,7 +312,7 @@ const exampleInput = {
   airportName: 'Nebula Air',
   uptimePercent: 99.6,
   latencyCv: computeEffectiveLatencyCv([82, 88, 79, 84, 83]),
-  stableDaysStreak: 24,
+  healthyDaysStreak: 24,
   medianLatencyMs: 82,
   medianDownloadMbps: 220,
   packetLossPercent: 0.6,
@@ -301,7 +327,7 @@ const exampleInput = {
 
 const uptimeScore = computeUptimeScore(exampleInput.uptimePercent);
 const stabilityScore = computeStabilityScore(exampleInput.latencyCv);
-const streakScore = computeStreakScore(exampleInput.stableDaysStreak);
+const streakScore = computeStreakScore(exampleInput.healthyDaysStreak);
 const s = round2(
   uptimeScore * SCORE_WEIGHTS.stability.uptime +
     stabilityScore * SCORE_WEIGHTS.stability.stability +
@@ -380,10 +406,12 @@ const finalScore = round2(
   currentScore * SCORE_WEIGHTS.decay.recent +
     exampleInput.historicalScore * SCORE_WEIGHTS.decay.historical,
 );
+const stabilityTier = describeStabilityTier(exampleInput.uptimePercent, exampleInput.latencyCv);
 
 export const exampleCase = {
   input: exampleInput,
   breakdown: {
+    stabilityTier,
     uptimeScore,
     stabilityScore,
     streakScore,

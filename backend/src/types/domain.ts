@@ -1,4 +1,5 @@
 export type AirportStatus = 'normal' | 'risk' | 'down';
+export type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
 export type AirportApplicationReviewStatus = 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
 export type RankingType = 'today' | 'stable' | 'value' | 'new' | 'risk';
 export type ProbeSampleType = 'latency' | 'download' | 'availability';
@@ -75,7 +76,9 @@ export interface DailyMetrics {
   median_download_mbps: number;
   packet_loss_percent: number;
   stable_days_streak: number;
+  healthy_days_streak?: number | null;
   is_stable_day?: boolean | null;
+  stability_tier?: StabilityTier | null;
   domain_ok: boolean;
   ssl_days_left: number | null;
   recent_complaints_count: number;
@@ -171,6 +174,7 @@ export interface PublicCardItem {
   tags: string[];
   score: number;
   score_delta_vs_yesterday: ScoreDeltaView;
+  stability_tier: StabilityTier;
   details: [PublicCardDetail, PublicCardDetail];
   conclusion: string;
   report_url: string;
@@ -274,6 +278,8 @@ export interface ReportView {
     median_download_mbps: number;
     packet_loss_percent: number;
     stable_days_streak: number;
+    healthy_days_streak: number;
+    stability_tier: StabilityTier;
     recent_complaints_count: number;
     history_incidents: number;
   };

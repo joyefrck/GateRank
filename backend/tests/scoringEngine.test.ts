@@ -86,6 +86,7 @@ test('computeScore returns bounded and weighted output', () => {
     median_download_mbps: 250,
     packet_loss_percent: 0.2,
     stable_days_streak: 28,
+    healthy_days_streak: 28,
     domain_ok: true,
     ssl_days_left: 45,
     recent_complaints_count: 1,
@@ -128,6 +129,7 @@ test('computeScore uses uptime, latency cv and streak formulas for S', () => {
     median_download_mbps: 100,
     packet_loss_percent: 1,
     stable_days_streak: 15,
+    healthy_days_streak: 15,
     domain_ok: true,
     ssl_days_left: 30,
     recent_complaints_count: 0,
@@ -164,6 +166,8 @@ test('computeScore uses effective latency cv for low-latency routes', () => {
     median_download_mbps: 100,
     packet_loss_percent: 0.2,
     stable_days_streak: 15,
+    healthy_days_streak: 15,
+    stability_tier: 'stable',
     domain_ok: true,
     ssl_days_left: 30,
     recent_complaints_count: 0,
@@ -173,7 +177,7 @@ test('computeScore uses effective latency cv for low-latency routes', () => {
   const out = computeScore(airport, metrics, 0);
   assert.equal(out.details.latency_cv_raw, 0.2498);
   assert.equal(out.details.effective_latency_cv, 0.1023);
-  assert.equal(out.details.stability_rule_version, 'robust_cv_v1');
+  assert.equal(out.details.stability_rule_version, 'stability_tier_v2');
   assert.equal(out.details.stability_score, 89.77);
   assert.equal(out.s, 86.93);
 });
@@ -200,6 +204,7 @@ test('computeScore does not over-reward genuinely noisy latency samples', () => 
     median_download_mbps: 100,
     packet_loss_percent: 0.2,
     stable_days_streak: 0,
+    healthy_days_streak: 0,
     domain_ok: true,
     ssl_days_left: 30,
     recent_complaints_count: 0,
@@ -209,6 +214,42 @@ test('computeScore does not over-reward genuinely noisy latency samples', () => 
   const out = computeScore(airport, metrics, 0);
   assert.equal(out.details.effective_latency_cv, 0.4082);
   assert.equal(out.details.stability_score, 59.18);
+});
+
+test('computeScore prefers healthy streak days when minor fluctuation should not over-penalize S', () => {
+  const airport: Airport = {
+    id: 1,
+    name: 'A',
+    website: 'https://a.example.com',
+    status: 'normal',
+    plan_price_month: 20,
+    has_trial: false,
+    tags: [],
+    created_at: '2026-03-20',
+  };
+
+  const metrics: DailyMetrics = {
+    airport_id: 1,
+    date: '2026-04-02',
+    uptime_percent_30d: 99.1,
+    uptime_percent_today: 100,
+    latency_samples_ms: [10, 12, 18, 16, 14],
+    median_latency_ms: 60,
+    median_download_mbps: 100,
+    packet_loss_percent: 0.2,
+    stable_days_streak: 0,
+    healthy_days_streak: 12,
+    stability_tier: 'minor_fluctuation',
+    domain_ok: true,
+    ssl_days_left: 30,
+    recent_complaints_count: 0,
+    history_incidents: 0,
+  };
+
+  const out = computeScore(airport, metrics, 0);
+  assert.equal(out.details.streak_basis_days, 12);
+  assert.equal(out.details.stability_tier, 'minor_fluctuation');
+  assert.equal(out.details.streak_score, 40);
 });
 
 test('risk penalty helpers follow stepped MVP rules', () => {
@@ -252,6 +293,7 @@ test('computeScore treats missing ssl data as light risk', () => {
     median_download_mbps: 100,
     packet_loss_percent: 1,
     stable_days_streak: 15,
+    healthy_days_streak: 15,
     domain_ok: true,
     ssl_days_left: null,
     recent_complaints_count: 2,

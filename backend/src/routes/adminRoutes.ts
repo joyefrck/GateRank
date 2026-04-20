@@ -36,9 +36,11 @@ import type {
   ProbeScope,
   SchedulerRunStatus,
   SchedulerTaskKey,
+  StabilityTier,
 } from '../types/domain';
 import {
   computeEffectiveLatencyStats,
+  getStabilityTier,
   computeLatencyStats,
   computeSScore,
   computeStabilityScore,
@@ -1106,13 +1108,17 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         effectiveLatencyStats.cv ??
         latencyCv;
       const stableDaysStreak = numberOrNull(metricsObj.stable_days_streak);
+      const healthyDaysStreak = numberOrNull(metricsObj.healthy_days_streak) ?? stableDaysStreak;
+      const stabilityTier =
+        stabilityTierOrNull(metricsObj.stability_tier) ??
+        getStabilityTier(uptimePercentToday, latencySamples);
       const uptimeScore =
         numberOrNull(details.uptime_score) ?? computeUptimeScore(uptimePercentToday);
       const stabilityScore =
         numberOrNull(details.stability_score) ?? computeStabilityScore(effectiveLatencyCv);
       const streakScore =
         numberOrNull(details.streak_score) ??
-        computeStreakScore(stableDaysStreak ?? 0);
+        computeStreakScore(healthyDaysStreak ?? stableDaysStreak ?? 0);
       const sScore =
         numberOrNull(scoreObj.s) ??
         computeSScore(uptimeScore, stabilityScore, streakScore);
@@ -1206,9 +1212,11 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           effective_latency_cv: effectiveLatencyCv,
           download_samples_mbps: numberArrayOrEmpty(metricsObj.download_samples_mbps),
           stable_days_streak: stableDaysStreak,
+          healthy_days_streak: healthyDaysStreak,
           is_stable_day:
             boolOrNull(metricsObj.is_stable_day) ??
             isStableDay(uptimePercentToday, latencySamples),
+          stability_tier: stabilityTier,
           s: sScore,
           uptime_score: uptimeScore,
           stability_score: stabilityScore,
@@ -1386,6 +1394,9 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         uptimePercentToday === undefined
           ? mustNumber(payload.uptime_percent_30d, 'uptime_percent_30d')
           : uptimePercentToday;
+      const stabilityTier =
+        optionalStabilityTier(payload.stability_tier) ??
+        getStabilityTier(derivedUptimePercentToday, latencySamples);
       const input: DailyMetricsInput = {
         airport_id: toAirportId(payload.airport_id),
         date: parseDate(payload.date),
@@ -1400,9 +1411,13 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         median_download_mbps: mustNumber(payload.median_download_mbps, 'median_download_mbps'),
         packet_loss_percent: mustNumber(payload.packet_loss_percent, 'packet_loss_percent'),
         stable_days_streak: mustNumber(payload.stable_days_streak, 'stable_days_streak'),
+        healthy_days_streak:
+          optionalNumber(payload.healthy_days_streak) ??
+          mustNumber(payload.stable_days_streak, 'stable_days_streak'),
         is_stable_day:
           optionalBoolean(payload.is_stable_day) ??
           isStableDay(derivedUptimePercentToday, latencySamples),
+        stability_tier: stabilityTier,
         domain_ok: Boolean(payload.domain_ok),
         ssl_days_left: optionalNumber(payload.ssl_days_left) ?? null,
         recent_complaints_count: mustNumber(payload.recent_complaints_count ?? 0, 'recent_complaints_count'),
@@ -1608,6 +1623,17 @@ function optionalBoolean(value: unknown): boolean | undefined {
     return undefined;
   }
   return boolOrNull(value) ?? undefined;
+}
+
+function optionalStabilityTier(value: unknown): StabilityTier | undefined {
+  if (
+    value === 'stable' ||
+    value === 'minor_fluctuation' ||
+    value === 'volatile'
+  ) {
+    return value;
+  }
+  return undefined;
 }
 
 function parseMarketingGranularity(value: unknown): MarketingGranularity {
@@ -2208,6 +2234,10 @@ function boolOrNull(value: unknown): boolean | null {
     }
   }
   return Boolean(value);
+}
+
+function stabilityTierOrNull(value: unknown): StabilityTier | null {
+  return optionalStabilityTier(value) ?? null;
 }
 
 function numberArrayOrEmpty(value: unknown): number[] {

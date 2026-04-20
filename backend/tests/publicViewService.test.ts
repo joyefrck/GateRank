@@ -229,7 +229,158 @@ test('PublicViewService.getHomePageView builds fallback cards from public scores
     label: '对比昨天',
     value: 3,
   });
+  assert.equal(result.sections.today_pick.items[0].stability_tier, 'stable');
   assert.equal(result.sections.most_stable.items.length, 1);
+});
+
+test('PublicViewService.getHomePageView builds today pick details and reminders from stability tiers', async () => {
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => ({
+        id: 1,
+        name: 'Alpha',
+        website: 'https://alpha.example.com',
+        status: 'normal' as const,
+        plan_price_month: 12,
+        has_trial: true,
+        tags: ['性价比高'],
+        created_at: '2026-01-20',
+      }),
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 0,
+        healthy_days_streak: 12,
+        stability_tier: 'minor_fluctuation' as const,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 0,
+        history_incidents: 0,
+      }),
+      getTrend: async () => [
+        {
+          airport_id: 1,
+          date: '2026-03-23',
+          uptime_percent_30d: 99.9,
+          median_latency_ms: 52,
+          median_download_mbps: 88,
+          packet_loss_percent: 0,
+          stable_days_streak: 10,
+          healthy_days_streak: 11,
+          stability_tier: 'stable' as const,
+          is_stable_day: true,
+          domain_ok: true,
+          ssl_days_left: 120,
+          recent_complaints_count: 0,
+          history_incidents: 0,
+        },
+        {
+          airport_id: 1,
+          date: '2026-03-24',
+          uptime_percent_30d: 99.9,
+          median_latency_ms: 52,
+          median_download_mbps: 88,
+          packet_loss_percent: 0,
+          stable_days_streak: 0,
+          healthy_days_streak: 12,
+          stability_tier: 'minor_fluctuation' as const,
+          is_stable_day: false,
+          domain_ok: true,
+          ssl_days_left: 120,
+          recent_complaints_count: 0,
+          history_incidents: 0,
+        },
+      ],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-03-24',
+        s: 82,
+        p: 76,
+        c: 88,
+        r: 95,
+        risk_penalty: 0,
+        score: 80,
+        recent_score: 80,
+        historical_score: 78,
+        final_score: 79,
+        details: {
+          total_score: 83,
+        },
+      }),
+      getPublicDisplayScoreByAirportAndDate: async () => 80,
+      getTrend: async () => [{
+        airport_id: 1,
+        date: '2026-03-24',
+        s: 82,
+        p: 76,
+        c: 88,
+        r: 95,
+        risk_penalty: 0,
+        score: 80,
+        recent_score: 80,
+        historical_score: 78,
+        final_score: 79,
+        details: {
+          total_score: 83,
+        },
+      }],
+      getPublicFullRankingByDate: async () => ({
+        total: 1,
+        items: [
+          {
+            airport_id: 1,
+            rank: 1,
+            name: 'Alpha',
+            website: 'https://alpha.example.com',
+            status: 'normal' as const,
+            tags: ['性价比高'],
+            founded_on: '2024-01-01',
+            plan_price_month: 12,
+            has_trial: true,
+            airport_intro: 'Alpha intro',
+            created_at: '2026-01-20',
+            score: 83,
+            score_delta_vs_yesterday: {
+              label: '对比昨天',
+              value: 3,
+            },
+            report_url: '/reports/1?date=2026-03-24',
+          },
+        ],
+      }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 1,
+        realtime_tests: 8,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getHomePageView('2026-03-24');
+  const item = result.sections.today_pick.items[0];
+  assert.equal(item.stability_tier, 'minor_fluctuation');
+  assert.deepEqual(item.details, [
+    { label: '健康记录', value: '12 天' },
+    { label: '最近30天', value: '0 异常 · 1 轻微' },
+  ]);
+  assert.match(item.conclusion, /亮点：当前价格与实际表现更均衡/);
+  assert.match(item.conclusion, /提醒：当前可以正常使用，但存在轻微抖动/);
 });
 
 test('PublicViewService.getHomePageView returns negative and missing score deltas', async () => {
@@ -547,6 +698,7 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
   const result = await service.getReportView(1, '2026-03-24');
   assert.ok(result);
   assert.equal(result.summary_card.type, 'stable');
+  assert.equal(result.summary_card.stability_tier, 'stable');
   assert.equal(result.ranking.risk_alerts_rank, null);
 });
 

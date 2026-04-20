@@ -433,7 +433,8 @@ export function MethodologyPage() {
               <div className="mt-6 grid gap-3 sm:grid-cols-2">
                 <MetricTile label="可用率" value={`${formatNumber(exampleCase.input.uptimePercent)}%`} />
                 <MetricTile label="延迟波动 CV" value={formatNumber(exampleCase.input.latencyCv)} />
-                <MetricTile label="连续稳定天数" value={`${exampleCase.input.stableDaysStreak} 天`} />
+                <MetricTile label="单日分档" value={exampleCase.breakdown.stabilityTier} />
+                <MetricTile label="连续健康天数" value={`${exampleCase.input.healthyDaysStreak} 天`} />
                 <MetricTile label="中位延迟" value={`${exampleCase.input.medianLatencyMs} ms`} />
                 <MetricTile label="下载速率" value={`${exampleCase.input.medianDownloadMbps} Mbps`} />
                 <MetricTile label="丢包率" value={`${exampleCase.input.packetLossPercent}%`} />

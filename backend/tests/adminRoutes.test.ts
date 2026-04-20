@@ -904,6 +904,7 @@ test('GET /airports/:id/dashboard exposes raw and effective stability diagnostic
           latency_std_ms: 1.14,
           latency_cv: 0.2498,
           stable_days_streak: 15,
+          healthy_days_streak: 15,
           is_stable_day: null,
         }),
       },
@@ -928,8 +929,10 @@ test('GET /airports/:id/dashboard exposes raw and effective stability diagnostic
     assert.equal(data.stability.latency_cv, 0.2498);
     assert.equal(data.stability.effective_latency_cv, 0.1023);
     assert.equal(data.stability.is_stable_day, true);
+    assert.equal(data.stability.healthy_days_streak, 15);
+    assert.equal(data.stability.stability_tier, 'stable');
     assert.equal(data.stability.stability_score, 89.77);
-    assert.equal(data.stability.stability_rule_version, 'robust_cv_v1');
+    assert.equal(data.stability.stability_rule_version, 'stability_tier_v2');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -975,6 +978,7 @@ test('GET /airports/:id/dashboard exposes pending score pipeline state when metr
           latency_std_ms: 0.15,
           latency_cv: 0.0182,
           stable_days_streak: 12,
+          healthy_days_streak: 12,
           is_stable_day: true,
         }),
       },

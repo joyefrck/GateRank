@@ -20,13 +20,15 @@ export const FINAL_ENGINE_WEIGHTS = {
 
 export const STABILITY_RULES = {
   uptimeBaseline: 95,
+  minHealthyDailyUptimePercent: 95,
   minDailyUptimePercent: 99,
   maxLatencyCv: 0.2,
+  maxMinorLatencyCv: 0.35,
   streakCapDays: 30,
   trimMinSampleCount: 5,
   trimEdgeSampleCount: 1,
   effectiveMeanFloorMs: 10,
-  ruleVersion: 'robust_cv_v1',
+  ruleVersion: 'stability_tier_v2',
 } as const;
 
 export const THRESHOLDS = {

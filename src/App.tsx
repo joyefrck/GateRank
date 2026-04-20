@@ -61,6 +61,7 @@ const LazyPublishTokenDocsPage = lazy(async () => {
 
 type CardType = 'stable' | 'value' | 'risk' | 'new';
 type HomeSectionKey = 'today_pick' | 'most_stable' | 'best_value' | 'new_entries' | 'risk_alerts';
+type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
 
 interface CardDetail {
   label: string;
@@ -80,6 +81,7 @@ interface HomeCardItem {
   tags: string[];
   score: number;
   score_delta_vs_yesterday: ScoreDeltaView;
+  stability_tier: StabilityTier;
   details: [CardDetail, CardDetail];
   conclusion: string;
   report_url: string;
@@ -166,6 +168,7 @@ interface ReportViewResponse {
     name: string;
     tags: string[];
     score: number;
+    stability_tier: StabilityTier;
     details: [CardDetail, CardDetail];
     conclusion: string;
   };
@@ -190,6 +193,8 @@ interface ReportViewResponse {
     median_download_mbps: number;
     packet_loss_percent: number;
     stable_days_streak: number;
+    healthy_days_streak: number;
+    stability_tier: StabilityTier;
     recent_complaints_count: number;
     history_incidents: number;
   };
@@ -209,6 +214,7 @@ interface CardProps {
   tags: string[];
   score: number;
   scoreDeltaVsYesterday?: ScoreDeltaView;
+  stabilityTier: StabilityTier;
   details: CardDetail[];
   conclusion: string;
   icon?: React.ReactNode;
@@ -454,6 +460,28 @@ function getScoreDeltaToneOnDark(value: number | null): string {
   return 'text-white/70';
 }
 
+function getStabilityTierLabel(tier: StabilityTier): string {
+  switch (tier) {
+    case 'stable':
+      return '稳定';
+    case 'minor_fluctuation':
+      return '轻微波动';
+    case 'volatile':
+      return '异常波动';
+  }
+}
+
+function getStabilityTierTone(tier: StabilityTier): string {
+  switch (tier) {
+    case 'stable':
+      return 'border-emerald-200 bg-emerald-50 text-emerald-700';
+    case 'minor_fluctuation':
+      return 'border-amber-200 bg-amber-50 text-amber-700';
+    case 'volatile':
+      return 'border-rose-200 bg-rose-50 text-rose-700';
+  }
+}
+
 const ConclusionCard = ({
   type,
   title,
@@ -462,6 +490,7 @@ const ConclusionCard = ({
   tags,
   score,
   scoreDeltaVsYesterday,
+  stabilityTier,
   details,
   conclusion,
   icon,
@@ -543,6 +572,11 @@ const ConclusionCard = ({
         <div className="flex items-center gap-2.5 mb-2.5">
           <div className="w-1 h-3 bg-neutral-900" />
           <div className="text-[11px] md:text-xs text-neutral-900 uppercase tracking-[0.18em] font-black">监测结论</div>
+          {type !== 'risk' && (
+            <span className={`ml-auto inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-[11px] font-black tracking-[0.08em] ${getStabilityTierTone(stabilityTier)}`}>
+              {getStabilityTierLabel(stabilityTier)}
+            </span>
+          )}
         </div>
         <p className="text-[13px] md:text-sm font-medium leading-6 text-neutral-600 line-clamp-3 pl-4 border-l border-neutral-200">{conclusion}</p>
       </div>
@@ -1541,6 +1575,7 @@ function HomePage({ date }: { date?: string }) {
                           tags={item.tags}
                           score={item.score}
                           scoreDeltaVsYesterday={item.score_delta_vs_yesterday}
+                          stabilityTier={item.stability_tier}
                           details={item.details}
                           conclusion={item.conclusion}
                           onOpen={() => navigate(item.report_url)}
@@ -2364,6 +2399,7 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
                 name={data.summary_card.name}
                 tags={data.summary_card.tags}
                 score={data.summary_card.score}
+                stabilityTier={data.summary_card.stability_tier}
                 details={data.summary_card.details}
                 conclusion={data.summary_card.conclusion}
               />
@@ -2400,7 +2436,8 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
                 <StatusPill label="中位延迟" value={`${formatMetric(data.metrics.median_latency_ms)} ms`} />
                 <StatusPill label="下载速率" value={`${formatMetric(data.metrics.median_download_mbps)} Mbps`} />
                 <StatusPill label="丢包率" value={`${formatMetric(data.metrics.packet_loss_percent)}%`} />
-                <StatusPill label="稳定记录" value={`${data.metrics.stable_days_streak} 天`} />
+                <StatusPill label="健康记录" value={`${data.metrics.healthy_days_streak} 天`} />
+                <StatusPill label="当前状态" value={getStabilityTierLabel(data.metrics.stability_tier)} />
                 <StatusPill label="近期投诉" value={data.metrics.recent_complaints_count} />
                 <StatusPill label="历史异常" value={data.metrics.history_incidents} />
                 <StatusPill label="状态" value={formatAirportStatus(data.airport.status)} />

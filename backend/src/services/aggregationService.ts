@@ -1,6 +1,6 @@
-import type { DailyMetrics, ProbeSample } from '../types/domain';
+import type { DailyMetrics, ProbeSample, StabilityTier } from '../types/domain';
 import { dateDaysAgo } from '../utils/time';
-import { computeLatencyStats, isStableDay } from '../utils/stability';
+import { computeLatencyStats, getStabilityTier, isStableDay } from '../utils/stability';
 
 interface AggregationDeps {
   airportRepository: {
@@ -114,8 +114,15 @@ export class AggregationService {
     }
     const uptimePercent30d = calcUptimePercent(availByDay);
     const latenciesByDay = buildLatencyMap(samples, 'stability');
-    const stableDaysStreak = calcStableStreak(availByDay, latenciesByDay, date);
-    const stableDay = isStableDay(uptimePercentToday, stabilityLatencies);
+    const stabilityTier = getStabilityTier(uptimePercentToday, stabilityLatencies);
+    const stableDaysStreak = calcStreakByTier(availByDay, latenciesByDay, date, ['stable']);
+    const healthyDaysStreak = calcStreakByTier(
+      availByDay,
+      latenciesByDay,
+      date,
+      ['stable', 'minor_fluctuation'],
+    );
+    const stableDay = stabilityTier === 'stable';
 
     await this.deps.metricsRepository.upsertDaily({
       airport_id: airportId,
@@ -131,7 +138,9 @@ export class AggregationService {
       median_download_mbps: medianDownload,
       packet_loss_percent: packetLoss,
       stable_days_streak: stableDaysStreak,
+      healthy_days_streak: healthyDaysStreak,
       is_stable_day: stableDay,
+      stability_tier: stabilityTier,
       domain_ok: domainOk,
       ssl_days_left: base?.ssl_days_left ?? null,
       recent_complaints_count: base?.recent_complaints_count ?? 0,
@@ -186,10 +195,11 @@ function buildLatencyMap(samples: ProbeSample[], probeScope: ProbeSample['probe_
   return latenciesByDay;
 }
 
-function calcStableStreak(
+function calcStreakByTier(
   availByDay: Map<string, number[]>,
   latenciesByDay: Map<string, number[]>,
   date: string,
+  acceptedTiers: StabilityTier[],
 ): number {
   let streak = 0;
   for (let i = 0; i < 365; i += 1) {
@@ -200,7 +210,8 @@ function calcStableStreak(
       break;
     }
     const uptimePercent = average(availabilities) * 100;
-    if (isStableDay(uptimePercent, latencies)) {
+    const stabilityTier = getStabilityTier(uptimePercent, latencies);
+    if (acceptedTiers.includes(stabilityTier)) {
       streak += 1;
       continue;
     }
