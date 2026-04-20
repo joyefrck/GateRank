@@ -760,6 +760,10 @@ test('PublicViewService.getReportView falls back to latest score date and expose
         final_score: 79,
         details: {
           total_score: 83,
+          domain_penalty: 0,
+          ssl_penalty: 0,
+          complaint_penalty: 0,
+          history_penalty: 0,
         },
       }),
       getPublicDisplayScoreByAirportAndDate: async () => 80,
@@ -777,6 +781,10 @@ test('PublicViewService.getReportView falls back to latest score date and expose
         final_score: 79,
         details: {
           total_score: 83,
+          domain_penalty: 0,
+          ssl_penalty: 0,
+          complaint_penalty: 0,
+          history_penalty: 0,
         },
       }],
       getPublicFullRankingByDate: async () => ({
@@ -806,6 +814,124 @@ test('PublicViewService.getReportView falls back to latest score date and expose
   assert.equal(result?.date, '2026-03-24');
   assert.equal(result?.resolved_from_fallback, true);
   assert.match(result?.fallback_notice || '', /2026-03-24/);
+  assert.match(result?.fallback_notice || '', /非实时探测结果/);
+});
+
+test('PublicViewService.getReportView exposes detailed risk penalties and mixed-clear conclusion', async () => {
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => ({
+        id: 1,
+        name: 'Alpha',
+        website: 'https://alpha.example.com',
+        status: 'normal' as const,
+        plan_price_month: 12,
+        has_trial: true,
+        tags: ['风险观察'],
+        created_at: '2026-01-20',
+      }),
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 30,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 2,
+        history_incidents: 0,
+      }),
+      getTrend: async () => [{
+        airport_id: 1,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 30,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 2,
+        history_incidents: 0,
+      }],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-03-24',
+        s: 82,
+        p: 76,
+        c: 70,
+        r: 72,
+        risk_penalty: 28,
+        score: 80,
+        recent_score: 80,
+        historical_score: 78,
+        final_score: 79,
+        details: {
+          total_score: 83,
+          domain_penalty: 0,
+          ssl_penalty: 0,
+          complaint_penalty: 6,
+          history_penalty: 0,
+        },
+      }),
+      getPublicDisplayScoreByAirportAndDate: async () => 80,
+      getTrend: async () => [{
+        airport_id: 1,
+        date: '2026-03-24',
+        s: 82,
+        p: 76,
+        c: 70,
+        r: 72,
+        risk_penalty: 28,
+        score: 80,
+        recent_score: 80,
+        historical_score: 78,
+        final_score: 79,
+        details: {
+          total_score: 83,
+          domain_penalty: 0,
+          ssl_penalty: 0,
+          complaint_penalty: 6,
+          history_penalty: 0,
+        },
+      }],
+      getPublicFullRankingByDate: async () => ({
+        total: 1,
+        items: [],
+      }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({
+        risk: 1,
+      }),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 1,
+        realtime_tests: 8,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getReportView(1, '2026-03-24');
+  assert.ok(result);
+  assert.equal(result?.summary_card.type, 'risk');
+  assert.equal(result?.score_breakdown.domain_penalty, 0);
+  assert.equal(result?.score_breakdown.ssl_penalty, 0);
+  assert.equal(result?.score_breakdown.complaint_penalty, 6);
+  assert.equal(result?.score_breakdown.history_penalty, 0);
+  assert.match(result?.summary_card.conclusion || '', /官网已恢复访问/);
+  assert.match(result?.summary_card.conclusion || '', /近期投诉 2 条/);
 });
 
 test('PublicViewService.getHomePageView filters stale normal airports from persisted risk ranking', async () => {
@@ -967,6 +1093,9 @@ test('PublicViewService.getRiskMonitorView includes down airports and risk-watch
             report_url: '/reports/1?date=2026-03-23',
             monitor_reason: 'down' as const,
             risk_penalty: 90,
+            risk_reasons: [],
+            risk_reason_summary: '该机场已由管理员确认标记为跑路状态，已停止日常测评与调度采样。',
+            snapshot_is_stale: true,
           },
           {
             airport_id: 2,
@@ -982,10 +1111,13 @@ test('PublicViewService.getRiskMonitorView includes down airports and risk-watch
             created_at: '2026-03-02',
             score: 44,
             score_delta_vs_yesterday: { label: '对比昨天', value: -1 },
-            score_date: '2026-03-23',
-            report_url: '/reports/2?date=2026-03-23',
+            score_date: '2026-03-24',
+            report_url: '/reports/2?date=2026-03-24',
             monitor_reason: 'risk_watch' as const,
             risk_penalty: 55,
+            risk_reasons: ['recent_complaints'],
+            risk_reason_summary: '官网已恢复访问，当前风险主要来自近期投诉 2 条。',
+            snapshot_is_stale: false,
           },
         ],
       }),
@@ -1011,4 +1143,7 @@ test('PublicViewService.getRiskMonitorView includes down airports and risk-watch
     result.items.map((item) => [item.name, item.monitor_reason]),
     [['Down Airport', 'down'], ['Watch Airport', 'risk_watch']],
   );
+  assert.equal(result.items[1]?.snapshot_is_stale, true);
+  assert.deepEqual(result.items[1]?.risk_reasons, ['recent_complaints']);
+  assert.match(result.items[1]?.risk_reason_summary || '', /官网已恢复访问/);
 });

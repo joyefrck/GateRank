@@ -1078,7 +1078,7 @@ function renderTopbar(active: 'news' | 'home' | 'rankings' | 'methodology'): str
           <nav class="nav-links">
             <a class="nav-link ${active === 'home' ? 'is-active' : ''}" href="/">今日推荐</a>
             <a class="nav-link ${active === 'rankings' ? 'is-active' : ''}" href="/rankings/all">全量榜单</a>
-            <a class="risk-link" href="/risk-monitor">跑路监测 <span class="risk-badge">实时</span></a>
+            <a class="risk-link" href="/risk-monitor">跑路监测 <span class="risk-badge">快照</span></a>
             <a class="nav-link ${active === 'methodology' ? 'is-active' : ''}" href="/methodology">测评方法</a>
             <a class="nav-link is-news ${active === 'news' ? 'is-active' : ''}" href="/news">News</a>
           </nav>

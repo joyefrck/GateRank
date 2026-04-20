@@ -238,6 +238,9 @@ export interface FullRankingView {
 export interface RiskMonitorItem extends FullRankingItem {
   monitor_reason: 'down' | 'risk_watch';
   risk_penalty: number | null;
+  risk_reasons: string[];
+  risk_reason_summary: string;
+  snapshot_is_stale: boolean;
 }
 
 export interface RiskMonitorView {
@@ -271,6 +274,10 @@ export interface ReportView {
     r: number;
     final_score: number;
     risk_penalty: number;
+    domain_penalty: number;
+    ssl_penalty: number;
+    complaint_penalty: number;
+    history_penalty: number;
   };
   metrics: {
     uptime_percent_30d: number;

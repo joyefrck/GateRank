@@ -332,6 +332,10 @@ test('GET /airports/:id/report-view returns report view payload', async () => {
             r: 96,
             final_score: 95.1,
             risk_penalty: 4,
+            domain_penalty: 0,
+            ssl_penalty: 4,
+            complaint_penalty: 0,
+            history_penalty: 0,
           },
           metrics: {
             uptime_percent_30d: 99.98,
@@ -514,6 +518,9 @@ test('GET /pages/risk-monitor returns paged risk monitor payload', async () => {
               report_url: '/reports/7?date=2026-03-22',
               monitor_reason: 'down',
               risk_penalty: 88,
+              risk_reasons: [],
+              risk_reason_summary: '该机场已由管理员确认标记为跑路状态，已停止日常测评与调度采样。',
+              snapshot_is_stale: true,
             },
           ],
         }),
@@ -532,12 +539,19 @@ test('GET /pages/risk-monitor returns paged risk monitor payload', async () => {
       page: number;
       page_size: number;
       total: number;
-      items: Array<{ monitor_reason: string; risk_penalty: number | null }>;
+      items: Array<{
+        monitor_reason: string;
+        risk_penalty: number | null;
+        risk_reason_summary: string;
+        snapshot_is_stale: boolean;
+      }>;
     };
     assert.equal(data.page, 1);
     assert.equal(data.page_size, 20);
     assert.equal(data.total, 2);
     assert.equal(data.items[0]?.monitor_reason, 'down');
+    assert.equal(data.items[0]?.snapshot_is_stale, true);
+    assert.match(data.items[0]?.risk_reason_summary || '', /管理员确认/);
     assert.equal(data.items[0]?.risk_penalty, 88);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

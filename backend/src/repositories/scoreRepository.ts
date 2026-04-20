@@ -8,6 +8,7 @@ import type {
   ScoreDetailValue,
   TimeSeriesScorePoint,
 } from '../types/domain';
+import { buildRiskReasonSummary, deriveRiskReasonCodes } from '../utils/risk';
 import { formatDateOnly } from '../utils/time';
 
 interface ScoreRow extends RowDataPacket {
@@ -68,6 +69,12 @@ interface PublicRiskMonitorRow extends RowDataPacket {
   score_date: unknown;
   display_score: number | null;
   risk_penalty: number | null;
+  details_json: unknown;
+  domain_ok: number | null;
+  ssl_days_left: number | null;
+  recent_complaints_count: number | null;
+  history_incidents: number | null;
+  score_r: number | null;
 }
 
 export class ScoreRepository {
@@ -383,20 +390,29 @@ export class ScoreRepository {
          a.airport_intro,
          a.created_at,
          s.date AS score_date,
+         s.score_r,
          COALESCE(
            CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.total_score')) AS DECIMAL(10,2)),
            s.final_score
          ) AS display_score,
-         s.risk_penalty
+         s.risk_penalty,
+         s.details_json,
+         m.domain_ok,
+         m.ssl_days_left,
+         m.recent_complaints_count,
+         m.history_incidents
        FROM airports a
        LEFT JOIN airport_scores_daily s
          ON s.airport_id = a.id
         AND s.date = (
           SELECT MAX(s2.date)
-            FROM airport_scores_daily s2
-           WHERE s2.airport_id = a.id
+           FROM airport_scores_daily s2
+          WHERE s2.airport_id = a.id
              AND s2.date <= ?
         )
+       LEFT JOIN airport_metrics_daily m
+         ON m.airport_id = a.id
+        AND m.date = s.date
       WHERE a.status = 'down'
          OR JSON_SEARCH(a.tags_json, 'one', '风险观察') IS NOT NULL
       ORDER BY
@@ -421,6 +437,23 @@ export class ScoreRepository {
       items: rows.map((row, index) => {
         const currentScore = row.display_score === null ? null : Number(row.display_score);
         const yesterdayScore = yesterdayDisplayScores.get(Number(row.airport_id));
+        const details = safeJsonObject(row.details_json);
+        const metrics = {
+          domain_ok: row.domain_ok === null ? undefined : Boolean(row.domain_ok),
+          ssl_days_left: row.ssl_days_left === null ? null : Number(row.ssl_days_left),
+          recent_complaints_count: row.recent_complaints_count === null ? 0 : Number(row.recent_complaints_count),
+          history_incidents: row.history_incidents === null ? 0 : Number(row.history_incidents),
+        };
+        const riskReasons = row.status === 'down'
+          ? []
+          : deriveRiskReasonCodes({
+              metrics,
+              score: {
+                r: row.score_r === null ? undefined : Number(row.score_r),
+                details,
+              },
+            });
+        const scoreDate = row.score_date ? formatDateOnly(row.score_date) : null;
 
         return {
           airport_id: row.airport_id,
@@ -442,10 +475,21 @@ export class ScoreRepository {
                 ? null
                 : round2(currentScore - yesterdayScore),
           },
-          score_date: row.score_date ? formatDateOnly(row.score_date) : null,
-          report_url: row.score_date ? `/reports/${row.airport_id}?date=${formatDateOnly(row.score_date)}` : null,
+          score_date: scoreDate,
+          report_url: scoreDate ? `/reports/${row.airport_id}?date=${scoreDate}` : null,
           monitor_reason: row.status === 'down' ? 'down' : 'risk_watch',
           risk_penalty: row.risk_penalty === null ? null : Number(row.risk_penalty),
+          risk_reasons: riskReasons,
+          risk_reason_summary: row.status === 'down'
+            ? '该机场已由管理员确认标记为跑路状态，已停止日常测评与调度采样。'
+            : buildRiskReasonSummary({
+                metrics,
+                score: {
+                  r: row.score_r === null ? undefined : Number(row.score_r),
+                  details,
+                },
+              }),
+          snapshot_is_stale: scoreDate ? scoreDate < date : false,
         };
       }),
     };

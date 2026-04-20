@@ -1,4 +1,5 @@
 import type { Airport, DailyMetrics, ScoreBreakdown } from '../types/domain';
+import { hasActiveRiskReasons } from '../utils/risk';
 import { sortDisplayTags } from '../utils/tags';
 
 const TAG_RULES = {
@@ -104,7 +105,8 @@ export function generateAirportTags(input: GenerateAirportTagsInput): string[] {
 
   if (
     riskScore < TAG_RULES.riskWatch.riskScoreMaxExclusive ||
-    recentRiskEvents > 0
+    recentRiskEvents > 0 ||
+    hasActiveRiskReasons({ metrics, score })
   ) {
     tags.add('风险观察');
   }

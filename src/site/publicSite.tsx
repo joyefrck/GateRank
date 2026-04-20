@@ -199,7 +199,7 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
               }`}
             >
               跑路监测
-              <span className="rounded-md bg-rose-500 px-2 py-1 text-[10px] tracking-[0.18em] text-white">实时</span>
+              <span className="rounded-md bg-rose-500 px-2 py-1 text-[10px] tracking-[0.18em] text-white">快照</span>
             </a>
             <PublicNavLink href={buildMethodologyHref()} label="测评方法" active={active === 'methodology'} />
             <a

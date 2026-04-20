@@ -11,6 +11,7 @@ import type {
   ReportView,
   RiskMonitorItem,
   RiskMonitorView,
+  ScoreDetailValue,
   ScoreDeltaView,
 } from '../types/domain';
 import {
@@ -20,6 +21,7 @@ import {
   formatRelativeTimeFromNow,
   getDateInTimezone,
 } from '../utils/time';
+import { buildRiskReasonSummary } from '../utils/risk';
 
 type HomeSectionKey =
   | 'today_pick'
@@ -50,7 +52,7 @@ interface PublicViewDeps {
       recent_score: number;
       historical_score: number;
       final_score: number;
-      details?: Record<string, unknown>;
+      details?: Record<string, ScoreDetailValue>;
     } | null>;
     getPublicDisplayScoreByAirportAndDate(airportId: number, date: string): Promise<number | null>;
     getTrend(
@@ -69,7 +71,7 @@ interface PublicViewDeps {
         recent_score: number;
         historical_score: number;
         final_score: number;
-        details?: Record<string, unknown>;
+        details?: Record<string, ScoreDetailValue>;
       }>
     >;
     getPublicFullRankingByDate(
@@ -115,6 +117,7 @@ interface CardContext {
     final_score: number;
     display_score: number;
     yesterday_display_score: number | null;
+    details: Record<string, ScoreDetailValue>;
   };
   metricsTrend30d: DailyMetrics[];
   scoreTrend30d: Array<{ date: string; final_score: number; display_score: number }>;
@@ -286,7 +289,10 @@ export class PublicViewService {
       page_size: safePageSize,
       total: result.total,
       total_pages: Math.max(1, Math.ceil(result.total / safePageSize)),
-      items: result.items,
+      items: result.items.map((item) => ({
+        ...item,
+        snapshot_is_stale: item.score_date ? item.score_date < date : false,
+      })),
     };
   }
 
@@ -342,6 +348,10 @@ export class PublicViewService {
         r: round2(base.score.r),
         final_score: round2(base.score.display_score),
         risk_penalty: round2(base.score.risk_penalty),
+        domain_penalty: getPenaltyValue(base.score.details, 'domain_penalty'),
+        ssl_penalty: getPenaltyValue(base.score.details, 'ssl_penalty'),
+        complaint_penalty: getPenaltyValue(base.score.details, 'complaint_penalty'),
+        history_penalty: getPenaltyValue(base.score.details, 'history_penalty'),
       },
       metrics: {
         uptime_percent_30d: round2(base.metrics.uptime_percent_30d),
@@ -451,6 +461,7 @@ export class PublicViewService {
         final_score: score.final_score,
         display_score: getDisplayScore(score),
         yesterday_display_score: yesterdayDisplayScore,
+        details: score.details || {},
       },
       metricsTrend30d,
       scoreTrend30d: scoreTrend30d.map((row) => ({
@@ -624,7 +635,13 @@ function buildConclusion(section: HomeSectionKey, context: CardContext, date: st
     case 'new_entries':
       return `已观察 ${trackingDays} 天，近期评分趋势为${trendLabel}，目前处于持续跟踪阶段，具备继续上榜的潜力。`;
     case 'risk_alerts':
-      return `当前主要风险信号为“${primaryRiskReason}”，投诉表现为${complaintTrendLabel}。建议暂停续费，优先核查官网、订阅和历史异常。`;
+      return `${buildRiskReasonSummary({
+        metrics: context.metrics,
+        score: {
+          r: context.score.r,
+          details: context.score.details,
+        },
+      })} 建议暂停续费，优先核查官网、订阅和历史异常。`;
   }
 }
 
@@ -783,7 +800,9 @@ function buildRiskMonitorCardDetails(
     },
     {
       label: '评分快照',
-      value: item.score_date || '暂无历史评分',
+      value: item.score_date
+        ? `${item.score_date}${item.snapshot_is_stale ? '（非实时）' : ''}`
+        : '暂无历史评分',
     },
   ];
 }
@@ -791,6 +810,9 @@ function buildRiskMonitorCardDetails(
 function buildRiskMonitorConclusion(item: RiskMonitorItem): string {
   if (item.monitor_reason === 'down') {
     return '该机场已由管理员确认标记为跑路状态，已停止日常测评与调度采样。建议暂停续费，并仅将其作为风险留档对象观察。';
+  }
+  if (item.risk_reason_summary) {
+    return `${item.risk_reason_summary}${item.snapshot_is_stale && item.score_date ? ` 当前说明基于 ${item.score_date} 快照，非实时探测结果。` : ''}`;
   }
   return '该机场当前命中“风险观察”标签，尚未进入管理员确认跑路状态。建议优先核查官网、订阅、投诉与近期波动，再决定是否继续使用。';
 }
@@ -809,8 +831,13 @@ function round2(value: number): number {
   return Object.is(rounded, -0) ? 0 : rounded;
 }
 
+function getPenaltyValue(details: Record<string, ScoreDetailValue>, key: string): number {
+  const value = details[key];
+  return typeof value === 'number' && Number.isFinite(value) ? round2(value) : 0;
+}
+
 function buildPublicFallbackNotice(requestedDate: string, resolvedDate: string): string {
-  return `${requestedDate} 的公开分数尚未生成，当前展示 ${resolvedDate} 的最新已发布结果。`;
+  return `${requestedDate} 的公开分数尚未生成，当前展示 ${resolvedDate} 的最新已生成快照，非实时探测结果。`;
 }
 
 function getDisplayScore(score: { final_score: number; details?: Record<string, unknown> }): number {

@@ -112,6 +112,84 @@ test('generateAirportTags adds 风险观察 when recent complaints exist', () =>
   assert.ok(tags.includes('风险观察'));
 });
 
+test('generateAirportTags clears 风险观察 after website recovers and no other active reasons remain', () => {
+  const tags = generateAirportTags({
+    date: '2026-03-22',
+    airport: buildAirport(),
+    metrics: buildMetrics({
+      domain_ok: true,
+      ssl_days_left: 120,
+      recent_complaints_count: 0,
+      history_incidents: 0,
+    }),
+    score: buildScore({
+      r: 78,
+      details: {
+        stability_score: 88,
+        price_score: 85,
+        domain_penalty: 0,
+        ssl_penalty: 0,
+        complaint_penalty: 0,
+        history_penalty: 0,
+      },
+    }),
+    priceMedian: 20,
+  });
+  assert.equal(tags.includes('风险观察'), false);
+});
+
+test('generateAirportTags keeps 风险观察 after website recovers when complaints remain', () => {
+  const tags = generateAirportTags({
+    date: '2026-03-22',
+    airport: buildAirport(),
+    metrics: buildMetrics({
+      domain_ok: true,
+      ssl_days_left: 120,
+      recent_complaints_count: 2,
+      history_incidents: 0,
+    }),
+    score: buildScore({
+      r: 72,
+      details: {
+        stability_score: 88,
+        price_score: 85,
+        domain_penalty: 0,
+        ssl_penalty: 0,
+        complaint_penalty: 6,
+        history_penalty: 0,
+      },
+    }),
+    priceMedian: 20,
+  });
+  assert.ok(tags.includes('风险观察'));
+});
+
+test('generateAirportTags keeps 风险观察 after website recovers when historical incidents remain', () => {
+  const tags = generateAirportTags({
+    date: '2026-03-22',
+    airport: buildAirport(),
+    metrics: buildMetrics({
+      domain_ok: true,
+      ssl_days_left: 120,
+      recent_complaints_count: 0,
+      history_incidents: 1,
+    }),
+    score: buildScore({
+      r: 74,
+      details: {
+        stability_score: 88,
+        price_score: 85,
+        domain_penalty: 0,
+        ssl_penalty: 0,
+        complaint_penalty: 0,
+        history_penalty: 10,
+      },
+    }),
+    priceMedian: 20,
+  });
+  assert.ok(tags.includes('风险观察'));
+});
+
 test('generateAirportTags adds 新手友好 when display score is healthy and trial is supported', () => {
   const tags = generateAirportTags({
     date: '2026-03-22',

@@ -139,6 +139,9 @@ interface FullRankingPageResponse {
 interface RiskMonitorItemResponse extends FullRankingItemResponse {
   monitor_reason: 'down' | 'risk_watch';
   risk_penalty: number | null;
+  risk_reasons: string[];
+  risk_reason_summary: string;
+  snapshot_is_stale: boolean;
 }
 
 interface RiskMonitorPageResponse {
@@ -186,6 +189,10 @@ interface ReportViewResponse {
     r: number;
     final_score: number;
     risk_penalty: number;
+    domain_penalty: number;
+    ssl_penalty: number;
+    complaint_penalty: number;
+    history_penalty: number;
   };
   metrics: {
     uptime_percent_30d: number;
@@ -2083,8 +2090,13 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                           <p className="mt-4 max-w-3xl text-sm leading-7 text-neutral-600">
                             {item.monitor_reason === 'down'
                               ? '该机场已由管理员确认进入跑路状态，系统已停止其日常测评、调度与手动任务，仅保留风险留档展示。'
-                              : '该机场当前命中“风险观察”标签，仍需用户结合官网状态、订阅可用性与历史波动继续判断。'}
+                              : item.risk_reason_summary || '该机场当前命中“风险观察”标签，仍需用户结合官网状态、订阅可用性与历史波动继续判断。'}
                           </p>
+                          {item.snapshot_is_stale && item.score_date ? (
+                            <p className="mt-2 max-w-3xl text-xs leading-6 text-amber-700">
+                              当前说明基于 {item.score_date} 快照，非实时探测结果。
+                            </p>
+                          ) : null}
 
                           <dl className="mt-5 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
                             <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
@@ -2101,7 +2113,11 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                             </div>
                             <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
                               <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">风险快照</dt>
-                              <dd className="mt-1 font-semibold text-neutral-800">{item.score_date || '暂无快照'}</dd>
+                              <dd className="mt-1 font-semibold text-neutral-800">
+                                {item.score_date
+                                  ? `${item.score_date}${item.snapshot_is_stale ? '（非实时）' : ''}`
+                                  : '暂无快照'}
+                              </dd>
                             </div>
                             <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
                               <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">风险扣分</dt>
@@ -2116,10 +2132,16 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                           <TagBadgeGroup tags={item.tags} size="sm" className="mt-5" />
                         </div>
 
-                        <div className="flex flex-col gap-3 rounded-[24px] border border-neutral-200 bg-white p-4 lg:sticky lg:top-24">
-                          <div className="rounded-2xl bg-neutral-50 px-4 py-4">
-                            <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">风险操作</div>
-                            <p className="mt-2 text-sm leading-6 text-neutral-500">先核查官网与订阅，再决定是否查看历史测评报告。已跑路对象默认不再产生新的当日评分快照。</p>
+                          <div className="flex flex-col gap-3 rounded-[24px] border border-neutral-200 bg-white p-4 lg:sticky lg:top-24">
+                            <div className="rounded-2xl bg-neutral-50 px-4 py-4">
+                              <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">风险操作</div>
+                            <p className="mt-2 text-sm leading-6 text-neutral-500">
+                              {item.monitor_reason === 'down'
+                                ? '已跑路对象默认不再产生新的当日评分快照。'
+                                : item.snapshot_is_stale && item.score_date
+                                  ? `先核查官网与订阅，再决定是否查看历史测评报告。当前说明基于 ${item.score_date} 快照，非实时探测结果。`
+                                  : '先核查官网与订阅，再决定是否查看历史测评报告。'}
+                            </p>
                           </div>
                           <a
                             href={item.website}
@@ -2459,6 +2481,10 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
                 <StatusPill label="风险 R" value={formatMetric(data.score_breakdown.r)} />
                 <StatusPill label="最终分" value={formatMetric(data.score_breakdown.final_score)} />
                 <StatusPill label="风险惩罚" value={formatMetric(data.score_breakdown.risk_penalty)} />
+                <StatusPill label="域名惩罚" value={formatMetric(data.score_breakdown.domain_penalty)} />
+                <StatusPill label="SSL 惩罚" value={formatMetric(data.score_breakdown.ssl_penalty)} />
+                <StatusPill label="投诉惩罚" value={formatMetric(data.score_breakdown.complaint_penalty)} />
+                <StatusPill label="历史惩罚" value={formatMetric(data.score_breakdown.history_penalty)} />
               </div>
             </section>
 
