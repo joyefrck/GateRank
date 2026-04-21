@@ -20,7 +20,7 @@ interface DeriveRiskReasonOptions {
 }
 
 const RISK_REASON_LABELS: Record<RiskReasonCode, string> = {
-  domain_unreachable: '官网失联',
+  domain_unreachable: '官网探测异常',
   ssl_warning: 'SSL 告警',
   recent_complaints: '近期投诉记录',
   history_incidents: '历史异常记录',
@@ -80,13 +80,13 @@ export function buildRiskReasonSummary(options: DeriveRiskReasonOptions): string
 
   if (reasons.includes('domain_unreachable')) {
     if (reasons.length === 1) {
-      return '官网当前不可访问，当前风险主要来自官网失联。';
+      return '官网自动探测未通过，当前风险主要来自官网探测异常。';
     }
-    return `官网当前不可访问，且仍存在${joinedWithout(labels, '官网失联')}。`;
+    return `官网自动探测未通过，且仍存在${joinedWithout(labels, '官网探测异常')}。`;
   }
 
   if (metrics.domain_ok === true) {
-    return `官网已恢复访问，当前风险主要来自${joined}。`;
+    return `官网当前探测正常，当前风险主要来自${joined}。`;
   }
 
   return `当前风险主要来自${joined}。`;

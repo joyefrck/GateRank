@@ -666,7 +666,7 @@ function getTrendLabel(items: Array<{ date: string; final_score: number; display
 
 function getPrimaryRiskReason(metrics: DailyMetrics): string {
   if (metrics.domain_ok === false) {
-    return '官网失联';
+    return '官网探测异常';
   }
   if (typeof metrics.ssl_days_left === 'number' && metrics.ssl_days_left <= 7) {
     return '证书告急';

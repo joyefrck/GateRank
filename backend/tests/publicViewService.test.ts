@@ -930,7 +930,7 @@ test('PublicViewService.getReportView exposes detailed risk penalties and mixed-
   assert.equal(result?.score_breakdown.ssl_penalty, 0);
   assert.equal(result?.score_breakdown.complaint_penalty, 6);
   assert.equal(result?.score_breakdown.history_penalty, 0);
-  assert.match(result?.summary_card.conclusion || '', /官网已恢复访问/);
+  assert.match(result?.summary_card.conclusion || '', /官网当前探测正常/);
   assert.match(result?.summary_card.conclusion || '', /近期投诉 2 条/);
 });
 
@@ -1116,7 +1116,7 @@ test('PublicViewService.getRiskMonitorView includes down airports and risk-watch
             monitor_reason: 'risk_watch' as const,
             risk_penalty: 55,
             risk_reasons: ['recent_complaints'],
-            risk_reason_summary: '官网已恢复访问，当前风险主要来自近期投诉 2 条。',
+            risk_reason_summary: '官网当前探测正常，当前风险主要来自近期投诉 2 条。',
             snapshot_is_stale: false,
           },
         ],
@@ -1145,5 +1145,5 @@ test('PublicViewService.getRiskMonitorView includes down airports and risk-watch
   );
   assert.equal(result.items[1]?.snapshot_is_stale, true);
   assert.deepEqual(result.items[1]?.risk_reasons, ['recent_complaints']);
-  assert.match(result.items[1]?.risk_reason_summary || '', /官网已恢复访问/);
+  assert.match(result.items[1]?.risk_reason_summary || '', /官网当前探测正常/);
 });
