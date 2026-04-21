@@ -11,7 +11,7 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
       calls.push({ sql, params });
       if (sql.includes('FROM information_schema.COLUMNS')) {
         schemaChecks += 1;
-        return [schemaChecks <= 10 ? [] : [{ 1: 1 }]];
+        return [schemaChecks <= 11 ? [] : [{ 1: 1 }]];
       }
       return [[]];
     },
@@ -21,6 +21,9 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
 
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN websites_json JSON NULL AFTER website')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN is_listed TINYINT(1) NOT NULL DEFAULT 1 AFTER status')),
   );
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN tags_json JSON NULL AFTER subscription_url')),
@@ -36,6 +39,9 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
   );
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN test_password VARCHAR(255) NULL AFTER test_account')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('SET is_listed = 1')),
   );
   assert.ok(
     calls.some((call) => call.sql.includes('SET websites_json = JSON_ARRAY(website)')),

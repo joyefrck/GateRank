@@ -281,7 +281,8 @@ export class ScoreRepository {
     const [totalRows] = await this.pool.query<Array<RowDataPacket & { total: number }>>(
       `SELECT COUNT(*) AS total
          FROM airports a
-        WHERE a.status IN ('normal', 'risk')`,
+        WHERE a.is_listed = 1
+          AND a.status IN ('normal', 'risk')`,
       [],
     );
 
@@ -311,7 +312,8 @@ export class ScoreRepository {
            WHERE s2.airport_id = a.id
              AND s2.date <= ?
         )
-      WHERE a.status IN ('normal', 'risk')
+      WHERE a.is_listed = 1
+        AND a.status IN ('normal', 'risk')
       ORDER BY
         CASE WHEN s.date IS NULL THEN 1 ELSE 0 END ASC,
         display_score DESC,
@@ -372,8 +374,11 @@ export class ScoreRepository {
     const [totalRows] = await this.pool.query<Array<RowDataPacket & { total: number }>>(
       `SELECT COUNT(*) AS total
          FROM airports a
-        WHERE a.status = 'down'
-           OR JSON_SEARCH(a.tags_json, 'one', '风险观察') IS NOT NULL`,
+        WHERE a.is_listed = 1
+          AND (
+            a.status = 'down'
+            OR JSON_SEARCH(a.tags_json, 'one', '风险观察') IS NOT NULL
+          )`,
       [],
     );
 
@@ -413,8 +418,11 @@ export class ScoreRepository {
        LEFT JOIN airport_metrics_daily m
          ON m.airport_id = a.id
         AND m.date = s.date
-      WHERE a.status = 'down'
-         OR JSON_SEARCH(a.tags_json, 'one', '风险观察') IS NOT NULL
+      WHERE a.is_listed = 1
+        AND (
+          a.status = 'down'
+          OR JSON_SEARCH(a.tags_json, 'one', '风险观察') IS NOT NULL
+        )
       ORDER BY
         CASE WHEN a.status = 'down' THEN 0 ELSE 1 END ASC,
         CASE WHEN s.date IS NULL THEN 1 ELSE 0 END ASC,

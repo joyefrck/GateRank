@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS airports (
   website VARCHAR(512) NOT NULL,
   websites_json JSON NULL,
   status ENUM('normal', 'risk', 'down') NOT NULL DEFAULT 'normal',
+  is_listed TINYINT(1) NOT NULL DEFAULT 1,
   plan_price_month DECIMAL(10,2) NOT NULL,
   has_trial TINYINT(1) NOT NULL DEFAULT 0,
   subscription_url VARCHAR(1024) NULL,

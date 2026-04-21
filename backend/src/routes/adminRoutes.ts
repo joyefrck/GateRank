@@ -64,6 +64,7 @@ interface AdminDeps {
       website: string;
       websites?: string[];
       status?: AirportStatus;
+      is_listed?: boolean;
       plan_price_month: number;
       has_trial: boolean;
       subscription_url?: string | null;
@@ -83,6 +84,7 @@ interface AdminDeps {
         website?: string;
         websites?: string[];
         status?: AirportStatus;
+        is_listed?: boolean;
         plan_price_month?: number;
         has_trial?: boolean;
         subscription_url?: string | null;
@@ -115,6 +117,15 @@ interface AdminDeps {
         reviewed_at: string;
       },
     ): Promise<boolean>;
+    markPaid?(id: number, paymentAmount: number, paidAt: string): Promise<boolean>;
+  };
+  applicationPaymentOrderRepository?: {
+    getLatestByApplicationId(applicationId: number): Promise<{
+      id: number;
+      amount: number;
+      status: 'created' | 'paid' | 'failed' | 'expired';
+    } | null>;
+    expireOpenOrdersByApplicationId(applicationId: number): Promise<number>;
   };
   probeSampleRepository: {
     insertProbeSample(input: ProbeSampleInput): Promise<number>;
@@ -197,6 +208,7 @@ interface AdminDeps {
   paymentGatewaySettingsService?: {
     getAdminSettings(): Promise<unknown>;
     updateAdminSettings(input: PaymentGatewaySettingsInput, updatedBy: string): Promise<unknown>;
+    getConfig?(): Promise<{ application_fee_amount: number }>;
   };
   smtpSettingsService?: {
     getAdminSettings(): Promise<unknown>;
@@ -695,6 +707,64 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     }
   });
 
+  router.patch('/airport-applications/:id/mark-paid', async (req, res, next) => {
+    try {
+      const applicationId = toPositiveInt(req.params.id, 0);
+      if (applicationId <= 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'application id must be positive integer');
+      }
+
+      const application = await deps.airportApplicationRepository.getById(applicationId);
+      if (!application) {
+        throw new HttpError(404, 'AIRPORT_APPLICATION_NOT_FOUND', `application ${applicationId} not found`);
+      }
+
+      const currentApplication = application as {
+        review_status?: AirportApplicationReviewStatus;
+        payment_status?: 'unpaid' | 'paid';
+      };
+
+      if (currentApplication.review_status !== 'awaiting_payment' || currentApplication.payment_status === 'paid') {
+        throw new HttpError(409, 'AIRPORT_APPLICATION_MARK_PAID_NOT_ALLOWED', '当前申请状态不支持改为已支付');
+      }
+
+      if (!deps.airportApplicationRepository.markPaid) {
+        throw new Error('airportApplicationRepository.markPaid is not configured');
+      }
+
+      const paymentOrderRepository = getApplicationPaymentOrderRepository(deps);
+      const latestOrder = await paymentOrderRepository.getLatestByApplicationId(applicationId);
+      const paymentGatewaySettingsService = getPaymentGatewaySettingsService(deps);
+      if (!paymentGatewaySettingsService.getConfig) {
+        throw new Error('paymentGatewaySettingsService.getConfig is not configured');
+      }
+      const paymentConfig = await paymentGatewaySettingsService.getConfig();
+      const paymentAmount = latestOrder?.amount && latestOrder.amount > 0
+        ? Number(latestOrder.amount)
+        : Number(paymentConfig.application_fee_amount || DEFAULT_APPLICATION_FEE_AMOUNT);
+      const paidAt = formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
+
+      const marked = await deps.airportApplicationRepository.markPaid(applicationId, paymentAmount, paidAt);
+      if (!marked) {
+        throw new HttpError(409, 'AIRPORT_APPLICATION_MARK_PAID_NOT_ALLOWED', '该申请已处理，不能再次修改支付状态');
+      }
+
+      const expiredOrders = await paymentOrderRepository.expireOpenOrdersByApplicationId(applicationId);
+      await deps.auditRepository.log('mark_airport_application_paid', actorFromReq(req), req.requestId, {
+        application_id: applicationId,
+        payment_amount: paymentAmount,
+        paid_at: paidAt,
+        latest_payment_order_id: latestOrder?.id ?? null,
+        expired_orders: expiredOrders,
+      });
+
+      const updatedApplication = await deps.airportApplicationRepository.getById(applicationId);
+      res.json(updatedApplication);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.patch('/airport-applications/:id/review', async (req, res, next) => {
     try {
       const applicationId = toPositiveInt(req.params.id, 0);
@@ -743,6 +813,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           website: currentApplication.website,
           websites: currentApplication.websites,
           status: currentApplication.status,
+          is_listed: true,
           plan_price_month: currentApplication.plan_price_month,
           has_trial: currentApplication.has_trial,
           subscription_url: currentApplication.subscription_url || null,
@@ -851,6 +922,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const websiteBundle = parseWebsiteFields(payload, true);
       const primaryWebsite = websiteBundle.website as string;
       const status = payload.status ? toStatus(payload.status) : 'normal';
+      const isListed = payload.is_listed === undefined ? true : toBooleanFlag(payload.is_listed);
       ensureDownConfirmed(status, payload.confirm_down);
       const planPriceMonth = mustNumber(payload.plan_price_month, 'plan_price_month');
       const hasTrial = Boolean(payload.has_trial);
@@ -871,6 +943,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         website: primaryWebsite,
         websites: websiteBundle.websites,
         status,
+        is_listed: isListed,
         plan_price_month: planPriceMonth,
         has_trial: hasTrial,
         subscription_url: subscriptionUrl || null,
@@ -902,6 +975,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         website: websiteBundle.website,
         websites: websiteBundle.websites,
         status: nextStatus,
+        is_listed: payload.is_listed === undefined ? undefined : toBooleanFlag(payload.is_listed),
         plan_price_month:
           payload.plan_price_month === undefined
             ? undefined
@@ -2169,6 +2243,13 @@ function getMediaLibrarySettingsService(deps: AdminDeps) {
     throw new Error('mediaLibrarySettingsService is not configured');
   }
   return deps.mediaLibrarySettingsService;
+}
+
+function getApplicationPaymentOrderRepository(deps: AdminDeps) {
+  if (!deps.applicationPaymentOrderRepository) {
+    throw new Error('applicationPaymentOrderRepository is not configured');
+  }
+  return deps.applicationPaymentOrderRepository;
 }
 
 function getPaymentGatewaySettingsService(deps: AdminDeps) {

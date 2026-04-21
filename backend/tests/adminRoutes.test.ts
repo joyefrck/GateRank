@@ -2548,6 +2548,276 @@ test('PATCH /airport-applications/:id/review rejects unpaid awaiting payment app
   }
 });
 
+test('PATCH /airport-applications/:id/mark-paid marks awaiting payment application as paid and expires open orders', async () => {
+  const markPaidCalls: Array<{ id: number; paymentAmount: number; paidAt: string }> = [];
+  const expiredApplicationIds: number[] = [];
+  const auditLogs: Array<{ action: string; actor: string; payload: unknown }> = [];
+  let currentApplication: Record<string, unknown> = {
+    id: 7,
+    name: 'Cloud Airport',
+    website: 'https://example.com',
+    websites: ['https://example.com', 'https://mirror.example.com'],
+    status: 'normal',
+    plan_price_month: 10,
+    has_trial: true,
+    subscription_url: 'https://example.com/sub',
+    applicant_email: 'contact@example.com',
+    applicant_telegram: '@cloud',
+    founded_on: '2025-01-01',
+    airport_intro: 'intro',
+    test_account: 'tester',
+    test_password: 'secret',
+    approved_airport_id: null,
+    payment_status: 'unpaid',
+    payment_amount: null,
+    paid_at: null,
+    review_status: 'awaiting_payment',
+    review_note: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    created_at: '2026-03-24 10:00:00',
+    updated_at: '2026-03-24 10:00:00',
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async () => currentApplication,
+        markPaid: async (id, paymentAmount, paidAt) => {
+          markPaidCalls.push({ id, paymentAmount, paidAt });
+          currentApplication = {
+            ...currentApplication,
+            payment_status: 'paid',
+            payment_amount: paymentAmount,
+            paid_at: paidAt,
+            review_status: 'pending',
+          };
+          return true;
+        },
+      },
+      applicationPaymentOrderRepository: {
+        getLatestByApplicationId: async () => ({
+          id: 88,
+          amount: 1888,
+          status: 'created',
+        }),
+        expireOpenOrdersByApplicationId: async (applicationId) => {
+          expiredApplicationIds.push(applicationId);
+          return 2;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      paymentGatewaySettingsService: {
+        getAdminSettings: async () => ({}),
+        updateAdminSettings: async () => ({}),
+        getConfig: async () => ({ application_fee_amount: 1000 }),
+      },
+      auditRepository: {
+        log: async (action, actor, _requestId, payload) => {
+          auditLogs.push({ action, actor, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/mark-paid`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(markPaidCalls.length, 1);
+    assert.equal(markPaidCalls[0]?.id, 7);
+    assert.equal(markPaidCalls[0]?.paymentAmount, 1888);
+    assert.deepEqual(expiredApplicationIds, [7]);
+    assert.equal(auditLogs.length, 1);
+    assert.equal(auditLogs[0]?.action, 'mark_airport_application_paid');
+    assert.equal(auditLogs[0]?.actor, 'tester');
+
+    const data = (await response.json()) as {
+      payment_status: string;
+      review_status: string;
+      payment_amount: number;
+    };
+    assert.equal(data.payment_status, 'paid');
+    assert.equal(data.review_status, 'pending');
+    assert.equal(data.payment_amount, 1888);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airport-applications/:id/mark-paid falls back to configured application fee when order is missing', async () => {
+  const markPaidCalls: Array<{ paymentAmount: number }> = [];
+  let currentApplication: Record<string, unknown> = {
+    ...(await stubAirportApplicationRepository().getById(7)),
+    payment_status: 'unpaid',
+    payment_amount: null,
+    paid_at: null,
+    review_status: 'awaiting_payment',
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async () => currentApplication,
+        markPaid: async (_id, paymentAmount, paidAt) => {
+          markPaidCalls.push({ paymentAmount });
+          currentApplication = {
+            ...currentApplication,
+            payment_status: 'paid',
+            payment_amount: paymentAmount,
+            paid_at: paidAt,
+            review_status: 'pending',
+          };
+          return true;
+        },
+      },
+      applicationPaymentOrderRepository: {
+        getLatestByApplicationId: async () => null,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      paymentGatewaySettingsService: {
+        getAdminSettings: async () => ({}),
+        updateAdminSettings: async () => ({}),
+        getConfig: async () => ({ application_fee_amount: 666 }),
+      },
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/mark-paid`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(markPaidCalls.length, 1);
+    assert.equal(markPaidCalls[0]?.paymentAmount, 666);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airport-applications/:id/mark-paid rejects applications outside awaiting payment state', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async (id) => ({
+          ...(await stubAirportApplicationRepository().getById(id)),
+          review_status: 'pending',
+          payment_status: 'unpaid',
+          payment_amount: null,
+          paid_at: null,
+        }),
+      },
+      applicationPaymentOrderRepository: {
+        getLatestByApplicationId: async () => null,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      paymentGatewaySettingsService: {
+        getAdminSettings: async () => ({}),
+        updateAdminSettings: async () => ({}),
+        getConfig: async () => ({ application_fee_amount: 666 }),
+      },
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/mark-paid`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    assert.equal(response.status, 409);
+    const data = (await response.json()) as { code: string };
+    assert.equal(data.code, 'AIRPORT_APPLICATION_MARK_PAID_NOT_ALLOWED');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /airports prefers manual_tags over legacy tags field', async () => {
   const createdInputs: Array<Record<string, unknown>> = [];
 

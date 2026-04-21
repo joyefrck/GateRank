@@ -224,6 +224,7 @@ export async function createApp() {
     createAdminRoutes({
       airportRepository,
       airportApplicationRepository,
+      applicationPaymentOrderRepository,
       probeSampleRepository,
       performanceRunRepository,
       metricsRepository,

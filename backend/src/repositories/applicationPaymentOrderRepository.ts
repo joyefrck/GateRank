@@ -157,6 +157,17 @@ export class ApplicationPaymentOrderRepository {
     return rows[0] ? toApplicationPaymentOrder(rows[0]) : null;
   }
 
+  async expireOpenOrdersByApplicationId(applicationId: number): Promise<number> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE application_payment_orders
+          SET status = 'expired'
+        WHERE application_id = ?
+          AND status IN ('created', 'failed')`,
+      [applicationId],
+    );
+    return result.affectedRows;
+  }
+
   async markPaid(
     outTradeNo: string,
     input: {

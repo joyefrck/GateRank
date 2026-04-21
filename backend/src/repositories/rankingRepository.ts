@@ -74,7 +74,7 @@ export class RankingRepository {
               a.name, a.status, a.tags_json
          FROM airport_rankings_daily r
          JOIN airports a ON a.id = r.airport_id
-        WHERE r.date = ? AND r.list_type = ?
+        WHERE r.date = ? AND r.list_type = ? AND a.is_listed = 1
         ORDER BY r.rank_no ASC`,
       [date, listType],
     );

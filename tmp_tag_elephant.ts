@@ -75,6 +75,7 @@ import { computeMedian, generateAirportTags } from './backend/src/services/taggi
       name: String(airport.name),
       website: String(airport.website || ''),
       status: airport.status,
+      is_listed: true,
       plan_price_month: Number(airport.plan_price_month),
       has_trial: Boolean(airport.has_trial),
       subscription_url: airport.subscription_url,

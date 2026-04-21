@@ -19,7 +19,7 @@ export class StatsRepository {
 
   async getHomeStats(date: string): Promise<HomeStats> {
     const [[airportRow], [probeRow], [latestRow]] = await Promise.all([
-      this.pool.query<CountRow[]>('SELECT COUNT(*) AS total FROM airports'),
+      this.pool.query<CountRow[]>('SELECT COUNT(*) AS total FROM airports WHERE is_listed = 1'),
       this.pool.query<CountRow[]>('SELECT COUNT(*) AS total FROM airport_probe_samples'),
       this.pool.query<LatestRow[]>(
         `SELECT MAX(ts) AS latest_at

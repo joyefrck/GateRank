@@ -18,6 +18,7 @@ export interface Airport {
   website: string;
   websites?: string[];
   status: AirportStatus;
+  is_listed: boolean;
   plan_price_month: number;
   has_trial: boolean;
   subscription_url?: string | null;

@@ -38,6 +38,7 @@ interface Airport {
   website: string;
   websites?: string[];
   status: AirportStatus;
+  is_listed: boolean;
   plan_price_month: number;
   has_trial: boolean;
   subscription_url?: string | null;
@@ -61,6 +62,7 @@ interface AirportFormState {
   name: string;
   websites: string[];
   status: AirportStatus;
+  is_listed: boolean;
   plan_price_month: string;
   has_trial: boolean;
   subscription_url: string;
@@ -3766,6 +3768,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       website: websites[0],
       websites,
       status: editing.status,
+      is_listed: editing.is_listed,
       plan_price_month: Number(editing.plan_price_month || 0),
       has_trial: Boolean(editing.has_trial),
       subscription_url: editing.subscription_url.trim() || null,
@@ -3837,18 +3840,19 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       {error && <div className="text-sm text-rose-600">{error}</div>}
       {loading ? <div className="text-sm text-neutral-500">加载中...</div> : (
         <div className="overflow-x-auto rounded border border-neutral-200">
-          <table className="w-full min-w-[1320px] table-fixed text-sm">
+          <table className="w-full min-w-[1400px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
-                <th className="w-[14%] text-left px-4 py-3">名称</th>
+                <th className="w-[13%] text-left px-4 py-3">名称</th>
                 <th className="w-[8%] text-left px-4 py-3">网站</th>
                 <th className="w-[8%] text-left px-4 py-3">状态</th>
+                <th className="w-[8%] text-left px-4 py-3">是否上架</th>
                 <th className="w-[7%] text-left px-4 py-3">月价</th>
                 <th className="w-[8%] text-left px-4 py-3">总分</th>
                 <th className="w-[7%] text-left px-4 py-3">试用</th>
                 <th className="w-[8%] text-left px-4 py-3">订阅链接</th>
-                <th className="w-[28%] text-left px-4 py-3">标签</th>
-                <th className="sticky right-0 z-20 w-[12%] text-left px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
+                <th className="w-[23%] text-left px-4 py-3">标签</th>
+                <th className="sticky right-0 z-20 w-[10%] text-left px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
                   操作
                 </th>
               </tr>
@@ -3863,6 +3867,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                     <span className="whitespace-nowrap">{hasAirportWebsite(it) ? '有' : '无'}</span>
                   </td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatAirportStatus(it.status)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatAirportListedStatus(it.is_listed)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{it.plan_price_month}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{valueOrDash(it.total_score)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{it.has_trial ? '是' : '否'}</td>
@@ -3942,6 +3947,17 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                     <option value="normal">正常</option>
                     <option value="risk">风险</option>
                     <option value="down">跑路</option>
+                  </select>
+                </FormField>
+
+                <FormField label="上架状态" hint="控制是否出现在所有公开页面；下架后仅管理后台可见。">
+                  <select
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    value={editing.is_listed ? 'listed' : 'unlisted'}
+                    onChange={(e) => setEditing({ ...editing, is_listed: e.target.value === 'listed' })}
+                  >
+                    <option value="listed">上架</option>
+                    <option value="unlisted">下架</option>
                   </select>
                 </FormField>
 
@@ -4124,9 +4140,11 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
   const [selected, setSelected] = useState<AirportApplication | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
+  const [detailSuccess, setDetailSuccess] = useState('');
   const [reviewAction, setReviewAction] = useState<'reviewed' | 'rejected'>('reviewed');
   const [reviewNote, setReviewNote] = useState('');
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [markPaidSaving, setMarkPaidSaving] = useState(false);
 
   const fetchList = async () => {
     setLoading(true);
@@ -4150,6 +4168,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
     setSelectedId(id);
     setDetailLoading(true);
     setDetailError('');
+    setDetailSuccess('');
     setSelected(null);
     setReviewNote('');
     setReviewAction('reviewed');
@@ -4173,6 +4192,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
     }
     setReviewSaving(true);
     setDetailError('');
+    setDetailSuccess('');
     try {
       const data = (await apiFetch(`/api/v1/admin/airport-applications/${selectedId}/review`, {
         method: 'PATCH',
@@ -4190,11 +4210,43 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
     }
   };
 
+  const markApplicationPaid = async () => {
+    if (!selectedId || !selected) return;
+    if (selected.review_status !== 'awaiting_payment' || selected.payment_status === 'paid') {
+      setDetailError('当前申请状态不支持改为已支付');
+      return;
+    }
+    const confirmed = window.confirm('改为已支付后，该申请会进入待审核，并关闭当前未完成的支付订单。是否继续？');
+    if (!confirmed) return;
+
+    setMarkPaidSaving(true);
+    setDetailError('');
+    setDetailSuccess('');
+    try {
+      const data = (await apiFetch(`/api/v1/admin/airport-applications/${selectedId}/mark-paid`, {
+        method: 'PATCH',
+      })) as AirportApplication;
+      setSelected(data);
+      setReviewAction(data.review_status === 'rejected' ? 'rejected' : 'reviewed');
+      setReviewNote(data.review_note || '');
+      setDetailSuccess('已改为已支付，订单已关闭');
+      await fetchList();
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : '更新支付状态失败');
+    } finally {
+      setMarkPaidSaving(false);
+    }
+  };
+
   useEffect(() => {
     void fetchList();
   }, []);
 
   const isReviewLocked = selected?.review_status !== 'pending';
+  const canMarkPaid = selected?.review_status === 'awaiting_payment' && selected.payment_status !== 'paid';
+  const reviewLockMessage = selected?.review_status === 'awaiting_payment'
+    ? '该申请当前处于待支付状态。可先改为已支付，系统会自动推进到待审核。'
+    : '该申请已处理，审核结果不能再次修改。';
 
   return (
     <div className="space-y-4">
@@ -4292,6 +4344,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                   setSelectedId(null);
                   setSelected(null);
                   setDetailError('');
+                  setDetailSuccess('');
                 }}
               >
                 <X size={16} />
@@ -4301,6 +4354,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-6 overscroll-contain">
               {detailLoading && <div className="text-sm text-neutral-500">详情加载中...</div>}
               {detailError && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{detailError}</div>}
+              {detailSuccess && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{detailSuccess}</div>}
 
               {selected && (
                 <>
@@ -4341,11 +4395,26 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                   <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">审核处理</div>
-                      <p className="mt-1 text-sm text-neutral-500">只有已支付且处于待审核状态的申请才允许审批。</p>
+                      <p className="mt-1 text-sm text-neutral-500">支付处理与审核处理分开执行。只有已支付且处于待审核状态的申请才允许审批。</p>
                     </div>
                     {isReviewLocked && (
                       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                        该申请已处理，审核结果不能再次修改。
+                        {reviewLockMessage}
+                      </div>
+                    )}
+                    {canMarkPaid && (
+                      <div className="flex items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3">
+                        <div className="text-sm text-sky-900">
+                          后台可直接补录为已支付。提交后会自动进入待审核，并关闭当前未完成的支付订单。
+                        </div>
+                        <button
+                          type="button"
+                          className="rounded-2xl border border-sky-300 px-3 py-2 text-sm font-medium text-sky-900 disabled:opacity-50"
+                          disabled={markPaidSaving}
+                          onClick={() => void markApplicationPaid()}
+                        >
+                          {markPaidSaving ? '处理中...' : '改为已支付'}
+                        </button>
                       </div>
                     )}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -4404,16 +4473,17 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                   setSelectedId(null);
                   setSelected(null);
                   setDetailError('');
+                  setDetailSuccess('');
                 }}
               >
                 关闭
               </button>
               <button
                 className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50"
-                disabled={reviewSaving || !selected || isReviewLocked}
+                disabled={reviewSaving || markPaidSaving || !selected || isReviewLocked}
                 onClick={() => void submitReview()}
               >
-                {reviewSaving ? '提交中...' : isReviewLocked ? '已处理' : '保存审核结果'}
+                {reviewSaving ? '提交中...' : selected?.review_status === 'awaiting_payment' ? '待支付' : isReviewLocked ? '已处理' : '保存审核结果'}
               </button>
             </div>
           </div>
@@ -5206,6 +5276,7 @@ function createAirportForm(): AirportFormState {
     name: '',
     websites: [''],
     status: 'normal',
+    is_listed: true,
     plan_price_month: '',
     has_trial: false,
     subscription_url: '',
@@ -5225,6 +5296,7 @@ function toAirportForm(airport: Airport): AirportFormState {
     name: airport.name,
     websites: normalizeUrlList(airport.websites?.length ? airport.websites : [airport.website]),
     status: airport.status,
+    is_listed: airport.is_listed,
     plan_price_month: String(airport.plan_price_month ?? ''),
     has_trial: airport.has_trial,
     subscription_url: airport.subscription_url || '',
@@ -5282,6 +5354,10 @@ function formatAirportStatus(status: AirportStatus): string {
     return '风险';
   }
   return '跑路';
+}
+
+function formatAirportListedStatus(isListed: boolean): string {
+  return isListed ? '上架' : '下架';
 }
 
 function formatApplicationReviewStatus(status: AirportApplicationReviewStatus): string {

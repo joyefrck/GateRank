@@ -8,6 +8,7 @@ interface AirportRow extends RowDataPacket {
   website: string;
   websites_json: unknown;
   status: AirportStatus;
+  is_listed: number;
   plan_price_month: number;
   has_trial: number;
   subscription_url: string | null;
@@ -28,6 +29,7 @@ export interface CreateAirportInput {
   website: string;
   websites?: string[];
   status?: AirportStatus;
+  is_listed?: boolean;
   plan_price_month: number;
   has_trial: boolean;
   subscription_url?: string | null;
@@ -46,6 +48,7 @@ export interface UpdateAirportInput {
   website?: string;
   websites?: string[];
   status?: AirportStatus;
+  is_listed?: boolean;
   plan_price_month?: number;
   has_trial?: boolean;
   subscription_url?: string | null;
@@ -64,6 +67,7 @@ export class AirportRepository {
 
   async ensureSchema(): Promise<void> {
     await this.ensureColumn('websites_json', 'JSON NULL AFTER website');
+    await this.ensureColumn('is_listed', 'TINYINT(1) NOT NULL DEFAULT 1 AFTER status');
     await this.ensureColumn('tags_json', 'JSON NULL AFTER subscription_url');
     await this.ensureColumn('manual_tags_json', 'JSON NULL AFTER tags_json');
     await this.ensureColumn('auto_tags_json', 'JSON NULL AFTER manual_tags_json');
@@ -73,6 +77,12 @@ export class AirportRepository {
     await this.ensureColumn('airport_intro', 'TEXT NULL AFTER founded_on');
     await this.ensureColumn('test_account', 'VARCHAR(255) NULL AFTER airport_intro');
     await this.ensureColumn('test_password', 'VARCHAR(255) NULL AFTER test_account');
+
+    await this.pool.query(
+      `UPDATE airports
+          SET is_listed = 1
+        WHERE is_listed IS NULL`,
+    );
 
     await this.pool.query(
       `UPDATE airports
@@ -112,6 +122,7 @@ export class AirportRepository {
          website,
          websites_json,
          status,
+         is_listed,
          plan_price_month,
          has_trial,
          subscription_url,
@@ -165,6 +176,7 @@ export class AirportRepository {
          website,
          websites_json,
          status,
+         is_listed,
          plan_price_month,
          has_trial,
          subscription_url,
@@ -199,6 +211,7 @@ export class AirportRepository {
          website,
          websites_json,
          status,
+         is_listed,
          plan_price_month,
          has_trial,
          subscription_url,
@@ -236,6 +249,7 @@ export class AirportRepository {
          website,
          websites_json,
          status,
+         is_listed,
          plan_price_month,
          has_trial,
          subscription_url,
@@ -248,12 +262,13 @@ export class AirportRepository {
          manual_tags_json,
          auto_tags_json,
          tags_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.name,
         websites[0],
         JSON.stringify(websites),
         input.status || 'normal',
+        input.is_listed === undefined ? 1 : (input.is_listed ? 1 : 0),
         input.plan_price_month,
         input.has_trial ? 1 : 0,
         input.subscription_url || null,
@@ -296,6 +311,10 @@ export class AirportRepository {
     if (typeof input.status === 'string') {
       sets.push('status = ?');
       values.push(input.status);
+    }
+    if (typeof input.is_listed === 'boolean') {
+      sets.push('is_listed = ?');
+      values.push(input.is_listed ? 1 : 0);
     }
     if (typeof input.plan_price_month === 'number') {
       sets.push('plan_price_month = ?');
@@ -428,6 +447,7 @@ function toAirportEntity(row: AirportRow): Airport {
     website: websites[0],
     websites,
     status: row.status,
+    is_listed: !!row.is_listed,
     plan_price_month: Number(row.plan_price_month),
     has_trial: !!row.has_trial,
     subscription_url: row.subscription_url,

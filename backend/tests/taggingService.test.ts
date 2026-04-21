@@ -16,6 +16,7 @@ function buildAirport(partial: Partial<Airport> = {}): Airport {
     auto_tags: [],
     created_at: '2026-03-01',
     ...partial,
+    is_listed: partial.is_listed ?? true,
   };
 }
 

@@ -449,6 +449,10 @@ export class PublicViewService {
       return null;
     }
 
+    if (!airport.is_listed) {
+      return null;
+    }
+
     return {
       airport,
       metrics,
