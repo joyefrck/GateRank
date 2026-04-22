@@ -100,7 +100,12 @@ export class AggregationService {
     const packetLoss = packetLossSamples.length
       ? median(packetLossSamples)
       : base?.packet_loss_percent ?? 100;
-    const domainOk = dayAvail.length ? average(dayAvail) >= 0.95 : base?.domain_ok ?? false;
+    const hasCurrentDayRiskSnapshot = base?.date === date;
+    const domainOk = hasCurrentDayRiskSnapshot
+      ? base.domain_ok
+      : dayAvail.length
+        ? average(dayAvail) >= 0.95
+        : base?.domain_ok ?? false;
 
     const availByDay = new Map<string, number[]>();
     for (const sample of samples) {
