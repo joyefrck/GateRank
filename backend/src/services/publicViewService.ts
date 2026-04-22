@@ -22,6 +22,7 @@ import {
   getDateInTimezone,
 } from '../utils/time';
 import { buildRiskReasonSummary } from '../utils/risk';
+import { buildTodayPickRows, isTodayPickEligible, type RankedAirportInput } from './rankingService';
 
 type HomeSectionKey =
   | 'today_pick'
@@ -386,16 +387,19 @@ export class PublicViewService {
   ): Promise<PublicCardItem[]> {
     const config = SECTION_CONFIG[section];
     const items = await Promise.all(
-      rankingItems.slice(0, config.limit).map(async (item) => {
+      rankingItems.map(async (item) => {
         const context = await this.loadCardContext(item.airport_id, date);
         if (!context) {
+          return null;
+        }
+        if (section === 'today_pick' && !isTodayPickCardContextEligible(context)) {
           return null;
         }
         return this.buildCard(section, context, date);
       }),
     );
 
-    return items.filter((item): item is PublicCardItem => item !== null);
+    return items.filter((item): item is PublicCardItem => item !== null).slice(0, config.limit);
   }
 
   private async buildFallbackHomeSections(
@@ -405,8 +409,16 @@ export class PublicViewService {
     const contexts = (
       await Promise.all(items.map((item) => this.loadCardContext(item.airport_id, date)))
     ).filter((context): context is CardContext => context !== null);
+    const contextByAirportId = new Map(contexts.map((context) => [context.airport.id, context]));
 
     const byScore = [...contexts].sort(compareByDisplayScoreDesc);
+    const todayPick = buildTodayPickRows(
+      date,
+      contexts.map(toTodayPickRankedAirportInput),
+      SECTION_CONFIG.today_pick.limit,
+    )
+      .map((row) => contextByAirportId.get(row.airport.id))
+      .filter((context): context is CardContext => context !== undefined);
     const byStable = [...contexts].sort(compareByStabilityDesc);
     const byValue = [...contexts].sort(compareByValueDesc);
     const byNew = [...contexts]
@@ -417,7 +429,7 @@ export class PublicViewService {
       .sort(compareByRiskPriority);
 
     return {
-      today_pick: byScore.slice(0, SECTION_CONFIG.today_pick.limit).map((context) => this.buildCard('today_pick', context, date)),
+      today_pick: todayPick.map((context) => this.buildCard('today_pick', context, date)),
       most_stable: byStable
         .slice(0, SECTION_CONFIG.most_stable.limit)
         .map((context) => this.buildCard('most_stable', context, date)),
@@ -572,8 +584,6 @@ function buildCardDetails(
     0,
     Number(context.metrics.healthy_days_streak ?? context.metrics.stable_days_streak ?? 0),
   );
-  const minorDays30d = getMinorFluctuationDays30d(context.metricsTrend30d);
-  const volatileDays30d = getVolatileDays30d(context.metricsTrend30d);
   const trackingDays = Math.max(1, diffDays(context.airport.created_at, date) + 1);
   const primaryRiskReason = getPrimaryRiskReason(context.metrics);
   const complaintTrendLabel = getComplaintTrendLabel(context.metrics.recent_complaints_count);
@@ -583,7 +593,7 @@ function buildCardDetails(
     case 'today_pick':
       return [
         { label: '健康记录', value: `${healthyStreakDays} 天` },
-        { label: '最近30天', value: `${volatileDays30d} 异常 · ${minorDays30d} 轻微` },
+        getTodayPickPositiveDetail(context),
       ];
     case 'most_stable':
       return [
@@ -618,20 +628,10 @@ function buildConclusion(section: HomeSectionKey, context: CardContext, date: st
   const priceText = `¥${formatPrice(context.airport.plan_price_month)}/月`;
   const trackingDays = Math.max(1, diffDays(context.airport.created_at, date) + 1);
   const trendLabel = getTrendLabel(context.scoreTrend30d);
-  const primaryRiskReason = getPrimaryRiskReason(context.metrics);
-  const complaintTrendLabel = getComplaintTrendLabel(context.metrics.recent_complaints_count);
-  const minorDays30d = getMinorFluctuationDays30d(context.metricsTrend30d);
-  const volatileDays30d = getVolatileDays30d(context.metricsTrend30d);
-  const stabilityTier = getCardStabilityTier(context.metrics);
 
   switch (section) {
     case 'today_pick':
-      return `${buildTodayPickHighlight(context, healthyStreakDays)} ${buildTodayPickReminder(
-        context,
-        stabilityTier,
-        volatileDays30d,
-        minorDays30d,
-      )}`;
+      return buildTodayPickHighlight(context, healthyStreakDays);
     case 'most_stable':
       return `近阶段可用率维持在 ${uptimeText}，连续稳定记录达到 ${streakDays} 天，适合对长期在线质量要求更高的用户。`;
     case 'best_value':
@@ -708,12 +708,21 @@ function getCardStabilityTier(metrics: DailyMetrics): PublicCardItem['stability_
   return 'volatile';
 }
 
-function getMinorFluctuationDays30d(items: DailyMetrics[]): number {
-  return items.filter((row) => getCardStabilityTier(row) === 'minor_fluctuation').length;
-}
+function getTodayPickPositiveDetail(
+  context: CardContext,
+): PublicCardItem['details'][1] {
+  const preferredTag = getPreferredHighlightTag(context.airport.tags);
+  if (preferredTag) {
+    return {
+      label: '核心亮点',
+      value: preferredTag,
+    };
+  }
 
-function getVolatileDays30d(items: DailyMetrics[]): number {
-  return items.filter((row) => getCardStabilityTier(row) === 'volatile').length;
+  return {
+    label: '核心优势',
+    value: getStrongestScoreDimensionLabel(getStrongestScoreDimension(context.score)),
+  };
 }
 
 function buildTodayPickHighlight(context: CardContext, healthyStreakDays: number): string {
@@ -749,30 +758,6 @@ function buildTodayPickHighlight(context: CardContext, healthyStreakDays: number
   }
 }
 
-function buildTodayPickReminder(
-  context: CardContext,
-  stabilityTier: PublicCardItem['stability_tier'],
-  volatileDays30d: number,
-  minorDays30d: number,
-): string {
-  if (stabilityTier === 'volatile') {
-    return '提醒：当前处于异常波动状态，建议优先确认登录、订阅与高峰时段可用性。';
-  }
-  if (stabilityTier === 'minor_fluctuation') {
-    return '提醒：当前可以正常使用，但存在轻微抖动，建议继续观察高峰时段延迟。';
-  }
-  if (volatileDays30d > 0) {
-    return `提醒：最近30天出现 ${volatileDays30d} 天异常波动、${minorDays30d} 天轻微抖动，短期稳定性仍需继续跟踪。`;
-  }
-  if (context.metrics.recent_complaints_count > 0) {
-    return `提醒：近期投诉有 ${context.metrics.recent_complaints_count} 条，继续使用前建议交叉核对官网和订阅状态。`;
-  }
-  if (context.metrics.history_incidents > 0) {
-    return `提醒：历史异常累计 ${context.metrics.history_incidents} 次，长期使用前仍建议结合完整报告复核。`;
-  }
-  return '提醒：当前没有明显异常记录，适合作为近期优先观察和试用的主力候选。';
-}
-
 function getPreferredHighlightTag(tags: string[]): string | null {
   const preferredTags = ['长期稳定', '新手友好', '性价比高', '高性能', '高端路线', '新入榜'];
   for (const tag of preferredTags) {
@@ -792,6 +777,19 @@ function getStrongestScoreDimension(score: CardContext['score']): 's' | 'p' | 'c
   ];
   dimensions.sort((left, right) => right.value - left.value);
   return dimensions[0]?.key ?? 's';
+}
+
+function getStrongestScoreDimensionLabel(dimension: ReturnType<typeof getStrongestScoreDimension>): string {
+  switch (dimension) {
+    case 's':
+      return '稳定性突出';
+    case 'p':
+      return '性能突出';
+    case 'c':
+      return '成本效率突出';
+    case 'r':
+      return '风险侧更干净';
+  }
 }
 
 function buildRiskMonitorCardDetails(
@@ -854,6 +852,32 @@ function buildScoreDeltaView(currentScore: number, yesterdayScore: number | null
     label: '对比昨天',
     value: yesterdayScore === null ? null : round2(currentScore - yesterdayScore),
   };
+}
+
+function toTodayPickRankedAirportInput(context: CardContext): RankedAirportInput {
+  return {
+    airport: context.airport,
+    metrics: context.metrics,
+    score: {
+      s: context.score.s,
+      p: context.score.p,
+      c: context.score.c,
+      r: context.score.r,
+      risk_penalty: context.score.risk_penalty,
+      score: context.score.final_score,
+      recent_score: context.score.final_score,
+      historical_score: context.score.final_score,
+      final_score: context.score.final_score,
+      details: {
+        ...context.score.details,
+        total_score: context.score.display_score,
+      },
+    },
+  };
+}
+
+function isTodayPickCardContextEligible(context: CardContext): boolean {
+  return isTodayPickEligible(toTodayPickRankedAirportInput(context));
 }
 
 function resolveSummarySection(

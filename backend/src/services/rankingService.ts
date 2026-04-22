@@ -1,4 +1,4 @@
-import { LIST_LIMIT, NEW_AIRPORT_DAYS, TODAY_MAX_RISK_PENALTY } from '../config/scoring';
+import { LIST_LIMIT, NEW_AIRPORT_DAYS } from '../config/scoring';
 import { dateDaysAgo } from '../utils/time';
 import type { Airport, DailyMetrics, RankingType, ScoreBreakdown } from '../types/domain';
 
@@ -8,16 +8,16 @@ export interface RankedAirportInput {
   score: ScoreBreakdown;
 }
 
+const TODAY_PICK_RANKING_LIMIT = 3;
+const TODAY_PICK_MIN_POOL_SIZE = 9;
+
 export function buildRankings(
   date: string,
   rows: RankedAirportInput[],
 ): Record<RankingType, Array<{ airport_id: number; rank: number; score: number; details: Record<string, unknown> }>> {
   const activeRows = rows.filter((row) => row.airport.status !== 'down');
 
-  const today = activeRows
-    .filter((row) => row.score.risk_penalty <= TODAY_MAX_RISK_PENALTY)
-    .sort((a, b) => rankingScoreOf(b) - rankingScoreOf(a))
-    .slice(0, LIST_LIMIT);
+  const today = buildTodayPickRows(date, activeRows, TODAY_PICK_RANKING_LIMIT);
 
   const stable = activeRows
     .slice()
@@ -48,6 +48,56 @@ export function buildRankings(
     new: toRows(newest, 'ranking_score'),
     risk: toRows(risk, 'risk_penalty'),
   };
+}
+
+export function buildTodayPickRows(
+  date: string,
+  rows: RankedAirportInput[],
+  limit: number,
+): RankedAirportInput[] {
+  const safeLimit = Math.max(0, Math.floor(limit));
+  if (safeLimit === 0) {
+    return [];
+  }
+
+  const eligibleRows = rows
+    .filter(isTodayPickEligible)
+    .slice()
+    .sort(compareByTodayPickQuality);
+
+  if (eligibleRows.length === 0) {
+    return [];
+  }
+
+  const candidatePoolSize = Math.min(
+    eligibleRows.length,
+    Math.max(safeLimit * 3, TODAY_PICK_MIN_POOL_SIZE),
+  );
+  const candidatePool = eligibleRows.slice(0, candidatePoolSize);
+  const selectionCount = Math.min(safeLimit, candidatePool.length);
+  const offset = getStableDateOrdinal(date) % candidatePool.length;
+
+  return Array.from({ length: selectionCount }, (_, index) => candidatePool[(offset + index) % candidatePool.length]);
+}
+
+export function compareByTodayPickQuality(left: RankedAirportInput, right: RankedAirportInput): number {
+  return (
+    rankingScoreOf(right) - rankingScoreOf(left) ||
+    Number(right.metrics.healthy_days_streak ?? right.metrics.stable_days_streak ?? 0) -
+      Number(left.metrics.healthy_days_streak ?? left.metrics.stable_days_streak ?? 0) ||
+    right.score.s - left.score.s ||
+    left.airport.id - right.airport.id
+  );
+}
+
+export function isTodayPickEligible(row: RankedAirportInput): boolean {
+  return (
+    row.airport.status !== 'down' &&
+    row.airport.is_listed &&
+    row.score.risk_penalty === 0 &&
+    !row.airport.tags.includes('风险观察') &&
+    row.metrics.stability_tier !== 'volatile'
+  );
 }
 
 function toRows(
@@ -82,4 +132,12 @@ function toRows(
 function rankingScoreOf(row: RankedAirportInput): number {
   const score = Number(row.score.details.total_score ?? row.score.final_score);
   return Number.isFinite(score) ? score : row.score.final_score;
+}
+
+function getStableDateOrdinal(date: string): number {
+  const [year, month, day] = date.split('-').map((part) => Number(part));
+  if (!year || !month || !day) {
+    return 0;
+  }
+  return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
 }
