@@ -107,9 +107,11 @@ const MARKETING_PLACEMENTS: MarketingPlacement[] = [
   'report_header',
 ];
 const MARKETING_TARGET_KINDS: MarketingTargetKind[] = ['website', 'subscription_url'];
+const PUBLIC_PAGE_CACHE_TTL_MS = 30_000;
 
 export function createPublicRoutes(deps: PublicDeps): Router {
   const router = Router();
+  const pageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
 
   router.post('/airport-applications', async (req, res, next) => {
     try {
@@ -243,7 +245,10 @@ export function createPublicRoutes(deps: PublicDeps): Router {
   router.get('/pages/home', async (req, res, next) => {
     try {
       const date = parseDateQuery(req.query.date);
-      const data = await deps.publicViewService.getHomePageView(date);
+      const data = await pageCache.getOrLoad(
+        `home:${date}`,
+        () => deps.publicViewService.getHomePageView(date),
+      );
       res.json(data);
     } catch (error) {
       next(error);
@@ -255,7 +260,10 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       const date = parseDateQuery(req.query.date);
       const page = toPositiveInt(req.query.page, 1);
       const pageSize = 20;
-      const data = await deps.publicViewService.getFullRankingView(date, page, pageSize);
+      const data = await pageCache.getOrLoad(
+        `full-ranking:${date}:${page}:${pageSize}`,
+        () => deps.publicViewService.getFullRankingView(date, page, pageSize),
+      );
       res.json(data);
     } catch (error) {
       next(error);
@@ -267,7 +275,10 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       const date = parseDateQuery(req.query.date);
       const page = toPositiveInt(req.query.page, 1);
       const pageSize = 20;
-      const data = await deps.publicViewService.getRiskMonitorView(date, page, pageSize);
+      const data = await pageCache.getOrLoad(
+        `risk-monitor:${date}:${page}:${pageSize}`,
+        () => deps.publicViewService.getRiskMonitorView(date, page, pageSize),
+      );
       res.json(data);
     } catch (error) {
       next(error);
@@ -605,4 +616,34 @@ function mustMarketingTargetKind(value: unknown, fieldName: string): MarketingTa
     throw new HttpError(400, 'BAD_REQUEST', `${fieldName} is invalid`);
   }
   return text;
+}
+
+function createTimedPromiseCache(ttlMs: number): {
+  getOrLoad<T>(key: string, loader: () => Promise<T>): Promise<T>;
+} {
+  const cache = new Map<string, { expiresAt: number; promise: Promise<unknown> }>();
+
+  return {
+    getOrLoad<T>(key: string, loader: () => Promise<T>): Promise<T> {
+      const now = Date.now();
+      const cached = cache.get(key);
+      if (cached && cached.expiresAt > now) {
+        return cached.promise as Promise<T>;
+      }
+
+      const promise = loader().catch((error) => {
+        const current = cache.get(key);
+        if (current?.promise === promise) {
+          cache.delete(key);
+        }
+        throw error;
+      });
+
+      cache.set(key, {
+        expiresAt: now + ttlMs,
+        promise,
+      });
+      return promise;
+    },
+  };
 }

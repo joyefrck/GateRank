@@ -238,6 +238,41 @@ export class AirportRepository {
     return toAirportEntity(rows[0]);
   }
 
+  async getByIds(ids: number[]): Promise<Map<number, Airport>> {
+    if (ids.length === 0) {
+      return new Map();
+    }
+
+    const placeholders = ids.map(() => '?').join(', ');
+    const [rows] = await this.pool.query<AirportRow[]>(
+      `SELECT
+         id,
+         name,
+         website,
+         websites_json,
+         status,
+         is_listed,
+         plan_price_month,
+         has_trial,
+         subscription_url,
+         applicant_email,
+         applicant_telegram,
+         founded_on,
+         airport_intro,
+         test_account,
+         test_password,
+         manual_tags_json,
+         auto_tags_json,
+         tags_json,
+         created_at
+         FROM airports
+        WHERE id IN (${placeholders})`,
+      ids,
+    );
+
+    return new Map(rows.map((row) => [row.id, toAirportEntity(row)]));
+  }
+
   async create(input: CreateAirportInput): Promise<number> {
     const websites = normalizeWebsiteList(input.websites, input.website);
     const manualTags = normalizeTagList(input.manual_tags ?? input.tags ?? []);

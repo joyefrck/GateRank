@@ -268,6 +268,76 @@ test('GET /pages/home returns public homepage view', async () => {
   }
 });
 
+test('GET /pages/home reuses cached response within ttl', async () => {
+  let homeCalls = 0;
+  const app = express();
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async () => 1,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async (date: string) => {
+          homeCalls += 1;
+          return {
+            date,
+            generated_at: '2026-03-23T10:00:00+08:00',
+            hero: {
+              report_time_at: '2026-03-23T08:00:00+08:00',
+              report_time_text: '2 小时前',
+              monitored_airports: 12,
+              realtime_tests: 345,
+            },
+            sections: {
+              today_pick: { title: '今日推荐机场', subtitle: "Today's Top Pick", items: [] },
+              most_stable: { title: '长期稳定机场', subtitle: 'Most Stable', items: [] },
+              best_value: { title: '性价比最佳', subtitle: 'Best Value', items: [] },
+              new_entries: { title: '新入榜潜力', subtitle: 'New Entries', items: [] },
+              risk_alerts: { title: '风险预警', subtitle: 'Risk Alerts', items: [] },
+            },
+          };
+        },
+        getFullRankingView: async () => {
+          throw new Error('not used');
+        },
+        getRiskMonitorView: async () => {
+          throw new Error('not used');
+        },
+        getReportView: async () => null,
+      } as any,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const [first, second] = await Promise.all([
+      fetch(`http://127.0.0.1:${port}/pages/home?date=2026-03-23`),
+      fetch(`http://127.0.0.1:${port}/pages/home?date=2026-03-23`),
+    ]);
+
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+    assert.equal(homeCalls, 1);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /airports/:id/report-view returns report view payload', async () => {
   const app = express();
   app.use(
@@ -457,6 +527,68 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
       label: '对比昨天',
       value: 1.2,
     });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /pages/full-ranking reuses cached response within ttl', async () => {
+  let fullRankingCalls = 0;
+  const app = express();
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async () => 1,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async () => {
+          throw new Error('not used');
+        },
+        getFullRankingView: async (date: string, page: number, pageSize: number) => {
+          fullRankingCalls += 1;
+          return {
+            date,
+            generated_at: '2026-03-23T10:00:00+08:00',
+            page,
+            page_size: pageSize,
+            total: 35,
+            total_pages: 2,
+            items: [],
+          };
+        },
+        getRiskMonitorView: async () => {
+          throw new Error('not used');
+        },
+        getReportView: async () => null,
+      } as any,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const [first, second] = await Promise.all([
+      fetch(`http://127.0.0.1:${port}/pages/full-ranking?date=2026-03-23&page=2`),
+      fetch(`http://127.0.0.1:${port}/pages/full-ranking?date=2026-03-23&page=2`),
+    ]);
+
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+    assert.equal(fullRankingCalls, 1);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

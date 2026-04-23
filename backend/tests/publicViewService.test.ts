@@ -101,6 +101,181 @@ test('PublicViewService.getFullRankingView falls back to latest score date', asy
   assert.deepEqual(requestedDates, ['2026-03-24:2:20']);
 });
 
+test('PublicViewService.getHomePageView reuses card context across sections for the same airport', async () => {
+  const counts = {
+    airport: 0,
+    metrics: 0,
+    metricsTrend: 0,
+    score: 0,
+    yesterdayScore: 0,
+    scoreTrend: 0,
+  };
+  const rankingItem = {
+    airport_id: 1,
+    rank: 1,
+    name: 'Alpha',
+    status: 'normal' as const,
+    tags: ['稳定'],
+    score: 95,
+    key_metrics: {
+      uptime_percent_30d: 99.9,
+      median_latency_ms: 45,
+      median_download_mbps: 120,
+      packet_loss_percent: 0,
+    },
+  };
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async (id: number) => {
+        counts.airport += 1;
+        return {
+          id,
+          name: 'Alpha',
+          website: 'https://alpha.example.com',
+          status: 'normal',
+          is_listed: true,
+          plan_price_month: 12,
+          has_trial: true,
+          tags: ['稳定'],
+          created_at: '2026-03-20',
+        };
+      },
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => {
+        counts.metrics += 1;
+        return {
+          airport_id: 1,
+          date: '2026-03-24',
+          uptime_percent_30d: 99.9,
+          median_latency_ms: 45,
+          median_download_mbps: 120,
+          packet_loss_percent: 0,
+          stable_days_streak: 15,
+          domain_ok: true,
+          ssl_days_left: 180,
+          recent_complaints_count: 0,
+          history_incidents: 0,
+        };
+      },
+      getTrend: async () => {
+        counts.metricsTrend += 1;
+        return [{
+          airport_id: 1,
+          date: '2026-03-24',
+          uptime_percent_30d: 99.9,
+          median_latency_ms: 45,
+          median_download_mbps: 120,
+          packet_loss_percent: 0,
+          stable_days_streak: 15,
+          domain_ok: true,
+          ssl_days_left: 180,
+          recent_complaints_count: 0,
+          history_incidents: 0,
+        }];
+      },
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => {
+        counts.score += 1;
+        return {
+          airport_id: 1,
+          date: '2026-03-24',
+          s: 92,
+          p: 88,
+          c: 81,
+          r: 100,
+          risk_penalty: 0,
+          score: 90,
+          recent_score: 90,
+          historical_score: 88,
+          final_score: 89,
+          details: {
+            total_score: 95,
+          },
+        };
+      },
+      getPublicDisplayScoreByAirportAndDate: async () => {
+        counts.yesterdayScore += 1;
+        return 93;
+      },
+      getTrend: async () => {
+        counts.scoreTrend += 1;
+        return [{
+          airport_id: 1,
+          date: '2026-03-24',
+          s: 92,
+          p: 88,
+          c: 81,
+          r: 100,
+          risk_penalty: 0,
+          score: 90,
+          recent_score: 90,
+          historical_score: 88,
+          final_score: 89,
+          details: {
+            total_score: 95,
+          },
+        }];
+      },
+      getPublicFullRankingByDate: async () => ({
+        total: 1,
+        items: [{
+          airport_id: 1,
+          rank: 1,
+          name: 'Alpha',
+          website: 'https://alpha.example.com',
+          status: 'normal' as const,
+          tags: ['稳定'],
+          founded_on: '2024-01-01',
+          plan_price_month: 12,
+          has_trial: true,
+          airport_intro: 'Alpha intro',
+          created_at: '2026-03-20',
+          score: 95,
+          score_delta_vs_yesterday: {
+            label: '对比昨天',
+            value: 2,
+          },
+          report_url: '/reports/1?date=2026-03-24',
+        }],
+      }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async (_date: string, listType: 'today' | 'stable' | 'value' | 'new' | 'risk') => {
+        if (listType === 'risk') {
+          return [];
+        }
+        return [rankingItem];
+      },
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 1,
+        realtime_tests: 8,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getHomePageView('2026-03-24');
+  assert.equal(result.sections.today_pick.items[0]?.name, 'Alpha');
+  assert.equal(result.sections.most_stable.items[0]?.name, 'Alpha');
+  assert.equal(result.sections.best_value.items[0]?.name, 'Alpha');
+  assert.equal(result.sections.new_entries.items[0]?.name, 'Alpha');
+  assert.deepEqual(counts, {
+    airport: 1,
+    metrics: 1,
+    metricsTrend: 1,
+    score: 1,
+    yesterdayScore: 1,
+    scoreTrend: 1,
+  });
+});
+
 test('PublicViewService.getHomePageView builds fallback cards from public scores when rankings are empty', async () => {
   const service = new PublicViewService({
     airportRepository: {

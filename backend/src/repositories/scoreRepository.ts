@@ -155,20 +155,7 @@ export class ScoreRepository {
     }
 
     const row = rows[0];
-    return {
-      airport_id: row.airport_id,
-      date: formatDateOnly(row.date),
-      s: Number(row.score_s),
-      p: Number(row.score_p),
-      c: Number(row.score_c),
-      r: Number(row.score_r),
-      risk_penalty: Number(row.risk_penalty),
-      score: Number(row.score),
-      recent_score: Number(row.recent_score),
-      historical_score: Number(row.historical_score),
-      final_score: Number(row.final_score),
-      details: safeJsonObject(row.details_json),
-    };
+    return toAirportScoreDaily(row);
   }
 
   async getByDate(date: string): Promise<AirportScoreDaily[]> {
@@ -180,20 +167,25 @@ export class ScoreRepository {
       [date],
     );
 
-    return rows.map((row) => ({
-      airport_id: row.airport_id,
-      date: formatDateOnly(row.date),
-      s: Number(row.score_s),
-      p: Number(row.score_p),
-      c: Number(row.score_c),
-      r: Number(row.score_r),
-      risk_penalty: Number(row.risk_penalty),
-      score: Number(row.score),
-      recent_score: Number(row.recent_score),
-      historical_score: Number(row.historical_score),
-      final_score: Number(row.final_score),
-      details: safeJsonObject(row.details_json),
-    }));
+    return rows.map(toAirportScoreDaily);
+  }
+
+  async getByAirportIdsAndDate(airportIds: number[], date: string): Promise<Map<number, AirportScoreDaily>> {
+    if (airportIds.length === 0) {
+      return new Map();
+    }
+
+    const placeholders = airportIds.map(() => '?').join(', ');
+    const [rows] = await this.pool.query<ScoreRow[]>(
+      `SELECT airport_id, date, score_s, score_p, score_c, score_r,
+              risk_penalty, score, recent_score, historical_score, final_score, details_json
+         FROM airport_scores_daily
+        WHERE date = ?
+          AND airport_id IN (${placeholders})`,
+      [date, ...airportIds],
+    );
+
+    return new Map(rows.map((row) => [row.airport_id, toAirportScoreDaily(row)]));
   }
 
   async getTrend(airportId: number, startDate: string, endDate: string): Promise<AirportScoreDaily[]> {
@@ -206,20 +198,41 @@ export class ScoreRepository {
       [airportId, startDate, endDate],
     );
 
-    return rows.map((row) => ({
-      airport_id: row.airport_id,
-      date: formatDateOnly(row.date),
-      s: Number(row.score_s),
-      p: Number(row.score_p),
-      c: Number(row.score_c),
-      r: Number(row.score_r),
-      risk_penalty: Number(row.risk_penalty),
-      score: Number(row.score),
-      recent_score: Number(row.recent_score),
-      historical_score: Number(row.historical_score),
-      final_score: Number(row.final_score),
-      details: safeJsonObject(row.details_json),
-    }));
+    return rows.map(toAirportScoreDaily);
+  }
+
+  async getTrendsByAirportIds(
+    airportIds: number[],
+    startDate: string,
+    endDate: string,
+  ): Promise<Map<number, AirportScoreDaily[]>> {
+    if (airportIds.length === 0) {
+      return new Map();
+    }
+
+    const placeholders = airportIds.map(() => '?').join(', ');
+    const [rows] = await this.pool.query<ScoreRow[]>(
+      `SELECT airport_id, date, score_s, score_p, score_c, score_r,
+              risk_penalty, score, recent_score, historical_score, final_score, details_json
+         FROM airport_scores_daily
+        WHERE airport_id IN (${placeholders})
+          AND date >= ?
+          AND date <= ?
+        ORDER BY airport_id ASC, date ASC`,
+      [...airportIds, startDate, endDate],
+    );
+
+    const trends = new Map<number, AirportScoreDaily[]>();
+    for (const row of rows) {
+      const list = trends.get(row.airport_id);
+      const score = toAirportScoreDaily(row);
+      if (list) {
+        list.push(score);
+      } else {
+        trends.set(row.airport_id, [score]);
+      }
+    }
+    return trends;
   }
 
   async getPublicDisplayScoreByAirportAndDate(airportId: number, date: string): Promise<number | null> {
@@ -304,14 +317,16 @@ export class ScoreRepository {
            s.final_score
          ) AS display_score
        FROM airports a
+       LEFT JOIN (
+         SELECT airport_id, MAX(date) AS score_date
+           FROM airport_scores_daily
+          WHERE date <= ?
+          GROUP BY airport_id
+       ) latest_score
+         ON latest_score.airport_id = a.id
        LEFT JOIN airport_scores_daily s
          ON s.airport_id = a.id
-        AND s.date = (
-          SELECT MAX(s2.date)
-            FROM airport_scores_daily s2
-           WHERE s2.airport_id = a.id
-             AND s2.date <= ?
-        )
+        AND s.date = latest_score.score_date
       WHERE a.is_listed = 1
         AND a.status IN ('normal', 'risk')
       ORDER BY
@@ -517,6 +532,23 @@ function safeJsonObject(value: unknown): Record<string, ScoreDetailValue> {
   } catch {
     return {};
   }
+}
+
+function toAirportScoreDaily(row: ScoreRow): AirportScoreDaily {
+  return {
+    airport_id: row.airport_id,
+    date: formatDateOnly(row.date),
+    s: Number(row.score_s),
+    p: Number(row.score_p),
+    c: Number(row.score_c),
+    r: Number(row.score_r),
+    risk_penalty: Number(row.risk_penalty),
+    score: Number(row.score),
+    recent_score: Number(row.recent_score),
+    historical_score: Number(row.historical_score),
+    final_score: Number(row.final_score),
+    details: safeJsonObject(row.details_json),
+  };
 }
 
 function safeJsonArray(value: unknown): string[] {

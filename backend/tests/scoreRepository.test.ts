@@ -86,6 +86,9 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
   assert.deepEqual(result.items[0].tags, ['稳定', '热门']);
   assert.ok(calls.some((call) => call.sql.includes("a.status IN ('normal', 'risk')")));
   assert.ok(calls.some((call) => call.sql.includes("CASE WHEN s.date IS NULL THEN 1 ELSE 0 END ASC")));
+  assert.ok(calls.some((call) => call.sql.includes('LEFT JOIN (')));
+  assert.ok(calls.some((call) => call.sql.includes('MAX(date) AS score_date')));
+  assert.ok(calls.some((call) => call.sql.includes('latest_score.airport_id = a.id')));
 });
 
 test('ScoreRepository.getPublicFullRankingByDate keeps airports without scores', async () => {

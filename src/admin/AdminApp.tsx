@@ -589,6 +589,7 @@ const PUBLISH_TOKEN_SCOPES: Array<{ value: PublishTokenScope; label: string; des
 const DEFAULT_PUBLISH_TOKEN_SCOPES = PUBLISH_TOKEN_SCOPES.map((item) => item.value);
 
 const TOKEN_KEY = 'gaterank_admin_token';
+const ADMIN_DEFAULT_PATH = '/admin/marketing';
 const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = ['applicant_credentials', 'application_approved'];
 const SMTP_TEMPLATE_SCENARIOS: Record<
   SmtpTemplateKey,
@@ -681,8 +682,8 @@ export default function AdminApp() {
   }, []);
   useEffect(() => {
     if (path === '/admin') {
-      window.history.replaceState({}, '', '/admin/airports');
-      setPath('/admin/airports');
+      window.history.replaceState({}, '', ADMIN_DEFAULT_PATH);
+      setPath(ADMIN_DEFAULT_PATH);
     }
   }, [path]);
 
@@ -696,7 +697,7 @@ export default function AdminApp() {
       <LoginPage
         onLoggedIn={(token) => {
           setAdminToken(token);
-          navigate('/admin/airports');
+          navigate(ADMIN_DEFAULT_PATH);
         }}
       />
     );
@@ -707,7 +708,7 @@ export default function AdminApp() {
       <LoginPage
         onLoggedIn={(token) => {
           setAdminToken(token);
-          navigate('/admin/airports');
+          navigate(ADMIN_DEFAULT_PATH);
         }}
       />
     );
@@ -744,10 +745,10 @@ export default function AdminApp() {
 
       <div className="max-w-[1600px] mx-auto p-6 grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-6">
         <aside className="bg-white rounded-xl border border-neutral-200 p-3 h-fit">
+          <NavItem icon={<BarChart3 size={14} />} active={path.startsWith('/admin/marketing')} onClick={() => navigate('/admin/marketing')} label="营销" />
           <NavItem icon={<Database size={14} />} active={path.startsWith('/admin/airports')} onClick={() => navigate('/admin/airports')} label="机场管理" />
           <NavItem icon={<Shield size={14} />} active={path.startsWith('/admin/applications')} onClick={() => navigate('/admin/applications')} label="入驻申请" />
           <NavItem icon={<Newspaper size={14} />} active={path.startsWith('/admin/news')} onClick={() => navigate('/admin/news')} label="News" />
-          <NavItem icon={<BarChart3 size={14} />} active={path.startsWith('/admin/marketing')} onClick={() => navigate('/admin/marketing')} label="营销" />
           <NavItem icon={<Activity size={14} />} active={path.startsWith('/admin/scheduler')} onClick={() => navigate('/admin/scheduler')} label="任务调度" />
           <NavItem icon={<Bell size={14} />} active={path.startsWith('/admin/settings')} onClick={() => navigate('/admin/settings')} label="系统设置" />
         </aside>
@@ -1202,8 +1203,8 @@ function SchedulerPage() {
 }
 
 function MarketingPage() {
-  const [rangePreset, setRangePreset] = useState<MarketingRangePreset>('month');
-  const [dateFrom, setDateFrom] = useState(() => shiftDate(today(), -29));
+  const [rangePreset, setRangePreset] = useState<MarketingRangePreset>('day');
+  const [dateFrom, setDateFrom] = useState(() => today());
   const [dateTo, setDateTo] = useState(() => today());
   const [keyword, setKeyword] = useState('');
   const [keywordInput, setKeywordInput] = useState('');
@@ -1404,9 +1405,10 @@ function MarketingPage() {
             type="button"
             className="px-3 py-2 rounded border border-neutral-300 text-sm"
             onClick={() => {
-              setRangePreset('month');
-              setDateFrom(shiftDate(today(), -29));
-              setDateTo(today());
+              const currentDate = today();
+              setRangePreset('day');
+              setDateFrom(currentDate);
+              setDateTo(currentDate);
               setKeyword('');
               setKeywordInput('');
             }}

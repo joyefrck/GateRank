@@ -127,6 +127,26 @@ export class MetricsRepository {
     return toDailyMetrics(rows[0]);
   }
 
+  async getByAirportIdsAndDate(airportIds: number[], date: string): Promise<Map<number, DailyMetrics>> {
+    if (airportIds.length === 0) {
+      return new Map();
+    }
+
+    const placeholders = airportIds.map(() => '?').join(', ');
+    const [rows] = await this.pool.query<DailyMetricsRow[]>(
+      `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
+              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
+              recent_complaints_count, history_incidents
+         FROM airport_metrics_daily
+        WHERE date = ?
+          AND airport_id IN (${placeholders})`,
+      [date, ...airportIds],
+    );
+
+    return new Map(rows.map((row) => [row.airport_id, toDailyMetrics(row)]));
+  }
+
   async getLatestByAirportBeforeDate(airportId: number, date: string): Promise<DailyMetrics | null> {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
@@ -160,6 +180,42 @@ export class MetricsRepository {
     );
 
     return rows.map(toDailyMetrics);
+  }
+
+  async getTrendsByAirportIds(
+    airportIds: number[],
+    startDate: string,
+    endDate: string,
+  ): Promise<Map<number, DailyMetrics[]>> {
+    if (airportIds.length === 0) {
+      return new Map();
+    }
+
+    const placeholders = airportIds.map(() => '?').join(', ');
+    const [rows] = await this.pool.query<DailyMetricsRow[]>(
+      `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
+              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
+              recent_complaints_count, history_incidents
+         FROM airport_metrics_daily
+        WHERE airport_id IN (${placeholders})
+          AND date >= ?
+          AND date <= ?
+        ORDER BY airport_id ASC, date ASC`,
+      [...airportIds, startDate, endDate],
+    );
+
+    const trends = new Map<number, DailyMetrics[]>();
+    for (const row of rows) {
+      const list = trends.get(row.airport_id);
+      const metric = toDailyMetrics(row);
+      if (list) {
+        list.push(metric);
+      } else {
+        trends.set(row.airport_id, [metric]);
+      }
+    }
+    return trends;
   }
 
   async patchComplaintCount(

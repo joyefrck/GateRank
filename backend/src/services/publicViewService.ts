@@ -34,10 +34,17 @@ type HomeSectionKey =
 interface PublicViewDeps {
   airportRepository: {
     getById(id: number): Promise<Airport | null>;
+    getByIds?(ids: number[]): Promise<Map<number, Airport>>;
   };
   metricsRepository: {
     getByAirportAndDate(airportId: number, date: string): Promise<DailyMetrics | null>;
     getTrend(airportId: number, startDate: string, endDate: string): Promise<DailyMetrics[]>;
+    getByAirportIdsAndDate?(airportIds: number[], date: string): Promise<Map<number, DailyMetrics>>;
+    getTrendsByAirportIds?(
+      airportIds: number[],
+      startDate: string,
+      endDate: string,
+    ): Promise<Map<number, DailyMetrics[]>>;
   };
   scoreRepository: {
     getLatestAvailableDate(onOrBefore: string): Promise<string | null>;
@@ -56,6 +63,7 @@ interface PublicViewDeps {
       details?: Record<string, ScoreDetailValue>;
     } | null>;
     getPublicDisplayScoreByAirportAndDate(airportId: number, date: string): Promise<number | null>;
+    getPublicDisplayScoresByDate?(airportIds: number[], date: string): Promise<Map<number, number>>;
     getTrend(
       airportId: number,
       startDate: string,
@@ -74,6 +82,44 @@ interface PublicViewDeps {
         final_score: number;
         details?: Record<string, ScoreDetailValue>;
       }>
+    >;
+    getByAirportIdsAndDate?(
+      airportIds: number[],
+      date: string,
+    ): Promise<
+      Map<number, {
+        airport_id: number;
+        date: string;
+        s: number;
+        p: number;
+        c: number;
+        r: number;
+        risk_penalty: number;
+        score: number;
+        recent_score: number;
+        historical_score: number;
+        final_score: number;
+        details?: Record<string, ScoreDetailValue>;
+      }>
+    >;
+    getTrendsByAirportIds?(
+      airportIds: number[],
+      startDate: string,
+      endDate: string,
+    ): Promise<
+      Map<number, Array<{
+        date: string;
+        s: number;
+        p: number;
+        c: number;
+        r: number;
+        risk_penalty: number;
+        score: number;
+        recent_score: number;
+        historical_score: number;
+        final_score: number;
+        details?: Record<string, ScoreDetailValue>;
+      }>>
     >;
     getPublicFullRankingByDate(
       date: string,
@@ -195,10 +241,26 @@ export class PublicViewService {
           )
         : Promise.resolve({ total: 0, items: [] }),
     ]);
-    const todayPickItems = await this.buildHomeSectionItems('today_pick', fullRankingPreview.items, resolvedDate);
+    const preloadedContexts = await this.preloadCardContexts(
+      collectRankingAirportIds(fullRankingPreview.items, stable, value, newest),
+      resolvedDate,
+    );
+    const loadCardContext = this.createCardContextLoader(preloadedContexts);
+    const [todayPickItems, stableItems, valueItems, newestItems] = await Promise.all([
+      this.buildHomeSectionItems('today_pick', fullRankingPreview.items, resolvedDate, loadCardContext),
+      stable.length > 0
+        ? this.buildHomeSectionItems('most_stable', stable, resolvedDate, loadCardContext)
+        : Promise.resolve([]),
+      value.length > 0
+        ? this.buildHomeSectionItems('best_value', value, resolvedDate, loadCardContext)
+        : Promise.resolve([]),
+      newest.length > 0
+        ? this.buildHomeSectionItems('new_entries', newest, resolvedDate, loadCardContext)
+        : Promise.resolve([]),
+    ]);
     const fallbackSections =
       todayPickItems.length === 0 || stable.length === 0 || value.length === 0 || newest.length === 0
-        ? await this.buildFallbackHomeSections(resolvedDate)
+        ? await this.buildFallbackHomeSections(resolvedDate, loadCardContext)
         : null;
 
     return {
@@ -222,26 +284,17 @@ export class PublicViewService {
         most_stable: {
           title: SECTION_CONFIG.most_stable.title,
           subtitle: SECTION_CONFIG.most_stable.subtitle,
-          items:
-            stable.length > 0
-              ? await this.buildHomeSectionItems('most_stable', stable, resolvedDate)
-              : (fallbackSections?.most_stable ?? []),
+          items: stable.length > 0 ? stableItems : (fallbackSections?.most_stable ?? []),
         },
         best_value: {
           title: SECTION_CONFIG.best_value.title,
           subtitle: SECTION_CONFIG.best_value.subtitle,
-          items:
-            value.length > 0
-              ? await this.buildHomeSectionItems('best_value', value, resolvedDate)
-              : (fallbackSections?.best_value ?? []),
+          items: value.length > 0 ? valueItems : (fallbackSections?.best_value ?? []),
         },
         new_entries: {
           title: SECTION_CONFIG.new_entries.title,
           subtitle: SECTION_CONFIG.new_entries.subtitle,
-          items:
-            newest.length > 0
-              ? await this.buildHomeSectionItems('new_entries', newest, resolvedDate)
-              : (fallbackSections?.new_entries ?? []),
+          items: newest.length > 0 ? newestItems : (fallbackSections?.new_entries ?? []),
         },
         risk_alerts: {
           title: SECTION_CONFIG.risk_alerts.title,
@@ -386,11 +439,12 @@ export class PublicViewService {
     section: HomeSectionKey,
     rankingItems: Array<Pick<RankingItem, 'airport_id'>>,
     date: string,
+    loadCardContext: (airportId: number, targetDate: string) => Promise<CardContext | null>,
   ): Promise<PublicCardItem[]> {
     const config = SECTION_CONFIG[section];
     const items = await Promise.all(
       rankingItems.map(async (item) => {
-        const context = await this.loadCardContext(item.airport_id, date);
+        const context = await loadCardContext(item.airport_id, date);
         if (!context) {
           return null;
         }
@@ -403,10 +457,11 @@ export class PublicViewService {
 
   private async buildFallbackHomeSections(
     date: string,
+    loadCardContext: (airportId: number, targetDate: string) => Promise<CardContext | null>,
   ): Promise<Record<HomeSectionKey, PublicCardItem[]>> {
     const { items } = await this.deps.scoreRepository.getPublicFullRankingByDate(date, 1, 100);
     const contexts = (
-      await Promise.all(items.map((item) => this.loadCardContext(item.airport_id, date)))
+      await Promise.all(items.map((item) => loadCardContext(item.airport_id, date)))
     ).filter((context): context is CardContext => context !== null);
 
     const byScore = [...contexts].sort(compareByDisplayScoreDesc);
@@ -436,6 +491,104 @@ export class PublicViewService {
         .slice(0, SECTION_CONFIG.risk_alerts.limit)
         .map((context) => this.buildCard('risk_alerts', context, date)),
     };
+  }
+
+  private createCardContextLoaderWithCache(
+    cache: Map<string, Promise<CardContext | null>>,
+  ): (airportId: number, date: string) => Promise<CardContext | null> {
+    return (airportId: number, date: string) => {
+      const key = `${airportId}:${date}`;
+      const cached = cache.get(key);
+      if (cached) {
+        return cached;
+      }
+
+      const pending = this.loadCardContext(airportId, date);
+      cache.set(key, pending);
+      return pending;
+    };
+  }
+
+  private createCardContextLoader(
+    preloaded?: Map<string, CardContext | null>,
+  ): (airportId: number, date: string) => Promise<CardContext | null> {
+    const cache = new Map<string, Promise<CardContext | null>>();
+    for (const [key, value] of preloaded || []) {
+      cache.set(key, Promise.resolve(value));
+    }
+    return this.createCardContextLoaderWithCache(cache);
+  }
+
+  private async preloadCardContexts(
+    airportIds: number[],
+    date: string,
+  ): Promise<Map<string, CardContext | null>> {
+    if (
+      airportIds.length === 0 ||
+      !this.deps.airportRepository.getByIds ||
+      !this.deps.metricsRepository.getByAirportIdsAndDate ||
+      !this.deps.metricsRepository.getTrendsByAirportIds ||
+      !this.deps.scoreRepository.getByAirportIdsAndDate ||
+      !this.deps.scoreRepository.getTrendsByAirportIds ||
+      !this.deps.scoreRepository.getPublicDisplayScoresByDate
+    ) {
+      return new Map();
+    }
+
+    const uniqueAirportIds = Array.from(new Set(airportIds));
+    const trendStartDate = dateDaysAgo(date, 29);
+    const yesterdayDate = dateDaysAgo(date, 1);
+    const [
+      airportsById,
+      metricsById,
+      scoresById,
+      yesterdayDisplayScores,
+      metricsTrendsById,
+      scoreTrendsById,
+    ] = await Promise.all([
+      this.deps.airportRepository.getByIds(uniqueAirportIds),
+      this.deps.metricsRepository.getByAirportIdsAndDate(uniqueAirportIds, date),
+      this.deps.scoreRepository.getByAirportIdsAndDate(uniqueAirportIds, date),
+      this.deps.scoreRepository.getPublicDisplayScoresByDate(uniqueAirportIds, yesterdayDate),
+      this.deps.metricsRepository.getTrendsByAirportIds(uniqueAirportIds, trendStartDate, date),
+      this.deps.scoreRepository.getTrendsByAirportIds(uniqueAirportIds, trendStartDate, date),
+    ]);
+
+    const contexts = new Map<string, CardContext | null>();
+    for (const airportId of uniqueAirportIds) {
+      const airport = airportsById.get(airportId) || null;
+      const metrics = metricsById.get(airportId) || null;
+      const score = scoresById.get(airportId) || null;
+      if (!airport || !metrics || !score || !airport.is_listed) {
+        contexts.set(`${airportId}:${date}`, null);
+        continue;
+      }
+
+      const scoreTrend30d = scoreTrendsById.get(airportId) || [];
+      contexts.set(`${airportId}:${date}`, {
+        airport,
+        metrics,
+        score: {
+          s: score.s,
+          p: score.p,
+          c: score.c,
+          r: score.r,
+          risk_penalty: score.risk_penalty,
+          final_score: score.final_score,
+          display_score: getDisplayScore(score),
+          yesterday_display_score: yesterdayDisplayScores.get(airportId) ?? null,
+          details: score.details || {},
+        },
+        metricsTrend30d: metricsTrendsById.get(airportId) || [],
+        scoreTrend30d: scoreTrend30d.map((row) => ({
+          date: row.date,
+          final_score: row.final_score,
+          display_score: getDisplayScore(row),
+        })),
+      });
+    }
+
+    return contexts;
   }
 
   private async loadCardContext(airportId: number, date: string): Promise<CardContext | null> {
@@ -516,6 +669,14 @@ export class PublicViewService {
       report_url: item.report_url || `/risk-monitor?date=${encodeURIComponent(date)}`,
     }));
   }
+}
+
+function collectRankingAirportIds(...rankingLists: Array<Array<Pick<RankingItem, 'airport_id'>>>): number[] {
+  return Array.from(
+    new Set(
+      rankingLists.flatMap((items) => items.map((item) => item.airport_id)),
+    ),
+  );
 }
 
 function compareByDisplayScoreDesc(left: CardContext, right: CardContext): number {
