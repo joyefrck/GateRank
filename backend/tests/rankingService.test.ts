@@ -70,12 +70,7 @@ function createRow(
   };
 }
 
-function getDateOrdinal(date: string): number {
-  const [year, month, day] = date.split('-').map(Number);
-  return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
-}
-
-test('buildRankings excludes penalized airports from today ranking and down airports from all active lists', () => {
+test('buildRankings excludes down airports from today ranking and all active lists', () => {
   const rankings = buildRankings('2026-03-24', [
     createRow(1, { riskPenalty: 10, displayScore: 120 }),
     createRow(2, { status: 'risk', riskPenalty: 0, displayScore: 110 }),
@@ -84,11 +79,11 @@ test('buildRankings excludes penalized airports from today ranking and down airp
 
   assert.deepEqual(rankings.risk.map((item) => item.airport_id), [2]);
   assert.ok(rankings.today.every((item) => item.airport_id !== 3));
-  assert.ok(rankings.today.every((item) => item.airport_id !== 1));
+  assert.ok(rankings.today.some((item) => item.airport_id === 1));
   assert.ok(rankings.stable.every((item) => item.airport_id !== 3));
 });
 
-test('buildRankings excludes risk-watch and volatile airports from today ranking', () => {
+test('buildRankings excludes risk-watch airports from today ranking but allows volatile ones', () => {
   const rankings = buildRankings('2026-03-24', [
     createRow(1, { displayScore: 120, tags: ['风险观察'] }),
     createRow(2, { displayScore: 119, stabilityTier: 'volatile' }),
@@ -96,40 +91,50 @@ test('buildRankings excludes risk-watch and volatile airports from today ranking
     createRow(4, { displayScore: 117, stabilityTier: 'minor_fluctuation' }),
   ]);
 
-  assert.deepEqual(rankings.today.map((item) => item.airport_id).sort((left, right) => left - right), [3, 4]);
+  assert.deepEqual(rankings.today.map((item) => item.airport_id), [2, 3, 4]);
 });
 
-test('buildRankings rotates today picks within the top-quality candidate pool', () => {
-  const rows = Array.from({ length: 10 }, (_, index) => createRow(index + 1));
-
-  const firstDay = buildRankings('2026-03-24', rows).today.map((item) => item.airport_id);
-  const secondDay = buildRankings('2026-03-25', rows).today.map((item) => item.airport_id);
-  const repeatedFirstDay = buildRankings('2026-03-24', rows).today.map((item) => item.airport_id);
-  const expectedPool = Array.from({ length: 9 }, (_, index) => index + 1);
-  const expectedFirstDay = Array.from(
-    { length: 3 },
-    (_, index) => expectedPool[(getDateOrdinal('2026-03-24') + index) % expectedPool.length],
-  );
-  const expectedSecondDay = Array.from(
-    { length: 3 },
-    (_, index) => expectedPool[(getDateOrdinal('2026-03-25') + index) % expectedPool.length],
-  );
-
-  assert.deepEqual(firstDay, expectedFirstDay);
-  assert.deepEqual(secondDay, expectedSecondDay);
-  assert.deepEqual(repeatedFirstDay, expectedFirstDay);
-  assert.ok(firstDay.every((airportId) => expectedPool.includes(airportId)));
-  assert.ok(!firstDay.includes(10));
-});
-
-test('buildRankings does not backfill today picks with penalized airports when fewer than three are eligible', () => {
+test('buildRankings sorts today picks by display score descending', () => {
   const rankings = buildRankings('2026-03-24', [
-    createRow(1, { riskPenalty: 0 }),
-    createRow(2, { riskPenalty: 0 }),
-    createRow(3, { riskPenalty: 5, displayScore: 120 }),
-    createRow(4, { is_listed: false, riskPenalty: 0, displayScore: 118 }),
+    createRow(1, { displayScore: 88 }),
+    createRow(2, { displayScore: 97 }),
+    createRow(3, { displayScore: 91 }),
+    createRow(4, { displayScore: 95 }),
   ]);
 
-  assert.deepEqual(rankings.today.map((item) => item.airport_id).sort((left, right) => left - right), [1, 2]);
+  assert.deepEqual(rankings.today.map((item) => item.airport_id), [2, 4, 3]);
+});
+
+test('buildRankings uses streak, stability score, and id as today pick tiebreakers', () => {
+  const rankings = buildRankings('2026-03-24', [
+    createRow(1, { displayScore: 100, healthyDaysStreak: 10, s: 85 }),
+    createRow(2, { displayScore: 100, healthyDaysStreak: 10, s: 85 }),
+    createRow(3, { displayScore: 100, healthyDaysStreak: 12, s: 70 }),
+    createRow(4, { displayScore: 100, healthyDaysStreak: 10, s: 90 }),
+  ]);
+
+  assert.deepEqual(rankings.today.map((item) => item.airport_id), [3, 4, 1]);
+});
+
+test('buildRankings falls back to final score when total score is missing', () => {
+  const base = createRow(1, { displayScore: 80 });
+  const higherFinal = createRow(2, { displayScore: 70 });
+  higherFinal.score.final_score = 95;
+  higherFinal.score.details = {} as any;
+
+  const rankings = buildRankings('2026-03-24', [base, higherFinal]);
+
+  assert.deepEqual(rankings.today.map((item) => item.airport_id), [2, 1]);
+});
+
+test('buildRankings does not backfill today picks with excluded airports when fewer than three are eligible', () => {
+  const rankings = buildRankings('2026-03-24', [
+    createRow(1, { riskPenalty: 0 }),
+    createRow(2, { riskPenalty: 5, stabilityTier: 'volatile' }),
+    createRow(3, { tags: ['风险观察'], displayScore: 120 }),
+    createRow(4, { is_listed: false, displayScore: 118 }),
+  ]);
+
+  assert.deepEqual(rankings.today.map((item) => item.airport_id), [1, 2]);
   assert.equal(rankings.today.length, 2);
 });

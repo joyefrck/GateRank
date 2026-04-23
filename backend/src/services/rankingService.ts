@@ -9,7 +9,6 @@ export interface RankedAirportInput {
 }
 
 const TODAY_PICK_RANKING_LIMIT = 3;
-const TODAY_PICK_MIN_POOL_SIZE = 9;
 
 export function buildRankings(
   date: string,
@@ -55,6 +54,7 @@ export function buildTodayPickRows(
   rows: RankedAirportInput[],
   limit: number,
 ): RankedAirportInput[] {
+  void date;
   const safeLimit = Math.max(0, Math.floor(limit));
   if (safeLimit === 0) {
     return [];
@@ -63,24 +63,12 @@ export function buildTodayPickRows(
   const eligibleRows = rows
     .filter(isTodayPickEligible)
     .slice()
-    .sort(compareByTodayPickQuality);
+    .sort(compareByTodayPickScore);
 
-  if (eligibleRows.length === 0) {
-    return [];
-  }
-
-  const candidatePoolSize = Math.min(
-    eligibleRows.length,
-    Math.max(safeLimit * 3, TODAY_PICK_MIN_POOL_SIZE),
-  );
-  const candidatePool = eligibleRows.slice(0, candidatePoolSize);
-  const selectionCount = Math.min(safeLimit, candidatePool.length);
-  const offset = getStableDateOrdinal(date) % candidatePool.length;
-
-  return Array.from({ length: selectionCount }, (_, index) => candidatePool[(offset + index) % candidatePool.length]);
+  return eligibleRows.slice(0, safeLimit);
 }
 
-export function compareByTodayPickQuality(left: RankedAirportInput, right: RankedAirportInput): number {
+export function compareByTodayPickScore(left: RankedAirportInput, right: RankedAirportInput): number {
   return (
     rankingScoreOf(right) - rankingScoreOf(left) ||
     Number(right.metrics.healthy_days_streak ?? right.metrics.stable_days_streak ?? 0) -
@@ -94,9 +82,7 @@ export function isTodayPickEligible(row: RankedAirportInput): boolean {
   return (
     row.airport.status !== 'down' &&
     row.airport.is_listed &&
-    row.score.risk_penalty === 0 &&
-    !row.airport.tags.includes('风险观察') &&
-    row.metrics.stability_tier !== 'volatile'
+    !row.airport.tags.includes('风险观察')
   );
 }
 
@@ -132,12 +118,4 @@ function toRows(
 function rankingScoreOf(row: RankedAirportInput): number {
   const score = Number(row.score.details.total_score ?? row.score.final_score);
   return Number.isFinite(score) ? score : row.score.final_score;
-}
-
-function getStableDateOrdinal(date: string): number {
-  const [year, month, day] = date.split('-').map((part) => Number(part));
-  if (!year || !month || !day) {
-    return 0;
-  }
-  return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
 }

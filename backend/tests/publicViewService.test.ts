@@ -2,11 +2,6 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PublicViewService } from '../src/services/publicViewService';
 
-function getDateOrdinal(date: string): number {
-  const [year, month, day] = date.split('-').map(Number);
-  return Math.floor(Date.UTC(year, month - 1, day) / 86_400_000);
-}
-
 test('PublicViewService.getHomePageView falls back to latest ranking date', async () => {
   const rankingDates: string[] = [];
   const statsDates: string[] = [];
@@ -239,6 +234,248 @@ test('PublicViewService.getHomePageView builds fallback cards from public scores
   assert.equal(result.sections.most_stable.items.length, 1);
 });
 
+test('PublicViewService.getHomePageView fallback today picks follow relaxed filters and score ordering', async () => {
+  const airportById = new Map([
+    [1, {
+      id: 1,
+      name: 'Alpha',
+      website: 'https://alpha.example.com',
+      status: 'normal' as const,
+      is_listed: true,
+      plan_price_month: 12,
+      has_trial: true,
+      tags: ['稳定'],
+      created_at: '2026-03-20',
+    }],
+    [2, {
+      id: 2,
+      name: 'Beta',
+      website: 'https://beta.example.com',
+      status: 'normal' as const,
+      is_listed: true,
+      plan_price_month: 13,
+      has_trial: true,
+      tags: ['波动'],
+      created_at: '2026-03-20',
+    }],
+    [3, {
+      id: 3,
+      name: 'Gamma',
+      website: 'https://gamma.example.com',
+      status: 'normal' as const,
+      is_listed: true,
+      plan_price_month: 14,
+      has_trial: true,
+      tags: ['风险观察'],
+      created_at: '2026-03-20',
+    }],
+  ]);
+
+  const metricById = new Map([
+    [1, {
+      airport_id: 1,
+      date: '2026-03-24',
+      uptime_percent_30d: 99.9,
+      median_latency_ms: 52,
+      median_download_mbps: 88,
+      packet_loss_percent: 0,
+      stable_days_streak: 5,
+      healthy_days_streak: 5,
+      stability_tier: 'stable' as const,
+      domain_ok: true,
+      ssl_days_left: 120,
+      recent_complaints_count: 0,
+      history_incidents: 0,
+    }],
+    [2, {
+      airport_id: 2,
+      date: '2026-03-24',
+      uptime_percent_30d: 98.9,
+      median_latency_ms: 61,
+      median_download_mbps: 80,
+      packet_loss_percent: 0.2,
+      stable_days_streak: 4,
+      healthy_days_streak: 4,
+      stability_tier: 'volatile' as const,
+      domain_ok: true,
+      ssl_days_left: 120,
+      recent_complaints_count: 0,
+      history_incidents: 0,
+    }],
+    [3, {
+      airport_id: 3,
+      date: '2026-03-24',
+      uptime_percent_30d: 99.5,
+      median_latency_ms: 55,
+      median_download_mbps: 82,
+      packet_loss_percent: 0,
+      stable_days_streak: 6,
+      healthy_days_streak: 6,
+      stability_tier: 'stable' as const,
+      domain_ok: true,
+      ssl_days_left: 120,
+      recent_complaints_count: 0,
+      history_incidents: 0,
+    }],
+  ]);
+
+  const scoreById = new Map([
+    [1, {
+      airport_id: 1,
+      date: '2026-03-24',
+      s: 82,
+      p: 76,
+      c: 70,
+      r: 95,
+      risk_penalty: 0,
+      score: 80,
+      recent_score: 80,
+      historical_score: 78,
+      final_score: 79,
+      details: {
+        total_score: 83,
+      },
+    }],
+    [2, {
+      airport_id: 2,
+      date: '2026-03-24',
+      s: 75,
+      p: 70,
+      c: 68,
+      r: 88,
+      risk_penalty: 8,
+      score: 92,
+      recent_score: 92,
+      historical_score: 90,
+      final_score: 91,
+      details: {
+        total_score: 96,
+      },
+    }],
+    [3, {
+      airport_id: 3,
+      date: '2026-03-24',
+      s: 90,
+      p: 82,
+      c: 72,
+      r: 93,
+      risk_penalty: 0,
+      score: 89,
+      recent_score: 89,
+      historical_score: 87,
+      final_score: 88,
+      details: {
+        total_score: 99,
+      },
+    }],
+  ]);
+
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async (id: number) => airportById.get(id) || null,
+    },
+    metricsRepository: {
+      getByAirportAndDate: async (airportId: number) => metricById.get(airportId) || null,
+      getTrend: async (airportId: number) => {
+        const metric = metricById.get(airportId);
+        return metric ? [metric] : [];
+      },
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async (airportId: number) => scoreById.get(airportId) || null,
+      getPublicDisplayScoreByAirportAndDate: async (airportId: number) => {
+        const score = scoreById.get(airportId);
+        return score ? Number(score.details?.total_score ?? score.final_score) - 1 : null;
+      },
+      getTrend: async (airportId: number) => {
+        const score = scoreById.get(airportId);
+        return score ? [score] : [];
+      },
+      getPublicFullRankingByDate: async () => ({
+        total: 3,
+        items: [
+          {
+            airport_id: 3,
+            rank: 1,
+            name: 'Gamma',
+            website: 'https://gamma.example.com',
+            status: 'normal' as const,
+            tags: ['风险观察'],
+            founded_on: '2024-01-01',
+            plan_price_month: 14,
+            has_trial: true,
+            airport_intro: 'Gamma intro',
+            created_at: '2026-03-20',
+            score: 99,
+            score_delta_vs_yesterday: {
+              label: '对比昨天',
+              value: 1,
+            },
+            report_url: '/reports/3?date=2026-03-24',
+          },
+          {
+            airport_id: 2,
+            rank: 2,
+            name: 'Beta',
+            website: 'https://beta.example.com',
+            status: 'normal' as const,
+            tags: ['波动'],
+            founded_on: '2024-01-01',
+            plan_price_month: 13,
+            has_trial: true,
+            airport_intro: 'Beta intro',
+            created_at: '2026-03-20',
+            score: 96,
+            score_delta_vs_yesterday: {
+              label: '对比昨天',
+              value: 1,
+            },
+            report_url: '/reports/2?date=2026-03-24',
+          },
+          {
+            airport_id: 1,
+            rank: 3,
+            name: 'Alpha',
+            website: 'https://alpha.example.com',
+            status: 'normal' as const,
+            tags: ['稳定'],
+            founded_on: '2024-01-01',
+            plan_price_month: 12,
+            has_trial: true,
+            airport_intro: 'Alpha intro',
+            created_at: '2026-03-20',
+            score: 83,
+            score_delta_vs_yesterday: {
+              label: '对比昨天',
+              value: 1,
+            },
+            report_url: '/reports/1?date=2026-03-24',
+          },
+        ],
+      }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 3,
+        realtime_tests: 8,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getHomePageView('2026-03-25');
+
+  assert.deepEqual(result.sections.today_pick.items.map((item) => item.name), ['Beta', 'Alpha']);
+  assert.equal(result.sections.today_pick.items[0].score, 96);
+  assert.equal(result.sections.today_pick.items[0].stability_tier, 'volatile');
+});
+
 test('PublicViewService.getHomePageView builds today pick details and positive highlights only', async () => {
   const service = new PublicViewService({
     airportRepository: {
@@ -390,7 +627,7 @@ test('PublicViewService.getHomePageView builds today pick details and positive h
   assert.doesNotMatch(item.conclusion, /提醒：/);
 });
 
-test('PublicViewService.getHomePageView fallback uses zero-penalty today pick rotation', async () => {
+test('PublicViewService.getHomePageView fallback uses score-sorted today picks', async () => {
   const airportMap = new Map([
     [1, { id: 1, name: 'Alpha', displayScore: 95, healthyDays: 20, s: 90, riskPenalty: 0, tags: ['长期稳定'] }],
     [2, { id: 2, name: 'Bravo', displayScore: 94, healthyDays: 19, s: 89, riskPenalty: 0, tags: ['高性能'] }],
@@ -546,18 +783,13 @@ test('PublicViewService.getHomePageView fallback uses zero-penalty today pick ro
 
   const result = await service.getHomePageView('2026-03-24');
   const todayPickNames = result.sections.today_pick.items.map((item) => item.name);
-  const expectedOrder = Array.from(
-    { length: 3 },
-    (_, index) => ['Alpha', 'Bravo', 'Charlie'][(getDateOrdinal('2026-03-24') + index) % 3],
-  );
-
-  assert.deepEqual(todayPickNames, expectedOrder);
+  assert.deepEqual(todayPickNames, ['Delta', 'Alpha', 'Bravo']);
   assert.ok(result.sections.today_pick.items.every((item) => item.details[1]?.label !== '最近30天'));
   assert.ok(result.sections.today_pick.items.every((item) => !item.conclusion.includes('提醒：')));
-  assert.ok(!todayPickNames.includes('Delta'));
+  assert.equal(result.sections.today_pick.items[0].score, 99);
 });
 
-test('PublicViewService.getHomePageView filters risk-watch and volatile airports from persisted today ranking', async () => {
+test('PublicViewService.getHomePageView filters risk-watch airports from persisted today ranking but keeps volatile ones', async () => {
   const airportMap = new Map([
     [1, { id: 1, name: 'RiskWatch', tags: ['风险观察'], stabilityTier: 'stable' as const }],
     [2, { id: 2, name: 'Volatile', tags: ['测试'], stabilityTier: 'volatile' as const }],
@@ -699,7 +931,7 @@ test('PublicViewService.getHomePageView filters risk-watch and volatile airports
 
   const result = await service.getHomePageView('2026-03-24');
 
-  assert.deepEqual(result.sections.today_pick.items.map((item) => item.name), ['Healthy A', 'Healthy B']);
+  assert.deepEqual(result.sections.today_pick.items.map((item) => item.name), ['Volatile', 'Healthy A', 'Healthy B']);
 });
 
 test('PublicViewService.getHomePageView returns negative and missing score deltas', async () => {
