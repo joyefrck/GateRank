@@ -860,34 +860,35 @@ test('PublicViewService.getHomePageView filters risk-watch airports from persist
       getByAirportAndDate: async (airportId: number) => ({
         airport_id: airportId,
         date: '2026-03-24',
-        s: 85,
+        s: airportId === 2 ? 75 : airportId === 3 ? 85 : 83,
         p: 80,
         c: 82,
         r: 95,
         risk_penalty: 0,
-        score: 85,
-        recent_score: 85,
-        historical_score: 85,
-        final_score: 85,
+        score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
+        recent_score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
+        historical_score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
+        final_score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
         details: {
-          total_score: 85,
+          total_score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
         },
       }),
-      getPublicDisplayScoreByAirportAndDate: async () => 84,
+      getPublicDisplayScoreByAirportAndDate: async (airportId: number) =>
+        airportId === 2 ? 94 : airportId === 3 ? 87 : 89,
       getTrend: async (airportId: number) => [{
         airport_id: airportId,
         date: '2026-03-24',
-        s: 85,
+        s: airportId === 2 ? 75 : airportId === 3 ? 85 : 83,
         p: 80,
         c: 82,
         r: 95,
         risk_penalty: 0,
-        score: 85,
-        recent_score: 85,
-        historical_score: 85,
-        final_score: 85,
+        score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
+        recent_score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
+        historical_score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
+        final_score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
         details: {
-          total_score: 85,
+          total_score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
         },
       }],
       getPublicFullRankingByDate: async () => ({
@@ -931,7 +932,8 @@ test('PublicViewService.getHomePageView filters risk-watch airports from persist
 
   const result = await service.getHomePageView('2026-03-24');
 
-  assert.deepEqual(result.sections.today_pick.items.map((item) => item.name), ['Volatile', 'Healthy A', 'Healthy B']);
+  assert.deepEqual(result.sections.today_pick.items.map((item) => item.name), ['Volatile', 'Healthy B', 'Healthy A']);
+  assert.deepEqual(result.sections.today_pick.items.map((item) => item.score), [95, 90, 88]);
 });
 
 test('PublicViewService.getHomePageView returns negative and missing score deltas', async () => {

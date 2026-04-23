@@ -399,7 +399,12 @@ export class PublicViewService {
       }),
     );
 
-    return items.filter((item): item is PublicCardItem => item !== null).slice(0, config.limit);
+    const filteredItems = items.filter((item): item is PublicCardItem => item !== null);
+    if (section === 'today_pick') {
+      filteredItems.sort(comparePublicCardByScoreDesc);
+    }
+
+    return filteredItems.slice(0, config.limit);
   }
 
   private async buildFallbackHomeSections(
@@ -527,6 +532,10 @@ export class PublicViewService {
 
 function compareByDisplayScoreDesc(left: CardContext, right: CardContext): number {
   return right.score.display_score - left.score.display_score;
+}
+
+function comparePublicCardByScoreDesc(left: PublicCardItem, right: PublicCardItem): number {
+  return right.score - left.score || left.airport_id - right.airport_id;
 }
 
 function compareByStabilityDesc(left: CardContext, right: CardContext): number {
