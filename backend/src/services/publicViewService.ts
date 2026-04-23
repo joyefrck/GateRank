@@ -177,9 +177,13 @@ export class PublicViewService {
   async getHomePageView(date: string): Promise<HomePageView> {
     const resolvedDate = (await this.deps.rankingRepository.getLatestAvailableDate(date)) || date;
     const resolvedFromFallback = resolvedDate !== date;
-    const [stats, today, stable, value, newest, riskMonitor] = await Promise.all([
+    const [stats, fullRankingPreview, stable, value, newest, riskMonitor] = await Promise.all([
       this.deps.statsRepository.getHomeStats(resolvedDate),
-      this.deps.rankingRepository.getRanking(resolvedDate, 'today'),
+      this.deps.scoreRepository.getPublicFullRankingByDate(
+        resolvedDate,
+        1,
+        SECTION_CONFIG.today_pick.limit,
+      ),
       this.deps.rankingRepository.getRanking(resolvedDate, 'stable'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'value'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'new'),
@@ -191,8 +195,9 @@ export class PublicViewService {
           )
         : Promise.resolve({ total: 0, items: [] }),
     ]);
+    const todayPickItems = await this.buildHomeSectionItems('today_pick', fullRankingPreview.items, resolvedDate);
     const fallbackSections =
-      today.length === 0 || stable.length === 0 || value.length === 0 || newest.length === 0
+      todayPickItems.length === 0 || stable.length === 0 || value.length === 0 || newest.length === 0
         ? await this.buildFallbackHomeSections(resolvedDate)
         : null;
 
@@ -212,10 +217,7 @@ export class PublicViewService {
         today_pick: {
           title: SECTION_CONFIG.today_pick.title,
           subtitle: SECTION_CONFIG.today_pick.subtitle,
-          items:
-            today.length > 0
-              ? await this.buildHomeSectionItems('today_pick', today, resolvedDate)
-              : (fallbackSections?.today_pick ?? []),
+          items: todayPickItems.length > 0 ? todayPickItems : (fallbackSections?.today_pick ?? []),
         },
         most_stable: {
           title: SECTION_CONFIG.most_stable.title,
@@ -382,7 +384,7 @@ export class PublicViewService {
 
   private async buildHomeSectionItems(
     section: HomeSectionKey,
-    rankingItems: RankingItem[],
+    rankingItems: Array<Pick<RankingItem, 'airport_id'>>,
     date: string,
   ): Promise<PublicCardItem[]> {
     const config = SECTION_CONFIG[section];
@@ -392,19 +394,11 @@ export class PublicViewService {
         if (!context) {
           return null;
         }
-        if (section === 'today_pick' && !isTodayPickCardContextEligible(context)) {
-          return null;
-        }
         return this.buildCard(section, context, date);
       }),
     );
 
-    const filteredItems = items.filter((item): item is PublicCardItem => item !== null);
-    if (section === 'today_pick') {
-      filteredItems.sort(comparePublicCardByScoreDesc);
-    }
-
-    return filteredItems.slice(0, config.limit);
+    return items.filter((item): item is PublicCardItem => item !== null).slice(0, config.limit);
   }
 
   private async buildFallbackHomeSections(
@@ -414,16 +408,8 @@ export class PublicViewService {
     const contexts = (
       await Promise.all(items.map((item) => this.loadCardContext(item.airport_id, date)))
     ).filter((context): context is CardContext => context !== null);
-    const contextByAirportId = new Map(contexts.map((context) => [context.airport.id, context]));
 
     const byScore = [...contexts].sort(compareByDisplayScoreDesc);
-    const todayPick = buildTodayPickRows(
-      date,
-      contexts.map(toTodayPickRankedAirportInput),
-      SECTION_CONFIG.today_pick.limit,
-    )
-      .map((row) => contextByAirportId.get(row.airport.id))
-      .filter((context): context is CardContext => context !== undefined);
     const byStable = [...contexts].sort(compareByStabilityDesc);
     const byValue = [...contexts].sort(compareByValueDesc);
     const byNew = [...contexts]
@@ -434,7 +420,9 @@ export class PublicViewService {
       .sort(compareByRiskPriority);
 
     return {
-      today_pick: todayPick.map((context) => this.buildCard('today_pick', context, date)),
+      today_pick: byScore
+        .slice(0, SECTION_CONFIG.today_pick.limit)
+        .map((context) => this.buildCard('today_pick', context, date)),
       most_stable: byStable
         .slice(0, SECTION_CONFIG.most_stable.limit)
         .map((context) => this.buildCard('most_stable', context, date)),
@@ -532,10 +520,6 @@ export class PublicViewService {
 
 function compareByDisplayScoreDesc(left: CardContext, right: CardContext): number {
   return right.score.display_score - left.score.display_score;
-}
-
-function comparePublicCardByScoreDesc(left: PublicCardItem, right: PublicCardItem): number {
-  return right.score - left.score || left.airport_id - right.airport_id;
 }
 
 function compareByStabilityDesc(left: CardContext, right: CardContext): number {
@@ -883,10 +867,6 @@ function toTodayPickRankedAirportInput(context: CardContext): RankedAirportInput
       },
     },
   };
-}
-
-function isTodayPickCardContextEligible(context: CardContext): boolean {
-  return isTodayPickEligible(toTodayPickRankedAirportInput(context));
 }
 
 function resolveSummarySection(

@@ -54,7 +54,6 @@ test('PublicViewService.getHomePageView falls back to latest ranking date', asyn
     '2026-03-24',
     '2026-03-24',
     '2026-03-24',
-    '2026-03-24',
   ]);
 });
 
@@ -471,9 +470,9 @@ test('PublicViewService.getHomePageView fallback today picks follow relaxed filt
 
   const result = await service.getHomePageView('2026-03-25');
 
-  assert.deepEqual(result.sections.today_pick.items.map((item) => item.name), ['Beta', 'Alpha']);
-  assert.equal(result.sections.today_pick.items[0].score, 96);
-  assert.equal(result.sections.today_pick.items[0].stability_tier, 'volatile');
+  assert.deepEqual(result.sections.today_pick.items.map((item) => item.name), ['Gamma', 'Beta', 'Alpha']);
+  assert.equal(result.sections.today_pick.items[0].score, 99);
+  assert.equal(result.sections.today_pick.items[1].stability_tier, 'volatile');
 });
 
 test('PublicViewService.getHomePageView builds today pick details and positive highlights only', async () => {
@@ -783,13 +782,13 @@ test('PublicViewService.getHomePageView fallback uses score-sorted today picks',
 
   const result = await service.getHomePageView('2026-03-24');
   const todayPickNames = result.sections.today_pick.items.map((item) => item.name);
-  assert.deepEqual(todayPickNames, ['Delta', 'Alpha', 'Bravo']);
+  assert.deepEqual(todayPickNames, ['Alpha', 'Bravo', 'Charlie']);
   assert.ok(result.sections.today_pick.items.every((item) => item.details[1]?.label !== '最近30天'));
   assert.ok(result.sections.today_pick.items.every((item) => !item.conclusion.includes('提醒：')));
-  assert.equal(result.sections.today_pick.items[0].score, 99);
+  assert.equal(result.sections.today_pick.items[0].score, 95);
 });
 
-test('PublicViewService.getHomePageView filters risk-watch airports from persisted today ranking but keeps volatile ones', async () => {
+test('PublicViewService.getHomePageView today pick follows full ranking order instead of persisted today ranking', async () => {
   const airportMap = new Map([
     [1, { id: 1, name: 'RiskWatch', tags: ['风险观察'], stabilityTier: 'stable' as const }],
     [2, { id: 2, name: 'Volatile', tags: ['测试'], stabilityTier: 'volatile' as const }],
@@ -891,9 +890,58 @@ test('PublicViewService.getHomePageView filters risk-watch airports from persist
           total_score: airportId === 2 ? 95 : airportId === 3 ? 88 : 90,
         },
       }],
-      getPublicFullRankingByDate: async () => ({
+      getPublicFullRankingByDate: async (_date: string, page: number, pageSize: number) => ({
         total: 0,
-        items: [],
+        items: [
+          {
+            airport_id: 4,
+            rank: 1,
+            name: 'Healthy B',
+            website: 'https://healthy-b.example.com',
+            status: 'normal' as const,
+            tags: ['性价比高'],
+            founded_on: '2024-01-01',
+            plan_price_month: 12,
+            has_trial: true,
+            airport_intro: 'Healthy B intro',
+            created_at: '2026-01-20',
+            score: 90,
+            score_delta_vs_yesterday: { label: '对比昨天', value: 1 },
+            report_url: '/reports/4?date=2026-03-24',
+          },
+          {
+            airport_id: 2,
+            rank: 2,
+            name: 'Volatile',
+            website: 'https://volatile.example.com',
+            status: 'normal' as const,
+            tags: ['测试'],
+            founded_on: '2024-01-01',
+            plan_price_month: 12,
+            has_trial: true,
+            airport_intro: 'Volatile intro',
+            created_at: '2026-01-20',
+            score: 95,
+            score_delta_vs_yesterday: { label: '对比昨天', value: 1 },
+            report_url: '/reports/2?date=2026-03-24',
+          },
+          {
+            airport_id: 3,
+            rank: 3,
+            name: 'Healthy A',
+            website: 'https://healthy-a.example.com',
+            status: 'normal' as const,
+            tags: ['高性能'],
+            founded_on: '2024-01-01',
+            plan_price_month: 12,
+            has_trial: true,
+            airport_intro: 'Healthy A intro',
+            created_at: '2026-01-20',
+            score: 88,
+            score_delta_vs_yesterday: { label: '对比昨天', value: 1 },
+            report_url: '/reports/3?date=2026-03-24',
+          },
+        ].slice((page - 1) * pageSize, page * pageSize),
       }),
     },
     rankingRepository: {
@@ -932,8 +980,8 @@ test('PublicViewService.getHomePageView filters risk-watch airports from persist
 
   const result = await service.getHomePageView('2026-03-24');
 
-  assert.deepEqual(result.sections.today_pick.items.map((item) => item.name), ['Volatile', 'Healthy B', 'Healthy A']);
-  assert.deepEqual(result.sections.today_pick.items.map((item) => item.score), [95, 90, 88]);
+  assert.deepEqual(result.sections.today_pick.items.map((item) => item.name), ['Healthy B', 'Volatile', 'Healthy A']);
+  assert.deepEqual(result.sections.today_pick.items.map((item) => item.score), [90, 95, 88]);
 });
 
 test('PublicViewService.getHomePageView returns negative and missing score deltas', async () => {
@@ -994,7 +1042,25 @@ test('PublicViewService.getHomePageView returns negative and missing score delta
         getTrend: async () => [baseScore],
         getPublicFullRankingByDate: async () => ({
           total: 1,
-          items: [],
+          items: [{
+            airport_id: 1,
+            rank: 1,
+            name: 'Alpha',
+            website: 'https://alpha.example.com',
+            status: 'normal' as const,
+            tags: ['稳定'],
+            founded_on: '2024-01-01',
+            plan_price_month: 12,
+            has_trial: true,
+            airport_intro: 'Alpha intro',
+            created_at: '2026-03-20',
+            score: 83,
+            score_delta_vs_yesterday: {
+              label: '对比昨天',
+              value: 1,
+            },
+            report_url: '/reports/1?date=2026-03-24',
+          }],
         }),
       },
       rankingRepository: {
