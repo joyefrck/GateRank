@@ -9,6 +9,14 @@ from scripts.monitor_performance import (
 )
 
 
+class PickLastRandom:
+    def choice(self, values):
+        return values[-1]
+
+    def shuffle(self, values):
+        values.reverse()
+
+
 class MonitorPerformanceTests(unittest.TestCase):
     def test_normalize_subscription_text_supports_base64(self) -> None:
         plain = "trojan://pass@example.com:443?type=ws&host=cdn.example.com&path=%2Fws#HK-1"
@@ -65,16 +73,28 @@ class MonitorPerformanceTests(unittest.TestCase):
         self.assertEqual(trojan_node.region, "US")
         self.assertEqual(trojan_node.outbound["transport"]["type"], "ws")
 
-    def test_select_nodes_prefers_regions_and_caps_to_three(self) -> None:
+    def test_select_nodes_randomly_picks_one_node_per_priority_region(self) -> None:
         uris = [
             "trojan://password@hk.example.com:443#HK-A",
-            "trojan://password@jp.example.com:443#JP-A",
+            "trojan://password@hk2.example.com:443#HK-B",
             "trojan://password@sg.example.com:443#SG-A",
+            "trojan://password@jp.example.com:443#JP-A",
+            "trojan://password@jp2.example.com:443#JP-B",
             "trojan://password@us.example.com:443#US-A",
         ]
         nodes = [parse_node_line(uri) for uri in uris]
-        selected = select_nodes([node for node in nodes if node is not None])
-        self.assertEqual([node.region for node in selected], ["HK", "JP", "SG"])
+        selected = select_nodes([node for node in nodes if node is not None], rng=PickLastRandom())
+        self.assertEqual([node.name for node in selected], ["HK-B", "JP-B", "SG-A"])
+
+    def test_select_nodes_randomly_fills_remaining_slots(self) -> None:
+        uris = [
+            "trojan://password@hk.example.com:443#HK-A",
+            "trojan://password@de.example.com:443#DE-A",
+            "trojan://password@nl.example.com:443#NL-A",
+        ]
+        nodes = [parse_node_line(uri) for uri in uris]
+        selected = select_nodes([node for node in nodes if node is not None], rng=PickLastRandom())
+        self.assertEqual([node.name for node in selected], ["HK-A", "NL-A", "DE-A"])
 
 
 if __name__ == "__main__":

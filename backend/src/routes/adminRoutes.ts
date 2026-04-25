@@ -168,6 +168,7 @@ interface AdminDeps {
   scoreRepository: {
     getByAirportAndDate(airportId: number, date: string): Promise<unknown | null>;
     getTrend(airportId: number, startDate: string, endDate: string): Promise<unknown[]>;
+    updateManualTotalScore?(airportId: number, date: string, totalScore: number | null): Promise<boolean>;
     getLatestAvailableDate?(onOrBefore: string): Promise<string | null>;
     getPublicDisplayScoresByDate?(airportIds: number[], date: string): Promise<Map<number, number>>;
   };
@@ -1146,6 +1147,35 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     }
   });
 
+  router.patch('/airports/:id/scores/:date/manual-total-score', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const date = parseDate(req.params.date);
+      const totalScore = parseManualTotalScore((req.body ?? {}).total_score);
+      const existingScore = await deps.scoreRepository.getByAirportAndDate(airportId, date);
+      if (!existingScore) {
+        throw new HttpError(404, 'SCORE_NOT_FOUND', `score not found for ${airportId}`);
+      }
+      if (!deps.scoreRepository.updateManualTotalScore) {
+        throw new HttpError(500, 'SCORE_REPOSITORY_UNAVAILABLE', 'manual score update is unavailable');
+      }
+
+      const updated = await deps.scoreRepository.updateManualTotalScore(airportId, date, totalScore);
+      if (!updated) {
+        throw new HttpError(404, 'SCORE_NOT_FOUND', `score not found for ${airportId}`);
+      }
+
+      await deps.auditRepository.log('update_manual_total_score', actorFromReq(req), req.requestId, {
+        airport_id: airportId,
+        date,
+        manual_total_score: totalScore,
+      });
+      res.json({ airport_id: airportId, date, manual_total_score: totalScore });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/airports/:id/dashboard', async (req, res, next) => {
     try {
       const airportId = toAirportId(req.params.id);
@@ -1219,6 +1249,9 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           referenceDate: date,
         })
         : null;
+      const formulaTotalScore = finalEngineScore?.final_score ?? null;
+      const manualTotalScore = numberOrNull(details.manual_total_score);
+      const displayTotalScore = manualTotalScore ?? formulaTotalScore;
       const hasMetrics = Boolean(metrics);
       const hasProbeSamples = dayProbeSamples.length > 0;
       const publicResolvedDate = hasScore ? date : latestAvailableScoreDate;
@@ -1272,7 +1305,10 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         },
         base: {
           ...baseObj,
-          total_score: finalEngineScore?.final_score ?? null,
+          total_score: displayTotalScore,
+          formula_total_score: formulaTotalScore,
+          manual_total_score: manualTotalScore,
+          total_score_source: manualTotalScore !== null ? 'manual' : formulaTotalScore !== null ? 'formula' : null,
           price_score: calcPriceScore(Number(baseObj.plan_price_month || 0)),
           score_data_days: finalEngineScore?.data_days ?? null,
         },
@@ -1679,6 +1715,20 @@ function mustNumber(value: unknown, fieldName: string): number {
     throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be number`);
   }
   return num;
+}
+
+function parseManualTotalScore(value: unknown): number | null {
+  if (value === null) {
+    return null;
+  }
+  if (value === undefined || value === '') {
+    throw new HttpError(400, 'BAD_REQUEST', 'total_score is required');
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0 || num > 100) {
+    throw new HttpError(400, 'BAD_REQUEST', 'total_score must be a number between 0 and 100');
+  }
+  return Math.round(num * 100) / 100;
 }
 
 function optionalNumber(value: unknown): number | undefined {

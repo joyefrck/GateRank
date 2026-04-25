@@ -997,6 +997,10 @@ function buildPublicFallbackNotice(requestedDate: string, resolvedDate: string):
 }
 
 function getDisplayScore(score: { final_score: number; details?: Record<string, unknown> }): number {
+  const manualTotalScore = Number(score.details?.manual_total_score);
+  if (Number.isFinite(manualTotalScore)) {
+    return manualTotalScore;
+  }
   const totalScore = Number(score.details?.total_score);
   return Number.isFinite(totalScore) ? totalScore : score.final_score;
 }

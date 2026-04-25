@@ -116,6 +116,6 @@ function toRows(
 }
 
 function rankingScoreOf(row: RankedAirportInput): number {
-  const score = Number(row.score.details.total_score ?? row.score.final_score);
+  const score = Number(row.score.details.manual_total_score ?? row.score.details.total_score ?? row.score.final_score);
   return Number.isFinite(score) ? score : row.score.final_score;
 }

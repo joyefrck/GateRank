@@ -13,6 +13,7 @@ import argparse
 import base64
 import json
 import os
+import random
 import shutil
 import socket
 import ssl
@@ -777,20 +778,22 @@ def apply_tls(
     outbound["tls"] = {key: value for key, value in tls_config.items() if value not in (None, "", [])}
 
 
-def select_nodes(nodes: list[ParsedNode]) -> list[ParsedNode]:
+def select_nodes(nodes: list[ParsedNode], rng: Any = random) -> list[ParsedNode]:
     selected: list[ParsedNode] = []
     used_names: set[str] = set()
     for region in REGION_PRIORITY:
-        node = next((item for item in nodes if item.region == region and item.name not in used_names), None)
-        if not node:
+        candidates = [item for item in nodes if item.region == region and item.name not in used_names]
+        if not candidates:
             continue
+        node = rng.choice(candidates)
         selected.append(node)
         used_names.add(node.name)
         if len(selected) >= 3:
             return selected
-    for node in nodes:
-        if node.name in used_names:
-            continue
+
+    remaining_nodes = [node for node in nodes if node.name not in used_names]
+    rng.shuffle(remaining_nodes)
+    for node in remaining_nodes:
         selected.append(node)
         used_names.add(node.name)
         if len(selected) >= 3:

@@ -131,18 +131,24 @@ test('ScoreRepository.getPublicFullRankingByDate keeps airports without scores',
   assert.equal(result.items[0].report_url, null);
 });
 
-test('ScoreRepository.getPublicDisplayScoreByAirportAndDate prefers details_json total_score', async () => {
+test('ScoreRepository.getPublicDisplayScoreByAirportAndDate prefers manual total score', async () => {
+  const calls: string[] = [];
   const repository = new ScoreRepository({
-    query: async () => [[
-      {
-        airport_id: 7,
-        display_score: 96.2,
-      },
-    ]],
+    query: async (sql: string) => {
+      calls.push(sql);
+      return [[
+        {
+          airport_id: 7,
+          display_score: 96.2,
+        },
+      ]];
+    },
   } as never);
 
   const score = await repository.getPublicDisplayScoreByAirportAndDate(7, '2026-03-24');
   assert.equal(score, 96.2);
+  assert.match(calls[0], /manual_total_score/);
+  assert.ok(calls[0].indexOf('manual_total_score') < calls[0].indexOf('total_score'));
 });
 
 test('ScoreRepository.getPublicDisplayScoreByAirportAndDate returns null when date is missing', async () => {
@@ -152,4 +158,51 @@ test('ScoreRepository.getPublicDisplayScoreByAirportAndDate returns null when da
 
   const score = await repository.getPublicDisplayScoreByAirportAndDate(7, '2026-03-24');
   assert.equal(score, null);
+});
+
+test('ScoreRepository.upsertDaily preserves existing manual total score on duplicate update', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new ScoreRepository({
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  } as never);
+
+  await repository.upsertDaily(7, '2026-03-24', {
+    s: 80,
+    p: 70,
+    c: 88,
+    r: 90,
+    risk_penalty: 10,
+    score: 78,
+    recent_score: 78,
+    historical_score: 76,
+    final_score: 77.5,
+    details: { total_score: 77.5 },
+  });
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /JSON_EXTRACT\(details_json, '\$\.manual_total_score'\)/);
+  assert.match(calls[0].sql, /JSON_SET\(/);
+  assert.equal(calls[0].params?.[0], 7);
+  assert.equal(calls[0].params?.[1], '2026-03-24');
+});
+
+test('ScoreRepository.updateManualTotalScore saves and clears manual total score', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new ScoreRepository({
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  } as never);
+
+  assert.equal(await repository.updateManualTotalScore(7, '2026-03-24', 88.66), true);
+  assert.equal(await repository.updateManualTotalScore(7, '2026-03-24', null), true);
+
+  assert.match(calls[0].sql, /JSON_SET/);
+  assert.deepEqual(calls[0].params, [88.66, 7, '2026-03-24']);
+  assert.match(calls[1].sql, /JSON_REMOVE/);
+  assert.deepEqual(calls[1].params, [7, '2026-03-24']);
 });

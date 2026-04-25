@@ -53,7 +53,7 @@ export function generateAirportTags(input: GenerateAirportTagsInput): string[] {
   const stabilityScore = Number(score.details.stability_score ?? score.s);
   const priceScore = Number(score.details.price_score ?? score.c);
   const performanceScore = score.p;
-  const displayScore = Number(score.details.total_score ?? score.final_score);
+  const displayScore = Number(score.details.manual_total_score ?? score.details.total_score ?? score.final_score);
   const recentRiskEvents = metrics.recent_complaints_count;
   const trackingDays = getTrackingDays(airport.created_at, date);
 

@@ -805,6 +805,201 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
   }
 });
 
+test('PATCH /airports/:id/scores/:date/manual-total-score saves and clears manual override', async () => {
+  const updates: Array<{ airportId: number; date: string; totalScore: number | null }> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => ({
+          airport_id: 1,
+          date: '2026-03-22',
+          s: 80,
+          p: 70,
+          c: 88,
+          r: 90,
+          risk_penalty: 10,
+          score: 78,
+          recent_score: 78,
+          historical_score: 76,
+          final_score: 77.5,
+          details: { total_score: 77.5 },
+        }),
+        getTrend: async () => [],
+        updateManualTotalScore: async (airportId, date, totalScore) => {
+          updates.push({ airportId, date, totalScore });
+          return true;
+        },
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const saveResponse = await fetch(`http://127.0.0.1:${port}/airports/1/scores/2026-03-22/manual-total-score`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ total_score: 77.936 }),
+    });
+    assert.equal(saveResponse.status, 200);
+    const saveData = (await saveResponse.json()) as { manual_total_score: number };
+    assert.equal(saveData.manual_total_score, 77.94);
+
+    const clearResponse = await fetch(`http://127.0.0.1:${port}/airports/1/scores/2026-03-22/manual-total-score`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ total_score: null }),
+    });
+    assert.equal(clearResponse.status, 200);
+
+    assert.deepEqual(updates, [
+      { airportId: 1, date: '2026-03-22', totalScore: 77.94 },
+      { airportId: 1, date: '2026-03-22', totalScore: null },
+    ]);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airports/:id/scores/:date/manual-total-score validates score input and missing rows', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async (_airportId, date) => (date === '2026-03-22' ? { details: {} } : null),
+        getTrend: async () => [],
+        updateManualTotalScore: async () => true,
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    for (const totalScore of [-1, 100.1, 'bad']) {
+      const response = await fetch(`http://127.0.0.1:${port}/airports/1/scores/2026-03-22/manual-total-score`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ total_score: totalScore }),
+      });
+      assert.equal(response.status, 400);
+    }
+
+    const missingResponse = await fetch(`http://127.0.0.1:${port}/airports/1/scores/2026-03-23/manual-total-score`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ total_score: 77 }),
+    });
+    assert.equal(missingResponse.status, 404);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/dashboard exposes manual total score override metadata', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => ({
+          airport_id: 1,
+          date: '2026-03-22',
+          s: 80,
+          p: 70,
+          c: 80,
+          r: 90,
+          risk_penalty: 10,
+          score: 79,
+          recent_score: 79,
+          historical_score: 75,
+          final_score: 77,
+          details: { total_score: 11.06, manual_total_score: 66.66 },
+        }),
+        getTrend: async () => [
+          { date: '2026-03-22', s: 80, p: 70, r: 90 },
+        ],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/dashboard?date=2026-03-22`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { base: Record<string, unknown> };
+    assert.equal(data.base.total_score, 66.66);
+    assert.equal(data.base.manual_total_score, 66.66);
+    assert.equal(data.base.formula_total_score, 11.06);
+    assert.equal(data.base.total_score_source, 'manual');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /airports/:id/dashboard exposes risk breakdown details', async () => {
   const app = express();
   app.use(express.json());

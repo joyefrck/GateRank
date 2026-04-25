@@ -122,7 +122,15 @@ export class ScoreRepository {
         recent_score = VALUES(recent_score),
         historical_score = VALUES(historical_score),
         final_score = VALUES(final_score),
-        details_json = VALUES(details_json)`,
+        details_json =
+          CASE
+            WHEN JSON_EXTRACT(details_json, '$.manual_total_score') IS NULL THEN VALUES(details_json)
+            ELSE JSON_SET(
+              VALUES(details_json),
+              '$.manual_total_score',
+              CAST(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.manual_total_score')) AS DECIMAL(10,2))
+            )
+          END`,
       [
         airportId,
         date,
@@ -138,6 +146,27 @@ export class ScoreRepository {
         JSON.stringify(score.details),
       ],
     );
+  }
+
+  async updateManualTotalScore(
+    airportId: number,
+    date: string,
+    totalScore: number | null,
+  ): Promise<boolean> {
+    const sql = totalScore === null
+      ? `UPDATE airport_scores_daily
+            SET details_json = JSON_REMOVE(COALESCE(details_json, JSON_OBJECT()), '$.manual_total_score')
+          WHERE airport_id = ? AND date = ?`
+      : `UPDATE airport_scores_daily
+            SET details_json = JSON_SET(
+              COALESCE(details_json, JSON_OBJECT()),
+              '$.manual_total_score',
+              ?
+            )
+          WHERE airport_id = ? AND date = ?`;
+    const params = totalScore === null ? [airportId, date] : [totalScore, airportId, date];
+    const [result] = await this.pool.execute<ResultSetHeader>(sql, params);
+    return result.affectedRows > 0;
   }
 
   async getByAirportAndDate(airportId: number, date: string): Promise<AirportScoreDaily | null> {
@@ -240,6 +269,7 @@ export class ScoreRepository {
       `SELECT
          airport_id,
          COALESCE(
+           CAST(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.manual_total_score')) AS DECIMAL(10,2)),
            CAST(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.total_score')) AS DECIMAL(10,2)),
            final_score
          ) AS display_score
@@ -266,6 +296,7 @@ export class ScoreRepository {
       `SELECT
          airport_id,
          COALESCE(
+           CAST(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.manual_total_score')) AS DECIMAL(10,2)),
            CAST(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.total_score')) AS DECIMAL(10,2)),
            final_score
          ) AS display_score
@@ -313,6 +344,7 @@ export class ScoreRepository {
          a.created_at,
          s.date AS score_date,
          COALESCE(
+           CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.manual_total_score')) AS DECIMAL(10,2)),
            CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.total_score')) AS DECIMAL(10,2)),
            s.final_score
          ) AS display_score
@@ -412,6 +444,7 @@ export class ScoreRepository {
          s.date AS score_date,
          s.score_r,
          COALESCE(
+           CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.manual_total_score')) AS DECIMAL(10,2)),
            CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.total_score')) AS DECIMAL(10,2)),
            s.final_score
          ) AS display_score,
