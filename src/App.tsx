@@ -222,6 +222,7 @@ interface CardProps {
   score: number;
   scoreDeltaVsYesterday?: ScoreDeltaView;
   stabilityTier: StabilityTier;
+  showStabilityTier?: boolean;
   details: CardDetail[];
   conclusion: string;
   icon?: React.ReactNode;
@@ -498,6 +499,7 @@ const ConclusionCard = ({
   score,
   scoreDeltaVsYesterday,
   stabilityTier,
+  showStabilityTier = true,
   details,
   conclusion,
   icon,
@@ -579,7 +581,7 @@ const ConclusionCard = ({
         <div className="flex items-center gap-2.5 mb-2.5">
           <div className="w-1 h-3 bg-neutral-900" />
           <div className="text-[11px] md:text-xs text-neutral-900 uppercase tracking-[0.18em] font-black">监测结论</div>
-          {type !== 'risk' && (
+          {showStabilityTier && type !== 'risk' && (
             <span className={`ml-auto inline-flex items-center rounded-full border px-2.5 py-1 text-[10px] md:text-[11px] font-black tracking-[0.08em] ${getStabilityTierTone(stabilityTier)}`}>
               {getStabilityTierLabel(stabilityTier)}
             </span>
@@ -1583,6 +1585,7 @@ function HomePage({ date }: { date?: string }) {
                           score={item.score}
                           scoreDeltaVsYesterday={item.score_delta_vs_yesterday}
                           stabilityTier={item.stability_tier}
+                          showStabilityTier={false}
                           details={item.details}
                           conclusion={item.conclusion}
                           onOpen={() => navigate(item.report_url)}
