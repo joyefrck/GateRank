@@ -286,8 +286,62 @@ export class ManualJobService {
         throw new Error(normalizeSingBoxError(stderrText, this.singBoxBin));
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
+      const message = summarizeManualJobScriptFailure(error);
       throw new Error(normalizeSingBoxError(message, this.singBoxBin));
     }
+  }
+}
+
+export function summarizeManualJobScriptFailure(error: unknown): string {
+  const output = getExecOutput(error);
+  if (output) {
+    const summarized = summarizeScriptOutput(output);
+    if (summarized) {
+      return summarized;
+    }
+  }
+  return error instanceof Error ? error.message : String(error);
+}
+
+function getExecOutput(error: unknown): string {
+  if (!error || typeof error !== 'object') {
+    return '';
+  }
+  const candidate = error as { stdout?: unknown; stderr?: unknown };
+  return [candidate.stdout, candidate.stderr]
+    .filter((value): value is string => typeof value === 'string' && value.trim() !== '')
+    .join('\n')
+    .trim();
+}
+
+function summarizeScriptOutput(output: string): string {
+  const trimmed = output.trim();
+  if (!trimmed) {
+    return '';
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as {
+      airport_count?: number;
+      success_count?: number;
+      failure_count?: number;
+      failures?: Array<{ airport_id?: number; airport_name?: string; error?: string }>;
+    };
+    const airportCount = Number(parsed.airport_count ?? 0);
+    const successCount = Number(parsed.success_count ?? 0);
+    const failureCount = Number(parsed.failure_count ?? 0);
+    const firstFailure = Array.isArray(parsed.failures) ? parsed.failures[0] : null;
+    const firstFailureLabel = firstFailure
+      ? [firstFailure.airport_name, firstFailure.airport_id ? `#${firstFailure.airport_id}` : null]
+        .filter(Boolean)
+        .join(' ')
+      : '';
+    const firstFailureError = firstFailure?.error?.trim() || '';
+    const countSummary = `${successCount}/${airportCount} succeeded, ${failureCount} failed`;
+    return firstFailureError
+      ? `${countSummary}; ${firstFailureLabel ? `${firstFailureLabel}: ` : ''}${firstFailureError}`
+      : countSummary;
+  } catch {
+    return trimmed.split('\n').slice(-1)[0].slice(0, 240);
   }
 }

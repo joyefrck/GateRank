@@ -3,7 +3,7 @@ import { CLICK_CHARGE_AMOUNT, CLICK_DEDUPE_HOURS } from '../config/billing';
 import { sqlDateTimeToTimezoneIso } from '../utils/time';
 
 export type BillingPaymentChannel = 'alipay' | 'wxpay';
-export type BillingOrderStatus = 'created' | 'paid' | 'failed' | 'expired';
+export type BillingOrderStatus = 'created' | 'paid' | 'failed' | 'expired' | 'canceled';
 export type WalletTransactionType = 'recharge' | 'click_charge' | 'adjustment';
 export type ClickBillingStatus = 'billed' | 'duplicate' | 'insufficient_balance' | 'unlisted' | 'no_wallet';
 
@@ -18,8 +18,16 @@ export interface ApplicantWalletView {
   updated_at: string;
 }
 
+export interface AdminWalletAdjustmentInput {
+  airport_id: number;
+  amount: number;
+  description: string;
+  reference_id: string;
+}
+
 export interface RechargeOrderView {
   id: number;
+  applicant_account_id: number;
   out_trade_no: string;
   channel: BillingPaymentChannel;
   amount: number;
@@ -162,7 +170,7 @@ export class ApplicantBillingRepository {
         gateway_trade_no VARCHAR(64) NULL,
         channel ENUM('alipay', 'wxpay') NOT NULL,
         amount DECIMAL(10,2) NOT NULL,
-        status ENUM('created', 'paid', 'failed', 'expired') NOT NULL DEFAULT 'created',
+        status ENUM('created', 'paid', 'failed', 'expired', 'canceled') NOT NULL DEFAULT 'created',
         pay_type VARCHAR(32) NULL,
         pay_info TEXT NULL,
         notify_payload_json JSON NULL,
@@ -174,6 +182,11 @@ export class ApplicantBillingRepository {
         INDEX idx_applicant_recharge_orders_account_created (applicant_account_id, created_at DESC),
         INDEX idx_applicant_recharge_orders_status_created (status, created_at DESC)
       )
+    `);
+
+    await this.pool.query(`
+      ALTER TABLE applicant_recharge_orders
+        MODIFY COLUMN status ENUM('created', 'paid', 'failed', 'expired', 'canceled') NOT NULL DEFAULT 'created'
     `);
 
     await this.pool.query(`
@@ -246,6 +259,110 @@ export class ApplicantBillingRepository {
     );
   }
 
+  async listWalletsByAirportIds(airportIds: number[]): Promise<Map<number, ApplicantWalletView>> {
+    const ids = [...new Set(airportIds.filter((id) => Number.isInteger(id) && id > 0))];
+    if (ids.length === 0) {
+      return new Map();
+    }
+
+    const placeholders = ids.map(() => '?').join(', ');
+    const [rows] = await this.pool.query<WalletRow[]>(
+      `SELECT id, applicant_account_id, application_id, airport_id, balance,
+              DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+              DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+         FROM applicant_wallets
+        WHERE airport_id IN (${placeholders})`,
+      ids,
+    );
+
+    return new Map(
+      rows
+        .filter((row) => row.airport_id != null)
+        .map((row) => [Number(row.airport_id), toWallet(row)]),
+    );
+  }
+
+  async getWalletByAirportId(airportId: number): Promise<ApplicantWalletView | null> {
+    const [rows] = await this.pool.query<WalletRow[]>(
+      `SELECT id, applicant_account_id, application_id, airport_id, balance,
+              DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+              DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+         FROM applicant_wallets
+        WHERE airport_id = ?
+        LIMIT 1`,
+      [airportId],
+    );
+    return rows[0] ? toWallet(rows[0]) : null;
+  }
+
+  async addWalletBalanceAdjustment(input: AdminWalletAdjustmentInput): Promise<ApplicantWalletView | null> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<WalletRow[]>(
+        `SELECT id, applicant_account_id, application_id, airport_id, balance,
+                DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+                DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+                DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+           FROM applicant_wallets
+          WHERE airport_id = ?
+          LIMIT 1
+          FOR UPDATE`,
+        [input.airport_id],
+      );
+      const wallet = rows[0];
+      if (!wallet) {
+        await connection.rollback();
+        return null;
+      }
+
+      const amount = roundMoney(input.amount);
+      const nextBalance = roundMoney(Number(wallet.balance) + amount);
+      await connection.execute<ResultSetHeader>(
+        `UPDATE applicant_wallets
+            SET balance = ?
+          WHERE id = ?`,
+        [nextBalance, wallet.id],
+      );
+      await connection.execute<ResultSetHeader>(
+        `INSERT INTO applicant_wallet_transactions (
+           wallet_id, applicant_account_id, application_id, airport_id, transaction_type,
+           amount, balance_after, reference_type, reference_id, description
+         ) VALUES (?, ?, ?, ?, 'adjustment', ?, ?, 'admin_adjustment', ?, ?)`,
+        [
+          wallet.id,
+          wallet.applicant_account_id,
+          wallet.application_id,
+          wallet.airport_id,
+          amount,
+          nextBalance,
+          input.reference_id,
+          input.description,
+        ],
+      );
+
+      const [updatedRows] = await connection.query<WalletRow[]>(
+        `SELECT id, applicant_account_id, application_id, airport_id, balance,
+                DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+                DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+                DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+           FROM applicant_wallets
+          WHERE id = ?
+          LIMIT 1`,
+        [wallet.id],
+      );
+      await connection.commit();
+      return updatedRows[0] ? toWallet(updatedRows[0]) : null;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   async getWalletByAccountId(applicantAccountId: number): Promise<ApplicantWalletView | null> {
     const [rows] = await this.pool.query<WalletRow[]>(
       `SELECT id, applicant_account_id, application_id, airport_id, balance,
@@ -298,6 +415,18 @@ export class ApplicantBillingRepository {
       [outTradeNo],
     );
     return rows[0] ? toRechargeOrder(rows[0]) : null;
+  }
+
+  async cancelRechargeOrder(applicantAccountId: number, outTradeNo: string): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE applicant_recharge_orders
+          SET status = 'canceled'
+        WHERE applicant_account_id = ?
+          AND out_trade_no = ?
+          AND status = 'created'`,
+      [applicantAccountId, outTradeNo],
+    );
+    return result.affectedRows > 0;
   }
 
   async listRechargeOrders(applicantAccountId: number, limit = 20): Promise<RechargeOrderView[]> {
@@ -636,6 +765,7 @@ function toWallet(row: WalletRow): ApplicantWalletView {
 function toRechargeOrder(row: RechargeOrderRow): RechargeOrderView {
   return {
     id: Number(row.id),
+    applicant_account_id: Number(row.applicant_account_id),
     out_trade_no: row.out_trade_no,
     channel: row.channel,
     amount: Number(row.amount),

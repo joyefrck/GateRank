@@ -259,7 +259,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
 
 
 def check_http_ok(url: str, timeout: int) -> tuple[bool, int | None]:
-    request = Request(url, method="GET", headers={"User-Agent": "GateRank-Stability-Monitor/1.0"})
+    request = Request(normalize_url(url), method="GET", headers={"User-Agent": "GateRank-Stability-Monitor/1.0"})
     try:
         with urlopen(request, timeout=timeout) as response:
             status = int(response.status)
@@ -335,7 +335,7 @@ def request_json(
 
 
 def extract_host(url: str) -> str:
-    parsed = urlparse(url)
+    parsed = urlparse(normalize_url(url))
     return parsed.hostname or url
 
 
@@ -344,11 +344,23 @@ def choose_website(airport: dict[str, Any]) -> str:
     if isinstance(websites, list):
         for value in websites:
             if isinstance(value, str) and value.strip():
-                return value.strip()
+                return normalize_url(value.strip())
     website = airport.get("website")
     if isinstance(website, str) and website.strip():
-        return website.strip()
+        return normalize_url(website.strip())
     raise ValueError(f"airport {airport.get('id')} has no website configured")
+
+
+def normalize_url(value: str) -> str:
+    text = value.strip()
+    if not text:
+        return text
+    parsed = urlparse(text)
+    if parsed.scheme:
+        return text
+    if text.startswith("//"):
+        return f"https:{text}"
+    return f"https://{text}"
 
 
 def shanghai_now_iso() -> str:

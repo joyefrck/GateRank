@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS applicant_recharge_orders (
   gateway_trade_no VARCHAR(64) NULL,
   channel ENUM('alipay', 'wxpay') NOT NULL,
   amount DECIMAL(10,2) NOT NULL,
-  status ENUM('created', 'paid', 'failed', 'expired') NOT NULL DEFAULT 'created',
+  status ENUM('created', 'paid', 'failed', 'expired', 'canceled') NOT NULL DEFAULT 'created',
   pay_type VARCHAR(32) NULL,
   pay_info TEXT NULL,
   notify_payload_json JSON NULL,

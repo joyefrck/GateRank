@@ -58,6 +58,8 @@ interface Airport {
   total_score_source?: 'manual' | 'formula' | null;
   price_score?: number | null;
   score_data_days?: number | null;
+  wallet_id?: number | null;
+  wallet_balance?: number | null;
 }
 
 interface AirportFormState {
@@ -76,6 +78,8 @@ interface AirportFormState {
   test_account: string;
   test_password: string;
   manual_tags: string[];
+  wallet_id: number | null;
+  wallet_balance: number | null;
 }
 
 interface AirportDashboardView {
@@ -3723,6 +3727,11 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
   const [manualTagInput, setManualTagInput] = useState('');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [balanceAmount, setBalanceAmount] = useState('');
+  const [balanceDescription, setBalanceDescription] = useState('');
+  const [balanceSaving, setBalanceSaving] = useState(false);
+  const [balanceError, setBalanceError] = useState('');
+  const [balanceMessage, setBalanceMessage] = useState('');
 
   const fetchList = async () => {
     setLoading(true);
@@ -3746,7 +3755,11 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
 
   useEffect(() => {
     setManualTagInput(editing ? formatTagInput(editing.manual_tags) : '');
-  }, [editing]);
+    setBalanceAmount('');
+    setBalanceDescription('');
+    setBalanceError('');
+    setBalanceMessage('');
+  }, [editing?.id ?? (editing ? 'new' : 'none')]);
 
   const saveAirport = async () => {
     if (!editing) return;
@@ -3808,6 +3821,45 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
     }
   };
 
+  const addWalletBalance = async () => {
+    if (!editing?.id) return;
+    if (!editing.wallet_id) {
+      setBalanceError('该机场未绑定申请人钱包，不能添加余额');
+      return;
+    }
+    const amount = Number(balanceAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setBalanceError('请输入大于 0 的加款金额');
+      return;
+    }
+
+    setBalanceSaving(true);
+    setBalanceError('');
+    setBalanceMessage('');
+    try {
+      const data = (await apiFetch(`/api/v1/admin/airports/${editing.id}/wallet/adjustments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          amount,
+          description: balanceDescription.trim() || null,
+        }),
+      })) as { wallet: { id: number; balance: number } };
+      setEditing({
+        ...editing,
+        wallet_id: data.wallet.id,
+        wallet_balance: data.wallet.balance,
+      });
+      setBalanceAmount('');
+      setBalanceDescription('');
+      setBalanceMessage('余额已添加');
+      await fetchList();
+    } catch (err) {
+      setBalanceError(err instanceof Error ? err.message : '添加余额失败');
+    } finally {
+      setBalanceSaving(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -3845,18 +3897,19 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       {error && <div className="text-sm text-rose-600">{error}</div>}
       {loading ? <div className="text-sm text-neutral-500">加载中...</div> : (
         <div className="overflow-x-auto rounded border border-neutral-200">
-          <table className="w-full min-w-[1400px] table-fixed text-sm">
+          <table className="w-full min-w-[1500px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
-                <th className="w-[13%] text-left px-4 py-3">名称</th>
-                <th className="w-[8%] text-left px-4 py-3">网站</th>
-                <th className="w-[8%] text-left px-4 py-3">状态</th>
-                <th className="w-[8%] text-left px-4 py-3">是否上架</th>
+                <th className="w-[12%] text-left px-4 py-3">名称</th>
+                <th className="w-[7%] text-left px-4 py-3">网站</th>
+                <th className="w-[7%] text-left px-4 py-3">状态</th>
+                <th className="w-[7%] text-left px-4 py-3">是否上架</th>
                 <th className="w-[7%] text-left px-4 py-3">月价</th>
-                <th className="w-[8%] text-left px-4 py-3">总分</th>
+                <th className="w-[7%] text-left px-4 py-3">总分</th>
                 <th className="w-[7%] text-left px-4 py-3">试用</th>
                 <th className="w-[8%] text-left px-4 py-3">订阅链接</th>
-                <th className="w-[23%] text-left px-4 py-3">标签</th>
+                <th className="w-[8%] text-left px-4 py-3">用户余额</th>
+                <th className="w-[20%] text-left px-4 py-3">标签</th>
                 <th className="sticky right-0 z-20 w-[10%] text-left px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
                   操作
                 </th>
@@ -3879,6 +3932,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                   <td className="px-4 py-3 whitespace-nowrap">
                     {it.subscription_url ? '有' : '无'}
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatMoneyOrDash(it.wallet_balance)}</td>
                   <td className="px-4 py-3">
                     <TagBadgeGroup tags={it.tags || []} size="sm" />
                   </td>
@@ -4054,6 +4108,53 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                   />
                 </FormField>
               </section>
+
+              {editing.id && (
+                <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">余额管理</div>
+                    <p className="mt-1 text-sm text-neutral-500">为该机场绑定的申请人钱包添加余额。</p>
+                  </div>
+                  <ReadField label="当前用户余额" value={formatMoneyOrDash(editing.wallet_balance)} />
+                  {!editing.wallet_id ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                      该机场未绑定申请人钱包，不能添加余额。
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <FormField label="本次加款金额" hint="只支持增加余额，不能直接覆盖余额。">
+                        <input
+                          className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          placeholder="例如：100"
+                          value={balanceAmount}
+                          onChange={(e) => setBalanceAmount(e.target.value)}
+                        />
+                      </FormField>
+                      <FormField label="备注" hint="可选，不填写时系统会自动记录为后台加款。">
+                        <input
+                          className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                          placeholder="例如：线下补款"
+                          value={balanceDescription}
+                          onChange={(e) => setBalanceDescription(e.target.value)}
+                        />
+                      </FormField>
+                      {balanceError && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{balanceError}</div>}
+                      {balanceMessage && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{balanceMessage}</div>}
+                      <button
+                        type="button"
+                        className="rounded-2xl bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                        disabled={balanceSaving}
+                        onClick={() => void addWalletBalance()}
+                      >
+                        {balanceSaving ? '添加中...' : '添加余额'}
+                      </button>
+                    </div>
+                  )}
+                </section>
+              )}
 
               <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
                 <div>
@@ -4291,16 +4392,17 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
         <div className="text-sm text-neutral-500">加载中...</div>
       ) : (
         <div className="overflow-x-auto rounded border border-neutral-200">
-          <table className="w-full min-w-[1240px] table-fixed text-sm">
+          <table className="w-full min-w-[1340px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
-                <th className="w-[17%] text-left px-4 py-3">机场名称</th>
-                <th className="w-[16%] text-left px-4 py-3">邮箱</th>
-                <th className="w-[12%] text-left px-4 py-3">Telegram</th>
-                <th className="w-[11%] text-left px-4 py-3">成立日期</th>
-                <th className="w-[12%] text-left px-4 py-3">支付状态</th>
-                <th className="w-[12%] text-left px-4 py-3">审批状态</th>
-                <th className="w-[12%] text-left px-4 py-3">提交时间</th>
+                <th className="w-[15%] text-left px-4 py-3">机场名称</th>
+                <th className="w-[15%] text-left px-4 py-3">邮箱</th>
+                <th className="w-[11%] text-left px-4 py-3">Telegram</th>
+                <th className="w-[10%] text-left px-4 py-3">成立日期</th>
+                <th className="w-[10%] text-left px-4 py-3">支付状态</th>
+                <th className="w-[10%] text-left px-4 py-3">已支付金额</th>
+                <th className="w-[10%] text-left px-4 py-3">审批状态</th>
+                <th className="w-[11%] text-left px-4 py-3">提交时间</th>
                 <th className="w-[8%] text-left px-4 py-3">操作</th>
               </tr>
             </thead>
@@ -4315,6 +4417,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                   <td className="px-4 py-3 whitespace-nowrap">{item.applicant_telegram}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.founded_on}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.payment_status === 'paid' ? '已支付' : '未支付'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatMoneyOrDash(item.payment_amount)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatApplicationReviewStatus(item.review_status)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.created_at}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
@@ -4324,7 +4427,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-neutral-500">
+                  <td colSpan={9} className="px-4 py-12 text-center text-sm text-neutral-500">
                     当前没有匹配的申请记录
                   </td>
                 </tr>
@@ -4374,7 +4477,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                       <ReadField label="月付价格" value={selected.plan_price_month} />
                       <ReadField label="试用支持" value={selected.has_trial ? '是' : '否'} />
                       <ReadField label="支付状态" value={selected.payment_status === 'paid' ? '已支付' : '未支付'} />
-                      <ReadField label="支付金额" value={selected.payment_amount == null ? '-' : `¥${selected.payment_amount}`} />
+                      <ReadField label="支付金额" value={formatMoneyOrDash(selected.payment_amount)} />
                       <ReadField label="订阅链接" value={valueOrDash(selected.subscription_url)} />
                       <ReadField label="成立日期" value={selected.founded_on} />
                       <ReadField label="支付时间" value={valueOrDash(selected.paid_at)} />
@@ -5385,6 +5488,13 @@ function valueOrDash(value: string | number | boolean | null | undefined): strin
   return value;
 }
 
+function formatMoneyOrDash(value: number | null | undefined): string {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) {
+    return '-';
+  }
+  return `¥${Number(value).toFixed(2)}`;
+}
+
 function today(): string {
   return new Intl.DateTimeFormat('en-CA', {
     timeZone: 'Asia/Shanghai',
@@ -5429,6 +5539,8 @@ function createAirportForm(): AirportFormState {
     test_account: '',
     test_password: '',
     manual_tags: [],
+    wallet_id: null,
+    wallet_balance: null,
   };
 }
 
@@ -5449,6 +5561,8 @@ function toAirportForm(airport: Airport): AirportFormState {
     test_account: airport.test_account || '',
     test_password: airport.test_password || '',
     manual_tags: airport.manual_tags || airport.tags || [],
+    wallet_id: airport.wallet_id ?? null,
+    wallet_balance: airport.wallet_balance ?? null,
   };
 }
 

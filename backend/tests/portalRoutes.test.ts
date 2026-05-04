@@ -32,6 +32,7 @@ function createMockBillingRepository(overrides: Record<string, unknown> = {}) {
     createRechargeOrder: async () => 1,
     getRechargeOrderByOutTradeNo: async () => null,
     listRechargeOrders: async () => [],
+    cancelRechargeOrder: async () => true,
     markRechargePaidAndCredit: async () => true,
     listTransactions: async () => [],
     listClicks: async () => [],
@@ -314,6 +315,92 @@ test('POST /portal/recharge-notify credits recharge order on valid callback', as
     assert.equal(creditedOrders.length, 1);
     assert.equal(creditedOrders[0].outTradeNo, 'grr_1_1');
     assert.equal(creditedOrders[0].gateway_trade_no, 'trade_recharge_1');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/recharge-orders/:outTradeNo/cancel cancels own pending recharge order', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const canceledOrders: Array<{ applicantAccountId: number; outTradeNo: string }> = [];
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => ({
+          id: 1,
+          application_id: 7,
+          email: 'user@example.com',
+          password_hash: 'hash',
+          must_change_password: false,
+          last_login_at: null,
+          created_at: '2026-04-18T10:00:00+08:00',
+          updated_at: '2026-04-18T10:00:00+08:00',
+        }),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => null,
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository({
+        getRechargeOrderByOutTradeNo: async (outTradeNo: string) => ({
+          id: 3,
+          applicant_account_id: 1,
+          out_trade_no: outTradeNo,
+          channel: 'alipay',
+          amount: 100,
+          status: canceledOrders.length > 0 ? 'canceled' : 'created',
+          pay_type: 'jump',
+          pay_info: 'https://pay.example.com/recharge',
+          paid_at: null,
+          created_at: '2026-04-18T10:00:00+08:00',
+        }),
+        cancelRechargeOrder: async (applicantAccountId: number, outTradeNo: string) => {
+          canceledOrders.push({ applicantAccountId, outTradeNo });
+          return true;
+        },
+      }),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({ application_fee_amount: 300 }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/recharge-orders/grr_1_1/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const body = await response.json() as { recharge_order: { status: string } };
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(canceledOrders, [{ applicantAccountId: 1, outTradeNo: 'grr_1_1' }]);
+    assert.equal(body.recharge_order.status, 'canceled');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

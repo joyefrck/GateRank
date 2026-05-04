@@ -129,6 +129,13 @@ interface AdminDeps {
   };
   applicantBillingRepository?: {
     linkAirportByApplicationId(applicationId: number, airportId: number): Promise<void>;
+    listWalletsByAirportIds?(airportIds: number[]): Promise<Map<number, { id: number; balance: number }>>;
+    addWalletBalanceAdjustment?(input: {
+      airport_id: number;
+      amount: number;
+      description: string;
+      reference_id: string;
+    }): Promise<unknown | null>;
   };
   probeSampleRepository: {
     insertProbeSample(input: ProbeSampleInput): Promise<number>;
@@ -882,25 +889,35 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const scoreRepository = deps.scoreRepository;
       const airports = result.items as Array<{ id?: number } & Record<string, unknown>>;
       let scoreMap = new Map<number, number>();
+      let walletMap = new Map<number, { id: number; balance: number }>();
+      const airportIds = airports
+        .map((item) => Number(item.id))
+        .filter((id) => Number.isInteger(id) && id > 0);
 
       if (scoreRepository.getLatestAvailableDate && scoreRepository.getPublicDisplayScoresByDate) {
         const latestDate = await scoreRepository.getLatestAvailableDate(getDateInTimezone());
-        const airportIds = airports
-          .map((item) => Number(item.id))
-          .filter((id) => Number.isInteger(id) && id > 0);
         if (latestDate && airportIds.length > 0) {
           scoreMap = await scoreRepository.getPublicDisplayScoresByDate(airportIds, latestDate);
         }
+      }
+      if (deps.applicantBillingRepository?.listWalletsByAirportIds && airportIds.length > 0) {
+        walletMap = await deps.applicantBillingRepository.listWalletsByAirportIds(airportIds);
       }
 
       res.json({
         page,
         page_size: pageSize,
         total: result.total,
-        items: airports.map((item) => ({
-          ...item,
-          total_score: typeof item.id === 'number' ? scoreMap.get(item.id) ?? null : null,
-        })),
+        items: airports.map((item) => {
+          const airportId = Number(item.id);
+          const wallet = Number.isInteger(airportId) ? walletMap.get(airportId) : undefined;
+          return {
+            ...item,
+            total_score: Number.isInteger(airportId) ? scoreMap.get(airportId) ?? null : null,
+            wallet_id: wallet?.id ?? null,
+            wallet_balance: wallet?.balance ?? null,
+          };
+        }),
       });
     } catch (error) {
       next(error);
@@ -1034,6 +1051,42 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       res.json({ airport_id: airportId, updated: true });
     } catch (error) {
       next(normalizeAirportMutationError(error));
+    }
+  });
+
+  router.post('/airports/:id/wallet/adjustments', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const airport = await deps.airportRepository.getById(airportId);
+      if (!airport) {
+        throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
+      }
+      const billingRepository = deps.applicantBillingRepository;
+      if (!billingRepository?.addWalletBalanceAdjustment) {
+        throw new Error('applicantBillingRepository.addWalletBalanceAdjustment is not configured');
+      }
+
+      const payload = (req.body ?? {}) as Record<string, unknown>;
+      const amount = parsePositiveMoney(payload.amount, 'amount');
+      const description = optionalString(payload.description) || `后台加款 ¥${amount.toFixed(2)}`;
+      const wallet = await billingRepository.addWalletBalanceAdjustment({
+        airport_id: airportId,
+        amount,
+        description,
+        reference_id: req.requestId,
+      });
+      if (!wallet) {
+        throw new HttpError(409, 'AIRPORT_WALLET_NOT_FOUND', '该机场未绑定申请人钱包，不能添加余额');
+      }
+
+      await deps.auditRepository.log('adjust_airport_wallet_balance', actorFromReq(req), req.requestId, {
+        airport_id: airportId,
+        amount,
+        description,
+      });
+      res.json({ airport_id: airportId, wallet });
+    } catch (error) {
+      next(error);
     }
   });
 
@@ -1719,6 +1772,14 @@ function mustNumber(value: unknown, fieldName: string): number {
     throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be number`);
   }
   return num;
+}
+
+function parsePositiveMoney(value: unknown, fieldName: string): number {
+  const num = mustNumber(value, fieldName);
+  if (num <= 0) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be positive number`);
+  }
+  return Math.round(num * 100) / 100;
 }
 
 function parseManualTotalScore(value: unknown): number | null {

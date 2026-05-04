@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ManualJobService } from '../src/services/manualJobService';
+import { ManualJobService, summarizeManualJobScriptFailure } from '../src/services/manualJobService';
 import { getDateInTimezone } from '../src/utils/time';
 import type { ManualJob } from '../src/types/domain';
 
@@ -76,4 +76,21 @@ test('full manual job continues remaining stages after one stage fails', async (
     `aggregate:7:${today}`,
     `recompute:7:${today}`,
   ]);
+});
+
+test('manual job script failures expose json failure detail', async () => {
+  const error = new Error('Command failed: python3 scripts/monitor_stability.py') as Error & {
+    stdout: string;
+  };
+  error.stdout = JSON.stringify({
+    airport_count: 1,
+    success_count: 0,
+    failure_count: 1,
+    failures: [{ airport_id: 2, airport_name: '遥遥领先', error: "unknown url type: 'www.baidu.com'" }],
+  });
+
+  assert.equal(
+    summarizeManualJobScriptFailure(error),
+    "0/1 succeeded, 1 failed; 遥遥领先 #2: unknown url type: 'www.baidu.com'",
+  );
 });

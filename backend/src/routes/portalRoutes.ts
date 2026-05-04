@@ -86,6 +86,7 @@ interface PortalDeps {
     }): Promise<number>;
     getRechargeOrderByOutTradeNo(outTradeNo: string): Promise<RechargeOrderView | null>;
     listRechargeOrders(applicantAccountId: number, limit?: number): Promise<RechargeOrderView[]>;
+    cancelRechargeOrder(applicantAccountId: number, outTradeNo: string): Promise<boolean>;
     markRechargePaidAndCredit(
       outTradeNo: string,
       input: {
@@ -287,6 +288,26 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       res.status(201).json({
         recharge_order: await deps.applicantBillingRepository.getRechargeOrderByOutTradeNo(outTradeNo),
         wallet: await deps.applicantBillingRepository.getWalletByAccountId(account.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/recharge-orders/:outTradeNo/cancel', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const order = await deps.applicantBillingRepository.getRechargeOrderByOutTradeNo(String(req.params.outTradeNo || ''));
+      if (!order || order.applicant_account_id !== session.applicant_id) {
+        throw new HttpError(404, 'RECHARGE_ORDER_NOT_FOUND', '充值订单不存在');
+      }
+      if (order.status !== 'created') {
+        throw new HttpError(409, 'RECHARGE_ORDER_NOT_CANCELABLE', '当前充值订单不能取消');
+      }
+
+      await deps.applicantBillingRepository.cancelRechargeOrder(session.applicant_id, order.out_trade_no);
+      res.json({
+        recharge_order: await deps.applicantBillingRepository.getRechargeOrderByOutTradeNo(order.out_trade_no),
       });
     } catch (error) {
       next(error);

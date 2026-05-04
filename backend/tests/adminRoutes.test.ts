@@ -377,6 +377,10 @@ test('GET /airports returns list items with latest available total_score', async
         getLatestAvailableDate: async () => '2026-03-30',
         getPublicDisplayScoresByDate: async () => new Map([[1, 88.6]]),
       },
+      applicantBillingRepository: {
+        linkAirportByApplicationId: async () => undefined,
+        listWalletsByAirportIds: async () => new Map([[1, { id: 11, balance: 321.45 }]]),
+      },
       recomputeService: stubRecomputeService(),
       aggregationService: stubAggregationService(),
       manualJobService: stubManualJobService(),
@@ -390,11 +394,169 @@ test('GET /airports returns list items with latest available total_score', async
     const port = (server.address() as AddressInfo).port;
     const response = await fetch(`http://127.0.0.1:${port}/airports`);
     assert.equal(response.status, 200);
-    const data = (await response.json()) as { items: Array<{ id: number; total_score: number | null; tags: string[] }> };
+    const data = (await response.json()) as {
+      items: Array<{
+        id: number;
+        total_score: number | null;
+        tags: string[];
+        wallet_id: number | null;
+        wallet_balance: number | null;
+      }>;
+    };
     assert.equal(data.items.length, 2);
     assert.equal(data.items[0]?.total_score, 88.6);
     assert.equal(data.items[1]?.total_score, null);
     assert.deepEqual(data.items[0]?.tags, ['长期稳定', '新手友好']);
+    assert.equal(data.items[0]?.wallet_id, 11);
+    assert.equal(data.items[0]?.wallet_balance, 321.45);
+    assert.equal(data.items[1]?.wallet_balance, null);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airports/:id/wallet/adjustments adds wallet balance and audits adjustment', async () => {
+  const adjustments: Array<{ airport_id: number; amount: number; description: string; reference_id: string }> = [];
+  const auditLogs: Array<{ action: string; actor: string; payload: unknown }> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantBillingRepository: {
+        linkAirportByApplicationId: async () => undefined,
+        addWalletBalanceAdjustment: async (input) => {
+          adjustments.push(input);
+          return {
+            id: 11,
+            applicant_account_id: 22,
+            application_id: 33,
+            airport_id: input.airport_id,
+            balance: 150.13,
+            auto_unlisted_at: null,
+            created_at: '2026-05-04T10:00:00+08:00',
+            updated_at: '2026-05-04T10:01:00+08:00',
+          };
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, actor, _requestId, payload) => {
+          auditLogs.push({ action, actor, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/wallet/adjustments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({ amount: 50.129, description: '线下补款' }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(adjustments.length, 1);
+    assert.equal(adjustments[0]?.airport_id, 1);
+    assert.equal(adjustments[0]?.amount, 50.13);
+    assert.equal(adjustments[0]?.description, '线下补款');
+    assert.equal(auditLogs.length, 1);
+    assert.equal(auditLogs[0]?.action, 'adjust_airport_wallet_balance');
+    assert.equal(auditLogs[0]?.actor, 'tester');
+
+    const data = (await response.json()) as { wallet: { id: number; balance: number } };
+    assert.equal(data.wallet.id, 11);
+    assert.equal(data.wallet.balance, 150.13);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airports/:id/wallet/adjustments validates amount and missing wallet', async () => {
+  let adjustmentCalls = 0;
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantBillingRepository: {
+        linkAirportByApplicationId: async () => undefined,
+        addWalletBalanceAdjustment: async () => {
+          adjustmentCalls += 1;
+          return null;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    for (const amount of [0, -1, 'abc']) {
+      const response = await fetch(`http://127.0.0.1:${port}/airports/1/wallet/adjustments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount }),
+      });
+      assert.equal(response.status, 400);
+    }
+    assert.equal(adjustmentCalls, 0);
+
+    const missingWalletResponse = await fetch(`http://127.0.0.1:${port}/airports/1/wallet/adjustments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: 10 }),
+    });
+    assert.equal(missingWalletResponse.status, 409);
+    const data = (await missingWalletResponse.json()) as { code: string };
+    assert.equal(data.code, 'AIRPORT_WALLET_NOT_FOUND');
+    assert.equal(adjustmentCalls, 1);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
