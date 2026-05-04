@@ -127,6 +127,9 @@ interface AdminDeps {
     } | null>;
     expireOpenOrdersByApplicationId(applicationId: number): Promise<number>;
   };
+  applicantBillingRepository?: {
+    linkAirportByApplicationId(applicationId: number, airportId: number): Promise<void>;
+  };
   probeSampleRepository: {
     insertProbeSample(input: ProbeSampleInput): Promise<number>;
     insertPacketLossSample(input: ProbeSampleInput): Promise<number>;
@@ -826,6 +829,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           test_password: currentApplication.test_password || null,
           tags: [],
         });
+        await deps.applicantBillingRepository?.linkAirportByApplicationId(applicationId, approvedAirportId);
       }
       const reviewedAt = formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
       const updated = await deps.airportApplicationRepository.review(applicationId, {

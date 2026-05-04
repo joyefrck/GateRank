@@ -1,4 +1,5 @@
 import type { SystemSettingRecord } from '../repositories/systemSettingRepository';
+import { APPLICATION_FEE_AMOUNT } from '../config/billing';
 import { HttpError } from '../middleware/errorHandler';
 import { canParseRsaPrivateKey, canParseRsaPublicKey } from '../utils/rsaSignature';
 import { formatDateTimeInTimezoneIso } from '../utils/time';
@@ -38,7 +39,8 @@ interface PaymentGatewaySettingsServiceOptions {
 }
 
 const PAYMENT_GATEWAY_SETTING_KEY = 'payment_gateway';
-export const DEFAULT_APPLICATION_FEE_AMOUNT = 1000;
+export const DEFAULT_APPLICATION_FEE_AMOUNT = APPLICATION_FEE_AMOUNT;
+export const LEGACY_APPLICATION_FEE_AMOUNT = 1000;
 
 export class PaymentGatewaySettingsService {
   private readonly systemSettingRepository?: PaymentGatewaySettingsServiceOptions['systemSettingRepository'];
@@ -134,12 +136,14 @@ function getDefaultConfig(): PaymentGatewayConfig {
 
 function normalizeConfig(value: unknown): PaymentGatewayConfig {
   const record = toObject(value);
+  const storedAmount = normalizeAmount(record.application_fee_amount);
   return {
     enabled: Boolean(record.enabled),
     pid: stringOrEmpty(record.pid),
     private_key: stringOrEmpty(record.private_key),
     platform_public_key: stringOrEmpty(record.platform_public_key),
-    application_fee_amount: normalizeAmount(record.application_fee_amount),
+    application_fee_amount:
+      storedAmount === LEGACY_APPLICATION_FEE_AMOUNT ? DEFAULT_APPLICATION_FEE_AMOUNT : storedAmount,
   };
 }
 

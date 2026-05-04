@@ -278,6 +278,53 @@ interface PortalPaymentOrderView {
   paid_at: string | null;
 }
 
+interface PortalWalletView {
+  id: number;
+  applicant_account_id: number;
+  application_id: number;
+  airport_id: number | null;
+  balance: number;
+  auto_unlisted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PortalRechargeOrderView {
+  id: number;
+  out_trade_no: string;
+  channel: 'alipay' | 'wxpay';
+  amount: number;
+  status: 'created' | 'paid' | 'failed' | 'expired';
+  pay_type: string | null;
+  pay_info: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
+interface PortalWalletTransactionView {
+  id: number;
+  transaction_type: 'recharge' | 'click_charge' | 'adjustment';
+  amount: number;
+  balance_after: number;
+  reference_type: string | null;
+  reference_id: string | null;
+  description: string;
+  created_at: string;
+}
+
+interface PortalClickView {
+  id: number;
+  click_id: string;
+  airport_id: number;
+  airport_name: string | null;
+  placement: string;
+  target_kind: string;
+  target_url: string;
+  billing_status: 'billed' | 'duplicate' | 'insufficient_balance' | 'unlisted' | 'no_wallet';
+  billed_amount: number;
+  occurred_at: string;
+}
+
 interface PortalApplicationView {
   id: number;
   name: string;
@@ -306,6 +353,9 @@ interface PortalViewResponse {
   application: PortalApplicationView;
   latest_payment_order: PortalPaymentOrderView | null;
   payment_fee_amount: number;
+  click_price: number;
+  recharge_amounts: number[];
+  wallet: PortalWalletView;
 }
 
 interface PortalLoginResponse {
@@ -334,6 +384,14 @@ const sectionOrder: HomeSectionKey[] = [
 ];
 
 const PORTAL_TOKEN_KEY = 'gaterank_portal_token';
+type PortalTabKey = 'overview' | 'recharge' | 'clicks' | 'transactions' | 'profile';
+const portalNavItems: Array<{ key: PortalTabKey; label: string }> = [
+  { key: 'overview', label: '账户概览' },
+  { key: 'recharge', label: '充值' },
+  { key: 'clicks', label: '访问记录' },
+  { key: 'transactions', label: '扣费流水' },
+  { key: 'profile', label: '资料' },
+];
 
 function shouldRenderSection(sectionKey: HomeSectionKey, section: HomeSection): boolean {
   if (sectionKey === 'risk_alerts') {
@@ -381,6 +439,17 @@ function formatDateLabel(value?: string | null): string {
     return '-';
   }
   return value;
+}
+
+function formatDateTimeLabel(value?: string | null): string {
+  if (!value) {
+    return '-';
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleString('zh-CN', { hour12: false });
 }
 
 function formatReportTimeFromNow(
@@ -466,6 +535,14 @@ function getScoreDeltaToneOnDark(value: number | null): string {
     return 'text-rose-300';
   }
   return 'text-white/70';
+}
+
+function buildOutboundAirportHref(
+  airportId: number,
+  target: 'website' | 'subscription_url',
+  placement: MarketingPlacement,
+): string {
+  return `/api/v1/outbound/airports/${airportId}?target=${encodeURIComponent(target)}&placement=${encodeURIComponent(placement)}`;
 }
 
 function getStabilityTierLabel(tier: StabilityTier): string {
@@ -950,6 +1027,48 @@ function PortalReadOnlyBlock({ label, value }: { label: string; value: string })
     <div className="rounded-[22px] border border-slate-200 bg-white px-4 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
       <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</div>
       <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-7 text-slate-700">{value || '-'}</div>
+    </div>
+  );
+}
+
+function PortalDataTable({
+  title,
+  headers,
+  rows,
+  emptyText,
+}: {
+  title: string;
+  headers: string[];
+  rows: string[][];
+  emptyText: string;
+}) {
+  return (
+    <div className="mt-6 rounded-[24px] border border-slate-200 bg-white">
+      <div className="border-b border-slate-200 px-4 py-3 text-sm font-black text-slate-950">{title}</div>
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead className="bg-slate-50 text-slate-500">
+            <tr>
+              {headers.map((header) => (
+                <th key={header} className="whitespace-nowrap px-4 py-3 text-left text-xs font-black uppercase tracking-[0.14em]">{header}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr>
+                <td className="px-4 py-6 text-slate-500" colSpan={headers.length}>{emptyText}</td>
+              </tr>
+            ) : rows.map((row, rowIndex) => (
+              <tr key={`${title}-${rowIndex}`} className="border-t border-slate-100">
+                {row.map((cell, cellIndex) => (
+                  <td key={`${title}-${rowIndex}-${cellIndex}`} className="whitespace-nowrap px-4 py-3 text-slate-700">{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -1580,7 +1699,7 @@ function HomePage({ date }: { date?: string }) {
                         <ConclusionCard
                           type={item.type}
                           name={item.name}
-                          website={item.website}
+                          website={buildOutboundAirportHref(item.airport_id, 'website', 'home_card')}
                           tags={item.tags}
                           score={item.score}
                           scoreDeltaVsYesterday={item.score_delta_vs_yesterday}
@@ -1835,7 +1954,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                             <p className="mt-2 text-sm leading-6 text-neutral-500">先访问官网，再结合本站测评报告完成判断，能更快对照风险与稳定性变化。</p>
                           </div>
                           <a
-                            href={item.website}
+                            href={buildOutboundAirportHref(item.airport_id, 'website', 'full_ranking_item')}
                             target="_blank"
                             rel="noreferrer"
                             onClick={createTrackedOutboundClickHandler({
@@ -2147,7 +2266,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                             </p>
                           </div>
                           <a
-                            href={item.website}
+                            href={buildOutboundAirportHref(item.airport_id, 'website', 'risk_monitor_item')}
                             target="_blank"
                             rel="noreferrer"
                             onClick={createTrackedOutboundClickHandler({
@@ -2401,7 +2520,7 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
                     {formatAirportStatus(data.airport.status)}
                   </span>
                   <a
-                    href={data.airport.website}
+                    href={buildOutboundAirportHref(data.airport.id, 'website', 'report_header')}
                     target="_blank"
                     rel="noreferrer"
                     onClick={createTrackedOutboundClickHandler({
@@ -2884,6 +3003,11 @@ function PortalPage() {
   const [newPassword, setNewPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   const [creatingChannel, setCreatingChannel] = useState<'' | 'alipay' | 'wxpay'>('');
+  const [creatingRecharge, setCreatingRecharge] = useState('');
+  const [portalTab, setPortalTab] = useState<PortalTabKey>('overview');
+  const [rechargeOrders, setRechargeOrders] = useState<PortalRechargeOrderView[]>([]);
+  const [walletTransactions, setWalletTransactions] = useState<PortalWalletTransactionView[]>([]);
+  const [clickRecords, setClickRecords] = useState<PortalClickView[]>([]);
   const [applicationForm, setApplicationForm] = useState<ApplicationFormState>(createApplicationForm());
   const [savingApplication, setSavingApplication] = useState(false);
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
@@ -2917,6 +3041,7 @@ function PortalPage() {
       const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/me');
       setView(data);
       setLoginEmail(data.account.email);
+      await loadPortalBillingData();
     } catch (err) {
       clearPortalToken();
       setView(null);
@@ -2924,6 +3049,17 @@ function PortalPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadPortalBillingData = async () => {
+    const [orders, transactions, clicks] = await Promise.all([
+      portalApiRequest<{ items: PortalRechargeOrderView[] }>('/api/v1/portal/recharge-orders?limit=20'),
+      portalApiRequest<{ items: PortalWalletTransactionView[] }>('/api/v1/portal/wallet-transactions?limit=50'),
+      portalApiRequest<{ items: PortalClickView[] }>('/api/v1/portal/clicks?limit=50'),
+    ]);
+    setRechargeOrders(orders.items);
+    setWalletTransactions(transactions.items);
+    setClickRecords(clicks.items);
   };
 
   useEffect(() => {
@@ -2950,6 +3086,10 @@ function PortalPage() {
     clearPortalToken();
     setIsApplicationModalOpen(false);
     setView(null);
+    setRechargeOrders([]);
+    setWalletTransactions([]);
+    setClickRecords([]);
+    setPortalTab('overview');
     setLoading(false);
     setLoginPassword('');
     setCurrentPassword('');
@@ -3051,6 +3191,52 @@ function PortalPage() {
       setError(err instanceof Error ? err.message : '创建支付订单失败');
     } finally {
       setCreatingChannel('');
+      await loadView();
+    }
+  };
+
+  const createRechargeOrder = async (amount: number, channel: 'alipay' | 'wxpay') => {
+    const pendingWindow = typeof window !== 'undefined'
+      ? window.open('', '_blank')
+      : null;
+    if (pendingWindow) {
+      pendingWindow.document.write('<!doctype html><title>正在跳转支付...</title><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:24px;color:#0f172a">正在跳转到支付页面，请稍候...</body>');
+      pendingWindow.document.close();
+    }
+
+    setCreatingRecharge(`${amount}-${channel}`);
+    setError('');
+    setSuccess('');
+    try {
+      const data = await portalApiRequest<{
+        recharge_order: PortalRechargeOrderView | null;
+        wallet: PortalWalletView | null;
+      }>('/api/v1/portal/recharge-orders', {
+        method: 'POST',
+        body: JSON.stringify({ amount, channel }),
+      });
+      setRechargeOrders((current) => data.recharge_order ? [data.recharge_order, ...current.filter((item) => item.out_trade_no !== data.recharge_order?.out_trade_no)] : current);
+      const payInfo = data.recharge_order?.pay_info || '';
+      if (/^https?:\/\//i.test(payInfo)) {
+        if (pendingWindow) {
+          pendingWindow.location.href = payInfo;
+          setSuccess('充值支付页已打开，请在新页面完成支付。');
+        } else {
+          window.location.href = payInfo;
+        }
+      } else {
+        if (pendingWindow && !pendingWindow.closed) {
+          pendingWindow.close();
+        }
+        setSuccess('充值订单已创建，请使用最近充值订单继续支付。');
+      }
+    } catch (err) {
+      if (pendingWindow && !pendingWindow.closed) {
+        pendingWindow.close();
+      }
+      setError(err instanceof Error ? err.message : '创建充值订单失败');
+    } finally {
+      setCreatingRecharge('');
       await loadView();
     }
   };
@@ -3178,6 +3364,95 @@ function PortalPage() {
     );
   };
 
+  const renderRechargeSection = (portalView: PortalViewResponse) => (
+    <PortalSectionCard
+      title="余额充值"
+      description="充值余额用于 GateRank 到机场链接的真实点击扣费。当前点击单价固定为 1 元/次。"
+      aside={<div className="rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">余额 ¥{formatMetric(portalView.wallet.balance)}</div>}
+    >
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+        {portalView.recharge_amounts.map((amount) => (
+          <div key={amount} className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
+            <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Recharge</div>
+            <div className="mt-2 text-3xl font-black text-slate-950">¥{formatMetric(amount)}</div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                className="rounded-2xl bg-sky-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50"
+                disabled={Boolean(creatingRecharge)}
+                onClick={() => void createRechargeOrder(amount, 'alipay')}
+              >
+                {creatingRecharge === `${amount}-alipay` ? '处理中' : '支付宝'}
+              </button>
+              <button
+                type="button"
+                className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50"
+                disabled={Boolean(creatingRecharge)}
+                onClick={() => void createRechargeOrder(amount, 'wxpay')}
+              >
+                {creatingRecharge === `${amount}-wxpay` ? '处理中' : '微信'}
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <PortalDataTable
+        title="最近充值订单"
+        emptyText="暂无充值订单"
+        headers={['订单号', '渠道', '金额', '状态', '创建时间']}
+        rows={rechargeOrders.map((item) => [
+          item.out_trade_no,
+          item.channel === 'alipay' ? '支付宝' : '微信',
+          `¥${formatMetric(item.amount)}`,
+          formatRechargeStatus(item.status),
+          formatDateTimeLabel(item.created_at),
+        ])}
+      />
+    </PortalSectionCard>
+  );
+
+  const renderClicksSection = () => (
+    <PortalSectionCard
+      title="访问记录"
+      description="这里展示从 GateRank 跳转到机场链接的服务端真实记录，包含扣费、重复点击和余额不足状态。"
+    >
+      <PortalDataTable
+        title="最近点击"
+        emptyText="暂无点击记录"
+        headers={['时间', '机场', '来源位', '目标', '扣费状态', '金额']}
+        rows={clickRecords.map((item) => [
+          formatDateTimeLabel(item.occurred_at),
+          item.airport_name || `#${item.airport_id}`,
+          formatPortalPlacement(item.placement),
+          item.target_kind === 'subscription_url' ? '订阅链接' : '官网',
+          formatClickBillingStatus(item.billing_status),
+          `¥${formatMetric(item.billed_amount)}`,
+        ])}
+      />
+    </PortalSectionCard>
+  );
+
+  const renderTransactionsSection = () => (
+    <PortalSectionCard
+      title="扣费流水"
+      description="充值入账和点击扣费都会写入余额流水，用于和访问记录相互核对。"
+    >
+      <PortalDataTable
+        title="余额流水"
+        emptyText="暂无余额流水"
+        headers={['时间', '类型', '金额', '余额', '说明']}
+        rows={walletTransactions.map((item) => [
+          formatDateTimeLabel(item.created_at),
+          formatTransactionType(item.transaction_type),
+          `${item.amount >= 0 ? '+' : ''}¥${formatMetric(item.amount)}`,
+          `¥${formatMetric(item.balance_after)}`,
+          item.description,
+        ])}
+      />
+    </PortalSectionCard>
+  );
+
   const renderContent = () => {
     if (loading) {
       return <div className="text-sm text-neutral-500">加载中...</div>;
@@ -3286,17 +3561,17 @@ function PortalPage() {
                 </div>
                 <div className="shrink-0 text-right">
                   <div className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-700">费用标准</div>
-                  <div className="mt-1 whitespace-nowrap text-3xl font-black tracking-tight text-slate-950">¥{formatMetric(view.payment_fee_amount)} / 年</div>
+                  <div className="mt-1 whitespace-nowrap text-3xl font-black tracking-tight text-slate-950">¥{formatMetric(view.payment_fee_amount)}</div>
                 </div>
               </div>
               <div className="mt-4 rounded-[22px] border border-slate-200 bg-white px-4 py-4 shadow-[0_8px_24px_rgba(15,23,42,0.04)]">
                 <div className="text-sm leading-7 text-slate-700">
-                  提供持续、标准化的性能测试与评估，包括稳定性、速度、可用性等核心指标。
+                  入驻费为一次性费用。入驻通过后，后续从 GateRank 跳转到机场链接按点击余额扣费。
                 </div>
                 <div className="mt-4 flex flex-wrap gap-x-6 gap-y-3 text-sm text-slate-600">
-                  <div><span className="font-black text-slate-900">服务周期：</span>1 年</div>
+                  <div><span className="font-black text-slate-900">费用类型：</span>一次性入驻费</div>
                   <div><span className="font-black text-slate-900">测试频率：</span>每日自动化测评与数据更新</div>
-                  <div><span className="font-black text-slate-900">费用标准：</span>¥{formatMetric(view.payment_fee_amount)} / 年</div>
+                  <div><span className="font-black text-slate-900">费用标准：</span>¥{formatMetric(view.payment_fee_amount)}</div>
                 </div>
               </div>
               <div className="mt-4 text-sm leading-7 text-slate-600">支付完成后自动进入后台待审批状态，支付结果会同步到当前页面。</div>
@@ -3342,10 +3617,33 @@ function PortalPage() {
       );
     }
 
+    if (portalTab === 'recharge') {
+      return renderRechargeSection(view);
+    }
+    if (portalTab === 'clicks') {
+      return renderClicksSection();
+    }
+    if (portalTab === 'transactions') {
+      return renderTransactionsSection();
+    }
+    if (portalTab === 'profile') {
+      return renderApplicationDetailsSection(view);
+    }
+
     return (
       <div className="space-y-6">
+        <PortalSectionCard
+          title="账户概览"
+          description="集中查看入驻状态、点击余额和当前上架状态。"
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <PortalInfoCard eyebrow="Balance" title="点击余额" value={`¥${formatMetric(view.wallet.balance)}`} tone={view.wallet.balance >= view.click_price ? 'green' : 'amber'} />
+            <PortalInfoCard eyebrow="Click Price" title="点击单价" value={`¥${formatMetric(view.click_price)} / 次`} tone="blue" />
+            <PortalInfoCard eyebrow="Listing" title="上架状态" value={view.wallet.auto_unlisted_at ? '欠费下架' : '正常'} tone={view.wallet.auto_unlisted_at ? 'amber' : 'green'} />
+            <PortalInfoCard eyebrow="Application" title="审批状态" value={formatPortalReviewStatus(view.application.review_status)} />
+          </div>
+        </PortalSectionCard>
         {stageSection}
-        {renderApplicationDetailsSection(view)}
       </div>
     );
   };
@@ -3383,7 +3681,33 @@ function PortalPage() {
           </div>
         </div>
 
-        <section className="space-y-5">
+        <section className={view ? 'grid grid-cols-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]' : 'space-y-5'}>
+          {view && (
+            <aside className="h-fit rounded-[30px] border border-slate-200/80 bg-white/90 p-4 shadow-[0_24px_80px_rgba(15,23,42,0.06)] lg:sticky lg:top-6">
+              <div className="rounded-[24px] border border-slate-100 bg-slate-50 px-4 py-4">
+                <div className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-700">Account</div>
+                <div className="mt-2 break-all text-sm font-black text-slate-950">{view.account.email}</div>
+                <div className="mt-3 text-3xl font-black text-slate-950">¥{formatMetric(view.wallet.balance)}</div>
+                <div className={`mt-2 inline-flex rounded-full px-3 py-1 text-[11px] font-black ${view.wallet.balance >= view.click_price ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {view.wallet.balance >= view.click_price ? '余额可用' : '余额不足'}
+                </div>
+              </div>
+              <nav className="mt-4 space-y-2">
+                {portalNavItems.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-black transition ${portalTab === item.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
+                    onClick={() => setPortalTab(item.key)}
+                  >
+                    <span>{item.label}</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                ))}
+              </nav>
+            </aside>
+          )}
+          <div className="min-w-0 space-y-5">
           {success && (
             <div className="flex items-start gap-3 rounded-[24px] border border-emerald-200 bg-emerald-50/95 px-4 py-4 text-sm text-emerald-700 shadow-[0_12px_30px_rgba(16,185,129,0.08)]">
               <CheckCircle2 className="mt-0.5 h-4 w-4" />
@@ -3397,6 +3721,7 @@ function PortalPage() {
             </div>
           )}
           {renderContent()}
+          </div>
         </section>
       </div>
       <PortalApplicationEditModal
@@ -3439,6 +3764,62 @@ function formatPortalReviewStatus(status: PortalApplicationView['review_status']
 
 function formatPortalPaymentStatus(status: PortalApplicationView['payment_status']): string {
   return status === 'paid' ? '已支付' : '未支付';
+}
+
+function formatRechargeStatus(status: PortalRechargeOrderView['status']): string {
+  switch (status) {
+    case 'paid':
+      return '已支付';
+    case 'failed':
+      return '失败';
+    case 'expired':
+      return '已过期';
+    default:
+      return '待支付';
+  }
+}
+
+function formatClickBillingStatus(status: PortalClickView['billing_status']): string {
+  switch (status) {
+    case 'billed':
+      return '已扣费';
+    case 'duplicate':
+      return '24小时重复不扣费';
+    case 'insufficient_balance':
+      return '余额不足';
+    case 'unlisted':
+      return '已下架';
+    case 'no_wallet':
+      return '未绑定钱包';
+    default:
+      return status;
+  }
+}
+
+function formatTransactionType(type: PortalWalletTransactionView['transaction_type']): string {
+  switch (type) {
+    case 'recharge':
+      return '充值';
+    case 'click_charge':
+      return '点击扣费';
+    default:
+      return '调整';
+  }
+}
+
+function formatPortalPlacement(value: string): string {
+  switch (value) {
+    case 'home_card':
+      return '首页卡片';
+    case 'full_ranking_item':
+      return '完整榜单';
+    case 'risk_monitor_item':
+      return '风险监控';
+    case 'report_header':
+      return '报告页';
+    default:
+      return value;
+  }
 }
 
 function PublicFormField({

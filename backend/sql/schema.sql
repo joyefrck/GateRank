@@ -69,6 +69,83 @@ CREATE TABLE IF NOT EXISTS applicant_accounts (
   INDEX idx_applicant_accounts_email (email)
 );
 
+CREATE TABLE IF NOT EXISTS applicant_wallets (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  applicant_account_id BIGINT UNSIGNED NOT NULL,
+  application_id BIGINT UNSIGNED NOT NULL,
+  airport_id BIGINT UNSIGNED NULL,
+  balance DECIMAL(10,2) NOT NULL DEFAULT 0,
+  auto_unlisted_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_applicant_wallets_account (applicant_account_id),
+  INDEX idx_applicant_wallets_application (application_id),
+  INDEX idx_applicant_wallets_airport (airport_id)
+);
+
+CREATE TABLE IF NOT EXISTS applicant_recharge_orders (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  applicant_account_id BIGINT UNSIGNED NOT NULL,
+  out_trade_no VARCHAR(64) NOT NULL,
+  gateway_trade_no VARCHAR(64) NULL,
+  channel ENUM('alipay', 'wxpay') NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  status ENUM('created', 'paid', 'failed', 'expired') NOT NULL DEFAULT 'created',
+  pay_type VARCHAR(32) NULL,
+  pay_info TEXT NULL,
+  notify_payload_json JSON NULL,
+  paid_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_applicant_recharge_orders_out_trade_no (out_trade_no),
+  INDEX idx_applicant_recharge_orders_account_created (applicant_account_id, created_at DESC),
+  INDEX idx_applicant_recharge_orders_status_created (status, created_at DESC)
+);
+
+CREATE TABLE IF NOT EXISTS applicant_wallet_transactions (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  wallet_id BIGINT UNSIGNED NOT NULL,
+  applicant_account_id BIGINT UNSIGNED NOT NULL,
+  application_id BIGINT UNSIGNED NOT NULL,
+  airport_id BIGINT UNSIGNED NULL,
+  transaction_type ENUM('recharge', 'click_charge', 'adjustment') NOT NULL,
+  amount DECIMAL(10,2) NOT NULL,
+  balance_after DECIMAL(10,2) NOT NULL,
+  reference_type VARCHAR(64) NULL,
+  reference_id VARCHAR(128) NULL,
+  description VARCHAR(255) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_wallet_transactions_account_created (applicant_account_id, created_at DESC),
+  INDEX idx_wallet_transactions_wallet_created (wallet_id, created_at DESC),
+  UNIQUE KEY uk_wallet_transactions_reference (reference_type, reference_id)
+);
+
+CREATE TABLE IF NOT EXISTS outbound_click_records (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  click_id CHAR(36) NOT NULL,
+  airport_id BIGINT UNSIGNED NOT NULL,
+  applicant_account_id BIGINT UNSIGNED NULL,
+  application_id BIGINT UNSIGNED NULL,
+  wallet_id BIGINT UNSIGNED NULL,
+  occurred_at DATETIME NOT NULL,
+  event_date DATE NOT NULL,
+  placement VARCHAR(64) NOT NULL,
+  target_kind ENUM('website', 'subscription_url') NOT NULL,
+  target_url VARCHAR(2048) NOT NULL,
+  billing_status ENUM('billed', 'duplicate', 'insufficient_balance', 'unlisted', 'no_wallet') NOT NULL,
+  billed_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+  visitor_hash CHAR(64) NOT NULL,
+  session_hash CHAR(64) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_outbound_click_records_click_id (click_id),
+  INDEX idx_outbound_click_records_airport_visitor_time (airport_id, visitor_hash, occurred_at),
+  INDEX idx_outbound_click_records_account_time (applicant_account_id, occurred_at DESC)
+);
+
 CREATE TABLE IF NOT EXISTS application_payment_orders (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   application_id BIGINT UNSIGNED NOT NULL,

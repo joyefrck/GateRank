@@ -7,6 +7,38 @@ import { errorHandler } from '../src/middleware/errorHandler';
 import type { PaymentGatewayCreateOrderInput } from '../src/services/paymentGatewayService';
 import { signApplicantToken } from '../src/utils/token';
 
+function createMockBillingRepository(overrides: Record<string, unknown> = {}) {
+  return {
+    ensureWalletForAccount: async () => ({
+      id: 1,
+      applicant_account_id: 1,
+      application_id: 7,
+      airport_id: null,
+      balance: 0,
+      auto_unlisted_at: null,
+      created_at: '2026-04-18T10:00:00+08:00',
+      updated_at: '2026-04-18T10:00:00+08:00',
+    }),
+    getWalletByAccountId: async () => ({
+      id: 1,
+      applicant_account_id: 1,
+      application_id: 7,
+      airport_id: null,
+      balance: 0,
+      auto_unlisted_at: null,
+      created_at: '2026-04-18T10:00:00+08:00',
+      updated_at: '2026-04-18T10:00:00+08:00',
+    }),
+    createRechargeOrder: async () => 1,
+    getRechargeOrderByOutTradeNo: async () => null,
+    listRechargeOrders: async () => [],
+    markRechargePaidAndCredit: async () => true,
+    listTransactions: async () => [],
+    listClicks: async () => [],
+    ...overrides,
+  };
+}
+
 test('POST /portal/payment-orders creates payment order from configured amount', async () => {
   process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
   const createdOrders: Array<Record<string, unknown>> = [];
@@ -67,7 +99,9 @@ test('POST /portal/payment-orders creates payment order from configured amount',
         }),
         getByOutTradeNo: async () => null,
         markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 1,
       },
+      applicantBillingRepository: createMockBillingRepository(),
       applicantPortalAuthService: {
         login: async () => {
           throw new Error('not used');
@@ -159,7 +193,9 @@ test('POST /portal/payment-notify marks payment as paid on valid callback', asyn
           paidOrders.push({ outTradeNo, ...input });
           return true;
         },
+        expireOpenOrdersByApplicationId: async () => 0,
       },
+      applicantBillingRepository: createMockBillingRepository(),
       applicantPortalAuthService: {
         login: async () => {
           throw new Error('not used');
@@ -197,6 +233,87 @@ test('POST /portal/payment-notify marks payment as paid on valid callback', asyn
     assert.equal(paidApplications.length, 1);
     assert.equal(paidApplications[0].id, 7);
     assert.equal(paidApplications[0].amount, 1000);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/recharge-notify credits recharge order on valid callback', async () => {
+  const creditedOrders: Array<Record<string, unknown>> = [];
+
+  const app = express();
+  app.use(express.urlencoded({ extended: false }));
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => null,
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => null,
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository({
+        getRechargeOrderByOutTradeNo: async () => ({
+          id: 3,
+          out_trade_no: 'grr_1_1',
+          channel: 'wxpay',
+          amount: 300,
+          status: 'created',
+          pay_type: 'jump',
+          pay_info: 'https://pay.example.com/recharge',
+          paid_at: null,
+          created_at: '2026-04-18T10:00:00+08:00',
+        }),
+        markRechargePaidAndCredit: async (outTradeNo: string, input: Record<string, unknown>) => {
+          creditedOrders.push({ outTradeNo, ...input });
+          return true;
+        },
+      }),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({ application_fee_amount: 300 }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/recharge-notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        out_trade_no: 'grr_1_1',
+        trade_no: 'trade_recharge_1',
+        trade_status: 'TRADE_SUCCESS',
+        type: 'wxpay',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), 'success');
+    assert.equal(creditedOrders.length, 1);
+    assert.equal(creditedOrders[0].outTradeNo, 'grr_1_1');
+    assert.equal(creditedOrders[0].gateway_trade_no, 'trade_recharge_1');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -269,7 +386,9 @@ test('PATCH /portal/application updates unpaid applicant details and syncs login
         getLatestByApplicationId: async () => null,
         getByOutTradeNo: async () => null,
         markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
       },
+      applicantBillingRepository: createMockBillingRepository(),
       applicantPortalAuthService: {
         login: async () => {
           throw new Error('not used');
@@ -384,7 +503,9 @@ test('PATCH /portal/application rejects changes after payment', async () => {
         getLatestByApplicationId: async () => null,
         getByOutTradeNo: async () => null,
         markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
       },
+      applicantBillingRepository: createMockBillingRepository(),
       applicantPortalAuthService: {
         login: async () => {
           throw new Error('not used');

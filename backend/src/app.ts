@@ -8,6 +8,7 @@ import { ApplicantAccountRepository } from './repositories/applicantAccountRepos
 import { AirportRepository } from './repositories/airportRepository';
 import { AirportApplicationRepository } from './repositories/airportApplicationRepository';
 import { ApplicationPaymentOrderRepository } from './repositories/applicationPaymentOrderRepository';
+import { ApplicantBillingRepository } from './repositories/applicantBillingRepository';
 import { AuditRepository } from './repositories/auditRepository';
 import { NewsRepository } from './repositories/newsRepository';
 import { MetricsRepository } from './repositories/metricsRepository';
@@ -25,6 +26,7 @@ import { createAdminAuthRoutes } from './routes/adminAuthRoutes';
 import { createAdminRoutes } from './routes/adminRoutes';
 import { createNewsAdminRoutes } from './routes/newsAdminRoutes';
 import { createPortalRoutes } from './routes/portalRoutes';
+import { createOutboundRoutes } from './routes/outboundRoutes';
 import { createPublishRoutes } from './routes/publishRoutes';
 import { createNewsPublicRoutes } from './routes/newsPublicRoutes';
 import { createPublicRoutes } from './routes/publicRoutes';
@@ -61,6 +63,8 @@ export async function createApp() {
   await applicantAccountRepository.ensureSchema();
   const applicationPaymentOrderRepository = new ApplicationPaymentOrderRepository(pool);
   await applicationPaymentOrderRepository.ensureSchema();
+  const applicantBillingRepository = new ApplicantBillingRepository(pool);
+  await applicantBillingRepository.ensureSchema();
   const metricsRepository = new MetricsRepository(pool);
   await metricsRepository.ensureSchema();
   const probeSampleRepository = new ProbeSampleRepository(pool);
@@ -188,6 +192,7 @@ export async function createApp() {
       airportRepository,
       airportApplicationRepository,
       applicantAccountRepository,
+      applicantBillingRepository,
       applicationNotificationService,
       mailService,
       metricsRepository,
@@ -204,9 +209,18 @@ export async function createApp() {
       applicantAccountRepository,
       airportApplicationRepository,
       applicationPaymentOrderRepository,
+      applicantBillingRepository,
       applicantPortalAuthService,
       paymentGatewaySettingsService,
       paymentGatewayService,
+    }),
+  );
+
+  app.use(
+    '/api/v1',
+    createOutboundRoutes({
+      airportRepository,
+      applicantBillingRepository,
     }),
   );
   app.use(
@@ -225,6 +239,7 @@ export async function createApp() {
       airportRepository,
       airportApplicationRepository,
       applicationPaymentOrderRepository,
+      applicantBillingRepository,
       probeSampleRepository,
       performanceRunRepository,
       metricsRepository,

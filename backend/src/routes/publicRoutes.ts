@@ -43,6 +43,9 @@ interface PublicDeps {
       must_change_password?: boolean;
     }): Promise<number>;
   };
+  applicantBillingRepository?: {
+    ensureWalletForAccount(applicantAccountId: number, applicationId: number): Promise<unknown>;
+  };
   applicationNotificationService?: {
     notifyNewAirportApplication(input: {
       applicationId: number;
@@ -155,12 +158,13 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       if (!deps.applicantAccountRepository) {
         throw new Error('applicantAccountRepository is not configured');
       }
-      await deps.applicantAccountRepository.create({
+      const applicantAccountId = await deps.applicantAccountRepository.create({
         application_id: applicationId,
         email: applicantEmail,
         password_hash: passwordHash,
         must_change_password: true,
       });
+      await deps.applicantBillingRepository?.ensureWalletForAccount(applicantAccountId, applicationId);
 
       const portalLoginUrl = buildPortalLoginUrl(req);
 

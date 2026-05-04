@@ -1,9 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
+import { APPLICATION_FEE_AMOUNT, CLICK_CHARGE_AMOUNT, RECHARGE_AMOUNTS } from '../config/billing';
 import { HttpError } from '../middleware/errorHandler';
 import { portalAuth } from '../middleware/portalAuth';
 import type { ApplicantAccount } from '../repositories/applicantAccountRepository';
 import type { ApplicationPaymentOrder } from '../repositories/applicationPaymentOrderRepository';
+import type {
+  ApplicantClickView,
+  ApplicantWalletView,
+  RechargeOrderView,
+  WalletTransactionView,
+} from '../repositories/applicantBillingRepository';
 import { verifyPassword, hashPassword } from '../utils/password';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
@@ -63,6 +70,34 @@ interface PortalDeps {
         paid_at: string;
       },
     ): Promise<boolean>;
+    expireOpenOrdersByApplicationId(applicationId: number): Promise<number>;
+  };
+  applicantBillingRepository: {
+    ensureWalletForAccount(applicantAccountId: number, applicationId: number): Promise<ApplicantWalletView>;
+    getWalletByAccountId(applicantAccountId: number): Promise<ApplicantWalletView | null>;
+    createRechargeOrder(input: {
+      applicant_account_id: number;
+      out_trade_no: string;
+      channel: 'alipay' | 'wxpay';
+      amount: number;
+      gateway_trade_no?: string | null;
+      pay_type?: string | null;
+      pay_info?: string | null;
+    }): Promise<number>;
+    getRechargeOrderByOutTradeNo(outTradeNo: string): Promise<RechargeOrderView | null>;
+    listRechargeOrders(applicantAccountId: number, limit?: number): Promise<RechargeOrderView[]>;
+    markRechargePaidAndCredit(
+      outTradeNo: string,
+      input: {
+        gateway_trade_no?: string | null;
+        pay_type?: string | null;
+        pay_info?: string | null;
+        notify_payload_json?: Record<string, unknown> | null;
+        paid_at: string;
+      },
+    ): Promise<boolean>;
+    listTransactions(applicantAccountId: number, limit?: number): Promise<WalletTransactionView[]>;
+    listClicks(applicantAccountId: number, limit?: number): Promise<ApplicantClickView[]>;
   };
   applicantPortalAuthService: {
     login(email: string, password: string): Promise<{
@@ -151,12 +186,13 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       }
 
       const paymentConfig = await deps.paymentGatewaySettingsService.getConfig();
-      const amount = Number(paymentConfig.application_fee_amount || 1000);
+      const amount = Number(paymentConfig.application_fee_amount || APPLICATION_FEE_AMOUNT);
       const outTradeNo = `gr_${application.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
       const apiOrigin = getRequestOrigin(req);
       const siteOrigin = getSiteOrigin(req);
       const notifyUrl = `${apiOrigin}/api/v1/portal/payment-notify`;
       const returnUrl = `${siteOrigin}/portal`;
+      await deps.applicationPaymentOrderRepository.expireOpenOrdersByApplicationId(application.id);
       const gatewayOrder = await deps.paymentGatewayService.createOrder({
         out_trade_no: outTradeNo,
         channel,
@@ -184,6 +220,92 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         payment_order: latest,
         application: await buildPortalView(deps, session.applicant_id),
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/portal/wallet', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      res.json({
+        wallet: await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id),
+        recharge_amounts: RECHARGE_AMOUNTS,
+        click_price: CLICK_CHARGE_AMOUNT,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/portal/recharge-orders', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      res.json({ items: await deps.applicantBillingRepository.listRechargeOrders(session.applicant_id, parseLimit(req.query.limit)) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/recharge-orders', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      if (account.must_change_password) {
+        throw new HttpError(409, 'PASSWORD_CHANGE_REQUIRED', '首次登录后必须先修改密码');
+      }
+      await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id);
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const channel = toPaymentChannel(payload.channel);
+      const amount = toRechargeAmount(payload.amount);
+      const outTradeNo = `grr_${account.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
+      const apiOrigin = getRequestOrigin(req);
+      const siteOrigin = getSiteOrigin(req);
+      const gatewayOrder = await deps.paymentGatewayService.createOrder({
+        out_trade_no: outTradeNo,
+        channel,
+        name: `GateRank 点击余额充值 #${account.id}`,
+        money: amount,
+        notify_url: `${apiOrigin}/api/v1/portal/recharge-notify`,
+        return_url: `${siteOrigin}/portal`,
+        clientip: getClientIp(req),
+        method: 'jump',
+        param: String(account.id),
+      });
+
+      await deps.applicantBillingRepository.createRechargeOrder({
+        applicant_account_id: account.id,
+        out_trade_no: outTradeNo,
+        channel,
+        amount,
+        gateway_trade_no: gatewayOrder.trade_no || null,
+        pay_type: gatewayOrder.pay_type || null,
+        pay_info: gatewayOrder.pay_info || null,
+      });
+
+      res.status(201).json({
+        recharge_order: await deps.applicantBillingRepository.getRechargeOrderByOutTradeNo(outTradeNo),
+        wallet: await deps.applicantBillingRepository.getWalletByAccountId(account.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/portal/clicks', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      res.json({ items: await deps.applicantBillingRepository.listClicks(session.applicant_id, parseLimit(req.query.limit)) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/portal/wallet-transactions', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      res.json({ items: await deps.applicantBillingRepository.listTransactions(session.applicant_id, parseLimit(req.query.limit)) });
     } catch (error) {
       next(error);
     }
@@ -293,15 +415,53 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     res.send('success');
   });
 
+  router.post('/portal/recharge-notify', async (req, res) => {
+    const payload = toNotificationPayload(req.body, req.query);
+    const outTradeNo = String(payload.out_trade_no || '').trim();
+    if (!outTradeNo) {
+      res.status(400).send('fail');
+      return;
+    }
+
+    const verified = await deps.paymentGatewayService.verifyNotificationPayload(payload);
+    if (!verified) {
+      res.status(400).send('fail');
+      return;
+    }
+
+    if (!isPaymentSuccessNotification(payload)) {
+      res.send('success');
+      return;
+    }
+
+    const order = await deps.applicantBillingRepository.getRechargeOrderByOutTradeNo(outTradeNo);
+    if (!order) {
+      res.status(404).send('fail');
+      return;
+    }
+
+    const paidAt = formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
+    await deps.applicantBillingRepository.markRechargePaidAndCredit(outTradeNo, {
+      gateway_trade_no: stringOrNull(payload.trade_no),
+      pay_type: stringOrNull(payload.type) || order.pay_type,
+      pay_info: buildGatewayTrace(payload),
+      notify_payload_json: payload,
+      paid_at: paidAt,
+    });
+
+    res.send('success');
+  });
+
   return router;
 }
 
 async function buildPortalView(deps: PortalDeps, applicantId: number) {
   const account = await requireApplicantAccount(deps, applicantId);
   const application = await requireApplication(deps, account.application_id);
-  const [latestPaymentOrder, paymentConfig] = await Promise.all([
+  const [latestPaymentOrder, paymentConfig, wallet] = await Promise.all([
     deps.applicationPaymentOrderRepository.getLatestByApplicationId(application.id),
     deps.paymentGatewaySettingsService.getConfig(),
+    deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id),
   ]);
 
   return {
@@ -323,7 +483,10 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
           paid_at: latestPaymentOrder.paid_at,
         }
       : null,
-    payment_fee_amount: Number(paymentConfig.application_fee_amount || 1000),
+    payment_fee_amount: Number(paymentConfig.application_fee_amount || APPLICATION_FEE_AMOUNT),
+    click_price: CLICK_CHARGE_AMOUNT,
+    recharge_amounts: RECHARGE_AMOUNTS,
+    wallet,
   };
 }
 
@@ -438,6 +601,22 @@ function toPaymentChannel(value: unknown): 'alipay' | 'wxpay' {
     return value;
   }
   throw new HttpError(400, 'BAD_REQUEST', 'channel must be alipay|wxpay');
+}
+
+function toRechargeAmount(value: unknown): number {
+  const amount = Number(value);
+  if (!RECHARGE_AMOUNTS.includes(amount as (typeof RECHARGE_AMOUNTS)[number])) {
+    throw new HttpError(400, 'BAD_REQUEST', `amount must be one of ${RECHARGE_AMOUNTS.join('|')}`);
+  }
+  return amount;
+}
+
+function parseLimit(value: unknown): number {
+  const num = Number(value || 50);
+  if (!Number.isFinite(num)) {
+    return 50;
+  }
+  return Math.min(100, Math.max(1, Math.floor(num)));
 }
 
 function requireApplicantSession(req: any): { applicant_id: number; email: string } {
