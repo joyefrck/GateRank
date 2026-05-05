@@ -64,6 +64,20 @@ const LazyPublishTokenDocsPage = lazy(async () => {
   return { default: module.PublishTokenDocsPage };
 });
 
+function XLogo({ className = '' }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+      fill="currentColor"
+    >
+      <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.656l-5.214-6.817-5.966 6.817H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z" />
+    </svg>
+  );
+}
+
 type CardType = 'stable' | 'value' | 'risk' | 'new';
 type HomeSectionKey = 'today_pick' | 'most_stable' | 'best_value' | 'new_entries' | 'risk_alerts';
 type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
@@ -4033,23 +4047,25 @@ function PortalPage() {
                 </button>
               </div>
             </PublicFormField>
-            <button
-              type="submit"
-              className={portalPrimaryButtonClass}
-              disabled={loggingIn}
-            >
-              <LogIn className="h-4 w-4" />
-              {loggingIn ? '登录中...' : '登录后台'}
-            </button>
-            <button
-              type="button"
-              className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
-              onClick={() => void startXLogin()}
-              disabled={Boolean(xOAuthAction)}
-            >
-              <X className="h-4 w-4" />
-              {xOAuthAction === 'login' ? '跳转中...' : '使用 X 登录'}
-            </button>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-2">
+              <button
+                type="submit"
+                className={portalPrimaryButtonClass}
+                disabled={loggingIn}
+              >
+                <LogIn className="h-4 w-4" />
+                {loggingIn ? '登录中...' : '登录后台'}
+              </button>
+              <button
+                type="button"
+                className="inline-flex min-h-12 items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                onClick={() => void startXLogin()}
+                disabled={Boolean(xOAuthAction)}
+              >
+                <XLogo className="h-4 w-4" />
+                {xOAuthAction === 'login' ? '跳转中...' : '使用 X 登录'}
+              </button>
+            </div>
           </form>
         </PortalSectionCard>
       );
