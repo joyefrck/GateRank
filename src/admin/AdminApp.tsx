@@ -624,6 +624,7 @@ const DEFAULT_PUBLISH_TOKEN_SCOPES = PUBLISH_TOKEN_SCOPES.map((item) => item.val
 
 const TOKEN_KEY = 'gaterank_admin_token';
 const ADMIN_DEFAULT_PATH = '/admin/marketing';
+const APPLICATIONS_PAGE_SIZE = 20;
 const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = ['applicant_credentials', 'application_approved'];
 const SMTP_TEMPLATE_SCENARIOS: Record<
   SmtpTemplateKey,
@@ -4512,6 +4513,8 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [items, setItems] = useState<AirportApplication[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [reviewStatus, setReviewStatus] = useState<'' | AirportApplicationReviewStatus>('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
@@ -4524,17 +4527,24 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
   const [reviewSaving, setReviewSaving] = useState(false);
   const [markPaidSaving, setMarkPaidSaving] = useState(false);
 
-  const fetchList = async () => {
+  const fetchList = async (targetPage = page) => {
     setLoading(true);
     setError('');
     try {
       const query = new URLSearchParams();
+      query.set('page', String(targetPage));
+      query.set('page_size', String(APPLICATIONS_PAGE_SIZE));
       if (keyword) query.set('keyword', keyword);
       if (reviewStatus) query.set('review_status', reviewStatus);
       const data = (await apiFetch(`/api/v1/admin/airport-applications?${query.toString()}`)) as {
+        page: number;
+        page_size: number;
+        total: number;
         items: AirportApplication[];
       };
       setItems(data.items || []);
+      setPage(data.page || targetPage);
+      setTotal(data.total || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -4620,6 +4630,17 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
     void fetchList();
   }, []);
 
+  const totalPages = Math.max(1, Math.ceil(total / APPLICATIONS_PAGE_SIZE));
+  const goToPage = (nextPage: number) => {
+    const boundedPage = Math.min(totalPages, Math.max(1, nextPage));
+    setPage(boundedPage);
+    void fetchList(boundedPage);
+  };
+  const searchList = () => {
+    setPage(1);
+    void fetchList(1);
+  };
+
   const isReviewLocked = selected?.review_status !== 'pending';
   const canMarkPaid = selected?.review_status === 'awaiting_payment' && selected.payment_status !== 'paid';
   const reviewLockMessage = selected?.review_status === 'awaiting_payment'
@@ -4642,13 +4663,19 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
             className="border rounded pl-7 pr-3 py-2 text-sm"
             placeholder="搜索机场 / 邮箱 / Telegram / 官网"
             value={keyword}
-            onChange={(e) => setKeyword(e.target.value)}
+            onChange={(e) => {
+              setKeyword(e.target.value);
+              setPage(1);
+            }}
           />
         </div>
         <select
           className="border rounded px-3 py-2 text-sm"
           value={reviewStatus}
-          onChange={(e) => setReviewStatus(e.target.value as '' | AirportApplicationReviewStatus)}
+          onChange={(e) => {
+            setReviewStatus(e.target.value as '' | AirportApplicationReviewStatus);
+            setPage(1);
+          }}
         >
           <option value="">全部状态</option>
           <option value="awaiting_payment">待支付</option>
@@ -4656,7 +4683,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
           <option value="reviewed">已审核</option>
           <option value="rejected">已驳回</option>
         </select>
-        <button className="px-3 py-2 text-sm rounded border" onClick={() => void fetchList()}>查询</button>
+        <button className="px-3 py-2 text-sm rounded border" onClick={searchList}>查询</button>
       </div>
 
       {error && <div className="text-sm text-rose-600">{error}</div>}
@@ -4708,6 +4735,31 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
           </table>
         </div>
       )}
+
+      <div className="flex flex-col gap-3 border-t border-neutral-100 pt-4 text-sm text-neutral-500 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          共 {total} 条申请，默认每页 {APPLICATIONS_PAGE_SIZE} 条
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="rounded border border-neutral-200 px-3 py-1.5 text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={loading || page <= 1}
+            onClick={() => goToPage(page - 1)}
+          >
+            上一页
+          </button>
+          <div className="rounded bg-neutral-100 px-3 py-1.5 font-medium text-neutral-700">
+            {page} / {totalPages}
+          </div>
+          <button
+            className="rounded border border-neutral-200 px-3 py-1.5 text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
+            disabled={loading || page >= totalPages}
+            onClick={() => goToPage(page + 1)}
+          >
+            下一页
+          </button>
+        </div>
+      </div>
 
       {selectedId && (
         <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">

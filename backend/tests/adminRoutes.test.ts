@@ -1726,6 +1726,12 @@ test('POST /airports returns conflict for duplicate airport names', async () => 
 });
 
 test('GET /airport-applications returns filtered application list', async () => {
+  let capturedQuery: {
+    keyword?: string;
+    reviewStatus?: string;
+    page?: number;
+    pageSize?: number;
+  } | null = null;
   const app = express();
   app.use(express.json());
   app.use(
@@ -1733,16 +1739,19 @@ test('GET /airport-applications returns filtered application list', async () => 
       airportRepository: stubAirportRepository(),
       airportApplicationRepository: {
         ...stubAirportApplicationRepository(),
-        listByQuery: async (query) => ({
-          total: 1,
-          items: [
-            {
-              ...(await stubAirportApplicationRepository().getById(7)),
-              name: `Cloud ${query.reviewStatus || 'pending'}`,
-              review_status: query.reviewStatus || 'pending',
-            },
-          ],
-        }),
+        listByQuery: async (query) => {
+          capturedQuery = query;
+          return {
+            total: 31,
+            items: [
+              {
+                ...(await stubAirportApplicationRepository().getById(7)),
+                name: `Cloud ${query.reviewStatus || 'pending'}`,
+                review_status: query.reviewStatus || 'pending',
+              },
+            ],
+          };
+        },
       },
       probeSampleRepository: {
         insertProbeSample: async () => 1,
@@ -1771,10 +1780,23 @@ test('GET /airport-applications returns filtered application list', async () => 
   const server = app.listen(0);
   try {
     const port = (server.address() as AddressInfo).port;
-    const response = await fetch(`http://127.0.0.1:${port}/airport-applications?review_status=pending&keyword=cloud`);
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications?review_status=pending&keyword=cloud&page=2&page_size=20`);
     assert.equal(response.status, 200);
-    const data = (await response.json()) as { total: number; items: Array<{ review_status: string }> };
-    assert.equal(data.total, 1);
+    const data = (await response.json()) as {
+      page: number;
+      page_size: number;
+      total: number;
+      items: Array<{ review_status: string }>;
+    };
+    assert.deepEqual(capturedQuery, {
+      keyword: 'cloud',
+      reviewStatus: 'pending',
+      page: 2,
+      pageSize: 20,
+    });
+    assert.equal(data.page, 2);
+    assert.equal(data.page_size, 20);
+    assert.equal(data.total, 31);
     assert.equal(data.items[0].review_status, 'pending');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

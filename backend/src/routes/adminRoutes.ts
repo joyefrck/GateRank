@@ -722,7 +722,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
   router.get('/airport-applications', async (req, res, next) => {
     try {
       const page = toPositiveInt(req.query.page, 1);
-      const pageSize = toPositiveInt(req.query.page_size, 20);
+      const pageSize = toBoundedPositiveInt(req.query.page_size, 20, 100);
       const keyword = optionalString(req.query.keyword);
       const reviewStatus = req.query.review_status
         ? toAirportApplicationReviewStatus(req.query.review_status)
