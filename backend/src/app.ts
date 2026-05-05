@@ -70,6 +70,7 @@ export async function createApp() {
   await applicationPaymentOrderRepository.ensureSchema();
   const applicantBillingRepository = new ApplicantBillingRepository(pool);
   await applicantBillingRepository.ensureSchema();
+  await applicantBillingRepository.backfillLegacyAirportWallets();
   const metricsRepository = new MetricsRepository(pool);
   await metricsRepository.ensureSchema();
   const probeSampleRepository = new ProbeSampleRepository(pool);

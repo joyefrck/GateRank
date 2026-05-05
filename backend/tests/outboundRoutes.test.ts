@@ -147,7 +147,10 @@ test('GET /outbound/airports/:id does not redirect when balance is insufficient'
 
     assert.equal(response.status, 402);
     assert.equal(response.headers.get('location'), null);
-    assert.match(await response.text(), /暂不可访问/);
+    const body = await response.text();
+    assert.match(body, /暂不可访问/);
+    assert.doesNotMatch(body, /点击计费标准/);
+    assert.doesNotMatch(body, /¥1\.00 \/ 次/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

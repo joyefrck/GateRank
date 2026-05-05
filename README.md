@@ -298,32 +298,68 @@ npm run server:dev
 
 ## 生产发布
 
-当前生产环境通过 1Panel 的 `gaterank` 编排发布，编排内包含：
+当前生产环境通过 1Panel 的 Docker Compose 编排 `gaterank` 发布，编排目录为：
 
-- `gaterank-web`
-- `gaterank-api`
+```bash
+/opt/1panel/docker/compose/gaterank
+```
+
+编排内包含两个核心服务：
+
+- `gaterank-web`：公开站前端，宿主机端口 `18088`
+- `gaterank-api`：后端 API，宿主机端口 `18787`
+
+1Panel 网站反向代理配置：
+
+- `/` -> `http://127.0.0.1:18088`
+- `/api` -> `http://127.0.0.1:18787`
+
+线上编排会在容器启动时从 GitHub 拉取最新代码：
+
+- `gaterank-web` 克隆 `https://github.com/joyefrck/GateRank.git` 到 `/srv/gaterank-web`，执行 `npm install`、`npm run build`，再把 `dist` 复制到 Nginx 静态目录
+- `gaterank-api` 克隆 `https://github.com/joyefrck/GateRank.git` 到 `/srv/gaterank-api`，执行 `npm install` 后启动 `npm run server:start`
+
+推荐发布流程：
+
+1. 在本地完成修复并运行必要检查，例如 `npm run server:typecheck`、`npm run test:backend`、`npm run lint`
+2. 如前端构建需要更高 Node 内存，可用 `NODE_OPTIONS=--max-old-space-size=4096 npm run build`
+3. 将需要发布的提交推送到 GitHub `main`
+4. 登录 1Panel，打开「容器」->「编排」或 1Panel 终端
+5. 在编排目录执行重建命令：
+
+```bash
+cd /opt/1panel/docker/compose/gaterank
+docker compose up -d --force-recreate gaterank-web gaterank-api
+```
+
+6. 等待 `gaterank-web` 和 `gaterank-api` 启动完成后，检查容器、提交版本和线上接口
+
+常用验证命令：
+
+```bash
+docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'gaterank|NAMES'
+docker exec gaterank-api sh -lc 'cd /srv/gaterank-api && git log -1 --pretty="%h %s"'
+docker exec gaterank-web sh -lc 'cd /srv/gaterank-web && git log -1 --pretty="%h %s"'
+curl -sS -I --connect-timeout 5 http://127.0.0.1:18088/ | head -5
+curl -sS --connect-timeout 5 http://127.0.0.1:18787/api/v1/pages/home | head -c 220
+curl -sS -I --connect-timeout 5 https://gate-rank.com/ | head -8
+```
 
 News 模块上线要求：
 
 - `gaterank-web` 需要把 `/news`、`/uploads`、`/sitemap.xml` 代理到 `gaterank-api`
-- `gaterank-api` 需要挂载新闻图片持久化目录
+- `gaterank-api` 需要挂载新闻图片持久化目录，当前使用 Docker volume `gaterank_news_uploads`
 - `gaterank-api` 需要在环境变量里配置 `NEWS_UPLOAD_ROOT_DIR`，并指向上面的持久化挂载路径
 - 如启用第三方封面图库，需要先在管理后台的“系统设置 -> 图库设置”中配置 Pexels API Key
 
-推荐发布流程：
-
-1. 在本地完成修复并运行至少 `npm run server:typecheck`、`npm run test:backend`
-2. 如前端构建需要更高 Node 内存，可用 `NODE_OPTIONS=--max-old-space-size=4096 npm run build`
-3. 将需要发布的提交推送到 GitHub `main`
-4. 登录 1Panel，进入「容器」->「编排」
-5. 找到编排 `gaterank` 并点击「重启」
-6. 等待 `gaterank-web` 和 `gaterank-api` 启动完成后回查线上页面和后台手动任务
-
 说明：
 
-- 当前线上编排会在启动时重新从 GitHub 拉取最新代码
+- 当前线上编排会在启动时重新从 GitHub 拉取最新代码，所以必须先确认代码已经 push 到 GitHub
+- `docker compose up -d --force-recreate` 会重建容器，但不会删除已挂载的 Docker volume
 - `gaterank-web` 不能直接用 `serve -s dist` 替代网关层；否则 `/news`、`/uploads`、`/sitemap.xml` 不会正确代理到 API
 - `gaterank-api` 若未挂新闻图片持久卷，`/uploads/news` 下的封面会在容器重建后丢失
+- 如果在 1Panel Web 终端里输入特殊字符出现错乱，优先用剪贴板粘贴整段命令
+- 启动失败时先看 `docker logs --tail 100 gaterank-web` 和 `docker logs --tail 100 gaterank-api`
 - 不要把 1Panel 账号、密码或其他敏感信息写入仓库
 
 ## 午夜自动维护

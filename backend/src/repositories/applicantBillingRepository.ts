@@ -62,6 +62,13 @@ export interface ApplicantClickView {
   occurred_at: string;
 }
 
+export interface LegacyWalletBackfillResult {
+  applicationsCreated: number;
+  accountsCreated: number;
+  walletsLinked: number;
+  walletsCreated: number;
+}
+
 interface WalletRow extends RowDataPacket {
   id: number;
   applicant_account_id: number;
@@ -234,6 +241,120 @@ export class ApplicantBillingRepository {
         INDEX idx_outbound_click_records_account_time (applicant_account_id, occurred_at DESC)
       )
     `);
+  }
+
+  async backfillLegacyAirportWallets(): Promise<LegacyWalletBackfillResult> {
+    const [applicationResult] = await this.pool.execute<ResultSetHeader>(`
+      INSERT INTO airport_applications (
+        name,
+        website,
+        websites_json,
+        status,
+        plan_price_month,
+        has_trial,
+        subscription_url,
+        applicant_email,
+        applicant_telegram,
+        founded_on,
+        airport_intro,
+        test_account,
+        test_password,
+        approved_airport_id,
+        review_status,
+        payment_status,
+        payment_amount,
+        paid_at,
+        review_note,
+        reviewed_by,
+        reviewed_at
+      )
+      SELECT
+        a.name,
+        a.website,
+        a.websites_json,
+        a.status,
+        a.plan_price_month,
+        a.has_trial,
+        a.subscription_url,
+        CONCAT('legacy-airport-', a.id, '@gaterank.local'),
+        COALESCE(NULLIF(a.applicant_telegram, ''), 'legacy-import'),
+        COALESCE(a.founded_on, DATE(a.created_at), CURRENT_DATE()),
+        COALESCE(NULLIF(a.airport_intro, ''), CONCAT(a.name, ' 历史机场资料自动补齐')),
+        COALESCE(NULLIF(a.test_account, ''), 'legacy-import'),
+        COALESCE(NULLIF(a.test_password, ''), 'legacy-import'),
+        a.id,
+        'reviewed',
+        'paid',
+        0,
+        NOW(),
+        '历史机场钱包初始化',
+        'system_legacy_wallet_backfill',
+        NOW()
+        FROM airports a
+        LEFT JOIN applicant_wallets airport_wallet ON airport_wallet.airport_id = a.id
+        LEFT JOIN airport_applications existing_application ON existing_application.approved_airport_id = a.id
+       WHERE airport_wallet.id IS NULL
+         AND existing_application.id IS NULL
+    `);
+
+    const [accountResult] = await this.pool.execute<ResultSetHeader>(`
+      INSERT IGNORE INTO applicant_accounts (
+        application_id,
+        email,
+        password_hash,
+        must_change_password
+      )
+      SELECT
+        ap.id,
+        CONCAT('legacy-airport-', a.id, '@gaterank.local'),
+        'legacy-disabled',
+        1
+        FROM airports a
+        JOIN airport_applications ap ON ap.approved_airport_id = a.id
+        LEFT JOIN applicant_wallets airport_wallet ON airport_wallet.airport_id = a.id
+        LEFT JOIN applicant_accounts existing_account ON existing_account.application_id = ap.id
+       WHERE airport_wallet.id IS NULL
+         AND existing_account.id IS NULL
+    `);
+
+    const [linkResult] = await this.pool.execute<ResultSetHeader>(`
+      UPDATE applicant_wallets wallet
+      JOIN applicant_accounts account ON account.id = wallet.applicant_account_id
+      JOIN airport_applications ap ON ap.id = account.application_id
+      JOIN airports a ON a.id = ap.approved_airport_id
+      LEFT JOIN applicant_wallets airport_wallet ON airport_wallet.airport_id = a.id
+         SET wallet.airport_id = a.id
+       WHERE wallet.airport_id IS NULL
+         AND airport_wallet.id IS NULL
+    `);
+
+    const [walletResult] = await this.pool.execute<ResultSetHeader>(`
+      INSERT IGNORE INTO applicant_wallets (
+        applicant_account_id,
+        application_id,
+        airport_id,
+        balance
+      )
+      SELECT
+        account.id,
+        ap.id,
+        a.id,
+        0
+        FROM airports a
+        JOIN airport_applications ap ON ap.approved_airport_id = a.id
+        JOIN applicant_accounts account ON account.application_id = ap.id
+        LEFT JOIN applicant_wallets airport_wallet ON airport_wallet.airport_id = a.id
+        LEFT JOIN applicant_wallets account_wallet ON account_wallet.applicant_account_id = account.id
+       WHERE airport_wallet.id IS NULL
+         AND account_wallet.id IS NULL
+    `);
+
+    return {
+      applicationsCreated: applicationResult.affectedRows,
+      accountsCreated: accountResult.affectedRows,
+      walletsLinked: linkResult.affectedRows,
+      walletsCreated: walletResult.affectedRows,
+    };
   }
 
   async ensureWalletForAccount(applicantAccountId: number, applicationId: number): Promise<ApplicantWalletView> {

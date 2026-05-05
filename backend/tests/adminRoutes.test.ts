@@ -379,7 +379,10 @@ test('GET /airports returns list items with latest available total_score', async
       },
       applicantBillingRepository: {
         linkAirportByApplicationId: async () => undefined,
-        listWalletsByAirportIds: async () => new Map([[1, { id: 11, balance: 321.45 }]]),
+        listWalletsByAirportIds: async () => new Map([
+          [1, { id: 11, balance: 321.45 }],
+          [2, { id: 12, balance: 0 }],
+        ]),
       },
       recomputeService: stubRecomputeService(),
       aggregationService: stubAggregationService(),
@@ -409,7 +412,8 @@ test('GET /airports returns list items with latest available total_score', async
     assert.deepEqual(data.items[0]?.tags, ['长期稳定', '新手友好']);
     assert.equal(data.items[0]?.wallet_id, 11);
     assert.equal(data.items[0]?.wallet_balance, 321.45);
-    assert.equal(data.items[1]?.wallet_balance, null);
+    assert.equal(data.items[1]?.wallet_id, 12);
+    assert.equal(data.items[1]?.wallet_balance, 0);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
