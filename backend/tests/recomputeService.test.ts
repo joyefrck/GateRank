@@ -175,6 +175,167 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
   assert.equal(storedScores.get('1:2026-03-22')?.details.total_score, 37.28);
 });
 
+test('recomputeForDate preserves manual total score while refreshing formula score for rankings', async () => {
+  const airports: Airport[] = [
+    {
+      id: 1,
+      name: 'Manual Airport',
+      website: 'https://manual.example.com',
+      status: 'normal',
+      is_listed: true,
+      plan_price_month: 20,
+      has_trial: true,
+      tags: [],
+      manual_tags: [],
+      auto_tags: [],
+      created_at: '2026-03-20',
+    },
+    {
+      id: 2,
+      name: 'Formula Airport',
+      website: 'https://formula.example.com',
+      status: 'normal',
+      is_listed: true,
+      plan_price_month: 20,
+      has_trial: true,
+      tags: [],
+      manual_tags: [],
+      auto_tags: [],
+      created_at: '2026-03-20',
+    },
+  ];
+  const metrics: DailyMetrics[] = [
+    {
+      airport_id: 1,
+      date: '2026-03-24',
+      uptime_percent_30d: 92,
+      median_latency_ms: 280,
+      median_download_mbps: 30,
+      packet_loss_percent: 3,
+      stable_days_streak: 1,
+      domain_ok: true,
+      ssl_days_left: 30,
+      recent_complaints_count: 0,
+      history_incidents: 0,
+    },
+    {
+      airport_id: 2,
+      date: '2026-03-24',
+      uptime_percent_30d: 99.5,
+      median_latency_ms: 80,
+      median_download_mbps: 180,
+      packet_loss_percent: 0.2,
+      stable_days_streak: 20,
+      domain_ok: true,
+      ssl_days_left: 90,
+      recent_complaints_count: 0,
+      history_incidents: 0,
+    },
+  ];
+  const storedScores = new Map<string, ScoreBreakdown>([
+    ['1:2026-03-24', {
+      s: 10,
+      p: 10,
+      c: 80,
+      r: 80,
+      risk_penalty: 20,
+      score: 18,
+      recent_score: 18,
+      historical_score: 18,
+      final_score: 18,
+      details: { total_score: 12.34, manual_total_score: 88.88 },
+    }],
+  ]);
+  const rankingsByType = new Map<string, Array<{ airport_id: number; rank: number; score: number; details: Record<string, unknown> }>>();
+
+  const toStoredRows = (airportId: number, date: string) =>
+    [
+      {
+        airport_id: airportId,
+        date: '2026-03-23',
+        s: airportId === 1 ? 20 : 90,
+        p: airportId === 1 ? 20 : 90,
+        c: 80,
+        r: 90,
+        risk_penalty: 10,
+        score: airportId === 1 ? 25 : 88,
+        recent_score: airportId === 1 ? 25 : 88,
+        historical_score: 0,
+        final_score: airportId === 1 ? 25 : 88,
+        details: {},
+      },
+      storedScores.get(`${airportId}:${date}`) && {
+        airport_id: airportId,
+        date,
+        ...storedScores.get(`${airportId}:${date}`)!,
+      },
+    ].filter((row): row is NonNullable<typeof row> => Boolean(row));
+
+  const svc = new RecomputeService({
+    airportRepository: {
+      listAll: async () => airports,
+      getById: async (airportId: number) => airports.find((airport) => airport.id === airportId) || null,
+      setAutoTags: async () => undefined,
+    },
+    metricsRepository: {
+      getByDate: async () => metrics,
+      getByAirportAndDate: async (airportId: number, date: string) =>
+        metrics.find((item) => item.airport_id === airportId && item.date === date) || null,
+    },
+    scoreRepository: {
+      getTimeSeriesBeforeDate: async (airportId: number) => [
+        { date: '2026-03-23', score: airportId === 1 ? 25 : 88 },
+      ],
+      getTrend: async (airportId: number, _startDate: string, endDate: string) =>
+        toStoredRows(airportId, endDate),
+      getByDate: async (date: string) =>
+        Array.from(storedScores.entries())
+          .filter(([key]) => key.endsWith(`:${date}`))
+          .map(([key, value]) => ({
+            airport_id: Number(key.split(':')[0]),
+            date,
+            s: value.s,
+            p: value.p,
+            c: value.c,
+            r: value.r,
+            risk_penalty: value.risk_penalty,
+            score: value.score,
+            recent_score: value.recent_score,
+            historical_score: value.historical_score,
+            final_score: value.final_score,
+            details: value.details,
+          })),
+      upsertDaily: async (airportId: number, date: string, score: ScoreBreakdown) => {
+        const key = `${airportId}:${date}`;
+        const manualTotalScore = storedScores.get(key)?.details.manual_total_score;
+        storedScores.set(key, {
+          ...score,
+          details: {
+            ...score.details,
+            ...(manualTotalScore === undefined ? {} : { manual_total_score: manualTotalScore }),
+          },
+        });
+      },
+    },
+    rankingRepository: {
+      replaceForDate: async (_date, listType, rows) => {
+        rankingsByType.set(listType, rows);
+      },
+    },
+  });
+
+  await svc.recomputeForDate('2026-03-24');
+
+  const manualScore = storedScores.get('1:2026-03-24');
+  assert.equal(manualScore?.details.manual_total_score, 88.88);
+  assert.equal(typeof manualScore?.details.total_score, 'number');
+  assert.notEqual(manualScore?.details.total_score, 12.34);
+  assert.notEqual(manualScore?.details.total_score, manualScore?.details.manual_total_score);
+  assert.equal(rankingsByType.get('today')?.[0]?.airport_id, 1);
+  assert.equal(rankingsByType.get('today')?.[0]?.score, 88.88);
+  assert.equal(rankingsByType.get('today')?.[0]?.details.total_score, 88.88);
+});
+
 test('recomputeAirportForDate only updates target airport and rebuilds rankings', async () => {
   const airports: Airport[] = [
     {

@@ -5,6 +5,7 @@ import { AddressInfo } from 'node:net';
 import { createPortalRoutes } from '../src/routes/portalRoutes';
 import { errorHandler } from '../src/middleware/errorHandler';
 import type { PaymentGatewayCreateOrderInput } from '../src/services/paymentGatewayService';
+import { hashPassword } from '../src/utils/password';
 import { signApplicantToken } from '../src/utils/token';
 
 function createMockBillingRepository(overrides: Record<string, unknown> = {}) {
@@ -39,6 +40,213 @@ function createMockBillingRepository(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+function createMockApplicantAccount(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 1,
+    application_id: 7,
+    email: 'user@example.com',
+    password_hash: 'hash',
+    must_change_password: false,
+    last_login_at: null,
+    x_user_id: null,
+    x_username: null,
+    x_display_name: null,
+    x_bound_at: null,
+    created_at: '2026-04-18T10:00:00+08:00',
+    updated_at: '2026-04-18T10:00:00+08:00',
+    ...overrides,
+  };
+}
+
+test('POST /portal/x-oauth/login/complete exchanges handoff code for portal token', async () => {
+  const account = createMockApplicantAccount({ x_user_id: 'x-123', x_username: 'gaterank' });
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => account,
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => null,
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+        createSession: async () => ({
+          token: 'portal-token',
+          expires_at: '2026-05-04T12:00:00.000Z',
+          account,
+        }),
+      },
+      applicantXOAuthService: {
+        startBind: async () => {
+          throw new Error('not used');
+        },
+        startLogin: async () => {
+          throw new Error('not used');
+        },
+        handleCallback: async () => {
+          throw new Error('not used');
+        },
+        consumeLoginHandoff: async (code) => {
+          assert.equal(code, 'handoff-code');
+          return account;
+        },
+        unbind: async () => undefined,
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({ application_fee_amount: 1000 }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/x-oauth/login/complete`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: 'handoff-code' }),
+    });
+    const data = await response.json() as { token: string; account: { x: { username: string } } };
+
+    assert.equal(response.status, 200);
+    assert.equal(data.token, 'portal-token');
+    assert.equal(data.account.x.username, 'gaterank');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/password/change verifies current password and clears first-login flag', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const passwordHash = await hashPassword('CurrentPass8');
+  const account = createMockApplicantAccount({
+    password_hash: passwordHash,
+    must_change_password: true,
+  });
+  const updates: Array<{ id: number; mustChangePassword: boolean }> = [];
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => account,
+        updatePassword: async (id, nextPasswordHash, mustChangePassword) => {
+          updates.push({ id, mustChangePassword });
+          account.password_hash = nextPasswordHash;
+          account.must_change_password = mustChangePassword;
+          return true;
+        },
+      },
+      airportApplicationRepository: {
+        getById: async () => ({
+          id: 7,
+          name: 'Cloud Airport',
+          website: 'https://example.com',
+          websites: ['https://example.com'],
+          review_status: 'awaiting_payment',
+          payment_status: 'unpaid',
+          payment_amount: null,
+          paid_at: null,
+          applicant_email: 'user@example.com',
+          applicant_telegram: '@cloud',
+          founded_on: '2025-01-01',
+          airport_intro: 'intro',
+          plan_price_month: 1000,
+          has_trial: true,
+          subscription_url: 'https://subscribe.example.com',
+          test_account: 'tester',
+          test_password: 'secret',
+          created_at: '2026-04-18 10:00:00',
+        }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({ application_fee_amount: 1000 }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const badResponse = await fetch(`http://127.0.0.1:${port}/portal/password/change`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        current_password: 'WrongPass8',
+        new_password: 'NextPass888',
+      }),
+    });
+    assert.equal(badResponse.status, 401);
+    assert.equal(updates.length, 0);
+
+    const okResponse = await fetch(`http://127.0.0.1:${port}/portal/password/change`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        current_password: 'CurrentPass8',
+        new_password: 'NextPass888',
+      }),
+    });
+    const data = await okResponse.json() as { account: { must_change_password: boolean } };
+
+    assert.equal(okResponse.status, 200);
+    assert.deepEqual(updates, [{ id: 1, mustChangePassword: false }]);
+    assert.equal(data.account.must_change_password, false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
 
 test('POST /portal/payment-orders creates payment order from configured amount', async () => {
   process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';

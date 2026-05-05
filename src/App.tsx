@@ -24,6 +24,9 @@ import {
   LogOut,
   Eye,
   EyeOff,
+  Link2,
+  Settings,
+  Unlink,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -268,6 +271,12 @@ interface PortalAccountView {
   email: string;
   must_change_password: boolean;
   last_login_at: string | null;
+  x: {
+    user_id: string;
+    username: string | null;
+    display_name: string | null;
+    bound_at: string | null;
+  } | null;
 }
 
 interface PortalPaymentOrderView {
@@ -387,7 +396,7 @@ const sectionOrder: HomeSectionKey[] = [
 ];
 
 const PORTAL_TOKEN_KEY = 'gaterank_portal_token';
-type PortalTabKey = 'overview' | 'billing_guide' | 'recharge' | 'clicks' | 'transactions' | 'profile';
+type PortalTabKey = 'overview' | 'billing_guide' | 'recharge' | 'clicks' | 'transactions' | 'profile' | 'account_settings';
 const portalNavItems: Array<{ key: PortalTabKey; label: string }> = [
   { key: 'overview', label: '账户概览' },
   { key: 'billing_guide', label: '扣费说明' },
@@ -395,6 +404,7 @@ const portalNavItems: Array<{ key: PortalTabKey; label: string }> = [
   { key: 'clicks', label: '访问记录' },
   { key: 'transactions', label: '扣费流水' },
   { key: 'profile', label: '资料' },
+  { key: 'account_settings', label: '账号设置' },
 ];
 
 function shouldRenderSection(sectionKey: HomeSectionKey, section: HomeSection): boolean {
@@ -786,6 +796,21 @@ function clearPortalToken(): void {
   localStorage.removeItem(PORTAL_TOKEN_KEY);
 }
 
+function cleanPortalOAuthParams(params: URLSearchParams): void {
+  let changed = false;
+  for (const key of ['x_login_code', 'x_oauth', 'x_oauth_error']) {
+    if (params.has(key)) {
+      params.delete(key);
+      changed = true;
+    }
+  }
+  if (!changed) {
+    return;
+  }
+  const query = params.toString();
+  window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
+}
+
 async function apiFetch<T>(path: string): Promise<T> {
   const response = await fetch(`${getApiBase()}${path}`);
   if (!response.ok) {
@@ -1012,16 +1037,16 @@ function PortalMetricTile({
   tone?: 'neutral' | 'blue' | 'green' | 'amber';
 }) {
   const toneMap = {
-    neutral: 'border-slate-200 bg-slate-50',
-    blue: 'border-sky-100 bg-sky-50',
-    green: 'border-emerald-100 bg-emerald-50',
-    amber: 'border-amber-100 bg-amber-50',
+    neutral: 'border-slate-200 bg-slate-50/90',
+    blue: 'border-sky-100 bg-sky-50/90',
+    green: 'border-emerald-100 bg-emerald-50/90',
+    amber: 'border-amber-100 bg-amber-50/90',
   };
 
   return (
-    <div className={`rounded-[22px] border px-4 py-4 ${toneMap[tone]}`}>
+    <div className={`flex min-h-[122px] flex-col justify-between rounded-[24px] border px-5 py-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] ${toneMap[tone]}`}>
       <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</div>
-      <div className="mt-2 text-base font-black tracking-tight text-slate-950">{value}</div>
+      <div className="mt-4 text-lg font-black tracking-tight text-slate-950">{value}</div>
     </div>
   );
 }
@@ -1178,7 +1203,7 @@ function PortalCollapsedApplicationSummary({
         </button>
       )}
     >
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4 xl:gap-6">
         <PortalMetricTile label="机场名称" value={application.name} tone="blue" />
         <PortalMetricTile label="月付价格" value={`¥${formatMetric(application.plan_price_month)}`} tone="amber" />
         <PortalMetricTile label="试用支持" value={application.has_trial ? '支持' : '不支持'} tone="green" />
@@ -3067,6 +3092,7 @@ function PortalPage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
+  const [xOAuthAction, setXOAuthAction] = useState<'' | 'login' | 'bind' | 'unbind'>('');
   const [creatingChannel, setCreatingChannel] = useState<'' | 'alipay' | 'wxpay'>('');
   const [creatingRecharge, setCreatingRecharge] = useState('');
   const [cancelingRechargeOrder, setCancelingRechargeOrder] = useState('');
@@ -3130,7 +3156,7 @@ function PortalPage() {
   };
 
   useEffect(() => {
-    void loadView();
+    void initializePortal();
   }, []);
 
   useEffect(() => {
@@ -3164,10 +3190,49 @@ function PortalPage() {
     setIsLoginPasswordVisible(false);
     setCurrentPassword('');
     setNewPassword('');
+    setXOAuthAction('');
     setError('');
     if (!options?.keepSuccess) {
       setSuccess('');
     }
+  };
+
+  const initializePortal = async () => {
+    const params = new URLSearchParams(window.location.search);
+    const xLoginCode = params.get('x_login_code');
+    const xOAuthStatus = params.get('x_oauth');
+    const xOAuthError = params.get('x_oauth_error');
+    cleanPortalOAuthParams(params);
+
+    if (xOAuthError) {
+      setError(xOAuthError);
+    }
+    if (xOAuthStatus === 'bound') {
+      setSuccess('X 登录已绑定。');
+    }
+
+    if (xLoginCode) {
+      setLoading(true);
+      setError('');
+      setSuccess('');
+      try {
+        const data = await apiRequest<PortalLoginResponse>('/api/v1/portal/x-oauth/login/complete', {
+          method: 'POST',
+          body: JSON.stringify({ code: xLoginCode }),
+        });
+        setPortalToken(data.token);
+        setLoginEmail(data.account.email);
+        setSuccess('已通过 X 登录。');
+      } catch (err) {
+        clearPortalToken();
+        setView(null);
+        setError(err instanceof Error ? err.message : 'X 登录失败');
+        setLoading(false);
+        return;
+      }
+    }
+
+    await loadView();
   };
 
   const login = async (event: React.FormEvent) => {
@@ -3191,6 +3256,56 @@ function PortalPage() {
       setError(err instanceof Error ? err.message : '登录失败');
     } finally {
       setLoggingIn(false);
+    }
+  };
+
+  const startXLogin = async () => {
+    setXOAuthAction('login');
+    setError('');
+    setSuccess('');
+    try {
+      const data = await apiRequest<{ authorization_url: string }>('/api/v1/portal/x-oauth/login/start', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      window.location.href = data.authorization_url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '发起 X 登录失败');
+      setXOAuthAction('');
+    }
+  };
+
+  const startXBind = async () => {
+    setXOAuthAction('bind');
+    setError('');
+    setSuccess('');
+    try {
+      const data = await portalApiRequest<{ authorization_url: string }>('/api/v1/portal/x-oauth/bind/start', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      window.location.href = data.authorization_url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '发起 X 绑定失败');
+      setXOAuthAction('');
+    }
+  };
+
+  const unbindX = async () => {
+    setXOAuthAction('unbind');
+    setError('');
+    setSuccess('');
+    try {
+      const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/x-oauth/unbind', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      setView(data);
+      setSuccess('X 登录已解除绑定。');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '解除 X 绑定失败');
+    } finally {
+      setXOAuthAction('');
     }
   };
 
@@ -3447,7 +3562,7 @@ function PortalPage() {
           </div>
         )}
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+        <div className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4 xl:gap-6">
           <PortalMetricTile label="机场名称" value={portalView.application.name} tone="blue" />
           <PortalMetricTile label="月付价格" value={`¥${formatMetric(portalView.application.plan_price_month)}`} tone="amber" />
           <PortalMetricTile label="试用支持" value={portalView.application.has_trial ? '支持' : '不支持'} tone="green" />
@@ -3469,7 +3584,7 @@ function PortalPage() {
             </button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 xl:gap-6">
             <PortalReadOnlyBlock label="官网列表" value={portalView.application.websites.join('\n')} />
             <PortalReadOnlyBlock label="申请邮箱 / 登录邮箱" value={portalView.application.applicant_email} />
             <PortalReadOnlyBlock label="Telegram" value={portalView.application.applicant_telegram} />
@@ -3770,6 +3885,111 @@ function PortalPage() {
     );
   };
 
+  const renderAccountSettingsSection = (portalView: PortalViewResponse) => {
+    const boundXLabel = portalView.account.x?.username
+      ? `@${portalView.account.x.username}`
+      : portalView.account.x?.display_name || portalView.account.x?.user_id || '已绑定';
+
+    return (
+      <div className="space-y-5">
+        <PortalSectionCard
+          title="账号设置"
+          description="管理申请人后台登录方式。修改密码后需要使用新密码重新登录。"
+          aside={<div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600">Security</div>}
+        >
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <PortalInfoCard eyebrow="Login Email" title="登录邮箱" value={portalView.account.email} tone="blue" />
+            <PortalInfoCard
+              eyebrow="X Login"
+              title="X 登录"
+              value={portalView.account.x ? boundXLabel : '未绑定'}
+              tone={portalView.account.x ? 'green' : 'amber'}
+            />
+          </div>
+        </PortalSectionCard>
+
+        <PortalSectionCard
+          title="修改密码"
+          description="输入当前密码和新密码。保存后当前登录状态会退出，请重新登录。"
+        >
+          <form onSubmit={changePassword} className="space-y-5">
+            <PublicFormField label="当前密码">
+              <input
+                className={portalInputClass}
+                type="password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+              />
+            </PublicFormField>
+            <PublicFormField label="新密码" hint="至少 8 位。">
+              <input
+                className={portalInputClass}
+                type="password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+              />
+            </PublicFormField>
+            <button
+              type="submit"
+              className={portalPrimaryButtonClass}
+              disabled={changingPassword}
+            >
+              <KeyRound className="h-4 w-4" />
+              {changingPassword ? '提交中...' : '保存新密码'}
+            </button>
+          </form>
+        </PortalSectionCard>
+
+        <PortalSectionCard
+          title="绑定 X 登录"
+          description="绑定后可以在登录页直接使用 X 登录申请人后台。系统只保存 X 用户身份，不保存访问凭证。"
+          aside={portalView.account.x ? (
+            <div className="rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Bound</div>
+          ) : (
+            <div className="rounded-full border border-amber-100 bg-amber-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-700">Not Bound</div>
+          )}
+        >
+          <div className="flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm font-black text-slate-950">
+                {portalView.account.x ? boundXLabel : '尚未绑定 X 账号'}
+              </div>
+              <div className="mt-2 text-sm leading-6 text-slate-600">
+                {portalView.account.x?.bound_at
+                  ? `绑定时间：${portalView.account.x.bound_at}`
+                  : '绑定会跳转到 X 授权页，授权完成后自动回到申请人后台。'}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50"
+                onClick={() => void startXBind()}
+                disabled={Boolean(xOAuthAction)}
+              >
+                <Link2 className="h-4 w-4" />
+                {xOAuthAction === 'bind' ? '跳转中...' : portalView.account.x ? '重新绑定' : '绑定 X'}
+              </button>
+              {portalView.account.x && (
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-rose-200 bg-white px-5 py-2.5 text-sm font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                  onClick={() => void unbindX()}
+                  disabled={Boolean(xOAuthAction)}
+                >
+                  <Unlink className="h-4 w-4" />
+                  {xOAuthAction === 'unbind' ? '处理中...' : '解除绑定'}
+                </button>
+              )}
+            </div>
+          </div>
+        </PortalSectionCard>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     if (loading) {
       return <div className="text-sm text-neutral-500">加载中...</div>;
@@ -3820,6 +4040,15 @@ function PortalPage() {
             >
               <LogIn className="h-4 w-4" />
               {loggingIn ? '登录中...' : '登录后台'}
+            </button>
+            <button
+              type="button"
+              className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+              onClick={() => void startXLogin()}
+              disabled={Boolean(xOAuthAction)}
+            >
+              <X className="h-4 w-4" />
+              {xOAuthAction === 'login' ? '跳转中...' : '使用 X 登录'}
             </button>
           </form>
         </PortalSectionCard>
@@ -3962,24 +4191,35 @@ function PortalPage() {
     if (portalTab === 'profile') {
       return renderApplicationDetailsSection(view);
     }
+    if (portalTab === 'account_settings') {
+      return renderAccountSettingsSection(view);
+    }
+
+    const accountOverviewSection = (
+      <PortalSectionCard
+        title="账户概览"
+        description="集中查看入驻状态、点击余额和当前上架状态。"
+      >
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <PortalInfoCard eyebrow="Balance" title="点击余额" value={`¥${formatMetric(view.wallet.balance)}`} tone={view.wallet.balance >= view.click_price ? 'green' : 'amber'} />
+          <PortalInfoCard eyebrow="Click Price" title="点击单价" value={`¥${formatMetric(view.click_price)} / 次`} tone="blue" />
+          <PortalInfoCard eyebrow="Listing" title="上架状态" value={view.wallet.auto_unlisted_at ? '欠费下架' : '正常'} tone={view.wallet.auto_unlisted_at ? 'amber' : 'green'} />
+          <PortalInfoCard eyebrow="Application" title="审批状态" value={formatPortalReviewStatus(view.application.review_status)} />
+        </div>
+      </PortalSectionCard>
+    );
+    const isApplicationApproved = view.application.review_status === 'reviewed';
 
     return (
       <div className="space-y-6">
-        {renderOnboardingGuide(view)}
-        {view.application.payment_status === 'paid' && (
-          <PortalSectionCard
-            title="账户概览"
-            description="集中查看入驻状态、点击余额和当前上架状态。"
-          >
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <PortalInfoCard eyebrow="Balance" title="点击余额" value={`¥${formatMetric(view.wallet.balance)}`} tone={view.wallet.balance >= view.click_price ? 'green' : 'amber'} />
-              <PortalInfoCard eyebrow="Click Price" title="点击单价" value={`¥${formatMetric(view.click_price)} / 次`} tone="blue" />
-              <PortalInfoCard eyebrow="Listing" title="上架状态" value={view.wallet.auto_unlisted_at ? '欠费下架' : '正常'} tone={view.wallet.auto_unlisted_at ? 'amber' : 'green'} />
-              <PortalInfoCard eyebrow="Application" title="审批状态" value={formatPortalReviewStatus(view.application.review_status)} />
-            </div>
-          </PortalSectionCard>
+        {isApplicationApproved ? (
+          accountOverviewSection
+        ) : (
+          <>
+            {renderOnboardingGuide(view)}
+            {stageSection}
+          </>
         )}
-        {stageSection}
       </div>
     );
   };
@@ -4036,7 +4276,10 @@ function PortalPage() {
                     className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-black transition ${portalTab === item.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
                     onClick={() => switchPortalTab(item.key)}
                   >
-                    <span>{item.label}</span>
+                    <span className="inline-flex items-center gap-2">
+                      {item.key === 'account_settings' && <Settings className="h-4 w-4" />}
+                      {item.label}
+                    </span>
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 ))}

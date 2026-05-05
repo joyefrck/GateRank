@@ -84,7 +84,7 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
 function resolveTargetUrl(airport: Airport, targetKind: 'website' | 'subscription_url'): string | null {
   const raw = targetKind === 'subscription_url' ? airport.subscription_url : airport.website;
   const value = String(raw || '').trim();
-  return /^https?:\/\//i.test(value) ? value : null;
+  return normalizeOutboundUrl(value);
 }
 
 function appendSourceParams(targetUrl: string, clickId: string): string {
@@ -94,6 +94,20 @@ function appendSourceParams(targetUrl: string, clickId: string): string {
   url.searchParams.set('utm_campaign', 'paid_click');
   url.searchParams.set('gr_click_id', clickId);
   return url.toString();
+}
+
+function normalizeOutboundUrl(value: string): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const candidate = /^https?:\/\//i.test(value) ? value : `https://${value}`;
+  try {
+    const url = new URL(candidate);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function renderUnavailablePage(message: string): string {

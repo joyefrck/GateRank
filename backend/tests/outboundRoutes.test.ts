@@ -63,6 +63,52 @@ test('GET /outbound/airports/:id records click and redirects with GateRank sourc
   }
 });
 
+test('GET /outbound/airports/:id redirects bare website domains as https URLs', async () => {
+  const app = express();
+  app.use(
+    createOutboundRoutes({
+      airportRepository: {
+        getById: async () => ({
+          id: 4,
+          name: 'Xiaomi',
+          website: 'www.xiaomi.com',
+          status: 'normal',
+          is_listed: true,
+          plan_price_month: 25,
+          has_trial: true,
+          tags: [],
+          created_at: '2026-05-04',
+        }),
+      },
+      applicantBillingRepository: {
+        processOutboundClick: async () => ({
+          status: 'billed',
+          billed_amount: 1,
+          airport_name: 'Xiaomi',
+          balance_after: 9,
+        }),
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/outbound/airports/4?target=website&placement=full_ranking_item`, {
+      redirect: 'manual',
+    });
+
+    assert.equal(response.status, 302);
+    const location = response.headers.get('location') || '';
+    const redirected = new URL(location);
+    assert.equal(redirected.origin, 'https://www.xiaomi.com');
+    assert.equal(redirected.searchParams.get('utm_source'), 'gaterank');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /outbound/airports/:id does not redirect when balance is insufficient', async () => {
   const app = express();
   app.use(

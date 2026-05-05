@@ -5,6 +5,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestContext } from './middleware/requestContext';
 import { AccessTokenRepository } from './repositories/accessTokenRepository';
 import { ApplicantAccountRepository } from './repositories/applicantAccountRepository';
+import { ApplicantXOAuthFlowRepository } from './repositories/applicantXOAuthFlowRepository';
 import { AirportRepository } from './repositories/airportRepository';
 import { AirportApplicationRepository } from './repositories/airportApplicationRepository';
 import { ApplicationPaymentOrderRepository } from './repositories/applicationPaymentOrderRepository';
@@ -33,6 +34,7 @@ import { createPublicRoutes } from './routes/publicRoutes';
 import { AccessTokenService } from './services/accessTokenService';
 import { AdminAuthService } from './services/adminAuthService';
 import { ApplicantPortalAuthService } from './services/applicantPortalAuthService';
+import { ApplicantXOAuthService } from './services/applicantXOAuthService';
 import { AggregationService } from './services/aggregationService';
 import { ManualJobService } from './services/manualJobService';
 import { MailService } from './services/mailService';
@@ -51,6 +53,7 @@ import { SmtpSettingsService } from './services/smtpSettingsService';
 import { AdminSchedulerService } from './services/adminSchedulerService';
 import { SchedulerTaskExecutor } from './services/schedulerTaskExecutor';
 import { TelegramNotificationService } from './services/telegramNotificationService';
+import { XOAuthSettingsService } from './services/xOAuthSettingsService';
 import { getNewsUploadRootDir } from './utils/newsStorage';
 
 export async function createApp() {
@@ -61,6 +64,8 @@ export async function createApp() {
   await airportApplicationRepository.ensureSchema();
   const applicantAccountRepository = new ApplicantAccountRepository(pool);
   await applicantAccountRepository.ensureSchema();
+  const applicantXOAuthFlowRepository = new ApplicantXOAuthFlowRepository(pool);
+  await applicantXOAuthFlowRepository.ensureSchema();
   const applicationPaymentOrderRepository = new ApplicationPaymentOrderRepository(pool);
   await applicationPaymentOrderRepository.ensureSchema();
   const applicantBillingRepository = new ApplicantBillingRepository(pool);
@@ -148,6 +153,9 @@ export async function createApp() {
   const smtpSettingsService = new SmtpSettingsService({
     systemSettingRepository,
   });
+  const xOAuthSettingsService = new XOAuthSettingsService({
+    systemSettingRepository,
+  });
   const accessTokenService = new AccessTokenService({
     accessTokenRepository,
   });
@@ -159,6 +167,11 @@ export async function createApp() {
   });
   const applicantPortalAuthService = new ApplicantPortalAuthService({
     applicantAccountRepository,
+  });
+  const applicantXOAuthService = new ApplicantXOAuthService({
+    applicantAccountRepository,
+    applicantXOAuthFlowRepository,
+    configFactory: () => xOAuthSettingsService.getConfig(),
   });
   const pexelsCoverService = new PexelsCoverService(mediaLibrarySettingsService, newsCoverImageService);
   const newsPublicService = new NewsPublicService(newsRepository, newsContentService);
@@ -211,6 +224,7 @@ export async function createApp() {
       applicationPaymentOrderRepository,
       applicantBillingRepository,
       applicantPortalAuthService,
+      applicantXOAuthService,
       paymentGatewaySettingsService,
       paymentGatewayService,
     }),
@@ -255,6 +269,7 @@ export async function createApp() {
       mediaLibrarySettingsService,
       paymentGatewaySettingsService,
       smtpSettingsService,
+      xOAuthSettingsService,
       mailService,
       accessTokenService,
     }),

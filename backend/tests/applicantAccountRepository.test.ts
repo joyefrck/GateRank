@@ -11,7 +11,10 @@ test('ApplicantAccountRepository.ensureSchema creates table and adds password co
       calls.push({ sql, params });
       if (sql.includes('FROM information_schema.COLUMNS')) {
         schemaChecks += 1;
-        return [schemaChecks <= 4 ? [] : [{ 1: 1 }]];
+        return [schemaChecks <= 8 ? [] : [{ 1: 1 }]];
+      }
+      if (sql.includes('FROM information_schema.STATISTICS')) {
+        return [[]];
       }
       return [[]];
     },
@@ -22,4 +25,6 @@ test('ApplicantAccountRepository.ensureSchema creates table and adds password co
   assert.ok(calls.some((call) => call.sql.includes('CREATE TABLE IF NOT EXISTS applicant_accounts')));
   assert.ok(calls.some((call) => call.sql.includes('ADD COLUMN password_hash VARCHAR(255) NOT NULL AFTER email')));
   assert.ok(calls.some((call) => call.sql.includes('ADD COLUMN must_change_password TINYINT(1) NOT NULL DEFAULT 1 AFTER password_hash')));
+  assert.ok(calls.some((call) => call.sql.includes('ADD COLUMN x_user_id VARCHAR(64) NULL AFTER last_login_at')));
+  assert.ok(calls.some((call) => call.sql.includes('ADD UNIQUE KEY uk_applicant_accounts_x_user_id (x_user_id)')));
 });

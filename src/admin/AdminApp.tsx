@@ -270,7 +270,7 @@ interface TelegramSettingsFormState {
   };
 }
 
-type SystemSettingsTab = 'notifications' | 'payment_gateway' | 'smtp' | 'media_libraries' | 'publish_tokens';
+type SystemSettingsTab = 'notifications' | 'payment_gateway' | 'smtp' | 'x_oauth' | 'media_libraries' | 'publish_tokens';
 
 type MarketingGranularity = 'hour' | 'day' | 'week' | 'month';
 type MarketingRangePreset = 'day' | 'week' | 'month' | 'custom';
@@ -492,6 +492,33 @@ interface MediaLibrarySettingsFormState {
       timeout_ms: string;
     };
   };
+}
+
+interface XOAuthSettingsView {
+  enabled: boolean;
+  client_id: string;
+  has_client_secret: boolean;
+  client_secret_masked: string | null;
+  redirect_uri: string;
+  authorize_url: string;
+  token_url: string;
+  me_url: string;
+  scope: string;
+  code_challenge_method: 'plain' | 'S256';
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+interface XOAuthSettingsFormState {
+  enabled: boolean;
+  client_id: string;
+  client_secret: string;
+  redirect_uri: string;
+  authorize_url: string;
+  token_url: string;
+  me_url: string;
+  scope: string;
+  code_challenge_method: 'plain' | 'S256';
 }
 
 interface PublishTokenView {
@@ -2091,6 +2118,8 @@ function SystemSettingsPage() {
                 ? '支付配置用于申请人后台下单和支付回调验签，申请金额默认 1000 元但可在这里调整。'
                 : activeTab === 'smtp'
                   ? 'SMTP 配置用于发送申请账号凭证邮件和审批通过邮件。'
+                  : activeTab === 'x_oauth'
+                    ? 'X 登录配置用于申请人后台绑定和 X 一键登录，保存后立即生效。'
                 : activeTab === 'media_libraries'
                   ? '图库设置用于托管第三方图库访问凭证，当前新闻封面搜索使用 Pexels。'
                   : '发布令牌用于给第三方系统或 AI 开放受限发文能力，令牌明文只会展示一次。'}
@@ -2121,6 +2150,12 @@ function SystemSettingsPage() {
           邮件配置
         </button>
         <button
+          className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'x_oauth' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+          onClick={() => setActiveTab('x_oauth')}
+        >
+          X登录配置
+        </button>
+        <button
           className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'media_libraries' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
           onClick={() => setActiveTab('media_libraries')}
         >
@@ -2140,9 +2175,11 @@ function SystemSettingsPage() {
           ? <PaymentGatewaySettingsTab refreshTick={refreshTick} />
           : activeTab === 'smtp'
             ? <SmtpSettingsTab refreshTick={refreshTick} />
-        : activeTab === 'media_libraries'
-          ? <MediaLibrarySettingsTab refreshTick={refreshTick} />
-          : <PublishTokensSettingsTab refreshTick={refreshTick} />}
+            : activeTab === 'x_oauth'
+              ? <XOAuthSettingsTab refreshTick={refreshTick} />
+              : activeTab === 'media_libraries'
+                ? <MediaLibrarySettingsTab refreshTick={refreshTick} />
+                : <PublishTokensSettingsTab refreshTick={refreshTick} />}
     </div>
   );
 }
@@ -3387,6 +3424,241 @@ function MediaLibrarySettingsTab({ refreshTick }: { refreshTick: number }) {
           {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
 
           <div className="flex items-center justify-end gap-3">
+            <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
+              {saving ? '保存中...' : '保存配置'}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function XOAuthSettingsTab({ refreshTick }: { refreshTick: number }) {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [settings, setSettings] = useState<XOAuthSettingsView | null>(null);
+  const [clearClientSecret, setClearClientSecret] = useState(false);
+  const [form, setForm] = useState<XOAuthSettingsFormState>({
+    enabled: false,
+    client_id: '',
+    client_secret: '',
+    redirect_uri: '',
+    authorize_url: 'https://twitter.com/i/oauth2/authorize',
+    token_url: 'https://api.x.com/2/oauth2/token',
+    me_url: 'https://api.x.com/2/users/me',
+    scope: 'tweet.read users.read',
+    code_challenge_method: 'plain',
+  });
+
+  const applyView = (view: XOAuthSettingsView) => {
+    setSettings(view);
+    setForm({
+      enabled: view.enabled,
+      client_id: view.client_id || '',
+      client_secret: '',
+      redirect_uri: view.redirect_uri || '',
+      authorize_url: view.authorize_url || 'https://twitter.com/i/oauth2/authorize',
+      token_url: view.token_url || 'https://api.x.com/2/oauth2/token',
+      me_url: view.me_url || 'https://api.x.com/2/users/me',
+      scope: view.scope || 'tweet.read users.read',
+      code_challenge_method: view.code_challenge_method || 'plain',
+    });
+    setClearClientSecret(false);
+  };
+
+  const fetchSettings = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/x-oauth')) as XOAuthSettingsView;
+      applyView(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载 X 登录配置失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchSettings();
+  }, [refreshTick]);
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const payload: Record<string, unknown> = {
+        enabled: form.enabled,
+        client_id: form.client_id.trim(),
+        redirect_uri: form.redirect_uri.trim(),
+        authorize_url: form.authorize_url.trim(),
+        token_url: form.token_url.trim(),
+        me_url: form.me_url.trim(),
+        scope: form.scope.trim(),
+        code_challenge_method: form.code_challenge_method,
+      };
+      if (clearClientSecret) {
+        payload.client_secret = '';
+      } else if (form.client_secret.trim()) {
+        payload.client_secret = form.client_secret.trim();
+      }
+      const data = (await apiFetch('/api/v1/admin/system-settings/x-oauth', {
+        method: 'PATCH',
+        body: JSON.stringify(payload),
+      })) as XOAuthSettingsView;
+      applyView(data);
+      setSuccess('X 登录配置已保存');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">X 登录配置</div>
+        <p className="mt-1 text-sm text-neutral-500">用于申请人后台绑定 X 账号和使用 X 登录。Callback URI 必须与 X Developer Portal 完全一致。</p>
+      </div>
+
+      {loading && <div className="text-sm text-neutral-500">加载中...</div>}
+
+      {!loading && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ReadField label="当前状态" value={settings?.enabled ? '已启用' : '已禁用'} />
+            <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
+            <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
+            <ReadField label="Client ID" value={valueOrDash(settings?.client_id)} />
+            <ReadField label="Client Secret" value={settings?.has_client_secret ? `已配置 (${settings?.client_secret_masked || '-'})` : '未配置'} />
+            <ReadField label="Callback URI" value={valueOrDash(settings?.redirect_uri)} />
+            <ReadField label="Scope" value={valueOrDash(settings?.scope)} />
+            <ReadField label="PKCE 方法" value={settings?.code_challenge_method || '-'} />
+          </div>
+
+          <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
+            <label className="inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={form.enabled}
+                onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+              />
+              启用 X 登录
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField label="Client ID">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.client_id}
+                onChange={(e) => setForm({ ...form, client_id: e.target.value })}
+                placeholder="X OAuth 2.0 Client ID"
+              />
+            </FormField>
+
+            <FormField
+              label="Client Secret"
+              hint={settings?.has_client_secret ? '已配置，留空则不修改；如需删除，请勾选下方“清空已保存 Client Secret”。' : 'X OAuth 2.0 Client Secret。'}
+            >
+              <div className="space-y-2">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  type="password"
+                  value={form.client_secret}
+                  onChange={(e) => {
+                    setClearClientSecret(false);
+                    setForm({ ...form, client_secret: e.target.value });
+                  }}
+                  placeholder={settings?.has_client_secret ? '已配置，留空则不修改' : '输入 Client Secret'}
+                />
+                {settings?.has_client_secret && (
+                  <div className="text-xs text-neutral-500">当前已保存：{settings.client_secret_masked}</div>
+                )}
+              </div>
+            </FormField>
+
+            <FormField label="Callback URI / Redirect URL" hint="必须与 X Developer Portal 中配置的 Callback URI 完全一致。">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.redirect_uri}
+                onChange={(e) => setForm({ ...form, redirect_uri: e.target.value })}
+                placeholder="http://127.0.0.1:3000/api/v1/portal/x-oauth/callback"
+              />
+            </FormField>
+
+            <FormField label="Scope">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.scope}
+                onChange={(e) => setForm({ ...form, scope: e.target.value })}
+                placeholder="tweet.read users.read"
+              />
+            </FormField>
+
+            <FormField label="Authorization URL">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.authorize_url}
+                onChange={(e) => setForm({ ...form, authorize_url: e.target.value })}
+              />
+            </FormField>
+
+            <FormField label="Token URL">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.token_url}
+                onChange={(e) => setForm({ ...form, token_url: e.target.value })}
+              />
+            </FormField>
+
+            <FormField label="User API URL">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.me_url}
+                onChange={(e) => setForm({ ...form, me_url: e.target.value })}
+              />
+            </FormField>
+
+            <FormField label="PKCE 方法" hint="X 后台使用 Web App 时通常选择 plain；如你确认应用支持 S256，可切换。">
+              <select
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.code_challenge_method}
+                onChange={(e) => setForm({ ...form, code_challenge_method: e.target.value === 'S256' ? 'S256' : 'plain' })}
+              >
+                <option value="plain">plain</option>
+                <option value="S256">S256</option>
+              </select>
+            </FormField>
+          </div>
+
+          {settings?.has_client_secret && (
+            <label className="inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={clearClientSecret}
+                onChange={(e) => {
+                  setClearClientSecret(e.target.checked);
+                  if (e.target.checked) {
+                    setForm({ ...form, client_secret: '' });
+                  }
+                }}
+              />
+              清空已保存 Client Secret
+            </label>
+          )}
+
+          {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+          {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+
+          <div className="flex items-center justify-end">
             <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
               {saving ? '保存中...' : '保存配置'}
             </button>

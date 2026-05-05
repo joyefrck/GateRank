@@ -20,6 +20,7 @@ import {
   type PaymentGatewaySettingsInput,
 } from '../services/paymentGatewaySettingsService';
 import type { SmtpSettingsInput, SmtpTemplateKey } from '../services/smtpSettingsService';
+import type { XOAuthSettingsInput } from '../services/xOAuthSettingsService';
 import type { SchedulerDailyStat } from '../repositories/schedulerRunRepository';
 import type { AccessTokenScope } from '../utils/accessToken';
 import type {
@@ -224,6 +225,10 @@ interface AdminDeps {
   smtpSettingsService?: {
     getAdminSettings(): Promise<unknown>;
     updateAdminSettings(input: SmtpSettingsInput, updatedBy: string): Promise<unknown>;
+  };
+  xOAuthSettingsService?: {
+    getAdminSettings(): Promise<unknown>;
+    updateAdminSettings(input: XOAuthSettingsInput, updatedBy: string): Promise<unknown>;
   };
   mailService?: {
     sendTestMail(input: SmtpSettingsInput & { test_to: string }): Promise<void>;
@@ -567,6 +572,38 @@ export function createAdminRoutes(deps: AdminDeps): Router {
   router.get('/system-settings/smtp', async (_req, res, next) => {
     try {
       res.json(await getSmtpSettingsService(deps).getAdminSettings());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/system-settings/x-oauth', async (_req, res, next) => {
+    try {
+      res.json(await getXOAuthSettingsService(deps).getAdminSettings());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/system-settings/x-oauth', async (req, res, next) => {
+    try {
+      const input = parseXOAuthSettingsPayload((req.body ?? {}) as Record<string, unknown>);
+      const result = await getXOAuthSettingsService(deps).updateAdminSettings(
+        input,
+        actorFromReq(req),
+      );
+      await deps.auditRepository.log(
+        'update_system_setting_x_oauth',
+        actorFromReq(req),
+        req.requestId,
+        {
+          ...input,
+          client_secret: input.client_secret
+            ? '[redacted]'
+            : input.client_secret,
+        },
+      );
+      res.json(result);
     } catch (error) {
       next(error);
     }
@@ -1969,6 +2006,27 @@ function parsePaymentGatewaySettingsPayload(
   };
 }
 
+function parseXOAuthSettingsPayload(payload: Record<string, unknown>): XOAuthSettingsInput {
+  const codeChallengeMethod = payload.code_challenge_method === undefined
+    ? undefined
+    : String(payload.code_challenge_method) === 'S256'
+      ? 'S256'
+      : 'plain';
+
+  return {
+    enabled: payload.enabled === undefined ? undefined : optionalBoolean(payload.enabled),
+    client_id: payload.client_id === undefined ? undefined : String(payload.client_id ?? '').trim(),
+    client_secret:
+      payload.client_secret === undefined ? undefined : String(payload.client_secret ?? '').trim(),
+    redirect_uri: payload.redirect_uri === undefined ? undefined : String(payload.redirect_uri ?? '').trim(),
+    authorize_url: payload.authorize_url === undefined ? undefined : String(payload.authorize_url ?? '').trim(),
+    token_url: payload.token_url === undefined ? undefined : String(payload.token_url ?? '').trim(),
+    me_url: payload.me_url === undefined ? undefined : String(payload.me_url ?? '').trim(),
+    scope: payload.scope === undefined ? undefined : String(payload.scope ?? '').trim(),
+    code_challenge_method: codeChallengeMethod,
+  };
+}
+
 function parseSmtpSettingsPayload(
   payload: Record<string, unknown>,
   allowPartial: boolean,
@@ -2379,6 +2437,13 @@ function getSmtpSettingsService(deps: AdminDeps) {
     throw new Error('smtpSettingsService is not configured');
   }
   return deps.smtpSettingsService;
+}
+
+function getXOAuthSettingsService(deps: AdminDeps) {
+  if (!deps.xOAuthSettingsService) {
+    throw new Error('xOAuthSettingsService is not configured');
+  }
+  return deps.xOAuthSettingsService;
 }
 
 function getMailService(deps: AdminDeps) {

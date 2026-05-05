@@ -559,6 +559,12 @@ export interface ApplicantPortalView {
     email: string;
     must_change_password: boolean;
     last_login_at: string | null;
+    x: {
+      user_id: string;
+      username: string | null;
+      display_name: string | null;
+      bound_at: string | null;
+    } | null;
   };
   application: AirportApplication;
   latest_payment_order?: {

@@ -66,6 +66,7 @@ export class RecomputeService {
 
       await this.deps.scoreRepository.upsertDaily(airport.id, date, score);
       const scoreTrend = await this.deps.scoreRepository.getTrend(airport.id, airport.created_at, date);
+      preserveManualTotalScore(score, scoreTrend, date);
       const totalScore = computeFinalEngineScore({
         sSeries: scoreTrend.map((row) => ({ date: row.date, score: row.s })),
         pSeries: scoreTrend.map((row) => ({ date: row.date, score: row.p })),
@@ -185,6 +186,7 @@ export class RecomputeService {
 
     await this.deps.scoreRepository.upsertDaily(airport.id, date, score);
     const scoreTrend = await this.deps.scoreRepository.getTrend(airport.id, airport.created_at, date);
+    preserveManualTotalScore(score, scoreTrend, date);
     const totalScore = computeFinalEngineScore({
       sSeries: scoreTrend.map((row) => ({ date: row.date, score: row.s })),
       pSeries: scoreTrend.map((row) => ({ date: row.date, score: row.p })),
@@ -195,5 +197,13 @@ export class RecomputeService {
     score.details.total_score = totalScore;
     await this.deps.scoreRepository.upsertDaily(airport.id, date, score);
     return score;
+  }
+}
+
+function preserveManualTotalScore(score: ScoreBreakdown, scoreTrend: AirportScoreDaily[], date: string): void {
+  const currentScore = scoreTrend.find((row) => row.date === date);
+  const manualTotalScore = currentScore?.details.manual_total_score;
+  if (typeof manualTotalScore === 'number' && Number.isFinite(manualTotalScore)) {
+    score.details.manual_total_score = manualTotalScore;
   }
 }

@@ -61,12 +61,40 @@ CREATE TABLE IF NOT EXISTS applicant_accounts (
   password_hash VARCHAR(255) NOT NULL,
   must_change_password TINYINT(1) NOT NULL DEFAULT 1,
   last_login_at DATETIME NULL,
+  x_user_id VARCHAR(64) NULL,
+  x_username VARCHAR(255) NULL,
+  x_display_name VARCHAR(255) NULL,
+  x_bound_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uk_applicant_accounts_application_id (application_id),
   UNIQUE KEY uk_applicant_accounts_email (email),
+  UNIQUE KEY uk_applicant_accounts_x_user_id (x_user_id),
   INDEX idx_applicant_accounts_email (email)
+);
+
+CREATE TABLE IF NOT EXISTS applicant_x_oauth_flows (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  flow_type ENUM('bind', 'login') NOT NULL,
+  state VARCHAR(128) NOT NULL,
+  code_verifier VARCHAR(128) NOT NULL,
+  applicant_account_id BIGINT UNSIGNED NULL,
+  status ENUM('pending', 'completed', 'consumed', 'expired') NOT NULL DEFAULT 'pending',
+  handoff_code VARCHAR(128) NULL,
+  handoff_expires_at DATETIME NULL,
+  x_user_id VARCHAR(64) NULL,
+  x_username VARCHAR(255) NULL,
+  x_display_name VARCHAR(255) NULL,
+  expires_at DATETIME NOT NULL,
+  consumed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_applicant_x_oauth_state (state),
+  UNIQUE KEY uk_applicant_x_oauth_handoff_code (handoff_code),
+  INDEX idx_applicant_x_oauth_status_expires (status, expires_at),
+  INDEX idx_applicant_x_oauth_account_created (applicant_account_id, created_at DESC)
 );
 
 CREATE TABLE IF NOT EXISTS applicant_wallets (

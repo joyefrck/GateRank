@@ -106,6 +106,22 @@ interface PortalDeps {
       expires_at: string;
       account: ApplicantAccount;
     }>;
+    createSession?(account: ApplicantAccount): Promise<{
+      token: string;
+      expires_at: string;
+      account: ApplicantAccount;
+    }>;
+  };
+  applicantXOAuthService?: {
+    startBind(applicantAccountId: number): Promise<{ authorization_url: string; expires_at: string }>;
+    startLogin(): Promise<{ authorization_url: string; expires_at: string }>;
+    handleCallback(input: { state: string; code: string }): Promise<{
+      flow_type: 'bind' | 'login';
+      handoff_code: string | null;
+    }>;
+    consumeLoginHandoff(handoffCode: string): Promise<ApplicantAccount>;
+    unbind(applicantAccountId: number): Promise<void>;
+    getReturnOrigin?(): Promise<string | null>;
   };
   paymentGatewaySettingsService: {
     getConfig(): Promise<{ application_fee_amount: number }>;
@@ -125,12 +141,33 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       res.json({
         token: auth.token,
         expires_at: auth.expires_at,
-        account: {
-          id: auth.account.id,
-          email: auth.account.email,
-          must_change_password: auth.account.must_change_password,
-          last_login_at: auth.account.last_login_at,
-        },
+        account: toPortalAccountView(auth.account),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/x-oauth/login/start', async (_req, res, next) => {
+    try {
+      res.status(201).json(await requireApplicantXOAuthService(deps).startLogin());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/x-oauth/login/complete', async (req, res, next) => {
+    try {
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const account = await requireApplicantXOAuthService(deps).consumeLoginHandoff(mustString(payload.code, 'code'));
+      if (!deps.applicantPortalAuthService.createSession) {
+        throw new Error('applicantPortalAuthService.createSession is not configured');
+      }
+      const auth = await deps.applicantPortalAuthService.createSession(account);
+      res.json({
+        token: auth.token,
+        expires_at: auth.expires_at,
+        account: toPortalAccountView(auth.account),
       });
     } catch (error) {
       next(error);
@@ -140,6 +177,25 @@ export function createPortalRoutes(deps: PortalDeps): Router {
   router.get('/portal/me', portalAuth, async (req, res, next) => {
     try {
       const session = requireApplicantSession(req);
+      res.json(await buildPortalView(deps, session.applicant_id));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/x-oauth/bind/start', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      res.status(201).json(await requireApplicantXOAuthService(deps).startBind(session.applicant_id));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/x-oauth/unbind', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      await requireApplicantXOAuthService(deps).unbind(session.applicant_id);
       res.json(await buildPortalView(deps, session.applicant_id));
     } catch (error) {
       next(error);
@@ -398,6 +454,30 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     res.json({ ok: true });
   });
 
+  router.get('/portal/x-oauth/callback', async (req, res) => {
+    const siteOrigin = await getXOAuthReturnOrigin(deps, req);
+    try {
+      const error = stringOrNull(req.query.error);
+      if (error) {
+        throw new HttpError(400, 'X_OAUTH_DECLINED', 'X 授权已取消');
+      }
+      const state = mustString(req.query.state, 'state');
+      const code = mustString(req.query.code, 'code');
+      const result = await requireApplicantXOAuthService(deps).handleCallback({ state, code });
+      const redirectUrl = new URL('/portal', siteOrigin);
+      if (result.flow_type === 'bind') {
+        redirectUrl.searchParams.set('x_oauth', 'bound');
+      } else if (result.handoff_code) {
+        redirectUrl.searchParams.set('x_login_code', result.handoff_code);
+      }
+      res.redirect(302, redirectUrl.toString());
+    } catch (error) {
+      const redirectUrl = new URL('/portal', siteOrigin);
+      redirectUrl.searchParams.set('x_oauth_error', error instanceof Error ? error.message : 'X 授权失败');
+      res.redirect(302, redirectUrl.toString());
+    }
+  });
+
   router.post('/portal/payment-notify', async (req, res) => {
     const payload = toNotificationPayload(req.body, req.query);
     const outTradeNo = String(payload.out_trade_no || '').trim();
@@ -487,10 +567,7 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
 
   return {
     account: {
-      id: account.id,
-      email: account.email,
-      must_change_password: account.must_change_password,
-      last_login_at: account.last_login_at,
+      ...toPortalAccountView(account),
     },
     application,
     latest_payment_order: latestPaymentOrder
@@ -511,12 +588,36 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
   };
 }
 
+function toPortalAccountView(account: ApplicantAccount) {
+  return {
+    id: account.id,
+    email: account.email,
+    must_change_password: account.must_change_password,
+    last_login_at: account.last_login_at,
+    x: account.x_user_id
+      ? {
+          user_id: account.x_user_id,
+          username: account.x_username,
+          display_name: account.x_display_name,
+          bound_at: account.x_bound_at,
+        }
+      : null,
+  };
+}
+
 async function requireApplicantAccount(deps: PortalDeps, applicantId: number) {
   const account = await deps.applicantAccountRepository.getById(applicantId);
   if (!account) {
     throw new HttpError(401, 'UNAUTHORIZED', '登录已失效，请重新登录');
   }
   return account;
+}
+
+function requireApplicantXOAuthService(deps: PortalDeps): NonNullable<PortalDeps['applicantXOAuthService']> {
+  if (!deps.applicantXOAuthService) {
+    throw new HttpError(503, 'X_OAUTH_NOT_CONFIGURED', 'X 登录尚未配置，请联系管理员');
+  }
+  return deps.applicantXOAuthService;
 }
 
 async function requireApplication(deps: PortalDeps, applicationId: number) {
@@ -659,6 +760,14 @@ function getRequestOrigin(req: any): string {
   const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0];
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0];
   return `${proto}://${host}`;
+}
+
+async function getXOAuthReturnOrigin(deps: PortalDeps, req: any): Promise<string> {
+  const origin = await deps.applicantXOAuthService?.getReturnOrigin?.();
+  if (origin) {
+    return origin;
+  }
+  return getSiteOrigin(req);
 }
 
 function stringOrNull(value: unknown): string | null {

@@ -2013,6 +2013,98 @@ test('PATCH /system-settings/telegram updates settings and writes audit log', as
   }
 });
 
+test('PATCH /system-settings/x-oauth updates X OAuth settings and writes audit log', async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const audits: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, actor, requestId, payload) => {
+          audits.push({ action, actor, requestId, payload: payload as Record<string, unknown> });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+      xOAuthSettingsService: {
+        getAdminSettings: async () => null,
+        updateAdminSettings: async (input, updatedBy) => {
+          updates.push({ ...(input as Record<string, unknown>), updatedBy });
+          return {
+            enabled: true,
+            client_id: input.client_id,
+            has_client_secret: true,
+            client_secret_masked: 'supe***cret',
+            redirect_uri: input.redirect_uri,
+            authorize_url: input.authorize_url,
+            token_url: input.token_url,
+            me_url: input.me_url,
+            scope: input.scope,
+            code_challenge_method: input.code_challenge_method,
+            updated_at: '2026-05-05 12:00:00',
+            updated_by: updatedBy,
+          };
+        },
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/x-oauth`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({
+        enabled: true,
+        client_id: 'client-id',
+        client_secret: 'super-secret',
+        redirect_uri: 'http://127.0.0.1:3000/api/v1/portal/x-oauth/callback',
+        authorize_url: 'https://twitter.com/i/oauth2/authorize',
+        token_url: 'https://api.x.com/2/oauth2/token',
+        me_url: 'https://api.x.com/2/users/me',
+        scope: 'tweet.read users.read',
+        code_challenge_method: 'plain',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].updatedBy, 'tester');
+    assert.equal(updates[0].client_id, 'client-id');
+    assert.equal(updates[0].client_secret, 'super-secret');
+    assert.equal(updates[0].code_challenge_method, 'plain');
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, 'update_system_setting_x_oauth');
+    const data = (await response.json()) as { client_secret_masked: string; updated_by: string };
+    assert.equal(data.client_secret_masked, 'supe***cret');
+    assert.equal(data.updated_by, 'tester');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /system-settings/telegram/test sends webhook test request without persisting', async () => {
   const tests: Array<Record<string, unknown>> = [];
   const audits: string[] = [];
