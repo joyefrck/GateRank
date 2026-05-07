@@ -1,4 +1,4 @@
-import type { DailyMetrics, ProbeSample, StabilityTier } from '../types/domain';
+import type { DailyMetrics, PerformanceRun, ProbeSample, StabilityTier } from '../types/domain';
 import { dateDaysAgo } from '../utils/time';
 import { computeLatencyStats, getStabilityTier, isStableDay } from '../utils/stability';
 
@@ -17,6 +17,9 @@ interface AggregationDeps {
   metricsRepository: {
     getLatestByAirportBeforeDate(airportId: number, date: string): Promise<DailyMetrics | null>;
     upsertDaily(input: DailyMetrics): Promise<void>;
+  };
+  performanceRunRepository?: {
+    getLatestByAirportAndDate(airportId: number, date: string): Promise<PerformanceRun | null>;
   };
 }
 
@@ -93,6 +96,8 @@ export class AggregationService {
     );
 
     const base = await this.deps.metricsRepository.getLatestByAirportBeforeDate(airportId, date);
+    const performanceRun =
+      (await this.deps.performanceRunRepository?.getLatestByAirportAndDate(airportId, date)) ?? null;
     const medianLatency = performanceLatencies.length
       ? median(performanceLatencies)
       : base?.median_latency_ms ?? 999;
@@ -142,6 +147,12 @@ export class AggregationService {
       median_latency_ms: medianLatency,
       median_download_mbps: medianDownload,
       packet_loss_percent: packetLoss,
+      available_nodes_count: performanceRun?.available_nodes_count ?? base?.available_nodes_count ?? null,
+      unavailable_nodes_count: performanceRun?.unavailable_nodes_count ?? base?.unavailable_nodes_count ?? null,
+      node_availability_percent:
+        performanceRun?.node_availability_percent ?? base?.node_availability_percent ?? null,
+      node_unavailability_percent:
+        performanceRun?.node_unavailability_percent ?? base?.node_unavailability_percent ?? null,
       stable_days_streak: stableDaysStreak,
       healthy_days_streak: healthyDaysStreak,
       is_stable_day: stableDay,

@@ -90,7 +90,10 @@ export function computeScore(
   const sslPenalty = calcSslPenalty(metrics.ssl_days_left);
   const complaintPenalty = calcComplaintPenalty(metrics.recent_complaints_count);
   const historyPenalty = calcHistoryPenalty(metrics.history_incidents);
-  const riskPenalty = round2(domainPenalty + sslPenalty + complaintPenalty + historyPenalty);
+  const nodeAvailabilityPenalty = calcNodeAvailabilityPenalty(metrics.node_unavailability_percent);
+  const riskPenalty = round2(
+    domainPenalty + sslPenalty + complaintPenalty + historyPenalty + nodeAvailabilityPenalty,
+  );
 
   const s = computeSScore(uptimeScore, stabilityScore, streakScore);
 
@@ -142,6 +145,7 @@ export function computeScore(
       ssl_penalty: round2(sslPenalty),
       complaint_penalty: round2(complaintPenalty),
       history_penalty: round2(historyPenalty),
+      node_availability_penalty: round2(nodeAvailabilityPenalty),
       total_penalty: round2(riskPenalty),
       risk_level: riskLevelFromScore(r),
       uptime_percent_basis: round2(uptimeBasis),
@@ -151,6 +155,10 @@ export function computeScore(
       effective_latency_cv: effectiveLatencyCv === null ? null : round4(effectiveLatencyCv),
       stability_tier: metrics.stability_tier ?? null,
       stability_rule_version: STABILITY_RULES.ruleVersion,
+      available_nodes_count: metrics.available_nodes_count ?? null,
+      unavailable_nodes_count: metrics.unavailable_nodes_count ?? null,
+      node_availability_percent: metrics.node_availability_percent ?? null,
+      node_unavailability_percent: metrics.node_unavailability_percent ?? null,
     },
   };
 }
@@ -275,6 +283,23 @@ export function calcComplaintPenalty(recentComplaintsCount: number): number {
 
 export function calcHistoryPenalty(historyIncidents: number): number {
   return Math.min(Math.max(historyIncidents, 0) * 10, 30);
+}
+
+export function calcNodeAvailabilityPenalty(nodeUnavailabilityPercent: number | null | undefined): number {
+  if (nodeUnavailabilityPercent === null || nodeUnavailabilityPercent === undefined) {
+    return 0;
+  }
+  const value = clamp(nodeUnavailabilityPercent, 0, 100);
+  if (value <= 5) {
+    return 0;
+  }
+  if (value <= 20) {
+    return round2(((value - 5) / 15) * 10);
+  }
+  if (value <= 50) {
+    return round2(10 + ((value - 20) / 30) * 15);
+  }
+  return round2(25 + ((value - 50) / 50) * 5);
 }
 
 export function riskLevelFromScore(rScore: number): string {

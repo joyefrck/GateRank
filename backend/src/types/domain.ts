@@ -76,6 +76,10 @@ export interface DailyMetrics {
   median_latency_ms: number;
   median_download_mbps: number;
   packet_loss_percent: number;
+  available_nodes_count?: number | null;
+  unavailable_nodes_count?: number | null;
+  node_availability_percent?: number | null;
+  node_unavailability_percent?: number | null;
   stable_days_streak: number;
   healthy_days_streak?: number | null;
   is_stable_day?: boolean | null;
@@ -515,6 +519,10 @@ export interface PerformanceRun {
   supported_nodes_count: number;
   selected_nodes: PerformanceRunNode[];
   tested_nodes: PerformanceRunNode[];
+  available_nodes_count: number | null;
+  unavailable_nodes_count: number | null;
+  node_availability_percent: number | null;
+  node_unavailability_percent: number | null;
   median_latency_ms: number | null;
   median_download_mbps: number | null;
   packet_loss_percent: number | null;
@@ -533,6 +541,10 @@ export interface PerformanceRunInput {
   supported_nodes_count?: number;
   selected_nodes?: PerformanceRunNode[];
   tested_nodes?: PerformanceRunNode[];
+  available_nodes_count?: number | null;
+  unavailable_nodes_count?: number | null;
+  node_availability_percent?: number | null;
+  node_unavailability_percent?: number | null;
   latency_samples_ms?: number[];
   latency_sampled_at?: string[];
   download_samples_mbps?: number[];

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   calcComplaintPenalty,
   calcHistoryPenalty,
+  calcNodeAvailabilityPenalty,
   calcPriceScore,
   calcSslPenalty,
   coldStartFactor,
@@ -269,11 +270,60 @@ test('risk penalty helpers follow stepped MVP rules', () => {
   assert.equal(calcComplaintPenalty(10), 15);
   assert.equal(calcHistoryPenalty(2), 20);
   assert.equal(calcHistoryPenalty(10), 30);
+  assert.equal(calcNodeAvailabilityPenalty(null), 0);
+  assert.equal(calcNodeAvailabilityPenalty(5), 0);
+  assert.equal(calcNodeAvailabilityPenalty(20), 10);
+  assert.equal(calcNodeAvailabilityPenalty(25), 12.5);
+  assert.equal(calcNodeAvailabilityPenalty(50), 25);
+  assert.equal(calcNodeAvailabilityPenalty(100), 30);
 
   assert.equal(riskLevelFromScore(90), 'low');
   assert.equal(riskLevelFromScore(72), 'medium_low');
   assert.equal(riskLevelFromScore(55), 'medium');
   assert.equal(riskLevelFromScore(40), 'high');
+});
+
+test('computeScore applies node availability penalty to R only', () => {
+  const airport: Airport = {
+    id: 1,
+    name: 'A',
+    website: 'https://a.example.com',
+    status: 'normal',
+    is_listed: true,
+    plan_price_month: 20,
+    has_trial: false,
+    tags: [],
+    created_at: '2026-03-20',
+  };
+
+  const metrics: DailyMetrics = {
+    airport_id: 1,
+    date: '2026-03-22',
+    uptime_percent_30d: 99,
+    uptime_percent_today: 99,
+    latency_samples_ms: [100, 120],
+    median_latency_ms: 110,
+    median_download_mbps: 100,
+    packet_loss_percent: 1,
+    available_nodes_count: 15,
+    unavailable_nodes_count: 5,
+    node_availability_percent: 75,
+    node_unavailability_percent: 25,
+    stable_days_streak: 15,
+    healthy_days_streak: 15,
+    domain_ok: true,
+    ssl_days_left: 30,
+    recent_complaints_count: 0,
+    history_incidents: 0,
+  };
+
+  const out = computeScore(airport, metrics, 0);
+  assert.equal(out.details.node_availability_penalty, 12.5);
+  assert.equal(out.risk_penalty, 12.5);
+  assert.equal(out.r, 87.5);
+  assert.equal(out.details.available_nodes_count, 15);
+  assert.equal(out.details.unavailable_nodes_count, 5);
+  assert.equal(out.details.node_unavailability_percent, 25);
 });
 
 test('computeScore treats missing ssl data as light risk', () => {

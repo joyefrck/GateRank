@@ -107,6 +107,7 @@ export async function createApp() {
     airportRepository,
     probeSampleRepository,
     metricsRepository,
+    performanceRunRepository,
   });
   const riskCheckService = new RiskCheckService({
     airportRepository,

@@ -15,6 +15,10 @@ interface DailyMetricsRow extends RowDataPacket {
   median_latency_ms: number;
   median_download_mbps: number;
   packet_loss_percent: number;
+  available_nodes_count: number | null;
+  unavailable_nodes_count: number | null;
+  node_availability_percent: number | null;
+  node_unavailability_percent: number | null;
   stable_days_streak: number;
   healthy_days_streak: number | null;
   is_stable_day: number | null;
@@ -39,6 +43,10 @@ export class MetricsRepository {
       'stability_tier',
       "ENUM('stable', 'minor_fluctuation', 'volatile') NULL AFTER is_stable_day",
     );
+    await this.ensureColumn('available_nodes_count', 'INT UNSIGNED NULL AFTER packet_loss_percent');
+    await this.ensureColumn('unavailable_nodes_count', 'INT UNSIGNED NULL AFTER available_nodes_count');
+    await this.ensureColumn('node_availability_percent', 'DECIMAL(5,2) NULL AFTER unavailable_nodes_count');
+    await this.ensureColumn('node_unavailability_percent', 'DECIMAL(5,2) NULL AFTER node_availability_percent');
     await this.ensureColumnNullable('ssl_days_left', 'INT NULL DEFAULT NULL');
   }
 
@@ -47,9 +55,10 @@ export class MetricsRepository {
       `INSERT INTO airport_metrics_daily (
          airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
          latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps,
-         packet_loss_percent, stable_days_streak, healthy_days_streak, is_stable_day, stability_tier,
+         packet_loss_percent, available_nodes_count, unavailable_nodes_count, node_availability_percent,
+         node_unavailability_percent, stable_days_streak, healthy_days_streak, is_stable_day, stability_tier,
          domain_ok, ssl_days_left, recent_complaints_count, history_incidents
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          uptime_percent_30d = VALUES(uptime_percent_30d),
          uptime_percent_today = VALUES(uptime_percent_today),
@@ -61,6 +70,10 @@ export class MetricsRepository {
          median_latency_ms = VALUES(median_latency_ms),
          median_download_mbps = VALUES(median_download_mbps),
          packet_loss_percent = VALUES(packet_loss_percent),
+         available_nodes_count = VALUES(available_nodes_count),
+         unavailable_nodes_count = VALUES(unavailable_nodes_count),
+         node_availability_percent = VALUES(node_availability_percent),
+         node_unavailability_percent = VALUES(node_unavailability_percent),
          stable_days_streak = VALUES(stable_days_streak),
          healthy_days_streak = VALUES(healthy_days_streak),
          is_stable_day = VALUES(is_stable_day),
@@ -82,6 +95,10 @@ export class MetricsRepository {
         nullableNumber(input.latency_cv),
         JSON.stringify(input.download_samples_mbps || []),
         input.packet_loss_percent,
+        nullableNumber(input.available_nodes_count),
+        nullableNumber(input.unavailable_nodes_count),
+        nullableNumber(input.node_availability_percent),
+        nullableNumber(input.node_unavailability_percent),
         input.stable_days_streak,
         nullableNumber(input.healthy_days_streak),
         nullableBoolean(input.is_stable_day),
@@ -98,6 +115,7 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
          FROM airport_metrics_daily
@@ -112,6 +130,7 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
          FROM airport_metrics_daily
@@ -136,6 +155,7 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
          FROM airport_metrics_daily
@@ -151,6 +171,7 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
          FROM airport_metrics_daily
@@ -171,6 +192,7 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
          FROM airport_metrics_daily
@@ -195,6 +217,7 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
          FROM airport_metrics_daily
@@ -306,6 +329,10 @@ function toDailyMetrics(row: DailyMetricsRow): DailyMetrics {
     median_latency_ms: Number(row.median_latency_ms),
     median_download_mbps: Number(row.median_download_mbps),
     packet_loss_percent: Number(row.packet_loss_percent),
+    available_nodes_count: nullableRowNumber(row.available_nodes_count),
+    unavailable_nodes_count: nullableRowNumber(row.unavailable_nodes_count),
+    node_availability_percent: nullableRowNumber(row.node_availability_percent),
+    node_unavailability_percent: nullableRowNumber(row.node_unavailability_percent),
     stable_days_streak: Number(row.stable_days_streak),
     healthy_days_streak: nullableRowNumber(row.healthy_days_streak),
     is_stable_day: nullableRowBoolean(row.is_stable_day),

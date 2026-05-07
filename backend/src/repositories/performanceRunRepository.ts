@@ -18,6 +18,10 @@ interface PerformanceRunRow extends RowDataPacket {
   supported_nodes_count: number;
   selected_nodes_json: unknown;
   tested_nodes_json: unknown;
+  available_nodes_count: number | null;
+  unavailable_nodes_count: number | null;
+  node_availability_percent: number | null;
+  node_unavailability_percent: number | null;
   median_latency_ms: number | null;
   median_download_mbps: number | null;
   packet_loss_percent: number | null;
@@ -42,6 +46,10 @@ export class PerformanceRunRepository {
         supported_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
         selected_nodes_json JSON NOT NULL,
         tested_nodes_json JSON NOT NULL,
+        available_nodes_count INT UNSIGNED NULL,
+        unavailable_nodes_count INT UNSIGNED NULL,
+        node_availability_percent DECIMAL(5,2) NULL,
+        node_unavailability_percent DECIMAL(5,2) NULL,
         median_latency_ms DECIMAL(8,2) NULL,
         median_download_mbps DECIMAL(8,2) NULL,
         packet_loss_percent DECIMAL(5,2) NULL,
@@ -54,6 +62,10 @@ export class PerformanceRunRepository {
         CONSTRAINT fk_perf_runs_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
       )`,
     );
+    await this.ensureColumn('available_nodes_count', 'INT UNSIGNED NULL AFTER tested_nodes_json');
+    await this.ensureColumn('unavailable_nodes_count', 'INT UNSIGNED NULL AFTER available_nodes_count');
+    await this.ensureColumn('node_availability_percent', 'DECIMAL(5,2) NULL AFTER unavailable_nodes_count');
+    await this.ensureColumn('node_unavailability_percent', 'DECIMAL(5,2) NULL AFTER node_availability_percent');
   }
 
   async insert(input: PerformanceRunInput): Promise<number> {
@@ -61,9 +73,10 @@ export class PerformanceRunRepository {
       `INSERT INTO airport_performance_runs (
          airport_id, sampled_at, source, status, subscription_format,
          parsed_nodes_count, supported_nodes_count, selected_nodes_json, tested_nodes_json,
+         available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
          median_latency_ms, median_download_mbps, packet_loss_percent,
          error_code, error_message, diagnostics_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.airport_id,
         input.sampled_at,
@@ -74,6 +87,10 @@ export class PerformanceRunRepository {
         Math.max(0, Number(input.supported_nodes_count || 0)),
         JSON.stringify(input.selected_nodes || []),
         JSON.stringify(input.tested_nodes || []),
+        nullableNumber(input.available_nodes_count),
+        nullableNumber(input.unavailable_nodes_count),
+        nullableNumber(input.node_availability_percent),
+        nullableNumber(input.node_unavailability_percent),
         nullableNumber(input.median_latency_ms),
         nullableNumber(input.median_download_mbps),
         nullableNumber(input.packet_loss_percent),
@@ -89,6 +106,7 @@ export class PerformanceRunRepository {
     const [rows] = await this.pool.query<PerformanceRunRow[]>(
       `SELECT id, airport_id, sampled_at, source, status, subscription_format,
               parsed_nodes_count, supported_nodes_count, selected_nodes_json, tested_nodes_json,
+              available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               median_latency_ms, median_download_mbps, packet_loss_percent,
               error_code, error_message, diagnostics_json
          FROM airport_performance_runs
@@ -111,6 +129,7 @@ export class PerformanceRunRepository {
     const [rows] = await this.pool.query<PerformanceRunRow[]>(
       `SELECT id, airport_id, sampled_at, source, status, subscription_format,
               parsed_nodes_count, supported_nodes_count, selected_nodes_json, tested_nodes_json,
+              available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               median_latency_ms, median_download_mbps, packet_loss_percent,
               error_code, error_message, diagnostics_json
          FROM airport_performance_runs
@@ -127,6 +146,24 @@ export class PerformanceRunRepository {
 
     return toPerformanceRun(rows[0]);
   }
+
+  private async ensureColumn(columnName: string, definition: string): Promise<void> {
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT 1
+         FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+        LIMIT 1`,
+      ['airport_performance_runs', columnName],
+    );
+
+    if (rows.length === 0) {
+      await this.pool.query(
+        `ALTER TABLE airport_performance_runs ADD COLUMN ${columnName} ${definition}`,
+      );
+    }
+  }
 }
 
 function toPerformanceRun(row: PerformanceRunRow): PerformanceRun {
@@ -141,6 +178,10 @@ function toPerformanceRun(row: PerformanceRunRow): PerformanceRun {
     supported_nodes_count: Number(row.supported_nodes_count),
     selected_nodes: safeNodeArray(row.selected_nodes_json),
     tested_nodes: safeNodeArray(row.tested_nodes_json),
+    available_nodes_count: nullableNumber(row.available_nodes_count),
+    unavailable_nodes_count: nullableNumber(row.unavailable_nodes_count),
+    node_availability_percent: nullableNumber(row.node_availability_percent),
+    node_unavailability_percent: nullableNumber(row.node_unavailability_percent),
     median_latency_ms: nullableNumber(row.median_latency_ms),
     median_download_mbps: nullableNumber(row.median_download_mbps),
     packet_loss_percent: nullableNumber(row.packet_loss_percent),

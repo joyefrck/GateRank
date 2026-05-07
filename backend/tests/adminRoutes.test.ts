@@ -66,6 +66,10 @@ test('POST /performance-runs stores run diagnostics and performance samples', as
         subscription_format: 'base64',
         parsed_nodes_count: 8,
         supported_nodes_count: 5,
+        available_nodes_count: 15,
+        unavailable_nodes_count: 5,
+        node_availability_percent: 75,
+        node_unavailability_percent: 25,
         selected_nodes: [{ name: 'HK-1', region: 'HK', type: 'trojan' }],
         tested_nodes: [{ name: 'HK-1', region: 'HK', type: 'trojan', status: 'ok' }],
         latency_samples_ms: [100, 120],
@@ -91,6 +95,10 @@ test('POST /performance-runs stores run diagnostics and performance samples', as
     assert.equal(insertedRuns[0].median_latency_ms, 110);
     assert.equal(insertedRuns[0].median_download_mbps, 88.8);
     assert.equal(insertedRuns[0].status, 'partial');
+    assert.equal(insertedRuns[0].available_nodes_count, 15);
+    assert.equal(insertedRuns[0].unavailable_nodes_count, 5);
+    assert.equal(insertedRuns[0].node_availability_percent, 75);
+    assert.equal(insertedRuns[0].node_unavailability_percent, 25);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -903,6 +911,10 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
           subscription_format: 'plain',
           parsed_nodes_count: 3,
           supported_nodes_count: 1,
+          available_nodes_count: 0,
+          unavailable_nodes_count: 1,
+          node_availability_percent: 0,
+          node_unavailability_percent: 100,
           selected_nodes: [{ name: 'JP-1', region: 'JP', type: 'vless' }],
           tested_nodes: [{ name: 'JP-1', region: 'JP', type: 'vless', status: 'failed' }],
           median_latency_ms: null,
@@ -921,6 +933,10 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
           subscription_format: 'plain',
           parsed_nodes_count: 3,
           supported_nodes_count: 1,
+          available_nodes_count: 0,
+          unavailable_nodes_count: 1,
+          node_availability_percent: 0,
+          node_unavailability_percent: 100,
           selected_nodes: [{ name: 'JP-1', region: 'JP', type: 'vless' }],
           tested_nodes: [{ name: 'JP-1', region: 'JP', type: 'vless', status: 'failed' }],
           median_latency_ms: null,
@@ -961,6 +977,8 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
     assert.equal(data.performance.cache_source_date, null);
     assert.equal(data.performance.subscription_format, 'plain');
     assert.equal(data.performance.parsed_nodes_count, 3);
+    assert.equal(data.performance.unavailable_nodes_count, 1);
+    assert.equal(data.performance.node_unavailability_percent, 100);
     assert.equal(data.performance.tested_nodes_count, 1);
     assert.equal((data.performance.selected_nodes as Array<{ name: string }>)[0].name, 'JP-1');
     assert.equal(data.base.price_score, 80);
@@ -1462,6 +1480,10 @@ test('GET /airports/:id/dashboard marks performance metrics as cached when run i
           subscription_format: 'base64',
           parsed_nodes_count: 8,
           supported_nodes_count: 5,
+          available_nodes_count: 4,
+          unavailable_nodes_count: 1,
+          node_availability_percent: 80,
+          node_unavailability_percent: 20,
           selected_nodes: [{ name: 'HK-1', region: 'HK', type: 'trojan' }],
           tested_nodes: [
             {

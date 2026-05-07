@@ -129,6 +129,10 @@ interface AirportDashboardView {
     subscription_format: string | null;
     parsed_nodes_count: number | null;
     supported_nodes_count: number | null;
+    available_nodes_count: number | null;
+    unavailable_nodes_count: number | null;
+    node_availability_percent: number | null;
+    node_unavailability_percent: number | null;
     selected_nodes: Array<{ name: string; region?: string | null; type?: string | null }>;
     tested_nodes: Array<{
       name: string;
@@ -143,6 +147,7 @@ interface AirportDashboardView {
       download_mbps?: number | null;
     }>;
     tested_nodes_count: number | null;
+    tested_region_count: number | null;
     error_code: string | null;
     error_message: string | null;
     latency_measurement: string | null;
@@ -161,6 +166,7 @@ interface AirportDashboardView {
     ssl_penalty: number | null;
     complaint_penalty: number | null;
     history_penalty: number | null;
+    node_availability_penalty: number | null;
     total_penalty: number | null;
     risk_penalty: number | null;
     r: number | null;
@@ -5465,8 +5471,13 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <ReadField label="测速口径" value={valueOrDash(dashboard.performance.speed_measurement)} />
               <ReadField label="测速并发连接数" value={valueOrDash(dashboard.performance.speed_test_connections)} />
                 <ReadField label="解析节点数" value={valueOrDash(dashboard.performance.parsed_nodes_count)} />
-                <ReadField label="可用节点数" value={valueOrDash(dashboard.performance.supported_nodes_count)} />
+                <ReadField label="支持节点数" value={valueOrDash(dashboard.performance.supported_nodes_count)} />
+                <ReadField label="可用节点数" value={valueOrDash(dashboard.performance.available_nodes_count)} />
+                <ReadField label="不可用节点数" value={valueOrDash(dashboard.performance.unavailable_nodes_count)} />
+                <ReadField label="节点可用率" value={valueOrDash(dashboard.performance.node_availability_percent)} />
+                <ReadField label="节点不可用率" value={valueOrDash(dashboard.performance.node_unavailability_percent)} />
                 <ReadField label="实测节点数" value={valueOrDash(dashboard.performance.tested_nodes_count)} />
+                <ReadField label="实测地区数" value={valueOrDash(dashboard.performance.tested_region_count)} />
                 <ReadField
                   label="已选节点"
                   value={valueOrDash(
@@ -5526,7 +5537,8 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                 {'SslPenalty = ssl_days_left 为 null 时记 5；< 0 记 30；< 7 记 20；< 15 记 10；< 30 记 5；其余记 0\n'}
                 {'ComplaintPenalty = min(recent_complaints_count * 3, 15)\n'}
                 {'HistoryPenalty = min(history_incidents * 10, 30)\n'}
-                {'RiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty\n'}
+                {'NodeAvailabilityPenalty: 不可用率 <= 5% 记 0；5%-20% 最高 10；20%-50% 最高 25；>50% 最高 30\n'}
+                {'RiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty + NodeAvailabilityPenalty\n'}
                 {'R = clamp(100 - RiskPenalty, 0, 100)'}
               </div>
             </div>
@@ -5536,6 +5548,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <ReadField label="SSL剩余天数 (ssl_days_left)" value={valueOrDash(dashboard.risk.ssl_days_left)} />
               <ReadField label="投诉数量 (recent_complaints_count)" value={valueOrDash(dashboard.risk.recent_complaints_count)} />
               <ReadField label="历史异常 (history_incidents)" value={valueOrDash(dashboard.risk.history_incidents)} />
+              <ReadField label="节点可用性惩罚 (node_availability_penalty)" value={valueOrDash(dashboard.risk.node_availability_penalty)} />
               <ReadField label="域名惩罚 (domain_penalty)" value={valueOrDash(dashboard.risk.domain_penalty)} />
               <ReadField label="SSL惩罚 (ssl_penalty)" value={valueOrDash(dashboard.risk.ssl_penalty)} />
               <ReadField label="投诉惩罚 (complaint_penalty)" value={valueOrDash(dashboard.risk.complaint_penalty)} />

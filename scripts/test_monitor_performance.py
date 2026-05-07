@@ -6,8 +6,10 @@ import unittest
 from unittest.mock import patch
 
 from scripts.monitor_performance import (
+    NodeAvailabilityResult,
     build_config,
     build_run_payload,
+    check_nodes_availability,
     normalize_subscription_text,
     parse_node_line,
     select_nodes,
@@ -78,20 +80,20 @@ class MonitorPerformanceTests(unittest.TestCase):
         self.assertEqual(trojan_node.region, "US")
         self.assertEqual(trojan_node.outbound["transport"]["type"], "ws")
 
-    def test_select_nodes_randomly_picks_one_node_per_priority_region(self) -> None:
+    def test_select_nodes_randomly_picks_one_node_per_detected_region(self) -> None:
         uris = [
             "trojan://password@hk.example.com:443#HK-A",
             "trojan://password@hk2.example.com:443#HK-B",
             "trojan://password@sg.example.com:443#SG-A",
             "trojan://password@jp.example.com:443#JP-A",
             "trojan://password@jp2.example.com:443#JP-B",
-            "trojan://password@us.example.com:443#US-A",
+            "trojan://password@us.example.com:443#硅谷-A",
         ]
         nodes = [parse_node_line(uri) for uri in uris]
         selected = select_nodes([node for node in nodes if node is not None], rng=PickLastRandom())
-        self.assertEqual([node.name for node in selected], ["HK-B", "JP-B", "SG-A"])
+        self.assertEqual([node.name for node in selected], ["HK-B", "JP-B", "SG-A", "硅谷-A"])
 
-    def test_select_nodes_randomly_fills_remaining_slots(self) -> None:
+    def test_select_nodes_groups_unknown_regions_as_other(self) -> None:
         uris = [
             "trojan://password@hk.example.com:443#HK-A",
             "trojan://password@de.example.com:443#DE-A",
@@ -99,7 +101,27 @@ class MonitorPerformanceTests(unittest.TestCase):
         ]
         nodes = [parse_node_line(uri) for uri in uris]
         selected = select_nodes([node for node in nodes if node is not None], rng=PickLastRandom())
-        self.assertEqual([node.name for node in selected], ["HK-A", "NL-A", "DE-A"])
+        self.assertEqual([node.name for node in selected], ["HK-A", "NL-A"])
+
+    def test_check_nodes_availability_reports_percentages_for_all_supported_nodes(self) -> None:
+        uris = [
+            f"trojan://password@node{index}.example.com:443#HK-{index}"
+            for index in range(20)
+        ]
+        nodes = [node for node in (parse_node_line(uri) for uri in uris) if node is not None]
+
+        def fake_probe(_config, node):
+            index = int(node.name.rsplit("-", 1)[1])
+            return NodeAvailabilityResult(node=node, available=index < 15)
+
+        results = check_nodes_availability(None, nodes, probe_fn=fake_probe)
+        available = sum(1 for item in results if item.available)
+        unavailable = len(results) - available
+
+        self.assertEqual(available, 15)
+        self.assertEqual(unavailable, 5)
+        self.assertEqual(round(available / len(results) * 100, 2), 75.0)
+        self.assertEqual(round(unavailable / len(results) * 100, 2), 25.0)
 
     def test_build_config_defaults_to_six_latency_attempts_and_three_second_interval(self) -> None:
         env = {

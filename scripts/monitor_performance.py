@@ -103,6 +103,13 @@ class NodeProbeResult:
     error_code: str | None = None
 
 
+@dataclass
+class NodeAvailabilityResult:
+    node: ParsedNode
+    available: bool
+    error_code: str | None = None
+
+
 def main() -> int:
     try:
         config = build_config()
@@ -345,6 +352,8 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
 
     parsed_nodes, unsupported_nodes = parse_nodes(normalized_subscription)
     selected_nodes = select_nodes(parsed_nodes)
+    availability_results = check_nodes_availability(config, parsed_nodes)
+    availability_summary = summarize_node_availability(availability_results)
     tested_nodes: list[dict[str, Any]] = []
     latency_samples: list[float] = []
     latency_sampled_at: list[str] = []
@@ -365,11 +374,16 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             supported_nodes_count=len(parsed_nodes),
             selected_nodes=[node_to_summary(node) for node in selected_nodes],
             tested_nodes=[],
+            available_nodes_count=availability_summary["available_nodes_count"],
+            unavailable_nodes_count=availability_summary["unavailable_nodes_count"],
+            node_availability_percent=availability_summary["node_availability_percent"],
+            node_unavailability_percent=availability_summary["node_unavailability_percent"],
             error_code="no_supported_nodes",
             error_message="no testable nodes selected from subscription",
             diagnostics={
                 "unsupported_nodes_count": len(unsupported_nodes),
                 "unsupported_nodes": unsupported_nodes,
+                "node_availability": availability_summary["nodes"],
             },
         )
         return {
@@ -430,6 +444,10 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         supported_nodes_count=len(parsed_nodes),
         selected_nodes=[node_to_summary(node) for node in selected_nodes],
         tested_nodes=tested_nodes,
+        available_nodes_count=availability_summary["available_nodes_count"],
+        unavailable_nodes_count=availability_summary["unavailable_nodes_count"],
+        node_availability_percent=availability_summary["node_availability_percent"],
+        node_unavailability_percent=availability_summary["node_unavailability_percent"],
         latency_samples_ms=latency_samples,
         latency_sampled_at=latency_sampled_at,
         download_samples_mbps=download_samples,
@@ -450,6 +468,8 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             "speed_test_url": config.test_url_speed,
             "speed_test_connections": config.speed_connections,
             "selected_node_count": len(selected_nodes),
+            "tested_region_count": count_selected_regions(selected_nodes),
+            "node_availability": availability_summary["nodes"],
             "unsupported_nodes_count": len(unsupported_nodes),
             "unsupported_nodes": unsupported_nodes,
         },
@@ -471,6 +491,10 @@ def build_run_payload(
     supported_nodes_count: int = 0,
     selected_nodes: list[dict[str, Any]] | None = None,
     tested_nodes: list[dict[str, Any]] | None = None,
+    available_nodes_count: int | None = None,
+    unavailable_nodes_count: int | None = None,
+    node_availability_percent: float | None = None,
+    node_unavailability_percent: float | None = None,
     latency_samples_ms: list[float] | None = None,
     latency_sampled_at: list[str] | None = None,
     download_samples_mbps: list[float] | None = None,
@@ -492,6 +516,14 @@ def build_run_payload(
         "supported_nodes_count": supported_nodes_count,
         "selected_nodes": selected_nodes or [],
         "tested_nodes": tested_nodes or [],
+        "available_nodes_count": available_nodes_count,
+        "unavailable_nodes_count": unavailable_nodes_count,
+        "node_availability_percent": round(node_availability_percent, 2)
+        if node_availability_percent is not None
+        else None,
+        "node_unavailability_percent": round(node_unavailability_percent, 2)
+        if node_unavailability_percent is not None
+        else None,
         "latency_samples_ms": latency_values,
         "latency_sampled_at": latency_timestamps[: len(latency_values)],
         "download_samples_mbps": download_values,
@@ -521,6 +553,10 @@ def summary_from_payload(payload: dict[str, Any], airport_name: str) -> dict[str
         "packet_loss_percent": payload.get("packet_loss_percent"),
         "selected_nodes": [item.get("name") for item in payload.get("selected_nodes", [])],
         "tested_nodes_count": len(payload.get("tested_nodes", [])),
+        "available_nodes_count": payload.get("available_nodes_count"),
+        "unavailable_nodes_count": payload.get("unavailable_nodes_count"),
+        "node_availability_percent": payload.get("node_availability_percent"),
+        "node_unavailability_percent": payload.get("node_unavailability_percent"),
         "error_code": payload.get("error_code"),
         "error_message": payload.get("error_message"),
     }
@@ -796,24 +832,31 @@ def apply_tls(
 def select_nodes(nodes: list[ParsedNode], rng: Any = random) -> list[ParsedNode]:
     selected: list[ParsedNode] = []
     used_names: set[str] = set()
-    for region in REGION_PRIORITY:
-        candidates = [item for item in nodes if item.region == region and item.name not in used_names]
+    for region in ordered_regions(nodes):
+        candidates = [item for item in nodes if region_key(item) == region and item.name not in used_names]
         if not candidates:
             continue
         node = rng.choice(candidates)
         selected.append(node)
         used_names.add(node.name)
-        if len(selected) >= 3:
-            return selected
-
-    remaining_nodes = [node for node in nodes if node.name not in used_names]
-    rng.shuffle(remaining_nodes)
-    for node in remaining_nodes:
-        selected.append(node)
-        used_names.add(node.name)
-        if len(selected) >= 3:
-            break
     return selected
+
+
+def ordered_regions(nodes: list[ParsedNode]) -> list[str]:
+    present = {region_key(node) for node in nodes}
+    ordered = [region for region in REGION_PRIORITY if region in present]
+    ordered.extend(sorted(region for region in present if region not in REGION_PRIORITY and region != "OTHER"))
+    if "OTHER" in present:
+        ordered.append("OTHER")
+    return ordered
+
+
+def region_key(node: ParsedNode) -> str:
+    return node.region or "OTHER"
+
+
+def count_selected_regions(nodes: list[ParsedNode]) -> int:
+    return len({region_key(node) for node in nodes})
 
 
 def detect_region(name: str) -> str | None:
@@ -822,6 +865,48 @@ def detect_region(name: str) -> str | None:
         if any(keyword in normalized for keyword in keywords):
             return region
     return None
+
+
+def check_nodes_availability(
+    config: Config,
+    nodes: list[ParsedNode],
+    probe_fn: Any | None = None,
+) -> list[NodeAvailabilityResult]:
+    probe = probe_fn or probe_node_availability
+    return [probe(config, node) for node in nodes]
+
+
+def probe_node_availability(config: Config, node: ParsedNode) -> NodeAvailabilityResult:
+    try:
+        address = resolve_probe_address(node)
+        with socket.socket(address[0], socket.SOCK_STREAM) as sock:
+            sock.settimeout(config.http_timeout)
+            sock.connect(address[4])
+        return NodeAvailabilityResult(node=node, available=True)
+    except Exception as exc:
+        return NodeAvailabilityResult(node=node, available=False, error_code=str(exc))
+
+
+def summarize_node_availability(results: list[NodeAvailabilityResult]) -> dict[str, Any]:
+    total = len(results)
+    available = sum(1 for item in results if item.available)
+    unavailable = total - available
+    availability_percent = round((available / total) * 100, 2) if total else None
+    unavailability_percent = round((unavailable / total) * 100, 2) if total else None
+    return {
+        "available_nodes_count": available,
+        "unavailable_nodes_count": unavailable,
+        "node_availability_percent": availability_percent,
+        "node_unavailability_percent": unavailability_percent,
+        "nodes": [
+            {
+                **node_to_summary(item.node),
+                "status": "available" if item.available else "unavailable",
+                "error_code": item.error_code,
+            }
+            for item in results
+        ],
+    }
 
 
 def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
