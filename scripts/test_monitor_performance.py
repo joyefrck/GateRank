@@ -1,8 +1,13 @@
 import base64
 import json
+import os
+import sys
 import unittest
+from unittest.mock import patch
 
 from scripts.monitor_performance import (
+    build_config,
+    build_run_payload,
     normalize_subscription_text,
     parse_node_line,
     select_nodes,
@@ -95,6 +100,41 @@ class MonitorPerformanceTests(unittest.TestCase):
         nodes = [parse_node_line(uri) for uri in uris]
         selected = select_nodes([node for node in nodes if node is not None], rng=PickLastRandom())
         self.assertEqual([node.name for node in selected], ["HK-A", "NL-A", "DE-A"])
+
+    def test_build_config_defaults_to_six_latency_attempts_and_three_second_interval(self) -> None:
+        env = {
+            "ADMIN_API_KEY": "test-key",
+            "AIRPORT_ID": "1",
+        }
+        with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", ["monitor_performance.py"]):
+            config = build_config()
+
+        self.assertEqual(config.latency_attempts, 6)
+        self.assertEqual(config.latency_sample_interval_seconds, 3)
+
+    def test_build_run_payload_preserves_latency_sample_timestamps(self) -> None:
+        payload = build_run_payload(
+            airport_id=1,
+            sampled_at="2026-05-07T00:00:00+08:00",
+            source="scheduler-performance",
+            status="success",
+            latency_samples_ms=[100, 120, 300],
+            latency_sampled_at=[
+                "2026-05-07T00:00:00+08:00",
+                "2026-05-07T00:00:03+08:00",
+                "2026-05-07T00:00:06+08:00",
+            ],
+        )
+
+        self.assertEqual(payload["latency_samples_ms"], [100, 120, 300])
+        self.assertEqual(
+            payload["latency_sampled_at"],
+            [
+                "2026-05-07T00:00:00+08:00",
+                "2026-05-07T00:00:03+08:00",
+                "2026-05-07T00:00:06+08:00",
+            ],
+        )
 
 
 if __name__ == "__main__":

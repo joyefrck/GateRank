@@ -178,6 +178,17 @@ test('aggregateForDate keeps raw latency_cv and classifies healthy jitter separa
     {
       id: 6,
       airport_id: 1,
+      sampled_at: '2026-03-28T01:23:00.000Z',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 59.19,
+      download_mbps: null,
+      availability: null,
+      source: 'agent',
+    },
+    {
+      id: 7,
+      airport_id: 1,
       sampled_at: '2026-03-28T01:25:00.000Z',
       sample_type: 'availability',
       probe_scope: 'stability',
@@ -187,7 +198,7 @@ test('aggregateForDate keeps raw latency_cv and classifies healthy jitter separa
       source: 'agent',
     },
     {
-      id: 7,
+      id: 8,
       airport_id: 1,
       sampled_at: '2026-03-27T01:25:00.000Z',
       sample_type: 'availability',
@@ -198,7 +209,7 @@ test('aggregateForDate keeps raw latency_cv and classifies healthy jitter separa
       source: 'agent',
     },
     {
-      id: 8,
+      id: 9,
       airport_id: 1,
       sampled_at: '2026-03-27T01:20:00.000Z',
       sample_type: 'latency',
@@ -229,7 +240,7 @@ test('aggregateForDate keeps raw latency_cv and classifies healthy jitter separa
   const result = await service.aggregateForDate('2026-03-28');
   assert.equal(result.aggregated, 1);
   assert.equal(written.length, 1);
-  assert.equal(written[0].latency_cv, 0.2498);
+  assert.equal(written[0].latency_cv, 1.4909);
   assert.equal(written[0].is_stable_day, true);
   assert.equal(written[0].stable_days_streak, 2);
   assert.equal(written[0].healthy_days_streak, 2);

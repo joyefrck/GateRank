@@ -1655,10 +1655,10 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const payload = req.body ?? {};
       const input = toPerformanceRunInput(payload);
 
-      for (const latency of input.latency_samples_ms || []) {
+      for (const [index, latency] of (input.latency_samples_ms || []).entries()) {
         await deps.probeSampleRepository.insertProbeSample({
           airport_id: input.airport_id,
-          sampled_at: input.sampled_at,
+          sampled_at: input.latency_sampled_at?.[index] || input.sampled_at,
           sample_type: 'latency',
           probe_scope: 'performance',
           latency_ms: latency,
@@ -2367,6 +2367,7 @@ function validateProbeSample(input: ProbeSampleInput): void {
 
 function toPerformanceRunInput(payload: Record<string, unknown>): PerformanceRunInput {
   const latencySamples = toNumberArrayOrDefault(payload.latency_samples_ms);
+  const latencySampledAt = toDateTimeArray(payload.latency_sampled_at, 'latency_sampled_at');
   const downloadSamples = toNumberArrayOrDefault(payload.download_samples_mbps);
   const packetLossPercent = optionalNumber(payload.packet_loss_percent);
   const medianLatency = optionalNumber(payload.median_latency_ms) ?? medianOrUndefined(latencySamples);
@@ -2383,6 +2384,7 @@ function toPerformanceRunInput(payload: Record<string, unknown>): PerformanceRun
     selected_nodes: toPerformanceNodeArray(payload.selected_nodes),
     tested_nodes: toPerformanceNodeArray(payload.tested_nodes),
     latency_samples_ms: latencySamples,
+    latency_sampled_at: latencySampledAt,
     download_samples_mbps: downloadSamples,
     packet_loss_percent: packetLossPercent,
     median_latency_ms: medianLatency,
@@ -2391,6 +2393,16 @@ function toPerformanceRunInput(payload: Record<string, unknown>): PerformanceRun
     error_message: optionalString(payload.error_message) || null,
     diagnostics: toObjectOrEmpty(payload.diagnostics),
   };
+}
+
+function toDateTimeArray(value: unknown, fieldName: string): string[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be an array`);
+  }
+  return value.map((item, index) => mustDateTime(item, `${fieldName}[${index}]`));
 }
 
 function toPerformanceRunStatus(value: unknown): PerformanceRunInput['status'] {

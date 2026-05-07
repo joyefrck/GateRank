@@ -28,7 +28,8 @@ DEFAULT_API_BASE = "http://127.0.0.1:8787"
 DEFAULT_TCP_PORT = 443
 DEFAULT_HTTP_TIMEOUT = 8
 DEFAULT_TCP_TIMEOUT = 5
-DEFAULT_LATENCY_SAMPLE_COUNT = 5
+DEFAULT_LATENCY_SAMPLE_COUNT = 6
+DEFAULT_LATENCY_SAMPLE_INTERVAL_SECONDS = 3
 DEFAULT_SOURCE = "cron-stability"
 
 
@@ -47,6 +48,7 @@ class Config:
     http_timeout: int
     tcp_timeout: int
     latency_sample_count: int
+    latency_sample_interval_seconds: float
     page_size: int
     source: str
     trigger_aggregate: bool
@@ -125,6 +127,11 @@ def build_config() -> Config:
         type=int,
         default=int(os.getenv("LATENCY_SAMPLE_COUNT", str(DEFAULT_LATENCY_SAMPLE_COUNT))),
     )
+    parser.add_argument(
+        "--latency-sample-interval-seconds",
+        type=float,
+        default=float(os.getenv("LATENCY_SAMPLE_INTERVAL_SECONDS", str(DEFAULT_LATENCY_SAMPLE_INTERVAL_SECONDS))),
+    )
     parser.add_argument("--page-size", type=int, default=int(os.getenv("PAGE_SIZE", "100")))
     parser.add_argument("--source", default=os.getenv("SOURCE", DEFAULT_SOURCE))
     parser.add_argument(
@@ -162,6 +169,7 @@ def build_config() -> Config:
         http_timeout=args.http_timeout,
         tcp_timeout=args.tcp_timeout,
         latency_sample_count=max(1, args.latency_sample_count),
+        latency_sample_interval_seconds=max(0, args.latency_sample_interval_seconds),
         page_size=max(1, args.page_size),
         source=args.source,
         trigger_aggregate=not args.skip_aggregate,
@@ -221,6 +229,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         config.tcp_port,
         config.latency_sample_count,
         config.tcp_timeout,
+        config.latency_sample_interval_seconds,
     )
 
     post_probe_sample(
@@ -234,14 +243,14 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         },
     )
 
-    for latency in latency_samples:
+    for sample in latency_samples:
         post_probe_sample(
             config,
             {
                 "airport_id": airport["id"],
-                "sampled_at": sampled_at,
+                "sampled_at": sample["sampled_at"],
                 "sample_type": "latency",
-                "latency_ms": latency,
+                "latency_ms": sample["latency_ms"],
                 "source": config.source,
             },
         )
@@ -254,7 +263,8 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         "tcp_port": config.tcp_port,
         "http_ok": http_ok,
         "http_status": http_status,
-        "latency_samples_ms": latency_samples,
+        "latency_samples_ms": [sample["latency_ms"] for sample in latency_samples],
+        "latency_sampled_at": [sample["sampled_at"] for sample in latency_samples],
     }
 
 
@@ -280,13 +290,25 @@ def tcp_latency_ms(host: str, port: int, timeout: int) -> float | None:
         return None
 
 
-def collect_latency_samples(host: str, port: int, count: int, timeout: int) -> list[float]:
-    samples: list[float] = []
-    for _ in range(count):
-        latency = tcp_latency_ms(host, port, timeout)
+def collect_latency_samples(
+    host: str,
+    port: int,
+    count: int,
+    timeout: int,
+    interval_seconds: float,
+    *,
+    latency_fn=tcp_latency_ms,
+    sleep_fn=time.sleep,
+    now_fn=None,
+) -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    current_time = now_fn or shanghai_now_iso
+    for index in range(count):
+        latency = latency_fn(host, port, timeout)
         if latency is not None:
-            samples.append(latency)
-        time.sleep(0.3)
+            samples.append({"latency_ms": latency, "sampled_at": current_time()})
+        if index < count - 1:
+            sleep_fn(interval_seconds)
     return samples
 
 

@@ -23,8 +23,8 @@ const STABILITY_RULES = {
   streakCapDays: 30,
   maxLatencyCv: 0.2,
   maxMinorLatencyCv: 0.35,
-  trimMinSampleCount: 5,
-  trimEdgeSampleCount: 1,
+  trimMinSampleCount: 6,
+  trimMaxSampleCount: 1,
   effectiveMeanFloorMs: 10,
 } as const;
 
@@ -236,10 +236,7 @@ function computeEffectiveLatencyCv(samples: number[]): number {
   const normalized = samples.slice().sort((left, right) => left - right);
   const evaluated =
     normalized.length >= STABILITY_RULES.trimMinSampleCount
-      ? normalized.slice(
-          STABILITY_RULES.trimEdgeSampleCount,
-          normalized.length - STABILITY_RULES.trimEdgeSampleCount,
-        )
+      ? normalized.slice(0, normalized.length - STABILITY_RULES.trimMaxSampleCount)
       : normalized;
   const mean = average(evaluated);
   const std = standardDeviation(evaluated, mean);

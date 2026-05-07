@@ -734,10 +734,6 @@ function buildCardDetails(
   date: string,
 ): [PublicCardItem['details'][0], PublicCardItem['details'][1]] {
   const streakDays = Math.max(0, Number(context.metrics.stable_days_streak || 0));
-  const healthyStreakDays = Math.max(
-    0,
-    Number(context.metrics.healthy_days_streak ?? context.metrics.stable_days_streak ?? 0),
-  );
   const trackingDays = Math.max(1, diffDays(context.airport.created_at, date) + 1);
   const primaryRiskReason = getPrimaryRiskReason(context.metrics);
   const complaintTrendLabel = getComplaintTrendLabel(context.metrics.recent_complaints_count);
@@ -746,7 +742,7 @@ function buildCardDetails(
   switch (section) {
     case 'today_pick':
       return [
-        { label: '健康记录', value: `${healthyStreakDays} 天` },
+        { label: '运行天数', value: `${trackingDays} 天` },
         getTodayPickPositiveDetail(context),
       ];
     case 'most_stable':

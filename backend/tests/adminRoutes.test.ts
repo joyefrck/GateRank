@@ -69,6 +69,7 @@ test('POST /performance-runs stores run diagnostics and performance samples', as
         selected_nodes: [{ name: 'HK-1', region: 'HK', type: 'trojan' }],
         tested_nodes: [{ name: 'HK-1', region: 'HK', type: 'trojan', status: 'ok' }],
         latency_samples_ms: [100, 120],
+        latency_sampled_at: ['2026-03-22T12:00:03+08:00'],
         download_samples_mbps: [88.8],
         packet_loss_percent: 33.33,
         diagnostics: { unsupported_nodes_count: 3 },
@@ -81,6 +82,8 @@ test('POST /performance-runs stores run diagnostics and performance samples', as
     assert.equal(insertedSamples.length, 3);
     assert.equal(insertedSamples[0].probe_scope, 'performance');
     assert.equal(insertedSamples[0].sample_type, 'latency');
+    assert.equal(insertedSamples[0].sampled_at, '2026-03-22 12:00:03');
+    assert.equal(insertedSamples[1].sampled_at, '2026-03-22 20:00:00');
     assert.equal(insertedSamples[2].sample_type, 'download');
     assert.equal(insertedPacketLoss.length, 1);
     assert.equal(insertedPacketLoss[0].probe_scope, 'performance');
@@ -1260,7 +1263,7 @@ test('GET /airports/:id/dashboard exposes raw and effective stability diagnostic
           date: '2026-03-28',
           uptime_percent_30d: 99.8,
           uptime_percent_today: 100,
-          latency_samples_ms: [3.7, 6.03, 3.74, 5.89, 3.48],
+          latency_samples_ms: [3.7, 6.03, 3.74, 5.89, 3.48, 59.19],
           latency_mean_ms: 4.57,
           latency_std_ms: 1.14,
           latency_cv: 0.2498,
@@ -1288,12 +1291,12 @@ test('GET /airports/:id/dashboard exposes raw and effective stability diagnostic
     assert.equal(response.status, 200);
     const data = (await response.json()) as { stability: Record<string, unknown> };
     assert.equal(data.stability.latency_cv, 0.2498);
-    assert.equal(data.stability.effective_latency_cv, 0.1023);
+    assert.equal(data.stability.effective_latency_cv, 0.1141);
     assert.equal(data.stability.is_stable_day, true);
     assert.equal(data.stability.healthy_days_streak, 15);
     assert.equal(data.stability.stability_tier, 'stable');
-    assert.equal(data.stability.stability_score, 89.77);
-    assert.equal(data.stability.stability_rule_version, 'stability_tier_v2');
+    assert.equal(data.stability.stability_score, 88.59);
+    assert.equal(data.stability.stability_rule_version, 'stability_tier_v3');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

@@ -40,7 +40,8 @@ DEFAULT_API_BASE = "http://127.0.0.1:8787"
 DEFAULT_HTTP_TIMEOUT = 10
 DEFAULT_PROXY_PORT = 7890
 DEFAULT_PROXY_STARTUP_TIMEOUT = 8
-DEFAULT_LATENCY_ATTEMPTS = 3
+DEFAULT_LATENCY_ATTEMPTS = 6
+DEFAULT_LATENCY_SAMPLE_INTERVAL_SECONDS = 3
 DEFAULT_SPEED_TIMEOUT = 20
 DEFAULT_SPEED_CONNECTIONS = 4
 DEFAULT_SOURCE = "cron-performance"
@@ -69,6 +70,7 @@ class Config:
     proxy_port: int
     proxy_startup_timeout: int
     latency_attempts: int
+    latency_sample_interval_seconds: float
     speed_timeout: int
     speed_connections: int
     page_size: int
@@ -93,6 +95,7 @@ class ParsedNode:
 class NodeProbeResult:
     node: ParsedNode
     latency_samples_ms: list[float]
+    latency_sampled_at: list[str]
     proxy_latency_samples_ms: list[float]
     download_mbps: float | None
     failures: int
@@ -178,6 +181,11 @@ def build_config() -> Config:
         type=int,
         default=int(os.getenv("LATENCY_ATTEMPTS", str(DEFAULT_LATENCY_ATTEMPTS))),
     )
+    parser.add_argument(
+        "--latency-sample-interval-seconds",
+        type=float,
+        default=float(os.getenv("LATENCY_SAMPLE_INTERVAL_SECONDS", str(DEFAULT_LATENCY_SAMPLE_INTERVAL_SECONDS))),
+    )
     parser.add_argument("--speed-timeout", type=int, default=int(os.getenv("SPEED_TIMEOUT", str(DEFAULT_SPEED_TIMEOUT))))
     parser.add_argument(
         "--speed-connections",
@@ -220,6 +228,7 @@ def build_config() -> Config:
         proxy_port=max(1, args.proxy_port),
         proxy_startup_timeout=max(1, args.proxy_startup_timeout),
         latency_attempts=max(1, args.latency_attempts),
+        latency_sample_interval_seconds=max(0, args.latency_sample_interval_seconds),
         speed_timeout=max(1, args.speed_timeout),
         speed_connections=max(1, args.speed_connections),
         page_size=max(1, args.page_size),
@@ -338,6 +347,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
     selected_nodes = select_nodes(parsed_nodes)
     tested_nodes: list[dict[str, Any]] = []
     latency_samples: list[float] = []
+    latency_sampled_at: list[str] = []
     proxy_latency_samples: list[float] = []
     download_samples: list[float] = []
     total_attempts = 0
@@ -388,6 +398,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             }
         )
         latency_samples.extend(probe.latency_samples_ms)
+        latency_sampled_at.extend(probe.latency_sampled_at)
         proxy_latency_samples.extend(probe.proxy_latency_samples_ms)
         if probe.download_mbps is not None:
             download_samples.append(probe.download_mbps)
@@ -420,6 +431,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         selected_nodes=[node_to_summary(node) for node in selected_nodes],
         tested_nodes=tested_nodes,
         latency_samples_ms=latency_samples,
+        latency_sampled_at=latency_sampled_at,
         download_samples_mbps=download_samples,
         packet_loss_percent=packet_loss_percent,
         error_code=error_code,
@@ -460,6 +472,7 @@ def build_run_payload(
     selected_nodes: list[dict[str, Any]] | None = None,
     tested_nodes: list[dict[str, Any]] | None = None,
     latency_samples_ms: list[float] | None = None,
+    latency_sampled_at: list[str] | None = None,
     download_samples_mbps: list[float] | None = None,
     packet_loss_percent: float | None = None,
     error_code: str | None = None,
@@ -467,6 +480,7 @@ def build_run_payload(
     diagnostics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     latency_values = [round(v, 2) for v in latency_samples_ms or []]
+    latency_timestamps = list(latency_sampled_at or [])
     download_values = [round(v, 2) for v in download_samples_mbps or []]
     payload: dict[str, Any] = {
         "airport_id": airport_id,
@@ -479,6 +493,7 @@ def build_run_payload(
         "selected_nodes": selected_nodes or [],
         "tested_nodes": tested_nodes or [],
         "latency_samples_ms": latency_values,
+        "latency_sampled_at": latency_timestamps[: len(latency_values)],
         "download_samples_mbps": download_values,
         "diagnostics": diagnostics or {},
     }
@@ -814,7 +829,7 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
     proc: subprocess.Popen[Any] | None = None
     try:
         proc, config_path = run_sing_box(config, node)
-        latency_samples, failures, total_attempts = test_node_connect_latency(config, node)
+        latency_samples, latency_sampled_at, failures, total_attempts = test_node_connect_latency(config, node)
         proxy_latency_samples, _, _ = test_proxy_http_latency(config)
         download_mbps = test_speed(config)
         error_code = None
@@ -823,6 +838,7 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
         return NodeProbeResult(
             node=node,
             latency_samples_ms=latency_samples,
+            latency_sampled_at=latency_sampled_at,
             proxy_latency_samples_ms=proxy_latency_samples,
             download_mbps=download_mbps,
             failures=failures,
@@ -833,6 +849,7 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
         return NodeProbeResult(
             node=node,
             latency_samples_ms=[],
+            latency_sampled_at=[],
             proxy_latency_samples_ms=[],
             download_mbps=None,
             failures=config.latency_attempts,
@@ -902,23 +919,26 @@ def wait_for_port(host: str, port: int, timeout_seconds: int) -> None:
     raise RuntimeError("singbox_start_failed")
 
 
-def test_node_connect_latency(config: Config, node: ParsedNode) -> tuple[list[float], int, int]:
+def test_node_connect_latency(config: Config, node: ParsedNode) -> tuple[list[float], list[str], int, int]:
     address = resolve_probe_address(node)
     latencies: list[float] = []
+    sampled_at: list[str] = []
     failures = 0
-    for _ in range(config.latency_attempts):
+    for index in range(config.latency_attempts):
         started = time.perf_counter()
         sock = socket.socket(address[0], socket.SOCK_STREAM)
         sock.settimeout(config.http_timeout)
         try:
             sock.connect(address[4])
             latencies.append(round((time.perf_counter() - started) * 1000, 2))
+            sampled_at.append(shanghai_now_iso())
         except Exception:
             failures += 1
         finally:
             sock.close()
-        time.sleep(0.2)
-    return latencies, failures, config.latency_attempts
+        if index < config.latency_attempts - 1:
+            time.sleep(config.latency_sample_interval_seconds)
+    return latencies, sampled_at, failures, config.latency_attempts
 
 
 def test_proxy_http_latency(config: Config) -> tuple[list[float], int, int]:
@@ -926,7 +946,7 @@ def test_proxy_http_latency(config: Config) -> tuple[list[float], int, int]:
     latencies: list[float] = []
     failures = 0
     request = Request(config.test_url_latency, method="GET", headers={"User-Agent": "GateRank-Performance-Monitor/1.0"})
-    for _ in range(config.latency_attempts):
+    for index in range(config.latency_attempts):
         started = time.perf_counter()
         try:
             with opener.open(request, timeout=config.http_timeout) as response:
@@ -934,7 +954,8 @@ def test_proxy_http_latency(config: Config) -> tuple[list[float], int, int]:
             latencies.append(round((time.perf_counter() - started) * 1000, 2))
         except Exception:
             failures += 1
-        time.sleep(0.2)
+        if index < config.latency_attempts - 1:
+            time.sleep(config.latency_sample_interval_seconds)
     return latencies, failures, config.latency_attempts
 
 

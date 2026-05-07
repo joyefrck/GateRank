@@ -163,8 +163,8 @@ test('computeScore uses effective latency cv for low-latency routes', () => {
     date: '2026-03-28',
     uptime_percent_30d: 99.8,
     uptime_percent_today: 100,
-    latency_samples_ms: [3.7, 6.03, 3.74, 5.89, 3.48],
-    latency_cv: 0.2498,
+    latency_samples_ms: [3.7, 6.03, 3.74, 5.89, 3.48, 59.19],
+    latency_cv: 1.4909,
     median_latency_ms: 20,
     median_download_mbps: 100,
     packet_loss_percent: 0.2,
@@ -178,11 +178,11 @@ test('computeScore uses effective latency cv for low-latency routes', () => {
   };
 
   const out = computeScore(airport, metrics, 0);
-  assert.equal(out.details.latency_cv_raw, 0.2498);
-  assert.equal(out.details.effective_latency_cv, 0.1023);
-  assert.equal(out.details.stability_rule_version, 'stability_tier_v2');
-  assert.equal(out.details.stability_score, 89.77);
-  assert.equal(out.s, 86.93);
+  assert.equal(out.details.latency_cv_raw, 1.4909);
+  assert.equal(out.details.effective_latency_cv, 0.1141);
+  assert.equal(out.details.stability_rule_version, 'stability_tier_v3');
+  assert.equal(out.details.stability_score, 88.59);
+  assert.equal(out.s, 86.58);
 });
 
 test('computeScore does not over-reward genuinely noisy latency samples', () => {
@@ -203,7 +203,7 @@ test('computeScore does not over-reward genuinely noisy latency samples', () => 
     date: '2026-03-28',
     uptime_percent_30d: 99.8,
     uptime_percent_today: 100,
-    latency_samples_ms: [5, 20, 40, 60, 90],
+    latency_samples_ms: [5, 20, 40, 60, 90, 120],
     median_latency_ms: 80,
     median_download_mbps: 100,
     packet_loss_percent: 0.2,
@@ -216,8 +216,8 @@ test('computeScore does not over-reward genuinely noisy latency samples', () => 
   };
 
   const out = computeScore(airport, metrics, 0);
-  assert.equal(out.details.effective_latency_cv, 0.4082);
-  assert.equal(out.details.stability_score, 59.18);
+  assert.equal(out.details.effective_latency_cv, 0.6961);
+  assert.equal(out.details.stability_score, 30.39);
 });
 
 test('computeScore prefers healthy streak days when minor fluctuation should not over-penalize S', () => {

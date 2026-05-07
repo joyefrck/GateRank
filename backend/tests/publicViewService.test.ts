@@ -794,11 +794,110 @@ test('PublicViewService.getHomePageView builds today pick details and positive h
   const item = result.sections.today_pick.items[0];
   assert.equal(item.stability_tier, 'minor_fluctuation');
   assert.deepEqual(item.details, [
-    { label: '健康记录', value: '12 天' },
+    { label: '运行天数', value: '64 天' },
     { label: '核心亮点', value: '性价比高' },
   ]);
   assert.match(item.conclusion, /亮点：当前价格与实际表现更均衡/);
   assert.doesNotMatch(item.conclusion, /提醒：/);
+});
+
+test('PublicViewService.getHomePageView shows one running day for same-day today picks', async () => {
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => ({
+        id: 1,
+        name: 'Alpha',
+        website: 'https://alpha.example.com',
+        status: 'normal' as const,
+        is_listed: true,
+        plan_price_month: 12,
+        has_trial: true,
+        tags: ['新手友好'],
+        created_at: '2026-03-24',
+      }),
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 0,
+        healthy_days_streak: 0,
+        stability_tier: 'stable' as const,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 0,
+        history_incidents: 0,
+      }),
+      getTrend: async () => [],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-03-24',
+        s: 82,
+        p: 76,
+        c: 88,
+        r: 95,
+        risk_penalty: 0,
+        score: 80,
+        recent_score: 80,
+        historical_score: 78,
+        final_score: 79,
+        details: {
+          total_score: 83,
+        },
+      }),
+      getPublicDisplayScoreByAirportAndDate: async () => 83,
+      getTrend: async () => [],
+      getPublicFullRankingByDate: async () => ({
+        total: 1,
+        items: [
+          {
+            airport_id: 1,
+            rank: 1,
+            name: 'Alpha',
+            website: 'https://alpha.example.com',
+            status: 'normal' as const,
+            tags: ['新手友好'],
+            founded_on: '2024-01-01',
+            plan_price_month: 12,
+            has_trial: true,
+            airport_intro: 'Alpha intro',
+            created_at: '2026-03-24',
+            score: 83,
+            score_delta_vs_yesterday: {
+              label: '对比昨天',
+              value: null,
+            },
+            report_url: '/reports/1?date=2026-03-24',
+          },
+        ],
+      }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 1,
+        realtime_tests: 8,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getHomePageView('2026-03-24');
+  assert.deepEqual(result.sections.today_pick.items[0].details, [
+    { label: '运行天数', value: '1 天' },
+    { label: '核心亮点', value: '新手友好' },
+  ]);
 });
 
 test('PublicViewService.getHomePageView fallback uses score-sorted today picks', async () => {

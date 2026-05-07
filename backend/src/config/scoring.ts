@@ -25,10 +25,10 @@ export const STABILITY_RULES = {
   maxLatencyCv: 0.2,
   maxMinorLatencyCv: 0.35,
   streakCapDays: 30,
-  trimMinSampleCount: 5,
-  trimEdgeSampleCount: 1,
+  trimMinSampleCount: 6,
+  trimMaxSampleCount: 1,
   effectiveMeanFloorMs: 10,
-  ruleVersion: 'stability_tier_v2',
+  ruleVersion: 'stability_tier_v3',
 } as const;
 
 export const THRESHOLDS = {

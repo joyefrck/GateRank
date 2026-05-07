@@ -147,10 +147,7 @@ function trimSamples(samples: number[]): number[] {
   }
 
   const sorted = samples.slice().sort((left, right) => left - right);
-  return sorted.slice(
-    STABILITY_RULES.trimEdgeSampleCount,
-    sorted.length - STABILITY_RULES.trimEdgeSampleCount,
-  );
+  return sorted.slice(0, sorted.length - STABILITY_RULES.trimMaxSampleCount);
 }
 
 function average(values: number[]): number {

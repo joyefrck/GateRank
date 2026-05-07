@@ -32,7 +32,7 @@ GateRank 是一个「机场测评与榜单」系统。
 说明：子项评分采用“阈值分段 + 线性插值”，并截断到 `[0, 100]`。时间衰减按天计算，日期越近权重越高。
 稳定性中的 `StabilityScore` 使用稳健波动值 `effective_latency_cv`，不是直接使用原始 `latency_cv`。规则如下：
 
-- 当稳定性延迟样本数 `>= 5` 时，先去掉 1 个最大值和 1 个最小值
+- 当稳定性延迟样本数 `>= 6` 时，先去掉 1 个最大延迟值
 - 用剩余样本计算 `effective_mean_ms` 和 `effective_std_ms`
 - `effective_latency_cv = effective_std_ms / max(effective_mean_ms, 10)`
 - 稳定日判定：`uptime >= 99%` 且 `effective_latency_cv <= 0.20`，并且当日存在有效延迟样本
@@ -408,7 +408,7 @@ NIGHTLY_PIPELINE_AIRPORT_STATUS=normal
 职责：
 
 - 检测官网可用性，写入 `availability` 样本
-- 采集多次 TCP 建连延迟，写入 `latency` 样本
+- 默认采集 6 次 TCP 建连延迟，每次至少间隔 3 秒，并用逐条真实时间写入 `latency` 样本
 - 调用后端 `aggregate` 与 `recompute`，刷新当日 S 分与榜单
 
 最小调用示例：

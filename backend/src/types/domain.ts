@@ -534,6 +534,7 @@ export interface PerformanceRunInput {
   selected_nodes?: PerformanceRunNode[];
   tested_nodes?: PerformanceRunNode[];
   latency_samples_ms?: number[];
+  latency_sampled_at?: string[];
   download_samples_mbps?: number[];
   packet_loss_percent?: number;
   median_latency_ms?: number | null;
