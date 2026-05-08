@@ -630,6 +630,7 @@ const DEFAULT_PUBLISH_TOKEN_SCOPES = PUBLISH_TOKEN_SCOPES.map((item) => item.val
 
 const TOKEN_KEY = 'gaterank_admin_token';
 const ADMIN_DEFAULT_PATH = '/admin/marketing';
+const AIRPORTS_PAGE_SIZE = 50;
 const APPLICATIONS_PAGE_SIZE = 20;
 const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = ['applicant_credentials', 'application_approved'];
 const SMTP_TEMPLATE_SCENARIOS: Record<
@@ -4000,6 +4001,8 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [items, setItems] = useState<Airport[]>([]);
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<'' | AirportStatus>('');
   const [editing, setEditing] = useState<AirportFormState | null>(null);
@@ -4012,15 +4015,24 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
   const [balanceError, setBalanceError] = useState('');
   const [balanceMessage, setBalanceMessage] = useState('');
 
-  const fetchList = async () => {
+  const fetchList = async (targetPage = page) => {
     setLoading(true);
     setError('');
     try {
       const query = new URLSearchParams();
+      query.set('page', String(targetPage));
+      query.set('page_size', String(AIRPORTS_PAGE_SIZE));
       if (keyword) query.set('keyword', keyword);
       if (status) query.set('status', status);
-      const data = (await apiFetch(`/api/v1/admin/airports?${query.toString()}`)) as { items: Airport[] };
+      const data = (await apiFetch(`/api/v1/admin/airports?${query.toString()}`)) as {
+        page: number;
+        page_size: number;
+        total: number;
+        items: Airport[];
+      };
       setItems(data.items || []);
+      setPage(data.page || targetPage);
+      setTotal(data.total || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -4092,7 +4104,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       }
 
       setEditing(null);
-      await fetchList();
+      await fetchList(page);
     } catch (err) {
       setFormError(err instanceof Error ? err.message : '保存失败');
     } finally {
@@ -4102,10 +4114,6 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
 
   const addWalletBalance = async () => {
     if (!editing?.id) return;
-    if (!editing.wallet_id) {
-      setBalanceError('该机场未绑定申请人钱包，不能添加余额');
-      return;
-    }
     const amount = Number(balanceAmount);
     if (!Number.isFinite(amount) || amount <= 0) {
       setBalanceError('请输入大于 0 的加款金额');
@@ -4131,12 +4139,25 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       setBalanceAmount('');
       setBalanceDescription('');
       setBalanceMessage('余额已添加');
-      await fetchList();
+      await fetchList(page);
     } catch (err) {
       setBalanceError(err instanceof Error ? err.message : '添加余额失败');
     } finally {
       setBalanceSaving(false);
     }
+  };
+
+  const totalPages = Math.max(1, Math.ceil(total / AIRPORTS_PAGE_SIZE));
+  const firstItemNo = total === 0 ? 0 : (page - 1) * AIRPORTS_PAGE_SIZE + 1;
+  const lastItemNo = Math.min(total, page * AIRPORTS_PAGE_SIZE);
+  const goToPage = (nextPage: number) => {
+    const boundedPage = Math.min(totalPages, Math.max(1, nextPage));
+    setPage(boundedPage);
+    void fetchList(boundedPage);
+  };
+  const searchList = () => {
+    setPage(1);
+    void fetchList(1);
   };
 
   return (
@@ -4170,7 +4191,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
           <option value="risk">风险</option>
           <option value="down">跑路</option>
         </select>
-        <button className="px-3 py-2 text-sm rounded border" onClick={() => void fetchList()}>查询</button>
+        <button className="px-3 py-2 text-sm rounded border" onClick={searchList}>查询</button>
       </div>
 
       {error && <div className="text-sm text-rose-600">{error}</div>}
@@ -4230,6 +4251,32 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
           </table>
         </div>
       )}
+
+      <div className="flex items-center justify-between gap-3 flex-wrap text-sm text-neutral-600">
+        <div>
+          共 {total} 条机场，默认每页 {AIRPORTS_PAGE_SIZE} 条
+          {total > 0 ? `，当前 ${firstItemNo}-${lastItemNo} 条` : ''}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            className="inline-flex items-center gap-1 rounded border border-neutral-200 px-3 py-2 disabled:opacity-40"
+            disabled={page <= 1 || loading}
+            onClick={() => goToPage(page - 1)}
+          >
+            <ChevronLeft size={14} /> 上一页
+          </button>
+          <span className="min-w-16 text-center">
+            {page} / {totalPages}
+          </span>
+          <button
+            className="inline-flex items-center gap-1 rounded border border-neutral-200 px-3 py-2 disabled:opacity-40"
+            disabled={page >= totalPages || loading}
+            onClick={() => goToPage(page + 1)}
+          >
+            下一页 <ChevronRight size={14} />
+          </button>
+        </div>
+      </div>
 
       {editing && (
         <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -4395,43 +4442,42 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                     <p className="mt-1 text-sm text-neutral-500">为该机场绑定的申请人钱包添加余额。</p>
                   </div>
                   <ReadField label="当前用户余额" value={formatMoneyOrDash(editing.wallet_balance)} />
-                  {!editing.wallet_id ? (
+                  {!editing.wallet_id && (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                      该机场未绑定申请人钱包，不能添加余额。
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <FormField label="本次加款金额" hint="只支持增加余额，不能直接覆盖余额。">
-                        <input
-                          className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                          type="number"
-                          min="0.01"
-                          step="0.01"
-                          placeholder="例如：100"
-                          value={balanceAmount}
-                          onChange={(e) => setBalanceAmount(e.target.value)}
-                        />
-                      </FormField>
-                      <FormField label="备注" hint="可选，不填写时系统会自动记录为后台加款。">
-                        <input
-                          className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                          placeholder="例如：线下补款"
-                          value={balanceDescription}
-                          onChange={(e) => setBalanceDescription(e.target.value)}
-                        />
-                      </FormField>
-                      {balanceError && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{balanceError}</div>}
-                      {balanceMessage && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{balanceMessage}</div>}
-                      <button
-                        type="button"
-                        className="rounded-2xl bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
-                        disabled={balanceSaving}
-                        onClick={() => void addWalletBalance()}
-                      >
-                        {balanceSaving ? '添加中...' : '添加余额'}
-                      </button>
+                      首次加款会自动为该机场创建内部钱包。
                     </div>
                   )}
+                  <div className="space-y-4">
+                    <FormField label="本次加款金额" hint="只支持增加余额，不能直接覆盖余额。">
+                      <input
+                        className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                        type="number"
+                        min="0.01"
+                        step="0.01"
+                        placeholder="例如：100"
+                        value={balanceAmount}
+                        onChange={(e) => setBalanceAmount(e.target.value)}
+                      />
+                    </FormField>
+                    <FormField label="备注" hint="可选，不填写时系统会自动记录为后台加款。">
+                      <input
+                        className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                        placeholder="例如：线下补款"
+                        value={balanceDescription}
+                        onChange={(e) => setBalanceDescription(e.target.value)}
+                      />
+                    </FormField>
+                    {balanceError && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{balanceError}</div>}
+                    {balanceMessage && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{balanceMessage}</div>}
+                    <button
+                      type="button"
+                      className="rounded-2xl bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                      disabled={balanceSaving}
+                      onClick={() => void addWalletBalance()}
+                    >
+                      {balanceSaving ? '添加中...' : '添加余额'}
+                    </button>
+                  </div>
                 </section>
               )}
 

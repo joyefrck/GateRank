@@ -329,45 +329,49 @@ test('PATCH /scheduler/tasks/:taskKey validates schedule_time', async () => {
 });
 
 test('GET /airports returns list items with latest available total_score', async () => {
+  const capturedQueries: Array<{ page?: number; pageSize?: number; keyword?: string; status?: string }> = [];
   const app = express();
   app.use(express.json());
   app.use(
     createAdminRoutes({
       airportRepository: {
         ...stubAirportRepository(),
-        listByQuery: async () => ({
-          items: [
-            {
-              id: 1,
-              name: 'Alpha',
-              website: 'https://alpha.example.com',
-              websites: ['https://alpha.example.com'],
-              status: 'normal',
-              plan_price_month: 12,
-              has_trial: true,
-              subscription_url: 'https://alpha.example.com/sub',
-              tags: ['长期稳定', '新手友好'],
-              manual_tags: ['长期稳定'],
-              auto_tags: ['新手友好'],
-              created_at: '2026-03-20',
-            },
-            {
-              id: 2,
-              name: 'Beta',
-              website: '',
-              websites: [],
-              status: 'risk',
-              plan_price_month: 20,
-              has_trial: false,
-              subscription_url: null,
-              tags: ['风险观察'],
-              manual_tags: [],
-              auto_tags: ['风险观察'],
-              created_at: '2026-03-21',
-            },
-          ],
-          total: 2,
-        }),
+        listByQuery: async (query) => {
+          capturedQueries.push(query);
+          return {
+            items: [
+              {
+                id: 1,
+                name: 'Alpha',
+                website: 'https://alpha.example.com',
+                websites: ['https://alpha.example.com'],
+                status: 'normal',
+                plan_price_month: 12,
+                has_trial: true,
+                subscription_url: 'https://alpha.example.com/sub',
+                tags: ['长期稳定', '新手友好'],
+                manual_tags: ['长期稳定'],
+                auto_tags: ['新手友好'],
+                created_at: '2026-03-20',
+              },
+              {
+                id: 2,
+                name: 'Beta',
+                website: '',
+                websites: [],
+                status: 'risk',
+                plan_price_month: 20,
+                has_trial: false,
+                subscription_url: null,
+                tags: ['风险观察'],
+                manual_tags: [],
+                auto_tags: ['风险观察'],
+                created_at: '2026-03-21',
+              },
+            ],
+            total: 2,
+          };
+        },
       },
       airportApplicationRepository: stubAirportApplicationRepository(),
       probeSampleRepository: {
@@ -416,7 +420,10 @@ test('GET /airports returns list items with latest available total_score', async
         wallet_id: number | null;
         wallet_balance: number | null;
       }>;
+      page_size: number;
     };
+    assert.equal(capturedQueries[0]?.pageSize, 50);
+    assert.equal(data.page_size, 50);
     assert.equal(data.items.length, 2);
     assert.equal(data.items[0]?.total_score, 88.6);
     assert.equal(data.items[1]?.total_score, null);
@@ -425,6 +432,14 @@ test('GET /airports returns list items with latest available total_score', async
     assert.equal(data.items[0]?.wallet_balance, 321.45);
     assert.equal(data.items[1]?.wallet_id, 12);
     assert.equal(data.items[1]?.wallet_balance, 0);
+
+    const overrideResponse = await fetch(`http://127.0.0.1:${port}/airports?page=3&page_size=25`);
+    assert.equal(overrideResponse.status, 200);
+    const overrideData = (await overrideResponse.json()) as { page: number; page_size: number };
+    assert.equal(capturedQueries[1]?.page, 3);
+    assert.equal(capturedQueries[1]?.pageSize, 25);
+    assert.equal(overrideData.page, 3);
+    assert.equal(overrideData.page_size, 25);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

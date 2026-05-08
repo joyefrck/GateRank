@@ -361,8 +361,10 @@ export class PublicViewService {
     }
 
     const rawRanking = await this.deps.rankingRepository.getRanksForAirport(airportId, resolvedDate);
+    const todayRank = rawRanking.today ?? (await this.getTodayPickRankFromPublicRanking(airportId, resolvedDate));
     const ranking = {
       ...rawRanking,
+      today: todayRank,
       risk: isRiskAlertAirport(base.airport) ? rawRanking.risk : undefined,
     };
     const section = resolveSummarySection(base.airport, base.metrics, base.score, ranking, resolvedDate);
@@ -453,6 +455,19 @@ export class PublicViewService {
     );
 
     return items.filter((item): item is PublicCardItem => item !== null).slice(0, config.limit);
+  }
+
+  private async getTodayPickRankFromPublicRanking(
+    airportId: number,
+    date: string,
+  ): Promise<number | undefined> {
+    const { items } = await this.deps.scoreRepository.getPublicFullRankingByDate(
+      date,
+      1,
+      SECTION_CONFIG.today_pick.limit,
+    );
+    const matchedItem = items.find((item) => item.airport_id === airportId);
+    return matchedItem?.rank;
   }
 
   private async buildFallbackHomeSections(

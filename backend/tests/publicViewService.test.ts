@@ -1598,6 +1598,121 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
   assert.equal(result.ranking.risk_alerts_rank, null);
 });
 
+test('PublicViewService.getReportView derives today pick rank from public full ranking preview', async () => {
+  const fullRankingCalls: string[] = [];
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => ({
+        id: 1,
+        name: 'Alpha',
+        website: 'https://alpha.example.com',
+        status: 'normal' as const,
+        is_listed: true,
+        plan_price_month: 12,
+        has_trial: true,
+        tags: ['高端路线'],
+        created_at: '2026-01-20',
+      }),
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 30,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 0,
+        history_incidents: 0,
+      }),
+      getTrend: async () => [{
+        airport_id: 1,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 30,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 0,
+        history_incidents: 0,
+      }],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-03-24',
+        s: 82,
+        p: 76,
+        c: 70,
+        r: 95,
+        risk_penalty: 0,
+        score: 80,
+        recent_score: 80,
+        historical_score: 78,
+        final_score: 79,
+        details: {
+          manual_total_score: 92,
+          total_score: 83,
+        },
+      }),
+      getPublicDisplayScoreByAirportAndDate: async () => 80,
+      getTrend: async () => [{
+        airport_id: 1,
+        date: '2026-03-24',
+        s: 82,
+        p: 76,
+        c: 70,
+        r: 95,
+        risk_penalty: 0,
+        score: 80,
+        recent_score: 80,
+        historical_score: 78,
+        final_score: 79,
+        details: {
+          manual_total_score: 92,
+          total_score: 83,
+        },
+      }],
+      getPublicFullRankingByDate: async (date: string, page: number, pageSize: number) => {
+        fullRankingCalls.push(`${date}:${page}:${pageSize}`);
+        return {
+          total: 3,
+          items: [
+            { airport_id: 8, rank: 1 } as any,
+            { airport_id: 1, rank: 2 } as any,
+            { airport_id: 9, rank: 3 } as any,
+          ],
+        };
+      },
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({
+        stable: 12,
+      }),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 3,
+        realtime_tests: 8,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getReportView(1, '2026-03-24');
+  assert.ok(result);
+  assert.equal(result.ranking.today_pick_rank, 2);
+  assert.deepEqual(fullRankingCalls, ['2026-03-24:1:3']);
+});
+
 test('PublicViewService.getReportView falls back to latest score date and exposes fallback notice', async () => {
   const service = new PublicViewService({
     airportRepository: {

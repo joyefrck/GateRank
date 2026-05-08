@@ -129,6 +129,14 @@ interface AirportOwnerRow extends RowDataPacket {
   balance: number | null;
 }
 
+interface ApplicationIdRow extends RowDataPacket {
+  id: number;
+}
+
+interface AccountIdRow extends RowDataPacket {
+  id: number;
+}
+
 export interface ProcessOutboundClickInput {
   click_id: string;
   airport_id: number;
@@ -422,18 +430,7 @@ export class ApplicantBillingRepository {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
-      const [rows] = await connection.query<WalletRow[]>(
-        `SELECT id, applicant_account_id, application_id, airport_id, balance,
-                DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
-                DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
-                DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
-           FROM applicant_wallets
-          WHERE airport_id = ?
-          LIMIT 1
-          FOR UPDATE`,
-        [input.airport_id],
-      );
-      const wallet = rows[0];
+      const wallet = await this.ensureWalletForAirport(connection, input.airport_id);
       if (!wallet) {
         await connection.rollback();
         return null;
@@ -482,6 +479,144 @@ export class ApplicantBillingRepository {
     } finally {
       connection.release();
     }
+  }
+
+  private async ensureWalletForAirport(
+    connection: PoolConnection,
+    airportId: number,
+  ): Promise<WalletRow | null> {
+    const existingWallet = await this.getWalletByAirportIdForUpdate(connection, airportId);
+    if (existingWallet) {
+      return existingWallet;
+    }
+
+    await connection.execute<ResultSetHeader>(
+      `INSERT INTO airport_applications (
+        name,
+        website,
+        websites_json,
+        status,
+        plan_price_month,
+        has_trial,
+        subscription_url,
+        applicant_email,
+        applicant_telegram,
+        founded_on,
+        airport_intro,
+        test_account,
+        test_password,
+        approved_airport_id,
+        review_status,
+        payment_status,
+        payment_amount,
+        paid_at,
+        review_note,
+        reviewed_by,
+        reviewed_at
+      )
+      SELECT
+        a.name,
+        a.website,
+        a.websites_json,
+        a.status,
+        a.plan_price_month,
+        a.has_trial,
+        a.subscription_url,
+        CONCAT('legacy-airport-', a.id, '@gaterank.local'),
+        COALESCE(NULLIF(a.applicant_telegram, ''), 'legacy-import'),
+        COALESCE(a.founded_on, DATE(a.created_at), CURRENT_DATE()),
+        COALESCE(NULLIF(a.airport_intro, ''), CONCAT(a.name, ' 历史机场资料自动补齐')),
+        COALESCE(NULLIF(a.test_account, ''), 'legacy-import'),
+        COALESCE(NULLIF(a.test_password, ''), 'legacy-import'),
+        a.id,
+        'reviewed',
+        'paid',
+        0,
+        NOW(),
+        '历史机场钱包初始化',
+        'system_legacy_wallet_backfill',
+        NOW()
+        FROM airports a
+        LEFT JOIN airport_applications existing_application ON existing_application.approved_airport_id = a.id
+       WHERE a.id = ?
+         AND existing_application.id IS NULL`,
+      [airportId],
+    );
+
+    const [applicationRows] = await connection.query<ApplicationIdRow[]>(
+      `SELECT id
+         FROM airport_applications
+        WHERE approved_airport_id = ?
+        ORDER BY id DESC
+        LIMIT 1
+        FOR UPDATE`,
+      [airportId],
+    );
+    const applicationId = applicationRows[0]?.id;
+    if (!applicationId) {
+      return null;
+    }
+
+    await connection.execute<ResultSetHeader>(
+      `INSERT IGNORE INTO applicant_accounts (
+        application_id,
+        email,
+        password_hash,
+        must_change_password
+      ) VALUES (?, CONCAT('legacy-airport-', ?, '@gaterank.local'), 'legacy-disabled', 1)`,
+      [applicationId, airportId],
+    );
+
+    const [accountRows] = await connection.query<AccountIdRow[]>(
+      `SELECT id
+         FROM applicant_accounts
+        WHERE application_id = ?
+        LIMIT 1
+        FOR UPDATE`,
+      [applicationId],
+    );
+    const accountId = accountRows[0]?.id;
+    if (!accountId) {
+      return null;
+    }
+
+    await connection.execute<ResultSetHeader>(
+      `UPDATE applicant_wallets
+          SET airport_id = ?
+        WHERE applicant_account_id = ?
+          AND airport_id IS NULL`,
+      [airportId, accountId],
+    );
+
+    await connection.execute<ResultSetHeader>(
+      `INSERT IGNORE INTO applicant_wallets (
+        applicant_account_id,
+        application_id,
+        airport_id,
+        balance
+      ) VALUES (?, ?, ?, 0)`,
+      [accountId, applicationId, airportId],
+    );
+
+    return this.getWalletByAirportIdForUpdate(connection, airportId);
+  }
+
+  private async getWalletByAirportIdForUpdate(
+    connection: PoolConnection,
+    airportId: number,
+  ): Promise<WalletRow | null> {
+    const [rows] = await connection.query<WalletRow[]>(
+      `SELECT id, applicant_account_id, application_id, airport_id, balance,
+              DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+              DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+         FROM applicant_wallets
+        WHERE airport_id = ?
+        LIMIT 1
+        FOR UPDATE`,
+      [airportId],
+    );
+    return rows[0] ?? null;
   }
 
   async getWalletByAccountId(applicantAccountId: number): Promise<ApplicantWalletView | null> {

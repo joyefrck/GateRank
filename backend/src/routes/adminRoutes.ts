@@ -919,7 +919,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
   router.get('/airports', async (req, res, next) => {
     try {
       const page = toPositiveInt(req.query.page, 1);
-      const pageSize = toPositiveInt(req.query.page_size, 20);
+      const pageSize = toPositiveInt(req.query.page_size, 50);
       const keyword = optionalString(req.query.keyword);
       const status = req.query.status ? toStatus(req.query.status) : undefined;
       const result = await deps.airportRepository.listByQuery({ page, pageSize, keyword, status });
