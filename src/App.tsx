@@ -1035,7 +1035,7 @@ function PortalInfoCard({
     <div className={`rounded-[24px] border px-5 py-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] ${toneMap[tone]}`}>
       <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{eyebrow}</div>
       <div className="mt-3 text-sm font-medium text-slate-500">{title}</div>
-      <div className="mt-2 text-2xl font-black tracking-tight text-slate-950">{value}</div>
+      <div className="mt-2 break-words text-2xl font-black tracking-tight text-slate-950">{value}</div>
     </div>
   );
 }
@@ -4261,13 +4261,18 @@ function PortalPage() {
     const accountOverviewSection = (
       <PortalSectionCard
         title="账户概览"
-        description="集中查看入驻状态、点击余额和当前上架状态。"
+        description="集中查看机场、账户余额、点击单价和当前上架状态。"
+        aside={(
+          <div className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-bold text-slate-500">
+            审批状态：{formatPortalReviewStatus(view.application.review_status)}
+          </div>
+        )}
       >
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <PortalInfoCard eyebrow="Balance" title="点击余额" value={`¥${formatMetric(view.wallet.balance)}`} tone={view.wallet.balance >= view.click_price ? 'green' : 'amber'} />
+          <PortalInfoCard eyebrow="Airport" title="机场名称" value={view.application.name} tone="blue" />
+          <PortalInfoCard eyebrow="Balance" title="账户余额" value={`¥${formatMetric(view.wallet.balance)}`} tone={view.wallet.balance >= view.click_price ? 'green' : 'amber'} />
           <PortalInfoCard eyebrow="Click Price" title="点击单价" value={`¥${formatMetric(view.click_price)} / 次`} tone="blue" />
           <PortalInfoCard eyebrow="Listing" title="上架状态" value={view.wallet.auto_unlisted_at ? '欠费下架' : '正常'} tone={view.wallet.auto_unlisted_at ? 'amber' : 'green'} />
-          <PortalInfoCard eyebrow="Application" title="审批状态" value={formatPortalReviewStatus(view.application.review_status)} />
         </div>
       </PortalSectionCard>
     );
@@ -4327,8 +4332,18 @@ function PortalPage() {
                 <div className="text-[11px] font-black uppercase tracking-[0.22em] text-cyan-700">Account</div>
                 <div className="mt-2 break-all text-sm font-black text-slate-950">{view.account.email}</div>
                 <div className="mt-3 text-3xl font-black text-slate-950">¥{formatMetric(view.wallet.balance)}</div>
-                <div className={`mt-2 inline-flex rounded-full px-3 py-1 text-[11px] font-black ${view.wallet.balance >= view.click_price ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {view.wallet.balance >= view.click_price ? '余额可用' : '余额不足'}
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <div className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black ${view.wallet.balance >= view.click_price ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {view.wallet.balance >= view.click_price ? '余额可用' : '余额不足'}
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-black text-sky-600 transition hover:bg-sky-50 hover:text-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    onClick={() => switchPortalTab('recharge')}
+                  >
+                    <Banknote className="h-4 w-4" />
+                    充值
+                  </button>
                 </div>
               </div>
               <nav className="mt-4 space-y-2">
