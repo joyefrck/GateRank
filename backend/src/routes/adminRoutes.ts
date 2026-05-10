@@ -119,6 +119,7 @@ interface AdminDeps {
       },
     ): Promise<boolean>;
     markPaid?(id: number, paymentAmount: number, paidAt: string): Promise<boolean>;
+    deleteUnpaid(id: number): Promise<boolean>;
   };
   applicationPaymentOrderRepository?: {
     getLatestByApplicationId(applicationId: number): Promise<{
@@ -786,6 +787,37 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         throw new HttpError(404, 'AIRPORT_APPLICATION_NOT_FOUND', `application ${applicationId} not found`);
       }
       res.json(application);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/airport-applications/:id', async (req, res, next) => {
+    try {
+      const applicationId = toPositiveInt(req.params.id, 0);
+      if (applicationId <= 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'application id must be positive integer');
+      }
+      const application = await deps.airportApplicationRepository.getById(applicationId);
+      if (!application) {
+        throw new HttpError(404, 'AIRPORT_APPLICATION_NOT_FOUND', `application ${applicationId} not found`);
+      }
+      const currentApplication = application as {
+        payment_status?: AirportApplicationPaymentStatus;
+      };
+      if (currentApplication.payment_status === 'paid') {
+        throw new HttpError(409, 'AIRPORT_APPLICATION_DELETE_NOT_ALLOWED', '已支付申请不能删除');
+      }
+
+      const deleted = await deps.airportApplicationRepository.deleteUnpaid(applicationId);
+      if (!deleted) {
+        throw new HttpError(409, 'AIRPORT_APPLICATION_DELETE_NOT_ALLOWED', '当前申请状态不支持删除');
+      }
+
+      await deps.auditRepository.log('delete_airport_application', actorFromReq(req), req.requestId, {
+        application_id: applicationId,
+      });
+      res.status(204).send();
     } catch (error) {
       next(error);
     }
@@ -1974,10 +2006,16 @@ function parseScheduleTime(value: unknown): string {
 
 function toSchedulerTaskKey(value: unknown): SchedulerTaskKey {
   const taskKey = String(value || '').trim();
-  if (taskKey === 'stability' || taskKey === 'performance' || taskKey === 'risk' || taskKey === 'aggregate_recompute') {
+  if (
+    taskKey === 'stability'
+    || taskKey === 'performance'
+    || taskKey === 'risk'
+    || taskKey === 'aggregate_recompute'
+    || taskKey === 'billing_listing_sync'
+  ) {
     return taskKey;
   }
-  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|performance|risk|aggregate_recompute');
+  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|performance|risk|aggregate_recompute|billing_listing_sync');
 }
 
 function toSchedulerRunStatus(value: unknown): SchedulerRunStatus {

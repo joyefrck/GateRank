@@ -344,7 +344,7 @@ CREATE TABLE IF NOT EXISTS admin_system_settings (
 );
 
 CREATE TABLE IF NOT EXISTS admin_scheduler_tasks (
-  task_key ENUM('stability', 'performance', 'risk', 'aggregate_recompute') NOT NULL,
+  task_key ENUM('stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync') NOT NULL,
   name VARCHAR(128) NOT NULL,
   enabled TINYINT(1) NOT NULL DEFAULT 0,
   schedule_time CHAR(5) NOT NULL,
@@ -359,7 +359,7 @@ CREATE TABLE IF NOT EXISTS admin_scheduler_tasks (
 
 CREATE TABLE IF NOT EXISTS admin_scheduler_runs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  task_key ENUM('stability', 'performance', 'risk', 'aggregate_recompute') NOT NULL,
+  task_key ENUM('stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync') NOT NULL,
   run_date DATE NOT NULL,
   trigger_source ENUM('schedule', 'restart', 'bootstrap_recover') NOT NULL DEFAULT 'schedule',
   status ENUM('running', 'succeeded', 'failed') NOT NULL DEFAULT 'running',

@@ -114,9 +114,14 @@ export async function createApp() {
     airportRepository,
     metricsRepository,
   });
+  const marketingSettingsService = new MarketingSettingsService({
+    systemSettingRepository,
+  });
   const schedulerTaskExecutor = new SchedulerTaskExecutor({
     airportRepository,
     aggregationService,
+    applicantBillingRepository,
+    marketingSettingsService,
     recomputeService,
     riskCheckService,
   });
@@ -151,9 +156,6 @@ export async function createApp() {
     systemSettingRepository,
   });
   const paymentGatewaySettingsService = new PaymentGatewaySettingsService({
-    systemSettingRepository,
-  });
-  const marketingSettingsService = new MarketingSettingsService({
     systemSettingRepository,
   });
   const smtpSettingsService = new SmtpSettingsService({

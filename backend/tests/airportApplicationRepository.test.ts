@@ -98,3 +98,77 @@ test('AirportApplicationRepository.listByQuery filters by payment status', async
   assert.deepEqual(calls[0]?.params, ['pending', 'paid', '%cloud%', '%cloud%', '%cloud%', '%cloud%', '%cloud%']);
   assert.deepEqual(calls[1]?.params, ['pending', 'paid', '%cloud%', '%cloud%', '%cloud%', '%cloud%', '%cloud%', 20, 20]);
 });
+
+test('AirportApplicationRepository.deleteUnpaid deletes application-related records in a transaction', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const connection = {
+    beginTransaction: async () => {
+      calls.push({ sql: 'BEGIN' });
+    },
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql.includes('FROM airport_applications') && sql.includes('FOR UPDATE')) {
+        return [[{ id: 7 }]];
+      }
+      if (sql.includes('FROM applicant_accounts')) {
+        return [[{ id: 11 }]];
+      }
+      if (sql.includes('DELETE FROM airport_applications')) {
+        return [{ affectedRows: 1 }];
+      }
+      return [{ affectedRows: 1 }];
+    },
+    commit: async () => {
+      calls.push({ sql: 'COMMIT' });
+    },
+    rollback: async () => {
+      calls.push({ sql: 'ROLLBACK' });
+    },
+    release: () => {
+      calls.push({ sql: 'RELEASE' });
+    },
+  };
+  const repository = new AirportApplicationRepository({
+    getConnection: async () => connection,
+  } as never);
+
+  const deleted = await repository.deleteUnpaid(7);
+
+  assert.equal(deleted, true);
+  assert.equal(calls[0]?.sql, 'BEGIN');
+  assert.ok(calls.some((call) => call.sql.includes("payment_status = 'unpaid'") && call.sql.includes('FOR UPDATE')));
+  assert.ok(calls.some((call) => call.sql.includes('DELETE FROM applicant_x_oauth_flows')));
+  assert.ok(calls.some((call) => call.sql.includes('DELETE FROM applicant_recharge_orders')));
+  assert.ok(calls.some((call) => call.sql.includes('DELETE FROM applicant_wallets WHERE application_id = ?')));
+  assert.ok(calls.some((call) => call.sql.includes('DELETE FROM applicant_accounts WHERE application_id = ?')));
+  assert.ok(calls.some((call) => call.sql.includes('DELETE FROM application_payment_orders WHERE application_id = ?')));
+  assert.equal(calls.at(-2)?.sql, 'COMMIT');
+  assert.equal(calls.at(-1)?.sql, 'RELEASE');
+});
+
+test('AirportApplicationRepository.deleteUnpaid returns false when application is paid or missing', async () => {
+  const calls: string[] = [];
+  const connection = {
+    beginTransaction: async () => {
+      calls.push('BEGIN');
+    },
+    execute: async () => [[]],
+    commit: async () => {
+      calls.push('COMMIT');
+    },
+    rollback: async () => {
+      calls.push('ROLLBACK');
+    },
+    release: () => {
+      calls.push('RELEASE');
+    },
+  };
+  const repository = new AirportApplicationRepository({
+    getConnection: async () => connection,
+  } as never);
+
+  const deleted = await repository.deleteUnpaid(7);
+
+  assert.equal(deleted, false);
+  assert.deepEqual(calls, ['BEGIN', 'ROLLBACK', 'RELEASE']);
+});

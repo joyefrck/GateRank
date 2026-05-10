@@ -20,7 +20,11 @@ const DEFAULT_TASKS: Array<Pick<SchedulerTask, 'task_key' | 'name' | 'schedule_t
   { task_key: 'performance', name: '性能采集', schedule_time: '00:10' },
   { task_key: 'risk', name: '风险体检', schedule_time: '00:20' },
   { task_key: 'aggregate_recompute', name: '聚合重算', schedule_time: '00:30' },
+  { task_key: 'billing_listing_sync', name: '欠费上架同步', schedule_time: '03:00' },
 ];
+
+const SCHEDULER_TASK_ENUM = "ENUM('stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync')";
+const SCHEDULER_TASK_ORDER = "'stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync'";
 
 export class SchedulerTaskRepository {
   constructor(private readonly pool: Pool) {}
@@ -28,7 +32,7 @@ export class SchedulerTaskRepository {
   async ensureSchema(): Promise<void> {
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS admin_scheduler_tasks (
-        task_key ENUM('stability', 'performance', 'risk', 'aggregate_recompute') NOT NULL,
+        task_key ${SCHEDULER_TASK_ENUM} NOT NULL,
         name VARCHAR(128) NOT NULL,
         enabled TINYINT(1) NOT NULL DEFAULT 0,
         schedule_time CHAR(5) NOT NULL,
@@ -40,6 +44,10 @@ export class SchedulerTaskRepository {
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (task_key)
       )
+    `);
+    await this.pool.query(`
+      ALTER TABLE admin_scheduler_tasks
+        MODIFY COLUMN task_key ${SCHEDULER_TASK_ENUM} NOT NULL
     `);
 
     const enabledByDefault = isEnabledByDefault() ? 1 : 0;
@@ -58,7 +66,7 @@ export class SchedulerTaskRepository {
       `SELECT task_key, name, enabled, schedule_time, timezone,
               last_restarted_at, last_restarted_by, updated_by, created_at, updated_at
          FROM admin_scheduler_tasks
-        ORDER BY FIELD(task_key, 'stability', 'performance', 'risk', 'aggregate_recompute')`,
+        ORDER BY FIELD(task_key, ${SCHEDULER_TASK_ORDER})`,
     );
     return rows.map(toSchedulerTask);
   }

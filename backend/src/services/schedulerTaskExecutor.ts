@@ -31,6 +31,18 @@ interface SchedulerTaskExecutorDeps {
   recomputeService: {
     recomputeForDate(date: string): Promise<{ recomputed: number }>;
   };
+  applicantBillingRepository: {
+    syncListingStatusByBalance(clickChargeAmount: number): Promise<{
+      checked: number;
+      restored: number;
+      unlisted: number;
+      unchanged: number;
+      skipped: number;
+    }>;
+  };
+  marketingSettingsService: {
+    getConfig(): Promise<{ click_charge_amount: number }>;
+  };
   logger?: LoggerLike;
   sleep?: (ms: number) => Promise<void>;
   execFileAsync?: (
@@ -94,6 +106,9 @@ export class SchedulerTaskExecutor {
     if (taskKey === 'risk') {
       return this.runRiskInspection(date);
     }
+    if (taskKey === 'billing_listing_sync') {
+      return this.runBillingListingSync();
+    }
     return this.runAggregateRecompute(date);
   }
 
@@ -146,6 +161,23 @@ export class SchedulerTaskExecutor {
       detail: {
         aggregate,
         recompute,
+      },
+    };
+  }
+
+  async runBillingListingSync(): Promise<SchedulerTaskExecutionResult> {
+    const config = await this.deps.marketingSettingsService.getConfig();
+    const result = await this.deps.applicantBillingRepository.syncListingStatusByBalance(
+      Number(config.click_charge_amount),
+    );
+    const message = `欠费上架同步完成：检查 ${result.checked}，恢复上架 ${result.restored}，欠费下架 ${result.unlisted}，未变化 ${result.unchanged}，跳过 ${result.skipped}`;
+    return {
+      status: 'succeeded',
+      message,
+      detail: {
+        stage: 'billing_listing_sync',
+        click_charge_amount: Number(config.click_charge_amount),
+        ...result,
       },
     };
   }

@@ -16,6 +16,7 @@ test('SchedulerRunRepository.ensureSchema creates scheduler runs table', async (
   await repository.ensureSchema();
 
   assert.ok(queries.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS admin_scheduler_runs')));
+  assert.ok(queries.some((sql) => sql.includes('MODIFY COLUMN task_key') && sql.includes('billing_listing_sync')));
 });
 
 test('SchedulerRunRepository.listByQuery maps rows and parses detail json', async () => {
@@ -26,7 +27,7 @@ test('SchedulerRunRepository.listByQuery maps rows and parses detail json', asyn
       }
       return [[{
         id: 1,
-        task_key: 'stability',
+        task_key: 'billing_listing_sync',
         run_date: '2026-03-30',
         trigger_source: 'schedule',
         status: 'succeeded',
@@ -44,6 +45,6 @@ test('SchedulerRunRepository.listByQuery maps rows and parses detail json', asyn
   const result = await repository.listByQuery({ page: 1, pageSize: 20 });
 
   assert.equal(result.total, 1);
-  assert.equal(result.items[0]?.task_key, 'stability');
+  assert.equal(result.items[0]?.task_key, 'billing_listing_sync');
   assert.equal(result.items[0]?.detail_json?.summary, 'ok');
 });

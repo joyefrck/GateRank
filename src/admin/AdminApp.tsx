@@ -30,7 +30,7 @@ type ProbeScope = 'stability' | 'performance';
 type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
 type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 type PublishTokenScope = 'news:create' | 'news:update' | 'news:publish' | 'news:archive' | 'news:upload';
-type SchedulerTaskKey = 'stability' | 'performance' | 'risk' | 'aggregate_recompute';
+type SchedulerTaskKey = 'stability' | 'performance' | 'risk' | 'aggregate_recompute' | 'billing_listing_sync';
 type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
 type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
 
@@ -1175,6 +1175,7 @@ function SchedulerPage() {
               <option value="performance">性能采集</option>
               <option value="risk">风险体检</option>
               <option value="aggregate_recompute">聚合重算</option>
+              <option value="billing_listing_sync">欠费上架同步</option>
             </select>
             <input type="date" className="rounded border border-neutral-300 px-3 py-2 text-sm" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setRunPage(1); }} />
             <input type="date" className="rounded border border-neutral-300 px-3 py-2 text-sm" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setRunPage(1); }} />
@@ -4816,6 +4817,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
   const [reviewNote, setReviewNote] = useState('');
   const [reviewSaving, setReviewSaving] = useState(false);
   const [markPaidSaving, setMarkPaidSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   const fetchList = async (targetPage = page) => {
     setLoading(true);
@@ -4914,6 +4916,31 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
       setDetailError(err instanceof Error ? err.message : '更新支付状态失败');
     } finally {
       setMarkPaidSaving(false);
+    }
+  };
+
+  const deleteApplication = async (item: AirportApplication) => {
+    if (item.payment_status === 'paid') return;
+    const confirmed = window.confirm(`确认删除未支付入驻申请「${item.name}」？删除后申请人后台账号和未完成支付订单也会一并移除。`);
+    if (!confirmed) return;
+
+    setDeletingId(item.id);
+    setError('');
+    setDetailError('');
+    setDetailSuccess('');
+    try {
+      await apiFetch(`/api/v1/admin/airport-applications/${item.id}`, {
+        method: 'DELETE',
+      });
+      if (selectedId === item.id) {
+        setSelectedId(null);
+        setSelected(null);
+      }
+      await fetchList();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '删除失败');
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -5016,14 +5043,27 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                     <div className="mt-1 text-xs text-neutral-500 truncate" title={item.website}>{item.website}</div>
                   </td>
                   <td className="px-4 py-3 truncate" title={item.applicant_email}>{item.applicant_email}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{item.applicant_telegram}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <TelegramProfileLink value={item.applicant_telegram} />
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.founded_on}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.payment_status === 'paid' ? '已支付' : '未支付'}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatMoneyOrDash(item.payment_amount)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatApplicationReviewStatus(item.review_status)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.created_at}</td>
                   <td className="px-4 py-3 whitespace-nowrap">
-                    <button className="underline" onClick={() => void openDetail(item.id)}>查看详情</button>
+                    <div className="flex items-center gap-3">
+                      <button className="underline" onClick={() => void openDetail(item.id)}>查看详情</button>
+                      {item.payment_status !== 'paid' && (
+                        <button
+                          className="text-rose-600 underline disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={deletingId === item.id}
+                          onClick={() => void deleteApplication(item)}
+                        >
+                          {deletingId === item.id ? '删除中' : '删除'}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -5120,7 +5160,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       <ReadField label="联系邮箱" value={selected.applicant_email} />
-                      <ReadField label="Telegram" value={selected.applicant_telegram} />
+                      <ReadField label="Telegram" value={<TelegramProfileLink value={selected.applicant_telegram} />} />
                       <ReadField label="测试账号" value={selected.test_account} />
                       <ReadField label="测试密码" value={selected.test_password} />
                     </div>
@@ -6011,6 +6051,23 @@ function ReadField({ label, value }: { label: string; value: React.ReactNode }) 
   );
 }
 
+function TelegramProfileLink({ value }: { value: string | null | undefined }) {
+  const telegram = getTelegramProfileTarget(value);
+  if (!telegram) {
+    return <span>-</span>;
+  }
+
+  return (
+    <a
+      className="font-medium text-blue-600 underline underline-offset-2 hover:text-blue-700"
+      href={telegram.href}
+      title={`打开 Telegram: ${telegram.label}`}
+    >
+      {telegram.label}
+    </a>
+  );
+}
+
 function FormField({
   label,
   hint,
@@ -6063,6 +6120,7 @@ function formatSchedulerTaskLabel(taskKey: SchedulerTaskKey): string {
   if (taskKey === 'stability') return '稳定性采集';
   if (taskKey === 'performance') return '性能采集';
   if (taskKey === 'risk') return '风险体检';
+  if (taskKey === 'billing_listing_sync') return '欠费上架同步';
   return '聚合重算';
 }
 
@@ -6120,6 +6178,29 @@ function valueOrDash(value: string | number | boolean | null | undefined): strin
     return value ? 'true' : 'false';
   }
   return value;
+}
+
+function getTelegramProfileTarget(value: string | null | undefined): { label: string; href: string } | null {
+  const rawValue = value?.trim();
+  if (!rawValue) {
+    return null;
+  }
+
+  let handle = rawValue.replace(/^@+/, '');
+  const urlMatch = handle.match(/^(?:https?:\/\/)?(?:t\.me|telegram\.me)\/([^/?#]+)/i);
+  if (urlMatch) {
+    handle = decodeURIComponent(urlMatch[1]);
+  }
+  handle = handle.replace(/^@+/, '').replace(/\/+$/, '').trim();
+
+  if (!handle) {
+    return null;
+  }
+
+  return {
+    label: rawValue.startsWith('@') ? rawValue : `@${handle}`,
+    href: `tg://resolve?domain=${encodeURIComponent(handle)}`,
+  };
 }
 
 function formatMoneyOrDash(value: number | null | undefined): string {

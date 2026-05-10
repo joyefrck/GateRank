@@ -142,8 +142,9 @@ test('GET /scheduler/tasks returns task list', async () => {
     const response = await fetch(`http://127.0.0.1:${port}/scheduler/tasks`);
     assert.equal(response.status, 200);
     const data = (await response.json()) as { items: Array<{ task_key: string }> };
-    assert.equal(data.items.length, 4);
+    assert.equal(data.items.length, 5);
     assert.equal(data.items[0]?.task_key, 'stability');
+    assert.equal(data.items[4]?.task_key, 'billing_listing_sync');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -1938,6 +1939,126 @@ test('GET /airport-applications/:id returns full application details', async () 
   }
 });
 
+test('DELETE /airport-applications/:id deletes unpaid applications', async () => {
+  const deletedIds: number[] = [];
+  const auditLogs: Array<{ action: string; payload: unknown }> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async (id: number) => ({
+          ...(await stubAirportApplicationRepository().getById(id)),
+          payment_status: 'unpaid',
+          review_status: 'awaiting_payment',
+        }),
+        deleteUnpaid: async (id: number) => {
+          deletedIds.push(id);
+          return true;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, _actor, _requestId, payload) => {
+          auditLogs.push({ action, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7`, {
+      method: 'DELETE',
+    });
+
+    assert.equal(response.status, 204);
+    assert.deepEqual(deletedIds, [7]);
+    assert.equal(auditLogs[0]?.action, 'delete_airport_application');
+    assert.deepEqual(auditLogs[0]?.payload, { application_id: 7 });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('DELETE /airport-applications/:id rejects paid applications', async () => {
+  let deleteCalled = false;
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        deleteUnpaid: async () => {
+          deleteCalled = true;
+          return true;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7`, {
+      method: 'DELETE',
+    });
+    const data = (await response.json()) as { code: string; message: string };
+
+    assert.equal(response.status, 409);
+    assert.equal(data.code, 'AIRPORT_APPLICATION_DELETE_NOT_ALLOWED');
+    assert.equal(data.message, '已支付申请不能删除');
+    assert.equal(deleteCalled, false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /system-settings/telegram returns masked telegram settings', async () => {
   const app = express();
   app.use(express.json());
@@ -3674,6 +3795,7 @@ function stubAirportApplicationRepository() {
       updated_at: '2026-03-24 10:00:00',
     }),
     review: async () => true,
+    deleteUnpaid: async () => true,
   };
 }
 
@@ -3808,6 +3930,22 @@ function stubSchedulerService(): any {
         updated_at: '2026-03-30T00:00:00+08:00',
         description: '聚合描述',
         next_run_at: '2026-03-31T00:30:00+08:00',
+        is_running: false,
+        latest_run: null,
+      },
+      {
+        task_key: 'billing_listing_sync',
+        name: '欠费上架同步',
+        enabled: true,
+        schedule_time: '03:00',
+        timezone: 'Asia/Shanghai',
+        last_restarted_at: null,
+        last_restarted_by: null,
+        updated_by: 'system',
+        created_at: '2026-03-30T00:00:00+08:00',
+        updated_at: '2026-03-30T00:00:00+08:00',
+        description: '欠费同步描述',
+        next_run_at: '2026-03-31T03:00:00+08:00',
         is_running: false,
         latest_run: null,
       },

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { HttpError } from '../src/middleware/errorHandler';
 import { AdminSchedulerService } from '../src/services/adminSchedulerService';
-import type { SchedulerTask } from '../src/types/domain';
+import type { SchedulerRun, SchedulerTask, SchedulerTaskKey } from '../src/types/domain';
 
 function createTask(overrides: Partial<SchedulerTask> = {}): SchedulerTask {
   return {
@@ -17,6 +17,16 @@ function createTask(overrides: Partial<SchedulerTask> = {}): SchedulerTask {
     created_at: '2026-03-30T00:00:00+08:00',
     updated_at: '2026-03-30T00:00:00+08:00',
     ...overrides,
+  };
+}
+
+function emptyLatestRuns(): Record<SchedulerTaskKey, SchedulerRun | null> {
+  return {
+    stability: null,
+    performance: null,
+    risk: null,
+    aggregate_recompute: null,
+    billing_listing_sync: null,
   };
 }
 
@@ -39,12 +49,7 @@ test('AdminSchedulerService.startAll only schedules enabled tasks', async () => 
     schedulerRunRepository: {
       createRunning: async () => ({ id: 1 }),
       markFinished: async () => {},
-      listLatestByTaskKeys: async () => ({
-        stability: null,
-        performance: null,
-        risk: null,
-        aggregate_recompute: null,
-      }),
+      listLatestByTaskKeys: async () => emptyLatestRuns(),
       listByQuery: async () => ({ items: [], total: 0 }),
       getDailyStats: async () => [],
     },
@@ -84,12 +89,7 @@ test('AdminSchedulerService.updateTask reloads next run time', async () => {
     schedulerRunRepository: {
       createRunning: async () => ({ id: 1 }),
       markFinished: async () => {},
-      listLatestByTaskKeys: async () => ({
-        stability: null,
-        performance: null,
-        risk: null,
-        aggregate_recompute: null,
-      }),
+      listLatestByTaskKeys: async () => emptyLatestRuns(),
       listByQuery: async () => ({ items: [], total: 0 }),
       getDailyStats: async () => [],
     },
@@ -137,12 +137,7 @@ test('AdminSchedulerService.restartTask executes task body with restart trigger'
       markFinished: async () => {
         markFinishedCount += 1;
       },
-      listLatestByTaskKeys: async () => ({
-        stability: null,
-        performance: null,
-        risk: null,
-        aggregate_recompute: null,
-      }),
+      listLatestByTaskKeys: async () => emptyLatestRuns(),
       listByQuery: async () => ({ items: [], total: 0 }),
       getDailyStats: async () => [],
     },
@@ -180,12 +175,7 @@ test('AdminSchedulerService.restartTask rejects disabled task', async () => {
     schedulerRunRepository: {
       createRunning: async () => ({ id: 1 }),
       markFinished: async () => {},
-      listLatestByTaskKeys: async () => ({
-        stability: null,
-        performance: null,
-        risk: null,
-        aggregate_recompute: null,
-      }),
+      listLatestByTaskKeys: async () => emptyLatestRuns(),
       listByQuery: async () => ({ items: [], total: 0 }),
       getDailyStats: async () => [],
     },
@@ -222,12 +212,7 @@ test('AdminSchedulerService.restartTask rejects when task is already running', a
     schedulerRunRepository: {
       createRunning: async () => ({ id: 1 }),
       markFinished: async () => {},
-      listLatestByTaskKeys: async () => ({
-        stability: null,
-        performance: null,
-        risk: null,
-        aggregate_recompute: null,
-      }),
+      listLatestByTaskKeys: async () => emptyLatestRuns(),
       listByQuery: async () => ({ items: [], total: 0 }),
       getDailyStats: async () => [],
     },
@@ -278,12 +263,7 @@ test('AdminSchedulerService scheduled execution writes run record and finishes i
       markFinished: async ({ status }) => {
         finishedStatuses.push(status);
       },
-      listLatestByTaskKeys: async () => ({
-        stability: null,
-        performance: null,
-        risk: null,
-        aggregate_recompute: null,
-      }),
+      listLatestByTaskKeys: async () => emptyLatestRuns(),
       listByQuery: async () => ({ items: [], total: 0 }),
       getDailyStats: async () => [],
     },
@@ -324,12 +304,7 @@ test('AdminSchedulerService scheduled midnight execution uses scheduled slot dat
         return { id: 1 };
       },
       markFinished: async () => {},
-      listLatestByTaskKeys: async () => ({
-        stability: null,
-        performance: null,
-        risk: null,
-        aggregate_recompute: null,
-      }),
+      listLatestByTaskKeys: async () => emptyLatestRuns(),
       listByQuery: async () => ({ items: [], total: 0 }),
       getDailyStats: async () => [],
     },
@@ -374,12 +349,7 @@ test('AdminSchedulerService scheduled risk execution auto-triggers aggregate_rec
       markFinished: async ({ id, status }) => {
         runOrder.push(`finish:${id}:${status}`);
       },
-      listLatestByTaskKeys: async () => ({
-        stability: null,
-        performance: null,
-        risk: null,
-        aggregate_recompute: null,
-      }),
+      listLatestByTaskKeys: async () => emptyLatestRuns(),
       listByQuery: async () => ({ items: [], total: 0 }),
       getDailyStats: async () => [],
     },

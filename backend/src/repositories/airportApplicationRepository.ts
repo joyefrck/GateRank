@@ -1,4 +1,4 @@
-import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type {
   AirportApplication,
   AirportApplicationPaymentStatus,
@@ -408,6 +408,56 @@ export class AirportApplicationRepository {
     return result.affectedRows > 0;
   }
 
+  async deleteUnpaid(id: number): Promise<boolean> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [applications] = await connection.execute<RowDataPacket[]>(
+        `SELECT id
+           FROM airport_applications
+          WHERE id = ?
+            AND payment_status = 'unpaid'
+          LIMIT 1
+          FOR UPDATE`,
+        [id],
+      );
+      if (applications.length === 0) {
+        await connection.rollback();
+        return false;
+      }
+
+      const [accounts] = await connection.execute<RowDataPacket[]>(
+        `SELECT id
+           FROM applicant_accounts
+          WHERE application_id = ?`,
+        [id],
+      );
+      const accountIds = accounts.map((account) => Number(account.id)).filter((accountId) => Number.isFinite(accountId));
+      if (accountIds.length > 0) {
+        await executeDeleteByIds(connection, 'applicant_x_oauth_flows', 'applicant_account_id', accountIds);
+        await executeDeleteByIds(connection, 'applicant_recharge_orders', 'applicant_account_id', accountIds);
+      }
+
+      await connection.execute('DELETE FROM applicant_wallets WHERE application_id = ?', [id]);
+      await connection.execute('DELETE FROM applicant_accounts WHERE application_id = ?', [id]);
+      await connection.execute('DELETE FROM application_payment_orders WHERE application_id = ?', [id]);
+      const [result] = await connection.execute<ResultSetHeader>(
+        `DELETE FROM airport_applications
+          WHERE id = ?
+            AND payment_status = 'unpaid'`,
+        [id],
+      );
+
+      await connection.commit();
+      return result.affectedRows > 0;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   private async ensureColumn(columnName: string, definition: string): Promise<void> {
     const [rows] = await this.pool.query<RowDataPacket[]>(
       `SELECT 1
@@ -425,6 +475,22 @@ export class AirportApplicationRepository {
       );
     }
   }
+}
+
+async function executeDeleteByIds(
+  connection: PoolConnection,
+  tableName: string,
+  columnName: string,
+  ids: number[],
+): Promise<void> {
+  if (ids.length === 0) {
+    return;
+  }
+  const placeholders = ids.map(() => '?').join(', ');
+  await connection.execute(
+    `DELETE FROM ${tableName} WHERE ${columnName} IN (${placeholders})`,
+    ids,
+  );
 }
 
 function normalizeWebsiteList(websites?: string[], primaryWebsite?: string): string[] {

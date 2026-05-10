@@ -71,6 +71,7 @@ const TASK_DESCRIPTIONS: Record<SchedulerTaskKey, string> = {
   performance: '调用 monitor_performance.py 批量采集性能样本，不重复触发聚合和重算。',
   risk: '逐机场串行执行风险体检，刷新官网可用性与 SSL 检查结果。',
   aggregate_recompute: '执行全量聚合和时间衰减重算，统一刷新每日分数与榜单。',
+  billing_listing_sync: '按余额规则同步机场上架状态和申请人后台欠费下架标记。',
 };
 
 export class AdminSchedulerService {

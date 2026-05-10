@@ -130,6 +130,22 @@ interface AirportOwnerRow extends RowDataPacket {
   balance: number | null;
 }
 
+interface ListingSyncRow extends RowDataPacket {
+  wallet_id: number;
+  airport_id: number | null;
+  balance: number;
+  auto_unlisted_at: string | null;
+  is_listed: number | null;
+}
+
+export interface BillingListingSyncResult {
+  checked: number;
+  restored: number;
+  unlisted: number;
+  unchanged: number;
+  skipped: number;
+}
+
 interface ApplicationIdRow extends RowDataPacket {
   id: number;
 }
@@ -476,6 +492,92 @@ export class ApplicantBillingRepository {
       );
       await connection.commit();
       return updatedRows[0] ? toWallet(updatedRows[0]) : null;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  async syncListingStatusByBalance(clickChargeAmount: number): Promise<BillingListingSyncResult> {
+    const minimumBalance = normalizeClickChargeAmount(clickChargeAmount);
+    const result: BillingListingSyncResult = {
+      checked: 0,
+      restored: 0,
+      unlisted: 0,
+      unchanged: 0,
+      skipped: 0,
+    };
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<ListingSyncRow[]>(
+        `SELECT w.id AS wallet_id,
+                w.airport_id,
+                w.balance,
+                DATE_FORMAT(w.auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+                a.is_listed
+           FROM applicant_wallets w
+           LEFT JOIN airports a
+             ON a.id = w.airport_id
+          WHERE w.airport_id IS NOT NULL
+          FOR UPDATE`,
+      );
+
+      for (const row of rows) {
+        result.checked += 1;
+        if (!row.airport_id || row.is_listed === null) {
+          result.skipped += 1;
+          continue;
+        }
+
+        const balance = Number(row.balance || 0);
+        const isListed = Boolean(row.is_listed);
+        const isAutoUnlisted = Boolean(row.auto_unlisted_at);
+
+        if (balance >= minimumBalance) {
+          if (!isListed || isAutoUnlisted) {
+            await connection.execute<ResultSetHeader>(
+              `UPDATE airports
+                  SET is_listed = 1
+                WHERE id = ?`,
+              [row.airport_id],
+            );
+            await connection.execute<ResultSetHeader>(
+              `UPDATE applicant_wallets
+                  SET auto_unlisted_at = NULL
+                WHERE id = ?`,
+              [row.wallet_id],
+            );
+            result.restored += 1;
+          } else {
+            result.unchanged += 1;
+          }
+          continue;
+        }
+
+        if (isListed || !isAutoUnlisted) {
+          await connection.execute<ResultSetHeader>(
+            `UPDATE airports
+                SET is_listed = 0
+              WHERE id = ?`,
+            [row.airport_id],
+          );
+          await connection.execute<ResultSetHeader>(
+            `UPDATE applicant_wallets
+                SET auto_unlisted_at = COALESCE(auto_unlisted_at, NOW())
+              WHERE id = ?`,
+            [row.wallet_id],
+          );
+          result.unlisted += 1;
+        } else {
+          result.unchanged += 1;
+        }
+      }
+
+      await connection.commit();
+      return result;
     } catch (error) {
       await connection.rollback();
       throw error;

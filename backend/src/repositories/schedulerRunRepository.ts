@@ -7,6 +7,9 @@ import type {
 } from '../types/domain';
 import { formatDateOnly, formatDateTimeInTimezoneIso } from '../utils/time';
 
+const SCHEDULER_TASK_ENUM = "ENUM('stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync')";
+const SCHEDULER_TASK_ORDER = "'stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync'";
+
 interface SchedulerRunRow extends RowDataPacket {
   id: number;
   task_key: SchedulerTaskKey;
@@ -61,7 +64,7 @@ export class SchedulerRunRepository {
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS admin_scheduler_runs (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-        task_key ENUM('stability', 'performance', 'risk', 'aggregate_recompute') NOT NULL,
+        task_key ${SCHEDULER_TASK_ENUM} NOT NULL,
         run_date DATE NOT NULL,
         trigger_source ENUM('schedule', 'restart', 'bootstrap_recover') NOT NULL DEFAULT 'schedule',
         status ENUM('running', 'succeeded', 'failed') NOT NULL DEFAULT 'running',
@@ -76,6 +79,10 @@ export class SchedulerRunRepository {
         INDEX idx_admin_scheduler_runs_date_task (run_date, task_key),
         INDEX idx_admin_scheduler_runs_status (status)
       )
+    `);
+    await this.pool.query(`
+      ALTER TABLE admin_scheduler_runs
+        MODIFY COLUMN task_key ${SCHEDULER_TASK_ENUM} NOT NULL
     `);
   }
 
@@ -136,6 +143,7 @@ export class SchedulerRunRepository {
       performance: null,
       risk: null,
       aggregate_recompute: null,
+      billing_listing_sync: null,
     } as Record<SchedulerTaskKey, SchedulerRun | null>;
 
     if (taskKeys.length === 0) {
@@ -251,7 +259,7 @@ export class SchedulerRunRepository {
          JOIN admin_scheduler_runs latest
            ON latest.id = agg.last_run_id
         ORDER BY agg.run_date DESC,
-                 FIELD(agg.task_key, 'stability', 'performance', 'risk', 'aggregate_recompute')`,
+                 FIELD(agg.task_key, ${SCHEDULER_TASK_ORDER})`,
       params,
     );
 

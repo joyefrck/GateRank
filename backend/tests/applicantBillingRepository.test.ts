@@ -196,3 +196,55 @@ test('ApplicantBillingRepository.addWalletBalanceAdjustment creates internal wal
   assert.match(calls[10]!.sql!, /INSERT INTO applicant_wallet_transactions/);
   assert.deepEqual(calls[10]!.params, [99, 88, 77, 5, 25.13, 25.13, 'req-1', '线下补款']);
 });
+
+test('ApplicantBillingRepository.syncListingStatusByBalance reconciles listing and auto-unlisted flags', async () => {
+  const calls: Array<{ kind: 'query' | 'execute' | 'begin' | 'commit' | 'rollback' | 'release'; sql?: string; params?: unknown[] }> = [];
+  const connection = {
+    beginTransaction: async () => {
+      calls.push({ kind: 'begin' });
+    },
+    commit: async () => {
+      calls.push({ kind: 'commit' });
+    },
+    rollback: async () => {
+      calls.push({ kind: 'rollback' });
+    },
+    release: () => {
+      calls.push({ kind: 'release' });
+    },
+    query: async (sql: string) => {
+      calls.push({ kind: 'query', sql });
+      return [[
+        { wallet_id: 1, airport_id: 101, balance: 1, auto_unlisted_at: '2026-05-09 10:00:00', is_listed: 1 },
+        { wallet_id: 2, airport_id: 102, balance: 0, auto_unlisted_at: null, is_listed: 1 },
+        { wallet_id: 3, airport_id: 103, balance: 1, auto_unlisted_at: '2026-05-09 10:00:00', is_listed: 0 },
+        { wallet_id: 4, airport_id: 104, balance: 0, auto_unlisted_at: '2026-05-09 10:00:00', is_listed: 0 },
+        { wallet_id: 5, airport_id: 105, balance: 1, auto_unlisted_at: null, is_listed: null },
+      ]];
+    },
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ kind: 'execute', sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  };
+  const repository = new ApplicantBillingRepository({
+    getConnection: async () => connection,
+  } as never);
+
+  const result = await repository.syncListingStatusByBalance(0.6);
+
+  assert.deepEqual(result, {
+    checked: 5,
+    restored: 2,
+    unlisted: 1,
+    unchanged: 1,
+    skipped: 1,
+  });
+  assert.match(calls[1]!.sql!, /FROM applicant_wallets w/);
+  assert.match(calls[1]!.sql!, /FOR UPDATE/);
+  assert.deepEqual(
+    calls.filter((call) => call.kind === 'execute').map((call) => call.params),
+    [[101], [1], [102], [2], [103], [3]],
+  );
+  assert.deepEqual(calls.map((call) => call.kind).slice(-2), ['commit', 'release']);
+});
