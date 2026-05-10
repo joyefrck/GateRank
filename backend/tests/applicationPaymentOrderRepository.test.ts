@@ -20,6 +20,7 @@ test('ApplicationPaymentOrderRepository.ensureSchema creates table and adds gate
   await repository.ensureSchema();
 
   assert.ok(calls.some((call) => call.sql.includes('CREATE TABLE IF NOT EXISTS application_payment_orders')));
+  assert.ok(calls.some((call) => call.sql.includes("channel ENUM('alipay', 'wxpay', 'usdt') NOT NULL")));
   assert.ok(calls.some((call) => call.sql.includes('ADD COLUMN gateway_trade_no VARCHAR(64) NULL AFTER out_trade_no')));
   assert.ok(calls.some((call) => call.sql.includes('ADD COLUMN notify_payload_json JSON NULL AFTER pay_info')));
 });

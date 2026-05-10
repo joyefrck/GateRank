@@ -1,7 +1,7 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { sqlDateTimeToTimezoneIso } from '../utils/time';
 
-export type ApplicationPaymentChannel = 'alipay' | 'wxpay';
+export type ApplicationPaymentChannel = 'alipay' | 'wxpay' | 'usdt';
 export type ApplicationPaymentOrderStatus = 'created' | 'paid' | 'failed' | 'expired';
 
 interface ApplicationPaymentOrderRow extends RowDataPacket {
@@ -57,7 +57,7 @@ export class ApplicationPaymentOrderRepository {
         application_id BIGINT UNSIGNED NOT NULL,
         out_trade_no VARCHAR(64) NOT NULL,
         gateway_trade_no VARCHAR(64) NULL,
-        channel ENUM('alipay', 'wxpay') NOT NULL,
+        channel ENUM('alipay', 'wxpay', 'usdt') NOT NULL,
         amount DECIMAL(10,2) NOT NULL,
         status ENUM('created', 'paid', 'failed', 'expired') NOT NULL DEFAULT 'created',
         pay_type VARCHAR(32) NULL,
@@ -71,6 +71,11 @@ export class ApplicationPaymentOrderRepository {
         INDEX idx_application_payment_orders_application_id (application_id),
         INDEX idx_application_payment_orders_status_created_at (status, created_at DESC)
       )
+    `);
+
+    await this.pool.query(`
+      ALTER TABLE application_payment_orders
+        MODIFY COLUMN channel ENUM('alipay', 'wxpay', 'usdt') NOT NULL
     `);
 
     await this.ensureColumn('gateway_trade_no', 'VARCHAR(64) NULL AFTER out_trade_no');

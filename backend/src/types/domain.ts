@@ -584,7 +584,7 @@ export interface ApplicantPortalView {
   application: AirportApplication;
   latest_payment_order?: {
     out_trade_no: string;
-    channel: 'alipay' | 'wxpay';
+    channel: 'alipay' | 'wxpay' | 'usdt';
     amount: number;
     status: 'created' | 'paid' | 'failed' | 'expired';
     pay_type: string | null;
@@ -599,7 +599,7 @@ export interface ApplicationPaymentOrder {
   application_id: number;
   out_trade_no: string;
   gateway_trade_no: string | null;
-  channel: 'alipay' | 'wxpay';
+  channel: 'alipay' | 'wxpay' | 'usdt';
   amount: number;
   status: 'created' | 'paid' | 'failed' | 'expired';
   pay_type: string | null;

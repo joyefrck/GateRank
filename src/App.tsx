@@ -294,7 +294,7 @@ interface PortalAccountView {
 
 interface PortalPaymentOrderView {
   out_trade_no: string;
-  channel: 'alipay' | 'wxpay';
+  channel: PaymentChannel;
   amount: number;
   status: 'created' | 'paid' | 'failed' | 'expired';
   pay_type: string | null;
@@ -317,7 +317,7 @@ interface PortalRechargeOrderView {
   id: number;
   applicant_account_id?: number;
   out_trade_no: string;
-  channel: 'alipay' | 'wxpay';
+  channel: PaymentChannel;
   amount: number;
   status: 'created' | 'paid' | 'failed' | 'expired' | 'canceled';
   pay_type: string | null;
@@ -378,10 +378,13 @@ interface PortalViewResponse {
   application: PortalApplicationView;
   latest_payment_order: PortalPaymentOrderView | null;
   payment_fee_amount: number;
+  payment_methods: PaymentChannel[];
   click_price: number;
   recharge_amounts: number[];
   wallet: PortalWalletView;
 }
+
+type PaymentChannel = 'alipay' | 'wxpay' | 'usdt';
 
 interface PortalLoginResponse {
   token: string;
@@ -1119,9 +1122,19 @@ function PaymentBrandArtwork({
   tone,
   className = '',
 }: {
-  tone: 'alipay' | 'wechat';
+  tone: 'alipay' | 'wechat' | 'usdt';
   className?: string;
 }) {
+  if (tone === 'usdt') {
+    return (
+      <div
+        aria-hidden="true"
+        className={`flex h-full w-full items-center justify-center rounded-full bg-emerald-500 text-lg font-black text-white ${className}`}
+      >
+        T
+      </div>
+    );
+  }
   const src = tone === 'alipay' ? '/alipay_logo.png' : '/wechat_logo.png';
   const scaleClass = tone === 'alipay' ? 'scale-[1.06]' : 'scale-[0.98]';
 
@@ -1145,7 +1158,7 @@ function PaymentMethodCard({
   onClick,
 }: {
   title: string;
-  tone: 'alipay' | 'wechat';
+  tone: 'alipay' | 'wechat' | 'usdt';
   icon: React.ReactNode;
   busy: boolean;
   disabled: boolean;
@@ -1158,10 +1171,16 @@ function PaymentMethodCard({
         logoShell: 'rounded-[28px] border border-white/25 bg-white p-3',
         cta: 'bg-white text-sky-700 hover:bg-sky-50',
       }
-    : {
+    : tone === 'wechat'
+      ? {
         shell: 'border-emerald-200 bg-[linear-gradient(135deg,#1cb85b_0%,#169b49_100%)]',
         logoShell: 'rounded-full border border-white/25 bg-white p-3.5',
         cta: 'bg-white text-emerald-700 hover:bg-emerald-50',
+      }
+      : {
+        shell: 'border-teal-200 bg-[linear-gradient(135deg,#0f766e_0%,#115e59_100%)]',
+        logoShell: 'rounded-full border border-white/25 bg-white p-3.5',
+        cta: 'bg-white text-teal-700 hover:bg-teal-50',
       };
 
   return (
@@ -3103,7 +3122,7 @@ function PortalPage() {
   const [newPassword, setNewPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   const [xOAuthAction, setXOAuthAction] = useState<'' | 'login' | 'bind' | 'unbind'>('');
-  const [creatingChannel, setCreatingChannel] = useState<'' | 'alipay' | 'wxpay'>('');
+  const [creatingChannel, setCreatingChannel] = useState<'' | PaymentChannel>('');
   const [creatingRecharge, setCreatingRecharge] = useState('');
   const [cancelingRechargeOrder, setCancelingRechargeOrder] = useState('');
   const [portalTab, setPortalTab] = useState<PortalTabKey>('overview');
@@ -3396,7 +3415,7 @@ function PortalPage() {
     }
   };
 
-  const createPaymentOrder = async (channel: 'alipay' | 'wxpay') => {
+  const createPaymentOrder = async (channel: PaymentChannel) => {
     const pendingWindow = typeof window !== 'undefined'
       ? window.open('', '_blank')
       : null;
@@ -3421,7 +3440,7 @@ function PortalPage() {
       if (/^https?:\/\//i.test(payInfo)) {
         if (pendingWindow) {
           pendingWindow.location.href = payInfo;
-          setSuccess(channel === 'alipay' ? '支付宝支付页已打开，请在新页面完成支付。' : '微信支付页已打开，请在新页面完成支付。');
+          setSuccess(`${formatPaymentChannelLabel(channel)}支付页已打开，请在新页面完成支付。`);
         } else {
           window.location.href = payInfo;
         }
@@ -3433,7 +3452,7 @@ function PortalPage() {
       }
     } catch (err) {
       if (pendingWindow && !pendingWindow.closed) {
-        pendingWindow.close();
+        renderPendingPaymentWindowError(pendingWindow, err);
       }
       setError(err instanceof Error ? err.message : '创建支付订单失败');
     } finally {
@@ -3442,7 +3461,7 @@ function PortalPage() {
     }
   };
 
-  const createRechargeOrder = async (amount: number, channel: 'alipay' | 'wxpay') => {
+  const createRechargeOrder = async (amount: number, channel: PaymentChannel) => {
     if (view?.account.must_change_password) {
       setIsPasswordRequiredModalOpen(true);
       return;
@@ -3484,7 +3503,7 @@ function PortalPage() {
       }
     } catch (err) {
       if (pendingWindow && !pendingWindow.closed) {
-        pendingWindow.close();
+        renderPendingPaymentWindowError(pendingWindow, err);
       }
       setError(err instanceof Error ? err.message : '创建充值订单失败');
     } finally {
@@ -3746,46 +3765,43 @@ function PortalPage() {
     );
   };
 
-  const renderRechargeSection = (portalView: PortalViewResponse) => (
-    <PortalSectionCard
-      title="余额充值"
-      description={`充值余额用于 GateRank 到机场链接的真实点击扣费。当前点击单价为 ${formatMetric(portalView.click_price)} 元/次。`}
-      aside={<div className="rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">余额 ¥{formatMetric(portalView.wallet.balance)}</div>}
-    >
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
+  const renderRechargeSection = (portalView: PortalViewResponse) => {
+    const paymentMethods = getPortalPaymentMethods(portalView);
+    return (
+      <PortalSectionCard
+        title="余额充值"
+        description={`充值余额用于 GateRank 到机场链接的真实点击扣费。当前点击单价为 ${formatMetric(portalView.click_price)} 元/次。`}
+        aside={<div className="rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">余额 ¥{formatMetric(portalView.wallet.balance)}</div>}
+      >
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
         {portalView.recharge_amounts.map((amount) => (
           <div key={amount} className="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
             <div className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Recharge</div>
             <div className="mt-2 text-3xl font-black text-slate-950">¥{formatMetric(amount)}</div>
-            <div className="mt-4 grid grid-cols-2 gap-2">
-              <button
-                type="button"
-                className="rounded-2xl bg-sky-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50"
-                disabled={Boolean(creatingRecharge)}
-                onClick={() => void createRechargeOrder(amount, 'alipay')}
-              >
-                {creatingRecharge === `${amount}-alipay` ? '处理中' : '支付宝'}
-              </button>
-              <button
-                type="button"
-                className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white disabled:opacity-50"
-                disabled={Boolean(creatingRecharge)}
-                onClick={() => void createRechargeOrder(amount, 'wxpay')}
-              >
-                {creatingRecharge === `${amount}-wxpay` ? '处理中' : '微信'}
-              </button>
+            <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
+              {paymentMethods.map((channel) => (
+                <button
+                  key={`${amount}-${channel}`}
+                  type="button"
+                  className={`rounded-2xl px-3 py-2 text-xs font-black text-white disabled:opacity-50 ${getRechargeButtonClass(channel)}`}
+                  disabled={Boolean(creatingRecharge)}
+                  onClick={() => void createRechargeOrder(amount, channel)}
+                >
+                  {creatingRecharge === `${amount}-${channel}` ? '处理中' : formatPaymentChannelLabel(channel)}
+                </button>
+              ))}
             </div>
           </div>
         ))}
-      </div>
+        </div>
 
-      <PortalDataTable
+        <PortalDataTable
         title="最近充值订单"
         emptyText="暂无充值订单"
         headers={['订单号', '渠道', '金额', '状态', '创建时间', '操作']}
         rows={rechargeOrders.map((item) => [
           item.out_trade_no,
-          item.channel === 'alipay' ? '支付宝' : '微信',
+          formatPaymentChannelLabel(item.channel),
           `¥${formatMetric(item.amount)}`,
           formatRechargeStatus(item.status),
           formatDateTimeLabel(item.created_at),
@@ -3809,9 +3825,10 @@ function PortalPage() {
             </div>
           ) : '-',
         ])}
-      />
-    </PortalSectionCard>
-  );
+        />
+      </PortalSectionCard>
+    );
+  };
 
   const renderClicksSection = () => (
     <PortalSectionCard
@@ -4199,25 +4216,23 @@ function PortalPage() {
               <div className="mt-4 text-sm leading-7 text-slate-600">支付完成后自动进入后台待审批状态，支付结果会同步到当前页面。</div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <PaymentMethodCard
-                title="支付宝支付"
-                tone="alipay"
-                icon={<PaymentBrandArtwork tone="alipay" className="h-full w-full" />}
-                busy={creatingChannel === 'alipay'}
-                disabled={Boolean(creatingChannel)}
-                buttonLabel="立即使用支付宝支付"
-                onClick={() => void createPaymentOrder('alipay')}
-              />
-              <PaymentMethodCard
-                title="微信支付"
-                tone="wechat"
-                icon={<PaymentBrandArtwork tone="wechat" className="h-full w-full" />}
-                busy={creatingChannel === 'wxpay'}
-                disabled={Boolean(creatingChannel)}
-                buttonLabel="立即使用微信支付"
-                onClick={() => void createPaymentOrder('wxpay')}
-              />
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+              {getPortalPaymentMethods(view).map((channel) => {
+                const tone = getPaymentCardTone(channel);
+                return (
+                  <div key={channel}>
+                    <PaymentMethodCard
+                      title={`${formatPaymentChannelLabel(channel)}支付`}
+                      tone={tone}
+                      icon={<PaymentBrandArtwork tone={tone} className="h-full w-full" />}
+                      busy={creatingChannel === channel}
+                      disabled={Boolean(creatingChannel)}
+                      buttonLabel={`立即使用${formatPaymentChannelLabel(channel)}支付`}
+                      onClick={() => void createPaymentOrder(channel)}
+                    />
+                  </div>
+                );
+              })}
             </div>
           </div>
         </PortalSectionCard>
@@ -4423,6 +4438,56 @@ function formatPortalReviewStatus(status: PortalApplicationView['review_status']
 
 function formatPortalPaymentStatus(status: PortalApplicationView['payment_status']): string {
   return status === 'paid' ? '已支付' : '未支付';
+}
+
+function getPortalPaymentMethods(view: PortalViewResponse): PaymentChannel[] {
+  return Array.isArray(view.payment_methods) ? view.payment_methods : ['alipay', 'wxpay'];
+}
+
+function formatPaymentChannelLabel(channel: PaymentChannel): string {
+  if (channel === 'alipay') {
+    return '支付宝';
+  }
+  if (channel === 'wxpay') {
+    return '微信';
+  }
+  return 'USDT';
+}
+
+function renderPendingPaymentWindowError(targetWindow: Window, error: unknown): void {
+  const message = error instanceof Error ? error.message : '创建支付订单失败，请返回页面重试。';
+  targetWindow.document.open();
+  targetWindow.document.write(`<!doctype html><title>支付创建失败</title><body style="font-family:-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif;padding:24px;color:#0f172a"><h1 style="font-size:18px;margin:0 0 12px">支付创建失败</h1><p style="line-height:1.7;color:#475569">${escapeHtml(message)}</p><p style="line-height:1.7;color:#64748b">请返回 GateRank 页面检查错误提示后重试。</p></body>`);
+  targetWindow.document.close();
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function getPaymentCardTone(channel: PaymentChannel): 'alipay' | 'wechat' | 'usdt' {
+  if (channel === 'alipay') {
+    return 'alipay';
+  }
+  if (channel === 'wxpay') {
+    return 'wechat';
+  }
+  return 'usdt';
+}
+
+function getRechargeButtonClass(channel: PaymentChannel): string {
+  if (channel === 'alipay') {
+    return 'bg-sky-600';
+  }
+  if (channel === 'wxpay') {
+    return 'bg-emerald-600';
+  }
+  return 'bg-teal-700';
 }
 
 function formatRechargeStatus(status: PortalRechargeOrderView['status']): string {

@@ -2,6 +2,23 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ApplicantBillingRepository } from '../src/repositories/applicantBillingRepository';
 
+test('ApplicantBillingRepository.ensureSchema allows USDT recharge orders', async () => {
+  const calls: string[] = [];
+
+  const repository = new ApplicantBillingRepository({
+    query: async (sql: string) => {
+      calls.push(sql);
+      return [[]];
+    },
+  } as never);
+
+  await repository.ensureSchema();
+
+  assert.ok(calls.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS applicant_recharge_orders')));
+  assert.ok(calls.some((sql) => sql.includes("channel ENUM('alipay', 'wxpay', 'usdt') NOT NULL")));
+  assert.ok(calls.some((sql) => sql.includes("MODIFY COLUMN channel ENUM('alipay', 'wxpay', 'usdt') NOT NULL")));
+});
+
 test('ApplicantBillingRepository.backfillLegacyAirportWallets creates missing application account and wallet links', async () => {
   const calls: Array<{ sql: string; params?: unknown[] }> = [];
   const affectedRows = [2, 2, 1, 2];

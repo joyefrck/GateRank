@@ -55,6 +55,117 @@ test('PaymentGatewaySettingsService saves and masks keys', async () => {
   assert.equal(view.pid, '10086');
   assert.equal(view.has_private_key, true);
   assert.ok(view.private_key_masked);
+  assert.equal(view.usdt.enabled, false);
+  assert.equal('payment_type' in view.usdt, false);
+});
+
+test('PaymentGatewaySettingsService saves masks preserves and clears USDT secret', async () => {
+  let storedValue: unknown = null;
+  const service = new PaymentGatewaySettingsService({
+    systemSettingRepository: {
+      getByKey: async () => storedValue
+        ? {
+          setting_key: 'payment_gateway',
+          value_json: storedValue,
+          updated_by: 'admin',
+          created_at: '2026-04-18 10:00:00',
+          updated_at: '2026-04-18 10:00:00',
+        }
+        : null,
+      upsert: async (_settingKey, value) => {
+        storedValue = value;
+      },
+    },
+  });
+
+  const saved = await service.updateAdminSettings({
+    enabled: true,
+    usdt: {
+      enabled: true,
+      gateway_url: 'https://pay.example.com/',
+      merchant_id: '1000',
+      secret_key: 'secret-1234567890',
+    },
+  }, 'admin');
+
+  assert.equal(saved.usdt.enabled, true);
+  assert.equal(saved.usdt.gateway_url, 'https://pay.example.com');
+  assert.equal(saved.usdt.merchant_id, '1000');
+  assert.equal(saved.usdt.has_secret_key, true);
+  assert.ok(saved.usdt.secret_key_masked);
+
+  const preserved = await service.updateAdminSettings({
+    usdt: {
+      merchant_id: '1001',
+    },
+  }, 'admin');
+
+  assert.equal(preserved.usdt.merchant_id, '1001');
+  assert.equal(preserved.usdt.has_secret_key, true);
+
+  const cleared = await service.updateAdminSettings({
+    enabled: false,
+    usdt: {
+      enabled: false,
+      secret_key: '',
+    },
+  }, 'admin');
+
+  assert.equal(cleared.usdt.enabled, false);
+  assert.equal(cleared.usdt.has_secret_key, false);
+});
+
+test('PaymentGatewaySettingsService normalizes legacy USDT gateway endpoint to base URL', async () => {
+  const service = new PaymentGatewaySettingsService({
+    systemSettingRepository: {
+      getByKey: async () => ({
+        setting_key: 'payment_gateway',
+        value_json: {
+          enabled: true,
+          usdt: {
+            enabled: true,
+            gateway_url: 'https://pay.example.com/payments/epay/v1/order/create-transaction',
+            merchant_id: '1000',
+            secret_key: 'secret-1234567890',
+          },
+        },
+        updated_by: 'admin',
+        created_at: '2026-04-18 10:00:00',
+        updated_at: '2026-04-18 10:00:00',
+      }),
+      upsert: async () => undefined,
+    },
+  });
+
+  const view = await service.getAdminSettings();
+  assert.equal(view.usdt.gateway_url, 'https://pay.example.com');
+});
+
+test('PaymentGatewaySettingsService rejects incomplete enabled USDT config', async () => {
+  const service = new PaymentGatewaySettingsService({
+    systemSettingRepository: {
+      getByKey: async () => null,
+      upsert: async () => undefined,
+    },
+  });
+
+  await assert.rejects(
+    () => service.updateAdminSettings({
+      enabled: true,
+      usdt: {
+        enabled: true,
+        gateway_url: 'https://pay.example.com',
+        merchant_id: '1000',
+        secret_key: '',
+      },
+    }, 'admin'),
+    (error: unknown) => {
+      const next = error as { code?: string; message?: string };
+      assert.equal(next.code, 'PAYMENT_GATEWAY_USDT_SECRET_REQUIRED');
+      assert.match(String(next.message || ''), /通信密钥/);
+      return true;
+    },
+  );
 });
 
 test('PaymentGatewaySettingsService accepts raw base64 keys from the gateway console', async () => {

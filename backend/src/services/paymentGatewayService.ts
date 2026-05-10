@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { HttpError } from '../middleware/errorHandler';
 import {
   buildRsaSignPayload,
@@ -5,11 +6,11 @@ import {
   verifyWithRsaPublicKey,
 } from '../utils/rsaSignature';
 import { formatDateTimeInTimezoneIso } from '../utils/time';
-import type { PaymentGatewaySettingsService } from './paymentGatewaySettingsService';
+import type { PaymentGatewayConfig, PaymentGatewaySettingsService } from './paymentGatewaySettingsService';
 
 export interface PaymentGatewayCreateOrderInput {
   out_trade_no: string;
-  channel: 'alipay' | 'wxpay';
+  channel: PaymentGatewayChannel;
   name: string;
   money: number;
   notify_url: string;
@@ -19,6 +20,8 @@ export interface PaymentGatewayCreateOrderInput {
   device?: 'pc' | 'mobile';
   param?: string;
 }
+
+export type PaymentGatewayChannel = 'alipay' | 'wxpay' | 'usdt';
 
 export interface PaymentGatewayCreateOrderResult {
   trade_no: string;
@@ -64,6 +67,12 @@ export class PaymentGatewayService {
     input: PaymentGatewayCreateOrderInput,
   ): Promise<PaymentGatewayCreateOrderResult> {
     const config = await this.requireConfigured();
+    if (input.channel === 'usdt') {
+      return this.createUsdtOrder(input, config);
+    }
+    if (!config.pid || !config.private_key || !config.platform_public_key) {
+      throw new HttpError(409, 'PAYMENT_NOT_CONFIGURED', '支付配置不完整');
+    }
     try {
       const requestParams: Record<string, string> = {
         pid: config.pid,
@@ -132,13 +141,28 @@ export class PaymentGatewayService {
     }
   }
 
-  async verifyNotificationPayload(payload: Record<string, unknown>): Promise<boolean> {
+  async verifyNotificationPayload(
+    payload: Record<string, unknown>,
+    channel: PaymentGatewayChannel = 'alipay',
+  ): Promise<boolean> {
     const config = await this.requireConfigured();
+    if (channel === 'usdt') {
+      return this.verifyUsdtPayload(payload, config.usdt?.secret_key || '');
+    }
     return this.verifyPayload(payload, config.platform_public_key);
   }
 
-  async queryOrder(outTradeNo: string): Promise<PaymentGatewayQueryOrderResult> {
+  async queryOrder(
+    outTradeNo: string,
+    channel: PaymentGatewayChannel = 'alipay',
+  ): Promise<PaymentGatewayQueryOrderResult> {
     const config = await this.requireConfigured();
+    if (channel === 'usdt') {
+      throw new HttpError(503, 'PAYMENT_GATEWAY_QUERY_NOT_SUPPORTED', 'USDT 支付暂不支持主动查单，请等待支付网关异步回调');
+    }
+    if (!config.pid || !config.private_key || !config.platform_public_key) {
+      throw new HttpError(409, 'PAYMENT_NOT_CONFIGURED', '支付配置不完整');
+    }
     try {
       const requestParams: Record<string, string> = {
         pid: config.pid,
@@ -217,6 +241,104 @@ export class PaymentGatewayService {
     return verifyWithRsaPublicKey(plain, sign, publicKey);
   }
 
+  private async createUsdtOrder(
+    input: PaymentGatewayCreateOrderInput,
+    config: PaymentGatewayConfig,
+  ): Promise<PaymentGatewayCreateOrderResult> {
+    const usdtConfig = config.usdt;
+    if (!usdtConfig?.enabled) {
+      throw new HttpError(409, 'PAYMENT_USDT_NOT_ENABLED', 'USDT 支付未启用');
+    }
+    if (!usdtConfig.gateway_url || !usdtConfig.merchant_id || !usdtConfig.secret_key) {
+      throw new HttpError(409, 'PAYMENT_USDT_NOT_CONFIGURED', 'USDT 支付配置不完整');
+    }
+
+    const requestParams: Record<string, string | number> = {
+      pid: usdtConfig.merchant_id,
+      order_id: input.out_trade_no,
+      currency: 'cny',
+      token: 'usdt',
+      network: 'tron',
+      amount: Number(input.money.toFixed(2)),
+      notify_url: input.notify_url,
+      redirect_url: input.return_url,
+      name: input.name,
+    };
+    requestParams.signature = signWithMd5Secret(requestParams, usdtConfig.secret_key);
+
+    try {
+      const response = await this.fetchImpl(
+        buildEpusdtGmpayCreateUrl(usdtConfig.gateway_url),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(requestParams),
+        },
+      );
+
+      const rawBody = await response.text();
+      const data = parsePaymentGatewayJson(rawBody);
+      if (!response.ok) {
+        throw new HttpError(
+          502,
+          'PAYMENT_GATEWAY_HTTP_ERROR',
+          String(data?.message || data?.msg || `EPUSDT 请求失败: HTTP ${response.status}${rawBody ? ` ${truncateGatewayBody(rawBody)}` : ''}`),
+        );
+      }
+
+      if (!data) {
+        throw new HttpError(
+          502,
+          'PAYMENT_GATEWAY_BAD_RESPONSE',
+          `EPUSDT 返回了非 JSON 响应: ${truncateGatewayBody(rawBody)}`,
+        );
+      }
+
+      const statusCode = data.status_code === undefined ? data.code : data.status_code;
+      if (!isEpusdtSuccessCode(statusCode)) {
+        throw new HttpError(
+          400,
+          'PAYMENT_GATEWAY_CREATE_FAILED',
+          String(data.message || data.msg || 'EPUSDT 下单失败'),
+        );
+      }
+
+      const responseData = toRecord(data.data);
+      const paymentUrl = normalizeEpusdtPaymentUrl(
+        String(responseData.payment_url || '').trim(),
+        usdtConfig.gateway_url,
+      );
+      if (!paymentUrl) {
+        throw new HttpError(
+          502,
+          'PAYMENT_GATEWAY_BAD_RESPONSE',
+          'EPUSDT 下单返回缺少 payment_url',
+        );
+      }
+
+      return {
+        trade_no: String(responseData.trade_id || ''),
+        pay_type: 'usdt',
+        pay_info: paymentUrl,
+      };
+    } catch (error) {
+      if (error instanceof HttpError) {
+        throw error;
+      }
+      throw normalizePaymentGatewayTransportError(error);
+    }
+  }
+
+  private verifyUsdtPayload(payload: Record<string, unknown>, secretKey: string): boolean {
+    const signature = String(payload.signature || '').trim();
+    if (!signature || !secretKey) {
+      return false;
+    }
+    return signature.toLowerCase() === signWithMd5Secret(payload, secretKey);
+  }
+
   private assertVerifiedPayload(payload: Record<string, unknown>, publicKey: string): void {
     const sign = String(payload.sign || '').trim();
     if (!sign) {
@@ -232,11 +354,66 @@ export class PaymentGatewayService {
     if (!config.enabled) {
       throw new HttpError(409, 'PAYMENT_NOT_ENABLED', '支付功能未启用');
     }
-    if (!config.pid || !config.private_key || !config.platform_public_key) {
+    const hasRsaConfig = config.pid && config.private_key && config.platform_public_key;
+    const hasUsdtConfig =
+      config.usdt?.enabled && config.usdt.gateway_url && config.usdt.merchant_id && config.usdt.secret_key;
+    if (!hasRsaConfig && !hasUsdtConfig) {
       throw new HttpError(409, 'PAYMENT_NOT_CONFIGURED', '支付配置不完整');
     }
     return config;
   }
+}
+
+export function signWithMd5Secret(params: Record<string, unknown>, secretKey: string): string {
+  const plain = buildMd5SignPayload(params) + secretKey;
+  return createHash('md5').update(plain, 'utf8').digest('hex');
+}
+
+export function buildMd5SignPayload(params: Record<string, unknown>): string {
+  return Object.entries(params)
+    .filter(([key, value]) => key !== 'sign' && key !== 'sign_type' && key !== 'signature' && isMd5SignableValue(value))
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([key, value]) => `${key}=${String(value)}`)
+    .join('&');
+}
+
+export function buildEpusdtGmpayCreateUrl(gatewayUrl: string): string {
+  const trimmed = gatewayUrl.trim().replace(/\/+$/, '');
+  const knownPaymentPath = /\/payments\/(?:epay|gmpay)\/v\d+\/order\/create-transaction$/i;
+  if (knownPaymentPath.test(trimmed)) {
+    return trimmed.replace(knownPaymentPath, '/payments/gmpay/v1/order/create-transaction');
+  }
+  if (/\/submit\.php$/i.test(trimmed)) {
+    return trimmed.replace(/\/submit\.php$/i, '/payments/gmpay/v1/order/create-transaction');
+  }
+  return `${trimmed}/payments/gmpay/v1/order/create-transaction`;
+}
+
+export function normalizeEpusdtPaymentUrl(paymentUrl: string, gatewayUrl: string): string {
+  if (!paymentUrl) {
+    return '';
+  }
+  try {
+    const payment = new URL(paymentUrl);
+    const gateway = new URL(buildEpusdtGmpayCreateUrl(gatewayUrl));
+    return `${gateway.origin}${payment.pathname}${payment.search}${payment.hash}`;
+  } catch {
+    return paymentUrl;
+  }
+}
+
+function isEpusdtSuccessCode(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') {
+    return false;
+  }
+  const normalized = String(value).trim().toLowerCase();
+  return normalized === '200' || normalized === '0' || normalized === 'success';
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
 }
 
 function parsePaymentGatewayJson(rawBody: string): Record<string, unknown> | null {
@@ -286,6 +463,13 @@ function normalizePaymentGatewayTransportError(error: unknown): HttpError {
 }
 
 export function isPaymentSuccessNotification(payload: Record<string, unknown>): boolean {
+  if (String(payload.order_id || '').trim() && String(payload.signature || '').trim()) {
+    const status = String(payload.status || payload.trade_status || '').trim().toLowerCase();
+    if (!status) {
+      return true;
+    }
+    return ['success', 'paid', 'completed', 'confirmed', '1', '2'].includes(status);
+  }
   const tradeStatus = String(payload.trade_status || '').trim().toUpperCase();
   if (tradeStatus) {
     return tradeStatus === 'TRADE_SUCCESS';
@@ -299,8 +483,8 @@ export function isPaymentQueryPaid(result: PaymentGatewayQueryOrderResult): bool
 
 export function buildGatewayTrace(payload: Record<string, unknown>): string {
   return [
-    String(payload.trade_no || ''),
-    String(payload.out_trade_no || ''),
+    String(payload.trade_no || payload.trade_id || ''),
+    String(payload.out_trade_no || payload.order_id || ''),
     formatDateTimeInTimezoneIso(),
   ]
     .filter(Boolean)
@@ -313,4 +497,14 @@ function stringOrNull(value: unknown): string | null {
   }
   const next = String(value).trim();
   return next || null;
+}
+
+function isMd5SignableValue(value: unknown): boolean {
+  if (value === undefined || value === null) {
+    return false;
+  }
+  if (Array.isArray(value) || typeof value === 'object') {
+    return false;
+  }
+  return String(value) !== '';
 }

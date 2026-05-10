@@ -446,6 +446,115 @@ test('POST /portal/payment-orders creates payment order from configured amount',
   }
 });
 
+test('POST /portal/payment-orders creates USDT payment order', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const createdOrders: Array<Record<string, unknown>> = [];
+  const gatewayOrders: PaymentGatewayCreateOrderInput[] = [];
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount({ application_id: 7 }),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({
+          id: 7,
+          name: 'Cloud Airport',
+          website: 'https://example.com',
+          review_status: 'awaiting_payment',
+          payment_status: 'unpaid',
+          payment_amount: null,
+          applicant_email: 'user@example.com',
+          applicant_telegram: '@cloud',
+          founded_on: '2025-01-01',
+          airport_intro: 'intro',
+          created_at: '2026-04-18 10:00:00',
+        }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async (input) => {
+          createdOrders.push(input as Record<string, unknown>);
+          return 1;
+        },
+        getLatestByApplicationId: async () => ({
+          id: 1,
+          application_id: 7,
+          out_trade_no: 'gr_7_usdt',
+          gateway_trade_no: null,
+          channel: 'usdt',
+          amount: 1888,
+          status: 'created',
+          pay_type: 'usdt',
+          pay_info: 'https://pay-usdt.example.com/pay/grr_1_usdt',
+          notify_payload_json: null,
+          paid_at: null,
+          created_at: '2026-04-18T10:00:00+08:00',
+          updated_at: '2026-04-18T10:00:00+08:00',
+        }),
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 1,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({
+          enabled: true,
+          usdt: {
+            enabled: true,
+            gateway_url: 'https://pay-usdt.example.com',
+            merchant_id: '1000',
+            secret_key: 'secret',
+          },
+        }),
+      },
+      marketingSettingsService: {
+        getConfig: async () => ({ application_fee_amount: 1888, click_charge_amount: 2.5 }),
+      },
+      paymentGatewayService: {
+        createOrder: async (input) => {
+          gatewayOrders.push(input);
+          return {
+            trade_no: '',
+            pay_type: 'usdt',
+            pay_info: 'https://pay-usdt.example.com/pay/grr_1_usdt',
+          };
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/payment-orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ channel: 'usdt' }),
+    });
+
+    assert.equal(response.status, 201);
+    assert.equal(createdOrders[0].channel, 'usdt');
+    assert.equal(gatewayOrders[0].channel, 'usdt');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /portal/payment-notify marks payment as paid on valid callback', async () => {
   const paidOrders: Array<Record<string, unknown>> = [];
   const paidApplications: Array<Record<string, unknown>> = [];
@@ -547,6 +656,188 @@ test('POST /portal/payment-notify marks payment as paid on valid callback', asyn
   }
 });
 
+test('POST /portal/payment-notify verifies USDT callback with order channel', async () => {
+  const verifiedChannels: string[] = [];
+  const paidOrders: Array<Record<string, unknown>> = [];
+
+  const app = express();
+  app.use(express.urlencoded({ extended: false }));
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => null,
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({ id: 7, name: 'Cloud Airport' }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => ({
+          id: 1,
+          application_id: 7,
+          out_trade_no: 'gr_7_usdt',
+          gateway_trade_no: null,
+          channel: 'usdt',
+          amount: 1000,
+          status: 'created',
+          pay_type: 'usdt',
+          pay_info: 'https://pay-usdt.example.com/pay/gr_7_usdt',
+          notify_payload_json: null,
+          paid_at: null,
+          created_at: '2026-04-18T10:00:00+08:00',
+          updated_at: '2026-04-18T10:00:00+08:00',
+        }),
+        markPaid: async (outTradeNo, input) => {
+          paidOrders.push({ outTradeNo, ...input });
+          return true;
+        },
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({}),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async (_payload, channel) => {
+          verifiedChannels.push(String(channel));
+          return true;
+        },
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/payment-notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        order_id: 'gr_7_usdt',
+        trade_id: 'trade_usdt_1',
+        status: 'success',
+        signature: 'valid-signature',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), 'ok');
+    assert.deepEqual(verifiedChannels, ['usdt']);
+    assert.equal(paidOrders.length, 1);
+    assert.equal(paidOrders[0].gateway_trade_no, 'trade_usdt_1');
+    assert.equal(paidOrders[0].pay_type, 'usdt');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/recharge-orders creates USDT recharge order', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const rechargeOrders: Array<Record<string, unknown>> = [];
+  const gatewayOrders: PaymentGatewayCreateOrderInput[] = [];
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount({ id: 1, application_id: 7 }),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({ id: 7, name: 'Cloud Airport' }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository({
+        createRechargeOrder: async (input: Record<string, unknown>) => {
+          rechargeOrders.push(input);
+          return 1;
+        },
+        getRechargeOrderByOutTradeNo: async () => ({
+          id: 1,
+          applicant_account_id: 1,
+          out_trade_no: 'grr_1_usdt',
+          gateway_trade_no: null,
+          channel: 'usdt',
+          amount: 300,
+          status: 'created',
+          pay_type: 'usdt',
+          pay_info: 'https://pay-usdt.example.com/pay/gr_7_usdt',
+          paid_at: null,
+          created_at: '2026-04-18T10:00:00+08:00',
+        }),
+      }),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({
+          enabled: true,
+          usdt: {
+            enabled: true,
+            gateway_url: 'https://pay-usdt.example.com',
+            merchant_id: '1000',
+            secret_key: 'secret',
+          },
+        }),
+      },
+      paymentGatewayService: {
+        createOrder: async (input) => {
+          gatewayOrders.push(input);
+          return {
+            trade_no: '',
+            pay_type: 'usdt',
+            pay_info: 'https://pay-usdt.example.com/pay/gr_7_usdt',
+          };
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/recharge-orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ amount: 300, channel: 'usdt' }),
+    });
+
+    assert.equal(response.status, 201);
+    assert.equal(rechargeOrders[0].channel, 'usdt');
+    assert.equal(gatewayOrders[0].channel, 'usdt');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /portal/recharge-notify credits recharge order on valid callback', async () => {
   const creditedOrders: Array<Record<string, unknown>> = [];
   const paymentNotifications: PaymentReceivedNotificationInput[] = [];
@@ -638,6 +929,89 @@ test('POST /portal/recharge-notify credits recharge order on valid callback', as
     assert.equal(paymentNotifications[0].airportName, 'Cloud Airport');
     assert.equal(paymentNotifications[0].amount, 300);
     assert.equal(paymentNotifications[0].outTradeNo, 'grr_1_1');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/recharge-notify credits USDT recharge order on GMPay callback', async () => {
+  const creditedOrders: Array<Record<string, unknown>> = [];
+
+  const app = express();
+  app.use(express.urlencoded({ extended: false }));
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount({ id: 1, application_id: 7 }),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({ id: 7, name: 'Cloud Airport' }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository({
+        getRechargeOrderByOutTradeNo: async () => ({
+          id: 3,
+          applicant_account_id: 1,
+          out_trade_no: 'grr_1_usdt',
+          channel: 'usdt',
+          amount: 300,
+          status: 'created',
+          pay_type: 'usdt',
+          pay_info: 'https://pay-usdt.example.com/pay/grr_1_usdt',
+          paid_at: null,
+          created_at: '2026-04-18T10:00:00+08:00',
+        }),
+        markRechargePaidAndCredit: async (outTradeNo: string, input: Record<string, unknown>) => {
+          creditedOrders.push({ outTradeNo, ...input });
+          return true;
+        },
+      }),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({}),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async (_payload, channel) => channel === 'usdt',
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/recharge-notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        order_id: 'grr_1_usdt',
+        trade_id: 'trade_usdt_recharge_1',
+        status: 'success',
+        signature: 'valid-signature',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(await response.text(), 'ok');
+    assert.equal(creditedOrders.length, 1);
+    assert.equal(creditedOrders[0].outTradeNo, 'grr_1_usdt');
+    assert.equal(creditedOrders[0].gateway_trade_no, 'trade_usdt_recharge_1');
+    assert.equal(creditedOrders[0].pay_type, 'usdt');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

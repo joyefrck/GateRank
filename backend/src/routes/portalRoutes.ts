@@ -20,6 +20,7 @@ import {
   isPaymentSuccessNotification,
   type PaymentGatewayService,
   type PaymentGatewayQueryOrderResult,
+  type PaymentGatewayChannel,
 } from '../services/paymentGatewayService';
 import type { PaymentReceivedNotificationInput } from '../services/telegramNotificationService';
 
@@ -55,7 +56,7 @@ interface PortalDeps {
     create(input: {
       application_id: number;
       out_trade_no: string;
-      channel: 'alipay' | 'wxpay';
+      channel: PaymentGatewayChannel;
       amount: number;
       gateway_trade_no?: string | null;
       pay_type?: string | null;
@@ -81,7 +82,7 @@ interface PortalDeps {
     createRechargeOrder(input: {
       applicant_account_id: number;
       out_trade_no: string;
-      channel: 'alipay' | 'wxpay';
+      channel: PaymentGatewayChannel;
       amount: number;
       gateway_trade_no?: string | null;
       pay_type?: string | null;
@@ -525,20 +526,9 @@ export function createPortalRoutes(deps: PortalDeps): Router {
 
   router.post('/portal/payment-notify', async (req, res) => {
     const payload = toNotificationPayload(req.body, req.query);
-    const outTradeNo = String(payload.out_trade_no || '').trim();
+    const outTradeNo = getNotificationOutTradeNo(payload);
     if (!outTradeNo) {
       res.status(400).send('fail');
-      return;
-    }
-
-    const verified = await deps.paymentGatewayService.verifyNotificationPayload(payload);
-    if (!verified) {
-      res.status(400).send('fail');
-      return;
-    }
-
-    if (!isPaymentSuccessNotification(payload)) {
-      res.send('success');
       return;
     }
 
@@ -548,10 +538,21 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       return;
     }
 
+    const verified = await deps.paymentGatewayService.verifyNotificationPayload(payload, order.channel);
+    if (!verified) {
+      res.status(400).send('fail');
+      return;
+    }
+
+    if (!isPaymentSuccessNotification(payload)) {
+      res.send(getNotificationSuccessResponse(order.channel));
+      return;
+    }
+
     const paidAt = formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
     await deps.applicationPaymentOrderRepository.markPaid(outTradeNo, {
-      gateway_trade_no: stringOrNull(payload.trade_no),
-      pay_type: stringOrNull(payload.type) || order.pay_type,
+      gateway_trade_no: getNotificationGatewayTradeNo(payload),
+      pay_type: getNotificationPayType(payload, order.channel, order.pay_type || order.channel),
       pay_info: buildGatewayTrace(payload),
       notify_payload_json: payload,
       paid_at: paidAt,
@@ -567,31 +568,20 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         applicationId: order.application_id,
         amount: Number(order.amount),
         outTradeNo,
-        gatewayTradeNo: stringOrNull(payload.trade_no) || order.gateway_trade_no,
-        channel: stringOrNull(payload.type) || order.channel,
+        gatewayTradeNo: getNotificationGatewayTradeNo(payload) || order.gateway_trade_no,
+        channel: getNotificationPayType(payload, order.channel, order.channel),
         paidAt,
       });
     }
 
-    res.send('success');
+    res.send(getNotificationSuccessResponse(order.channel));
   });
 
   router.post('/portal/recharge-notify', async (req, res) => {
     const payload = toNotificationPayload(req.body, req.query);
-    const outTradeNo = String(payload.out_trade_no || '').trim();
+    const outTradeNo = getNotificationOutTradeNo(payload);
     if (!outTradeNo) {
       res.status(400).send('fail');
-      return;
-    }
-
-    const verified = await deps.paymentGatewayService.verifyNotificationPayload(payload);
-    if (!verified) {
-      res.status(400).send('fail');
-      return;
-    }
-
-    if (!isPaymentSuccessNotification(payload)) {
-      res.send('success');
       return;
     }
 
@@ -601,11 +591,22 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       return;
     }
 
+    const verified = await deps.paymentGatewayService.verifyNotificationPayload(payload, order.channel);
+    if (!verified) {
+      res.status(400).send('fail');
+      return;
+    }
+
+    if (!isPaymentSuccessNotification(payload)) {
+      res.send(getNotificationSuccessResponse(order.channel));
+      return;
+    }
+
     const paidAt = formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
     const marketingConfig = await getMarketingBillingConfig(deps);
     const credited = await deps.applicantBillingRepository.markRechargePaidAndCredit(outTradeNo, {
-      gateway_trade_no: stringOrNull(payload.trade_no),
-      pay_type: stringOrNull(payload.type) || order.pay_type,
+      gateway_trade_no: getNotificationGatewayTradeNo(payload),
+      pay_type: getNotificationPayType(payload, order.channel, order.pay_type || order.channel),
       pay_info: buildGatewayTrace(payload),
       notify_payload_json: payload,
       paid_at: paidAt,
@@ -617,13 +618,13 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         applicantAccountId: order.applicant_account_id,
         amount: Number(order.amount),
         outTradeNo,
-        gatewayTradeNo: stringOrNull(payload.trade_no) || null,
-        channel: stringOrNull(payload.type) || order.channel,
+        gatewayTradeNo: getNotificationGatewayTradeNo(payload),
+        channel: getNotificationPayType(payload, order.channel, order.channel),
         paidAt,
       });
     }
 
-    res.send('success');
+    res.send(getNotificationSuccessResponse(order.channel));
   });
 
   return router;
@@ -633,7 +634,7 @@ async function syncApplicationPaymentOrder(deps: PortalDeps, order: ApplicationP
   if (order.status === 'paid') {
     return false;
   }
-  const queryResult = await queryGatewayOrder(deps, order.out_trade_no);
+  const queryResult = await queryGatewayOrder(deps, order.out_trade_no, order.channel);
   if (!isPaymentQueryPaid(queryResult)) {
     return false;
   }
@@ -669,7 +670,7 @@ async function syncRechargeOrder(deps: PortalDeps, order: RechargeOrderView): Pr
   if (order.status === 'paid') {
     return false;
   }
-  const queryResult = await queryGatewayOrder(deps, order.out_trade_no);
+  const queryResult = await queryGatewayOrder(deps, order.out_trade_no, order.channel);
   if (!isPaymentQueryPaid(queryResult)) {
     return false;
   }
@@ -701,11 +702,12 @@ async function syncRechargeOrder(deps: PortalDeps, order: RechargeOrderView): Pr
 async function queryGatewayOrder(
   deps: PortalDeps,
   outTradeNo: string,
+  channel: PaymentGatewayChannel,
 ): Promise<PaymentGatewayQueryOrderResult> {
   if (!deps.paymentGatewayService.queryOrder) {
     throw new HttpError(503, 'PAYMENT_GATEWAY_QUERY_NOT_CONFIGURED', '支付网关查单未配置');
   }
-  return deps.paymentGatewayService.queryOrder(outTradeNo);
+  return deps.paymentGatewayService.queryOrder(outTradeNo, channel);
 }
 
 function assertGatewayOrderMatches(
@@ -730,10 +732,11 @@ function normalizeGatewayPaidAt(value: string | null): string {
 async function buildPortalView(deps: PortalDeps, applicantId: number) {
   const account = await requireApplicantAccount(deps, applicantId);
   const application = await requireApplication(deps, account.application_id);
-  const [latestPaymentOrder, marketingConfig, wallet] = await Promise.all([
+  const [latestPaymentOrder, marketingConfig, wallet, paymentMethods] = await Promise.all([
     deps.applicationPaymentOrderRepository.getLatestByApplicationId(application.id),
     getMarketingBillingConfig(deps),
     deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id),
+    getAvailablePaymentMethods(deps),
   ]);
 
   return {
@@ -753,6 +756,7 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
         }
       : null,
     payment_fee_amount: Number(marketingConfig.application_fee_amount),
+    payment_methods: paymentMethods,
     click_price: Number(marketingConfig.click_charge_amount),
     recharge_amounts: RECHARGE_AMOUNTS,
     wallet,
@@ -937,11 +941,61 @@ function parseWebsiteFields(
   };
 }
 
-function toPaymentChannel(value: unknown): 'alipay' | 'wxpay' {
-  if (value === 'alipay' || value === 'wxpay') {
+async function getAvailablePaymentMethods(deps: PortalDeps): Promise<PaymentGatewayChannel[]> {
+  const config = await deps.paymentGatewaySettingsService.getConfig();
+  const record = toLooseObject(config);
+  const methods: PaymentGatewayChannel[] = [];
+  if (
+    Boolean(record.enabled) &&
+    String(record.pid || '').trim() &&
+    String(record.private_key || '').trim() &&
+    String(record.platform_public_key || '').trim()
+  ) {
+    methods.push('alipay', 'wxpay');
+  }
+
+  const usdt = toLooseObject(record.usdt);
+  if (
+    Boolean(record.enabled) &&
+    Boolean(usdt.enabled) &&
+    String(usdt.gateway_url || '').trim() &&
+    String(usdt.merchant_id || '').trim() &&
+    String(usdt.secret_key || '').trim()
+  ) {
+    methods.push('usdt');
+  }
+
+  return methods;
+}
+
+function toPaymentChannel(value: unknown): PaymentGatewayChannel {
+  if (value === 'alipay' || value === 'wxpay' || value === 'usdt') {
     return value;
   }
-  throw new HttpError(400, 'BAD_REQUEST', 'channel must be alipay|wxpay');
+  throw new HttpError(400, 'BAD_REQUEST', 'channel must be alipay|wxpay|usdt');
+}
+
+function getNotificationOutTradeNo(payload: Record<string, unknown>): string {
+  return String(payload.out_trade_no || payload.order_id || '').trim();
+}
+
+function getNotificationGatewayTradeNo(payload: Record<string, unknown>): string | null {
+  return stringOrNull(payload.trade_no) || stringOrNull(payload.trade_id);
+}
+
+function getNotificationPayType(
+  payload: Record<string, unknown>,
+  channel: PaymentGatewayChannel,
+  fallback: string,
+): string {
+  if (channel === 'usdt') {
+    return 'usdt';
+  }
+  return stringOrNull(payload.type) || fallback;
+}
+
+function getNotificationSuccessResponse(channel: PaymentGatewayChannel): string {
+  return channel === 'usdt' ? 'ok' : 'success';
 }
 
 function toRechargeAmount(value: unknown): number {

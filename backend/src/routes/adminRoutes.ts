@@ -2037,6 +2037,23 @@ function parsePaymentGatewaySettingsPayload(
       payload.platform_public_key === undefined
         ? undefined
         : String(payload.platform_public_key ?? '').trim(),
+    usdt:
+      payload.usdt === undefined
+        ? undefined
+        : parsePaymentGatewayUsdtSettingsPayload(payload.usdt),
+  };
+}
+
+function parsePaymentGatewayUsdtSettingsPayload(payload: unknown) {
+  const record = toPlainObject(payload, 'usdt');
+  return {
+    enabled: optionalBoolean(record.enabled),
+    gateway_url:
+      record.gateway_url === undefined ? undefined : String(record.gateway_url ?? '').trim(),
+    merchant_id:
+      record.merchant_id === undefined ? undefined : String(record.merchant_id ?? '').trim(),
+    secret_key:
+      record.secret_key === undefined ? undefined : String(record.secret_key ?? '').trim(),
   };
 }
 

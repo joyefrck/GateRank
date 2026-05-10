@@ -8,6 +8,14 @@ export interface PaymentGatewaySettingsInput {
   pid?: string;
   private_key?: string;
   platform_public_key?: string;
+  usdt?: PaymentGatewayUsdtSettingsInput;
+}
+
+export interface PaymentGatewayUsdtSettingsInput {
+  enabled?: boolean;
+  gateway_url?: string;
+  merchant_id?: string;
+  secret_key?: string;
 }
 
 export interface PaymentGatewaySettingsView {
@@ -16,6 +24,7 @@ export interface PaymentGatewaySettingsView {
   has_private_key: boolean;
   private_key_masked: string | null;
   platform_public_key: string;
+  usdt: PaymentGatewayUsdtSettingsView;
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -25,6 +34,22 @@ export interface PaymentGatewayConfig {
   pid: string;
   private_key: string;
   platform_public_key: string;
+  usdt: PaymentGatewayUsdtConfig;
+}
+
+export interface PaymentGatewayUsdtSettingsView {
+  enabled: boolean;
+  gateway_url: string;
+  merchant_id: string;
+  has_secret_key: boolean;
+  secret_key_masked: string | null;
+}
+
+export interface PaymentGatewayUsdtConfig {
+  enabled: boolean;
+  gateway_url: string;
+  merchant_id: string;
+  secret_key: string;
 }
 
 interface PaymentGatewaySettingsServiceOptions {
@@ -53,6 +78,13 @@ export class PaymentGatewaySettingsService {
       has_private_key: effective.private_key.trim() !== '',
       private_key_masked: maskPrivateKey(effective.private_key),
       platform_public_key: effective.platform_public_key,
+      usdt: {
+        enabled: effective.usdt.enabled,
+        gateway_url: effective.usdt.gateway_url,
+        merchant_id: effective.usdt.merchant_id,
+        has_secret_key: effective.usdt.secret_key.trim() !== '',
+        secret_key_masked: maskSecret(effective.usdt.secret_key),
+      },
       updated_at: stored?.record.updated_at ? normalizeStoredUpdatedAt(stored.record.updated_at) : null,
       updated_by: stored?.record.updated_by || null,
     };
@@ -95,6 +127,7 @@ export class PaymentGatewaySettingsService {
         input.platform_public_key === undefined
           ? base.platform_public_key
           : String(input.platform_public_key || '').trim(),
+      usdt: resolveUsdtConfig(base.usdt, input.usdt),
     };
   }
 
@@ -124,6 +157,16 @@ function getDefaultConfig(): PaymentGatewayConfig {
     pid: '',
     private_key: '',
     platform_public_key: '',
+    usdt: getDefaultUsdtConfig(),
+  };
+}
+
+function getDefaultUsdtConfig(): PaymentGatewayUsdtConfig {
+  return {
+    enabled: false,
+    gateway_url: '',
+    merchant_id: '',
+    secret_key: '',
   };
 }
 
@@ -134,6 +177,37 @@ function normalizeConfig(value: unknown): PaymentGatewayConfig {
     pid: stringOrEmpty(record.pid),
     private_key: stringOrEmpty(record.private_key),
     platform_public_key: stringOrEmpty(record.platform_public_key),
+    usdt: normalizeUsdtConfig(record.usdt),
+  };
+}
+
+function normalizeUsdtConfig(value: unknown): PaymentGatewayUsdtConfig {
+  const record = toObject(value);
+  return {
+    enabled: Boolean(record.enabled),
+    gateway_url: normalizeGatewayUrl(stringOrEmpty(record.gateway_url)),
+    merchant_id: stringOrEmpty(record.merchant_id),
+    secret_key: stringOrEmpty(record.secret_key),
+  };
+}
+
+function resolveUsdtConfig(
+  base: PaymentGatewayUsdtConfig,
+  input: PaymentGatewayUsdtSettingsInput | undefined,
+): PaymentGatewayUsdtConfig {
+  if (input === undefined) {
+    return base;
+  }
+  return {
+    enabled: input.enabled === undefined ? base.enabled : Boolean(input.enabled),
+    gateway_url:
+      input.gateway_url === undefined
+        ? base.gateway_url
+        : normalizeGatewayUrl(String(input.gateway_url || '').trim()),
+    merchant_id:
+      input.merchant_id === undefined ? base.merchant_id : String(input.merchant_id || '').trim(),
+    secret_key:
+      input.secret_key === undefined ? base.secret_key : String(input.secret_key || '').trim(),
   };
 }
 
@@ -182,6 +256,23 @@ function maskPrivateKey(value: string): string | null {
     : `${trimmed.slice(0, 4)}***${trimmed.slice(-4)}`;
 }
 
+function maskSecret(value: string): string | null {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.length > 16
+    ? `${trimmed.slice(0, 6)}***${trimmed.slice(-6)}`
+    : `${trimmed.slice(0, 3)}***${trimmed.slice(-3)}`;
+}
+
+function normalizeGatewayUrl(value: string): string {
+  return value
+    .replace(/\/+$/, '')
+    .replace(/\/payments\/(?:epay|gmpay)\/v\d+\/order\/create-transaction$/i, '')
+    .replace(/\/submit\.php$/i, '');
+}
+
 function normalizeStoredUpdatedAt(value: unknown): string {
   if (value instanceof Date) {
     return formatDateTimeInTimezoneIso(value);
@@ -199,13 +290,17 @@ function validatePaymentGatewayConfig(
   config: PaymentGatewayConfig,
   input: PaymentGatewaySettingsInput,
 ): void {
-  if (config.enabled && !config.pid) {
+  validateUsdtConfig(config.usdt, input.usdt);
+
+  const shouldRequireRsaConfig = config.enabled && !config.usdt.enabled;
+
+  if (shouldRequireRsaConfig && !config.pid) {
     throw new HttpError(400, 'PAYMENT_GATEWAY_PID_REQUIRED', '启用支付前必须填写商户号 PID');
   }
 
-  const shouldValidatePrivateKey = input.private_key !== undefined || config.enabled;
+  const shouldValidatePrivateKey = input.private_key !== undefined || shouldRequireRsaConfig;
   const shouldValidatePlatformPublicKey =
-    input.platform_public_key !== undefined || config.enabled;
+    input.platform_public_key !== undefined || shouldRequireRsaConfig;
 
   if (shouldValidatePrivateKey) {
     if (!config.private_key) {
@@ -227,6 +322,28 @@ function validatePaymentGatewayConfig(
       );
     }
     validatePlatformPublicKey(config.platform_public_key);
+  }
+}
+
+function validateUsdtConfig(
+  config: PaymentGatewayUsdtConfig,
+  input: PaymentGatewayUsdtSettingsInput | undefined,
+): void {
+  if (!input && !config.enabled) {
+    return;
+  }
+
+  if (config.enabled && !config.gateway_url) {
+    throw new HttpError(400, 'PAYMENT_GATEWAY_USDT_URL_REQUIRED', '启用 USDT 支付前必须填写支付网关地址');
+  }
+  if (config.gateway_url && !/^https?:\/\//i.test(config.gateway_url)) {
+    throw new HttpError(400, 'PAYMENT_GATEWAY_USDT_URL_INVALID', 'USDT 支付网关地址必须包含 http 或 https');
+  }
+  if (config.enabled && !config.merchant_id) {
+    throw new HttpError(400, 'PAYMENT_GATEWAY_USDT_MERCHANT_REQUIRED', '启用 USDT 支付前必须填写商户ID');
+  }
+  if (config.enabled && !config.secret_key) {
+    throw new HttpError(400, 'PAYMENT_GATEWAY_USDT_SECRET_REQUIRED', '启用 USDT 支付前必须填写通信密钥');
   }
 }
 

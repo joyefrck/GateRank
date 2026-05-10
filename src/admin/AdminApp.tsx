@@ -425,6 +425,13 @@ interface PaymentGatewaySettingsView {
   has_private_key: boolean;
   private_key_masked: string | null;
   platform_public_key: string;
+  usdt: {
+    enabled: boolean;
+    gateway_url: string;
+    merchant_id: string;
+    has_secret_key: boolean;
+    secret_key_masked: string | null;
+  };
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -434,6 +441,12 @@ interface PaymentGatewaySettingsFormState {
   pid: string;
   private_key: string;
   platform_public_key: string;
+  usdt: {
+    enabled: boolean;
+    gateway_url: string;
+    merchant_id: string;
+    secret_key: string;
+  };
 }
 
 interface MarketingSettingsView {
@@ -2716,11 +2729,18 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
   const [success, setSuccess] = useState('');
   const [settings, setSettings] = useState<PaymentGatewaySettingsView | null>(null);
   const [clearPrivateKey, setClearPrivateKey] = useState(false);
+  const [clearUsdtSecretKey, setClearUsdtSecretKey] = useState(false);
   const [form, setForm] = useState<PaymentGatewaySettingsFormState>({
     enabled: false,
     pid: '',
     private_key: '',
     platform_public_key: '',
+    usdt: {
+      enabled: false,
+      gateway_url: '',
+      merchant_id: '',
+      secret_key: '',
+    },
   });
 
   const applyView = (view: PaymentGatewaySettingsView) => {
@@ -2730,8 +2750,15 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
       pid: view.pid || '',
       private_key: '',
       platform_public_key: view.platform_public_key || '',
+      usdt: {
+        enabled: Boolean(view.usdt?.enabled),
+        gateway_url: view.usdt?.gateway_url || '',
+        merchant_id: view.usdt?.merchant_id || '',
+        secret_key: '',
+      },
     });
     setClearPrivateKey(false);
+    setClearUsdtSecretKey(false);
   };
 
   const fetchSettings = async () => {
@@ -2760,11 +2787,21 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
         enabled: form.enabled,
         pid: form.pid.trim(),
         platform_public_key: form.platform_public_key.trim(),
+        usdt: {
+          enabled: form.usdt.enabled,
+          gateway_url: form.usdt.gateway_url.trim(),
+          merchant_id: form.usdt.merchant_id.trim(),
+        },
       };
       if (clearPrivateKey) {
         payload.private_key = '';
       } else if (form.private_key.trim()) {
         payload.private_key = form.private_key.trim();
+      }
+      if (clearUsdtSecretKey) {
+        (payload.usdt as Record<string, unknown>).secret_key = '';
+      } else if (form.usdt.secret_key.trim()) {
+        (payload.usdt as Record<string, unknown>).secret_key = form.usdt.secret_key.trim();
       }
       const data = (await apiFetch('/api/v1/admin/system-settings/payment-gateway', {
         method: 'PATCH',
@@ -2865,6 +2902,77 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
               清空已保存商户私钥
             </label>
           )}
+
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 space-y-4">
+            <div>
+              <div className="text-sm font-bold text-neutral-900">USDT / EPUSDT</div>
+              <p className="mt-1 text-sm text-neutral-500">按 EPUSDT GMPay API 创建 USDT 支付订单，系统固定使用 CNY + USDT + TRON。</p>
+            </div>
+            <label className="inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={form.usdt.enabled}
+                onChange={(e) => setForm({ ...form, usdt: { ...form.usdt, enabled: e.target.checked } })}
+              />
+              启用 USDT 支付
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="支付网关地址" hint="请填写完整地址，包括 http 或 https；保存时会自动去除末尾斜杠。">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  value={form.usdt.gateway_url}
+                  onChange={(e) => setForm({ ...form, usdt: { ...form.usdt, gateway_url: e.target.value } })}
+                  placeholder="https://pay.example.com"
+                />
+              </FormField>
+              <FormField label="商户ID">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  value={form.usdt.merchant_id}
+                  onChange={(e) => setForm({ ...form, usdt: { ...form.usdt, merchant_id: e.target.value } })}
+                  placeholder="输入商户ID"
+                />
+              </FormField>
+              <FormField
+                label="通信密钥"
+                hint={settings?.usdt?.has_secret_key
+                  ? '已配置，留空则不修改；如需删除请勾选下方清空。'
+                  : '用于 EPUSDT GMPay 下单签名和回调验签。'}
+              >
+                <div className="space-y-2">
+                  <input
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    value={form.usdt.secret_key}
+                    onChange={(e) => {
+                      setClearUsdtSecretKey(false);
+                      setForm({ ...form, usdt: { ...form.usdt, secret_key: e.target.value } });
+                    }}
+                    placeholder={settings?.usdt?.has_secret_key ? '已配置，留空则不修改' : '输入通信密钥'}
+                  />
+                  {settings?.usdt?.has_secret_key && (
+                    <div className="text-xs text-neutral-500">当前已保存：{settings.usdt.secret_key_masked}</div>
+                  )}
+                </div>
+              </FormField>
+            </div>
+            {settings?.usdt?.has_secret_key && (
+              <label className="inline-flex items-center gap-3 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 rounded border-neutral-300"
+                  checked={clearUsdtSecretKey}
+                  onChange={(e) => {
+                    setClearUsdtSecretKey(e.target.checked);
+                    if (e.target.checked) {
+                      setForm({ ...form, usdt: { ...form.usdt, secret_key: '' } });
+                    }
+                  }}
+                />
+                清空已保存 USDT 通信密钥
+              </label>
+            )}
+          </div>
 
           {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
           {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}

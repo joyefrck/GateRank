@@ -2,7 +2,7 @@ import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql
 import { CLICK_CHARGE_AMOUNT, CLICK_DEDUPE_HOURS } from '../config/billing';
 import { sqlDateTimeToTimezoneIso } from '../utils/time';
 
-export type BillingPaymentChannel = 'alipay' | 'wxpay';
+export type BillingPaymentChannel = 'alipay' | 'wxpay' | 'usdt';
 export type BillingOrderStatus = 'created' | 'paid' | 'failed' | 'expired' | 'canceled';
 export type WalletTransactionType = 'recharge' | 'click_charge' | 'adjustment';
 export type ClickBillingStatus = 'billed' | 'duplicate' | 'insufficient_balance' | 'unlisted' | 'no_wallet';
@@ -185,7 +185,7 @@ export class ApplicantBillingRepository {
         applicant_account_id BIGINT UNSIGNED NOT NULL,
         out_trade_no VARCHAR(64) NOT NULL,
         gateway_trade_no VARCHAR(64) NULL,
-        channel ENUM('alipay', 'wxpay') NOT NULL,
+        channel ENUM('alipay', 'wxpay', 'usdt') NOT NULL,
         amount DECIMAL(10,2) NOT NULL,
         status ENUM('created', 'paid', 'failed', 'expired', 'canceled') NOT NULL DEFAULT 'created',
         pay_type VARCHAR(32) NULL,
@@ -203,6 +203,7 @@ export class ApplicantBillingRepository {
 
     await this.pool.query(`
       ALTER TABLE applicant_recharge_orders
+        MODIFY COLUMN channel ENUM('alipay', 'wxpay', 'usdt') NOT NULL,
         MODIFY COLUMN status ENUM('created', 'paid', 'failed', 'expired', 'canceled') NOT NULL DEFAULT 'created'
     `);
 

@@ -646,6 +646,9 @@ function formatPaymentChannel(channel: string): string {
   if (channel === 'wxpay') {
     return '微信';
   }
+  if (channel === 'usdt') {
+    return 'USDT';
+  }
   return channel || '-';
 }
 
