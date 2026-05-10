@@ -109,6 +109,62 @@ test('GET /outbound/airports/:id redirects bare website domains as https URLs', 
   }
 });
 
+test('GET /outbound/airports/:id redirects subscription links without billing', async () => {
+  const processed: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(
+    createOutboundRoutes({
+      airportRepository: {
+        getById: async () => ({
+          id: 6,
+          name: 'Subscribe Airport',
+          website: 'https://airport.example.com/',
+          subscription_url: 'https://subscribe.example.com/path?plan=monthly',
+          status: 'normal',
+          is_listed: true,
+          plan_price_month: 12,
+          has_trial: false,
+          tags: [],
+          created_at: '2026-05-04',
+        }),
+      },
+      applicantBillingRepository: {
+        processOutboundClick: async (input) => {
+          processed.push(input);
+          return {
+            status: 'insufficient_balance',
+            billed_amount: 0,
+            airport_name: 'Subscribe Airport',
+            balance_after: 0,
+          };
+        },
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/outbound/airports/6?target=subscription_url&placement=home_card`, {
+      redirect: 'manual',
+    });
+
+    assert.equal(response.status, 302);
+    assert.equal(processed.length, 0);
+    const location = response.headers.get('location') || '';
+    const redirected = new URL(location);
+    assert.equal(redirected.origin, 'https://subscribe.example.com');
+    assert.equal(redirected.searchParams.get('plan'), 'monthly');
+    assert.equal(redirected.searchParams.get('utm_source'), 'gaterank');
+    assert.equal(redirected.searchParams.get('utm_medium'), 'referral');
+    assert.equal(redirected.searchParams.get('utm_campaign'), 'subscription_referral');
+    assert.match(redirected.searchParams.get('gr_click_id') || '', /^[0-9a-f-]{36}$/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /outbound/airports/:id does not redirect when balance is insufficient', async () => {
   const app = express();
   app.use(

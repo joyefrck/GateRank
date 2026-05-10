@@ -52,6 +52,12 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
       }
 
       const clickId = randomUUID();
+
+      if (targetKind === 'subscription_url') {
+        res.redirect(302, appendSourceParams(targetUrl, clickId, targetKind));
+        return;
+      }
+
       const occurredAt = new Date();
       const identity = buildMarketingIdentity(req, String(req.query.sid || req.requestId || clickId));
       const result = await deps.applicantBillingRepository.processOutboundClick({
@@ -71,7 +77,7 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
         return;
       }
 
-      res.redirect(302, appendSourceParams(targetUrl, clickId));
+      res.redirect(302, appendSourceParams(targetUrl, clickId, targetKind));
     } catch (error) {
       next(error);
     }
@@ -86,11 +92,11 @@ function resolveTargetUrl(airport: Airport, targetKind: 'website' | 'subscriptio
   return normalizeOutboundUrl(value);
 }
 
-function appendSourceParams(targetUrl: string, clickId: string): string {
+function appendSourceParams(targetUrl: string, clickId: string, targetKind: 'website' | 'subscription_url'): string {
   const url = new URL(targetUrl);
   url.searchParams.set('utm_source', 'gaterank');
   url.searchParams.set('utm_medium', 'referral');
-  url.searchParams.set('utm_campaign', 'paid_click');
+  url.searchParams.set('utm_campaign', targetKind === 'website' ? 'paid_click' : 'subscription_referral');
   url.searchParams.set('gr_click_id', clickId);
   return url.toString();
 }

@@ -29,6 +29,7 @@ export interface RechargeOrderView {
   id: number;
   applicant_account_id: number;
   out_trade_no: string;
+  gateway_trade_no: string | null;
   channel: BillingPaymentChannel;
   amount: number;
   status: BillingOrderStatus;
@@ -1023,6 +1024,7 @@ function toRechargeOrder(row: RechargeOrderRow): RechargeOrderView {
     id: Number(row.id),
     applicant_account_id: Number(row.applicant_account_id),
     out_trade_no: row.out_trade_no,
+    gateway_trade_no: row.gateway_trade_no,
     channel: row.channel,
     amount: Number(row.amount),
     status: row.status,

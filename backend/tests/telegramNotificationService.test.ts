@@ -4,6 +4,7 @@ import {
   TelegramSendError,
   TelegramNotificationService,
   type NewAirportApplicationNotificationInput,
+  type PaymentReceivedNotificationInput,
 } from '../src/services/telegramNotificationService';
 
 const sampleApplication: NewAirportApplicationNotificationInput = {
@@ -19,6 +20,17 @@ const sampleApplication: NewAirportApplicationNotificationInput = {
   applicantTelegram: '@cloud',
   foundedOn: '2025-01-01',
   airportIntro: 'intro',
+};
+
+const samplePayment: PaymentReceivedNotificationInput = {
+  paymentType: 'application_fee_paid',
+  airportName: 'Cloud Airport',
+  amount: 1888,
+  outTradeNo: 'gr_7_1',
+  gatewayTradeNo: 'trade_1',
+  channel: 'alipay',
+  paidAt: '2026-04-18 10:00:00',
+  applicationId: 7,
 };
 
 test('TelegramNotificationService uses stored DB config before env fallback', async () => {
@@ -204,6 +216,125 @@ test('TelegramNotificationService sends webhook notifications when webhook mode 
   } finally {
     process.env.API_BASE = originalApiBase;
   }
+});
+
+test('TelegramNotificationService sends Telegram payment notification text', async () => {
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const service = new TelegramNotificationService({
+    systemSettingRepository: {
+      getByKey: async () => ({
+        setting_key: 'telegram_notifications',
+        value_json: {
+          enabled: true,
+          delivery_mode: 'telegram_chat',
+          telegram_chat: {
+            bot_token: 'payment-token',
+            chat_id: 'payment-chat',
+            api_base: 'https://api.telegram.org',
+            timeout_ms: 5000,
+          },
+          webhook: {
+            url: '',
+            bearer_token: '',
+            timeout_ms: 5000,
+          },
+        },
+        updated_by: 'admin',
+        created_at: '2026-03-25 10:00:00',
+        updated_at: '2026-03-25 10:00:00',
+      }),
+      upsert: async () => undefined,
+    },
+    fetchImpl: async (url, init) => {
+      calls.push({
+        url: String(url),
+        body: JSON.parse(String(init?.body || '{}')) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    },
+  });
+
+  await service.notifyPaymentReceived(samplePayment);
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://api.telegram.org/botpayment-token/sendMessage');
+  assert.equal(calls[0].body.chat_id, 'payment-chat');
+  const text = String(calls[0].body.text || '');
+  assert.match(text, /支付类型: 入驻费/);
+  assert.match(text, /机场名称: Cloud Airport/);
+  assert.match(text, /支付金额: ¥1888\.00/);
+  assert.match(text, /订单号: gr_7_1/);
+  assert.match(text, /网关交易号: trade_1/);
+  assert.match(text, /支付渠道: 支付宝/);
+  assert.match(text, /申请 ID: #7/);
+});
+
+test('TelegramNotificationService sends webhook payment notification payload', async () => {
+  const calls: Array<{
+    url: string;
+    headers: Record<string, string>;
+    body: Record<string, unknown>;
+  }> = [];
+  const service = new TelegramNotificationService({
+    systemSettingRepository: {
+      getByKey: async () => ({
+        setting_key: 'telegram_notifications',
+        value_json: {
+          enabled: true,
+          delivery_mode: 'webhook',
+          telegram_chat: {
+            bot_token: '',
+            chat_id: '',
+            api_base: 'https://api.telegram.org',
+            timeout_ms: 5000,
+          },
+          webhook: {
+            url: 'https://bot.example.com/hooks/gaterank',
+            bearer_token: 'webhook-secret',
+            timeout_ms: 5000,
+          },
+        },
+        updated_by: 'admin',
+        created_at: '2026-03-25 10:00:00',
+        updated_at: '2026-03-25 10:00:00',
+      }),
+      upsert: async () => undefined,
+    },
+    fetchImpl: async (_url, init) => {
+      calls.push({
+        url: String(_url),
+        headers: Object.fromEntries(new Headers(init?.headers).entries()),
+        body: JSON.parse(String(init?.body || '{}')) as Record<string, unknown>,
+      });
+      return new Response(null, { status: 200 });
+    },
+  });
+
+  await service.notifyPaymentReceived({
+    ...samplePayment,
+    paymentType: 'wallet_recharge_paid',
+    applicantAccountId: 1,
+    channel: 'wxpay',
+  });
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, 'https://bot.example.com/hooks/gaterank');
+  assert.equal(calls[0].headers.authorization, 'Bearer webhook-secret');
+  assert.equal(calls[0].body.event, 'wallet_recharge_paid');
+  assert.equal(calls[0].body.source, 'gaterank');
+  assert.deepEqual(calls[0].body.payment, {
+    type: 'wallet_recharge_paid',
+    type_label: '充值',
+    airport_name: 'Cloud Airport',
+    amount: 1888,
+    out_trade_no: 'gr_7_1',
+    gateway_trade_no: 'trade_1',
+    channel: 'wxpay',
+    channel_label: '微信',
+    paid_at: '2026-04-18 10:00:00',
+    application_id: 7,
+    applicant_account_id: 1,
+  });
 });
 
 test('TelegramNotificationService sends webhook test requests without persisting', async () => {

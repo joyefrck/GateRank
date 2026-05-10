@@ -229,6 +229,7 @@ export async function createApp() {
       applicantXOAuthService,
       paymentGatewaySettingsService,
       paymentGatewayService,
+      applicationNotificationService,
     }),
   );
 

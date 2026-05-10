@@ -16,6 +16,20 @@ export interface NewAirportApplicationNotificationInput {
   airportIntro: string;
 }
 
+export type PaymentNotificationType = 'application_fee_paid' | 'wallet_recharge_paid';
+
+export interface PaymentReceivedNotificationInput {
+  paymentType: PaymentNotificationType;
+  airportName: string;
+  amount: number;
+  outTradeNo: string;
+  gatewayTradeNo?: string | null;
+  channel: 'alipay' | 'wxpay' | string;
+  paidAt: string;
+  applicationId?: number | null;
+  applicantAccountId?: number | null;
+}
+
 export type NotificationDeliveryMode = 'telegram_chat' | 'webhook';
 
 export interface TelegramChatSettingsInput {
@@ -200,6 +214,22 @@ export class TelegramNotificationService {
       webhookConfig,
       buildWebhookApplicationPayload(input, this.apiBase),
     );
+  }
+
+  async notifyPaymentReceived(input: PaymentReceivedNotificationInput): Promise<void> {
+    const config = await this.resolveConfig();
+    if (!config.enabled) {
+      return;
+    }
+
+    if (config.delivery_mode === 'telegram_chat') {
+      const telegramConfig = this.requireTelegramChatConfig(config.telegram_chat);
+      await this.sendTelegramMessage(telegramConfig, buildPaymentMessage(input));
+      return;
+    }
+
+    const webhookConfig = this.requireWebhookConfig(config.webhook);
+    await this.sendWebhookEvent(webhookConfig, buildWebhookPaymentPayload(input));
   }
 
   private async resolveConfig(
@@ -388,6 +418,49 @@ function buildWebhookApplicationPayload(
   };
 }
 
+function buildPaymentMessage(input: PaymentReceivedNotificationInput): string {
+  const lines = [
+    'GateRank 收到支付成功通知',
+    `支付类型: ${formatPaymentType(input.paymentType)}`,
+    `机场名称: ${input.airportName || '-'}`,
+    `支付金额: ¥${formatMoney(input.amount)}`,
+    `订单号: ${input.outTradeNo}`,
+    `网关交易号: ${input.gatewayTradeNo || '-'}`,
+    `支付渠道: ${formatPaymentChannel(input.channel)}`,
+    `支付时间: ${input.paidAt}`,
+  ];
+
+  if (input.applicationId != null) {
+    lines.push(`申请 ID: #${input.applicationId}`);
+  }
+  if (input.applicantAccountId != null) {
+    lines.push(`账户 ID: #${input.applicantAccountId}`);
+  }
+
+  return lines.join('\n');
+}
+
+function buildWebhookPaymentPayload(input: PaymentReceivedNotificationInput): Record<string, unknown> {
+  return {
+    event: input.paymentType,
+    occurred_at: formatDateTimeInTimezoneIso(),
+    source: 'gaterank',
+    payment: {
+      type: input.paymentType,
+      type_label: formatPaymentType(input.paymentType),
+      airport_name: input.airportName || null,
+      amount: Number(input.amount),
+      out_trade_no: input.outTradeNo,
+      gateway_trade_no: input.gatewayTradeNo || null,
+      channel: input.channel,
+      channel_label: formatPaymentChannel(input.channel),
+      paid_at: input.paidAt,
+      application_id: input.applicationId ?? null,
+      applicant_account_id: input.applicantAccountId ?? null,
+    },
+  };
+}
+
 function getEnvFallbackConfig(): NotificationConfig {
   const botToken = String(process.env.TELEGRAM_BOT_TOKEN || '').trim();
   const chatId = String(process.env.TELEGRAM_CHAT_ID || '').trim();
@@ -560,6 +633,28 @@ function summarize(value: string, limit: number): string {
     return normalized;
   }
   return `${normalized.slice(0, Math.max(0, limit - 1))}…`;
+}
+
+function formatPaymentType(type: PaymentNotificationType): string {
+  return type === 'application_fee_paid' ? '入驻费' : '充值';
+}
+
+function formatPaymentChannel(channel: string): string {
+  if (channel === 'alipay') {
+    return '支付宝';
+  }
+  if (channel === 'wxpay') {
+    return '微信';
+  }
+  return channel || '-';
+}
+
+function formatMoney(value: number): string {
+  const amount = Number(value);
+  if (!Number.isFinite(amount)) {
+    return '0.00';
+  }
+  return amount.toFixed(2);
 }
 
 async function safeReadResponseText(response: Response): Promise<string> {

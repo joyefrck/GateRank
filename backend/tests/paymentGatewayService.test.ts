@@ -192,6 +192,50 @@ test('PaymentGatewayService accepts raw base64 RSA keys from the gateway console
   assert.equal(result.pay_info, 'https://pay.example.com/jump');
 });
 
+test('PaymentGatewayService queries an order and verifies the RSA response', async () => {
+  const requestedBodies: string[] = [];
+  const service = new PaymentGatewayService({
+    paymentGatewaySettingsService: {
+      getConfig: async () => paymentGatewayConfig,
+    },
+    fetchImpl: (async (_url, init) => {
+      requestedBodies.push(String(init?.body || ''));
+      const payload: Record<string, string | number> = {
+        code: 0,
+        msg: 'success',
+        trade_no: '202605100001',
+        out_trade_no: 'gr_7_test',
+        api_trade_no: 'ali-202605100001',
+        type: 'alipay',
+        status: 1,
+        pid: '28615',
+        addtime: '2026-05-10 09:00:00',
+        endtime: '2026-05-10 09:01:00',
+        name: 'GateRank test',
+        money: '10.00',
+        param: '7',
+        timestamp: '1778374860',
+        sign_type: 'RSA',
+      };
+      payload.sign = signWithRsaPrivateKey(buildRsaSignPayload(payload), paymentGatewayConfig.private_key);
+      return new Response(JSON.stringify(payload), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }) as typeof fetch,
+  });
+
+  const result = await service.queryOrder('gr_7_test');
+
+  assert.equal(result.out_trade_no, 'gr_7_test');
+  assert.equal(result.trade_no, '202605100001');
+  assert.equal(result.type, 'alipay');
+  assert.equal(result.status, 1);
+  assert.equal(result.money, 10);
+  assert.match(requestedBodies[0], /out_trade_no=gr_7_test/);
+  assert.match(requestedBodies[0], /sign_type=RSA/);
+});
+
 function stripPem(value: string): string {
   return value
     .replace(/-----BEGIN [A-Z ]+-----/g, '')

@@ -25,7 +25,6 @@ import {
   Eye,
   EyeOff,
   Link2,
-  Settings,
   Unlink,
 } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -3145,7 +3144,8 @@ function PortalPage() {
     setLoading(true);
     setError('');
     try {
-      const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/me');
+      let data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/me');
+      data = await syncPendingApplicationPayment(data);
       setView(data);
       setLoginEmail(data.account.email);
       await loadPortalBillingData();
@@ -3159,14 +3159,64 @@ function PortalPage() {
   };
 
   const loadPortalBillingData = async () => {
-    const [orders, transactions, clicks] = await Promise.all([
+    let [orders, transactions, clicks] = await Promise.all([
       portalApiRequest<{ items: PortalRechargeOrderView[] }>('/api/v1/portal/recharge-orders?limit=20'),
       portalApiRequest<{ items: PortalWalletTransactionView[] }>('/api/v1/portal/wallet-transactions?limit=50'),
       portalApiRequest<{ items: PortalClickView[] }>('/api/v1/portal/clicks?limit=50'),
     ]);
+    orders = await syncPendingRechargeOrders(orders);
     setRechargeOrders(orders.items);
     setWalletTransactions(transactions.items);
     setClickRecords(clicks.items);
+  };
+
+  const syncPendingApplicationPayment = async (portalView: PortalViewResponse): Promise<PortalViewResponse> => {
+    const order = portalView.latest_payment_order;
+    if (!order || order.status !== 'created') {
+      return portalView;
+    }
+    try {
+      return await portalApiRequest<PortalViewResponse>(
+        `/api/v1/portal/payment-orders/${encodeURIComponent(order.out_trade_no)}/sync`,
+        { method: 'POST' },
+      );
+    } catch (err) {
+      console.warn('[portal] failed to sync application payment order', err);
+      return portalView;
+    }
+  };
+
+  const syncPendingRechargeOrders = async (
+    orders: { items: PortalRechargeOrderView[] },
+  ): Promise<{ items: PortalRechargeOrderView[] }> => {
+    const pendingOrders = orders.items.filter((item) => item.status === 'created');
+    if (pendingOrders.length === 0) {
+      return orders;
+    }
+    const synced = await Promise.all(pendingOrders.map(async (order) => {
+      try {
+        const data = await portalApiRequest<{
+          recharge_order: PortalRechargeOrderView | null;
+          wallet: PortalWalletView | null;
+        }>(
+          `/api/v1/portal/recharge-orders/${encodeURIComponent(order.out_trade_no)}/sync`,
+          { method: 'POST' },
+        );
+        if (data.wallet) {
+          setView((current) => current ? { ...current, wallet: data.wallet as PortalWalletView } : current);
+        }
+        return data.recharge_order;
+      } catch (err) {
+        console.warn('[portal] failed to sync recharge order', err);
+        return null;
+      }
+    }));
+    const syncedByOrderNo = new Map(
+      synced.filter(Boolean).map((item) => [item!.out_trade_no, item!]),
+    );
+    return {
+      items: orders.items.map((item) => syncedByOrderNo.get(item.out_trade_no) || item),
+    };
   };
 
   useEffect(() => {
@@ -3817,8 +3867,8 @@ function PortalPage() {
       },
       {
         title: '计费对象',
-        value: '官网 / 订阅链接',
-        description: '从 GateRank 页面跳转到机场官网或订阅链接的真实访问会进入计费判断。',
+        value: '官网链接',
+        description: '从 GateRank 页面跳转到机场官网的真实访问会进入计费判断，订阅链接不扣费。',
         tone: 'green' as const,
       },
       {
@@ -4292,10 +4342,7 @@ function PortalPage() {
                     className={`flex w-full items-center justify-between rounded-2xl px-4 py-3 text-left text-sm font-black transition ${portalTab === item.key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-100'}`}
                     onClick={() => switchPortalTab(item.key)}
                   >
-                    <span className="inline-flex items-center gap-2">
-                      {item.key === 'account_settings' && <Settings className="h-4 w-4" />}
-                      {item.label}
-                    </span>
+                    <span>{item.label}</span>
                     <ChevronRight className="h-4 w-4" />
                   </button>
                 ))}

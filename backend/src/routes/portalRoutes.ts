@@ -16,9 +16,12 @@ import { getSiteOrigin } from '../utils/siteUrl';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
 import {
   buildGatewayTrace,
+  isPaymentQueryPaid,
   isPaymentSuccessNotification,
   type PaymentGatewayService,
+  type PaymentGatewayQueryOrderResult,
 } from '../services/paymentGatewayService';
+import type { PaymentReceivedNotificationInput } from '../services/telegramNotificationService';
 
 interface PortalDeps {
   applicantAccountRepository: {
@@ -126,7 +129,12 @@ interface PortalDeps {
   paymentGatewaySettingsService: {
     getConfig(): Promise<{ application_fee_amount: number }>;
   };
-  paymentGatewayService: Pick<PaymentGatewayService, 'createOrder' | 'verifyNotificationPayload'>;
+  paymentGatewayService: Pick<PaymentGatewayService, 'createOrder' | 'verifyNotificationPayload'> & {
+    queryOrder?: PaymentGatewayService['queryOrder'];
+  };
+  applicationNotificationService?: {
+    notifyPaymentReceived(input: PaymentReceivedNotificationInput): Promise<void>;
+  };
 }
 
 export function createPortalRoutes(deps: PortalDeps): Router {
@@ -245,7 +253,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const paymentConfig = await deps.paymentGatewaySettingsService.getConfig();
       const amount = Number(paymentConfig.application_fee_amount || APPLICATION_FEE_AMOUNT);
       const outTradeNo = `gr_${application.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
-      const apiOrigin = getRequestOrigin(req);
+      const apiOrigin = getPaymentNotifyOrigin(req);
       const siteOrigin = getSiteOrigin(req);
       const notifyUrl = `${apiOrigin}/api/v1/portal/payment-notify`;
       const returnUrl = `${siteOrigin}/portal`;
@@ -317,7 +325,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const channel = toPaymentChannel(payload.channel);
       const amount = toRechargeAmount(payload.amount);
       const outTradeNo = `grr_${account.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
-      const apiOrigin = getRequestOrigin(req);
+      const apiOrigin = getPaymentNotifyOrigin(req);
       const siteOrigin = getSiteOrigin(req);
       const gatewayOrder = await deps.paymentGatewayService.createOrder({
         out_trade_no: outTradeNo,
@@ -364,6 +372,38 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       await deps.applicantBillingRepository.cancelRechargeOrder(session.applicant_id, order.out_trade_no);
       res.json({
         recharge_order: await deps.applicantBillingRepository.getRechargeOrderByOutTradeNo(order.out_trade_no),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/payment-orders/:outTradeNo/sync', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      const order = await deps.applicationPaymentOrderRepository.getByOutTradeNo(String(req.params.outTradeNo || ''));
+      if (!order || order.application_id !== account.application_id) {
+        throw new HttpError(404, 'PAYMENT_ORDER_NOT_FOUND', '支付订单不存在');
+      }
+      await syncApplicationPaymentOrder(deps, order);
+      res.json(await buildPortalView(deps, session.applicant_id));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/recharge-orders/:outTradeNo/sync', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const order = await deps.applicantBillingRepository.getRechargeOrderByOutTradeNo(String(req.params.outTradeNo || ''));
+      if (!order || order.applicant_account_id !== session.applicant_id) {
+        throw new HttpError(404, 'RECHARGE_ORDER_NOT_FOUND', '充值订单不存在');
+      }
+      await syncRechargeOrder(deps, order);
+      res.json({
+        recharge_order: await deps.applicantBillingRepository.getRechargeOrderByOutTradeNo(order.out_trade_no),
+        wallet: await deps.applicantBillingRepository.getWalletByAccountId(session.applicant_id),
       });
     } catch (error) {
       next(error);
@@ -511,7 +551,22 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       notify_payload_json: payload,
       paid_at: paidAt,
     });
-    await deps.airportApplicationRepository.markPaid(order.application_id, Number(order.amount), paidAt);
+    const markedApplicationPaid = await deps.airportApplicationRepository.markPaid(
+      order.application_id,
+      Number(order.amount),
+      paidAt,
+    );
+    if (markedApplicationPaid) {
+      await notifyPaymentReceivedSafely(deps, {
+        paymentType: 'application_fee_paid',
+        applicationId: order.application_id,
+        amount: Number(order.amount),
+        outTradeNo,
+        gatewayTradeNo: stringOrNull(payload.trade_no) || order.gateway_trade_no,
+        channel: stringOrNull(payload.type) || order.channel,
+        paidAt,
+      });
+    }
 
     res.send('success');
   });
@@ -542,18 +597,125 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
 
     const paidAt = formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
-    await deps.applicantBillingRepository.markRechargePaidAndCredit(outTradeNo, {
+    const credited = await deps.applicantBillingRepository.markRechargePaidAndCredit(outTradeNo, {
       gateway_trade_no: stringOrNull(payload.trade_no),
       pay_type: stringOrNull(payload.type) || order.pay_type,
       pay_info: buildGatewayTrace(payload),
       notify_payload_json: payload,
       paid_at: paidAt,
     });
+    if (credited) {
+      await notifyPaymentReceivedSafely(deps, {
+        paymentType: 'wallet_recharge_paid',
+        applicantAccountId: order.applicant_account_id,
+        amount: Number(order.amount),
+        outTradeNo,
+        gatewayTradeNo: stringOrNull(payload.trade_no) || null,
+        channel: stringOrNull(payload.type) || order.channel,
+        paidAt,
+      });
+    }
 
     res.send('success');
   });
 
   return router;
+}
+
+async function syncApplicationPaymentOrder(deps: PortalDeps, order: ApplicationPaymentOrder): Promise<boolean> {
+  if (order.status === 'paid') {
+    return false;
+  }
+  const queryResult = await queryGatewayOrder(deps, order.out_trade_no);
+  if (!isPaymentQueryPaid(queryResult)) {
+    return false;
+  }
+  assertGatewayOrderMatches(order.out_trade_no, Number(order.amount), queryResult);
+  const paidAt = normalizeGatewayPaidAt(queryResult.endtime);
+  await deps.applicationPaymentOrderRepository.markPaid(order.out_trade_no, {
+    gateway_trade_no: queryResult.trade_no || order.gateway_trade_no,
+    pay_type: queryResult.type || order.pay_type,
+    pay_info: buildGatewayTrace(queryResult.raw),
+    notify_payload_json: queryResult.raw,
+    paid_at: paidAt,
+  });
+  const markedApplicationPaid = await deps.airportApplicationRepository.markPaid(
+    order.application_id,
+    Number(order.amount),
+    paidAt,
+  );
+  if (markedApplicationPaid) {
+    await notifyPaymentReceivedSafely(deps, {
+      paymentType: 'application_fee_paid',
+      applicationId: order.application_id,
+      amount: Number(order.amount),
+      outTradeNo: order.out_trade_no,
+      gatewayTradeNo: queryResult.trade_no || order.gateway_trade_no,
+      channel: queryResult.type || order.channel,
+      paidAt,
+    });
+  }
+  return markedApplicationPaid;
+}
+
+async function syncRechargeOrder(deps: PortalDeps, order: RechargeOrderView): Promise<boolean> {
+  if (order.status === 'paid') {
+    return false;
+  }
+  const queryResult = await queryGatewayOrder(deps, order.out_trade_no);
+  if (!isPaymentQueryPaid(queryResult)) {
+    return false;
+  }
+  assertGatewayOrderMatches(order.out_trade_no, Number(order.amount), queryResult);
+  const paidAt = normalizeGatewayPaidAt(queryResult.endtime);
+  const credited = await deps.applicantBillingRepository.markRechargePaidAndCredit(order.out_trade_no, {
+    gateway_trade_no: queryResult.trade_no || order.gateway_trade_no,
+    pay_type: queryResult.type || order.pay_type,
+    pay_info: buildGatewayTrace(queryResult.raw),
+    notify_payload_json: queryResult.raw,
+    paid_at: paidAt,
+  });
+  if (credited) {
+    await notifyPaymentReceivedSafely(deps, {
+      paymentType: 'wallet_recharge_paid',
+      applicantAccountId: order.applicant_account_id,
+      amount: Number(order.amount),
+      outTradeNo: order.out_trade_no,
+      gatewayTradeNo: queryResult.trade_no || null,
+      channel: queryResult.type || order.channel,
+      paidAt,
+    });
+  }
+  return credited;
+}
+
+async function queryGatewayOrder(
+  deps: PortalDeps,
+  outTradeNo: string,
+): Promise<PaymentGatewayQueryOrderResult> {
+  if (!deps.paymentGatewayService.queryOrder) {
+    throw new HttpError(503, 'PAYMENT_GATEWAY_QUERY_NOT_CONFIGURED', '支付网关查单未配置');
+  }
+  return deps.paymentGatewayService.queryOrder(outTradeNo);
+}
+
+function assertGatewayOrderMatches(
+  outTradeNo: string,
+  expectedAmount: number,
+  queryResult: PaymentGatewayQueryOrderResult,
+): void {
+  if (queryResult.out_trade_no !== outTradeNo) {
+    throw new HttpError(409, 'PAYMENT_GATEWAY_ORDER_MISMATCH', '支付网关返回订单号与本地订单不一致');
+  }
+  if (Math.abs(Number(queryResult.money) - expectedAmount) > 0.001) {
+    throw new HttpError(409, 'PAYMENT_GATEWAY_AMOUNT_MISMATCH', '支付网关返回金额与本地订单不一致');
+  }
+}
+
+function normalizeGatewayPaidAt(value: string | null): string {
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(value || '')
+    ? String(value)
+    : formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
 }
 
 async function buildPortalView(deps: PortalDeps, applicantId: number) {
@@ -626,6 +788,41 @@ async function requireApplication(deps: PortalDeps, applicationId: number) {
     throw new HttpError(404, 'AIRPORT_APPLICATION_NOT_FOUND', `application ${applicationId} not found`);
   }
   return application;
+}
+
+async function notifyPaymentReceivedSafely(
+  deps: PortalDeps,
+  input: Omit<PaymentReceivedNotificationInput, 'airportName'> & { airportName?: string },
+): Promise<void> {
+  if (!deps.applicationNotificationService) {
+    return;
+  }
+
+  try {
+    const application = input.applicationId != null
+      ? await deps.airportApplicationRepository.getById(input.applicationId)
+      : await getApplicationByApplicantAccountId(deps, Number(input.applicantAccountId));
+
+    await deps.applicationNotificationService.notifyPaymentReceived({
+      ...input,
+      airportName: input.airportName || application?.name || '-',
+      applicationId: input.applicationId ?? application?.id ?? null,
+    });
+  } catch (error) {
+    console.error('[telegram] failed to notify payment received', {
+      paymentType: input.paymentType,
+      outTradeNo: input.outTradeNo,
+      error,
+    });
+  }
+}
+
+async function getApplicationByApplicantAccountId(deps: PortalDeps, applicantAccountId: number) {
+  const account = await deps.applicantAccountRepository.getById(applicantAccountId);
+  if (!account) {
+    return null;
+  }
+  return deps.airportApplicationRepository.getById(account.application_id);
 }
 
 function toNotificationPayload(
@@ -760,6 +957,14 @@ function getRequestOrigin(req: any): string {
   const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0];
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0];
   return `${proto}://${host}`;
+}
+
+function getPaymentNotifyOrigin(req: any): string {
+  const configured = String(process.env.PAYMENT_NOTIFY_ORIGIN || process.env.API_BASE || '').trim();
+  if (configured) {
+    return configured.replace(/\/+$/, '');
+  }
+  return getRequestOrigin(req).replace(/\/+$/, '');
 }
 
 async function getXOAuthReturnOrigin(deps: PortalDeps, req: any): Promise<string> {

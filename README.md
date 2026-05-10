@@ -153,6 +153,12 @@ cp backend/.env.example backend/.env
 - `VITE_API_BASE`: 前端请求后端 API 的基础地址
 - `VITE_GA_MEASUREMENT_ID`: GA4 测量 ID；未配置时默认回退到 `G-4V9Z53GSP2`
 
+支付回调补充：
+
+- `API_BASE`: 后端公开访问地址，支付网关回调会优先使用它生成 `notify_url`
+- `PAYMENT_NOTIFY_ORIGIN`: 可选；如果支付回调入口和普通 API 地址不同，可单独配置这个公开 origin
+- 本地 `127.0.0.1` / `localhost` 只适合前端跳转测试，真实支付网关无法回调到本机地址；联调真实支付时需要配置成公网可访问的 API 地址或隧道地址
+
 News 模块补充：
 
 - `NEWS_UPLOAD_ROOT_DIR`: 可选，新闻图片上传根目录；默认落到 `backend/uploads`

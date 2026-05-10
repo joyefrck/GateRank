@@ -26,12 +26,30 @@ export interface PaymentGatewayCreateOrderResult {
   pay_info: string;
 }
 
+export interface PaymentGatewayQueryOrderResult {
+  code: number;
+  msg: string;
+  trade_no: string;
+  out_trade_no: string;
+  api_trade_no: string;
+  type: string;
+  status: number;
+  pid: string;
+  addtime: string;
+  endtime: string | null;
+  name: string;
+  money: number;
+  param: string;
+  raw: Record<string, unknown>;
+}
+
 interface PaymentGatewayServiceOptions {
   paymentGatewaySettingsService: Pick<PaymentGatewaySettingsService, 'getConfig'>;
   fetchImpl?: typeof fetch;
 }
 
 const PAY_CREATE_URL = 'https://pay.v8jisu.cn/api/pay/create';
+const PAY_QUERY_URL = 'https://pay.v8jisu.cn/api/pay/query';
 
 export class PaymentGatewayService {
   private readonly paymentGatewaySettingsService: PaymentGatewayServiceOptions['paymentGatewaySettingsService'];
@@ -119,6 +137,77 @@ export class PaymentGatewayService {
     return this.verifyPayload(payload, config.platform_public_key);
   }
 
+  async queryOrder(outTradeNo: string): Promise<PaymentGatewayQueryOrderResult> {
+    const config = await this.requireConfigured();
+    try {
+      const requestParams: Record<string, string> = {
+        pid: config.pid,
+        out_trade_no: outTradeNo,
+        timestamp: String(Math.floor(Date.now() / 1000)),
+        sign_type: 'RSA',
+      };
+      requestParams.sign = signWithRsaPrivateKey(buildRsaSignPayload(requestParams), config.private_key);
+
+      const response = await this.fetchImpl(PAY_QUERY_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: new URLSearchParams(requestParams).toString(),
+      });
+
+      const rawBody = await response.text();
+      const data = parsePaymentGatewayJson(rawBody);
+      if (!response.ok) {
+        throw new HttpError(
+          502,
+          'PAYMENT_GATEWAY_HTTP_ERROR',
+          String(data?.msg || `支付网关查单失败: HTTP ${response.status}${rawBody ? ` ${truncateGatewayBody(rawBody)}` : ''}`),
+        );
+      }
+
+      if (!data) {
+        throw new HttpError(
+          502,
+          'PAYMENT_GATEWAY_BAD_RESPONSE',
+          `支付网关返回了非 JSON 响应: ${truncateGatewayBody(rawBody)}`,
+        );
+      }
+
+      if (Number(data.code) !== 0) {
+        throw new HttpError(
+          400,
+          'PAYMENT_GATEWAY_QUERY_FAILED',
+          String(data.msg || '支付网关查单失败'),
+        );
+      }
+
+      this.assertVerifiedPayload(data, config.platform_public_key);
+
+      return {
+        code: Number(data.code),
+        msg: String(data.msg || ''),
+        trade_no: String(data.trade_no || ''),
+        out_trade_no: String(data.out_trade_no || ''),
+        api_trade_no: String(data.api_trade_no || ''),
+        type: String(data.type || ''),
+        status: Number(data.status),
+        pid: String(data.pid || ''),
+        addtime: String(data.addtime || ''),
+        endtime: stringOrNull(data.endtime),
+        name: String(data.name || ''),
+        money: Number(data.money || 0),
+        param: String(data.param || ''),
+        raw: data,
+      };
+    } catch (error) {
+      if (error instanceof HttpError) {
+        throw error;
+      }
+      throw normalizePaymentGatewayTransportError(error);
+    }
+  }
+
   verifyPayload(payload: Record<string, unknown>, publicKey: string): boolean {
     const sign = String(payload.sign || '').trim();
     if (!sign) {
@@ -204,6 +293,10 @@ export function isPaymentSuccessNotification(payload: Record<string, unknown>): 
   return String(payload.code || '').trim() === '0';
 }
 
+export function isPaymentQueryPaid(result: PaymentGatewayQueryOrderResult): boolean {
+  return result.code === 0 && result.status === 1;
+}
+
 export function buildGatewayTrace(payload: Record<string, unknown>): string {
   return [
     String(payload.trade_no || ''),
@@ -212,4 +305,12 @@ export function buildGatewayTrace(payload: Record<string, unknown>): string {
   ]
     .filter(Boolean)
     .join(' / ');
+}
+
+function stringOrNull(value: unknown): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  const next = String(value).trim();
+  return next || null;
 }
