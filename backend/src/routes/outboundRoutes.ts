@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
+import { CLICK_CHARGE_AMOUNT } from '../config/billing';
 import { HttpError } from '../middleware/errorHandler';
 import type { Airport } from '../types/domain';
 import { buildMarketingIdentity } from '../utils/marketing';
@@ -20,12 +21,16 @@ interface OutboundDeps {
       session_hash: string;
       occurred_at: string;
       event_date: string;
+      click_charge_amount?: number;
     }): Promise<{
       status: string;
       billed_amount: number;
       airport_name: string;
       balance_after: number | null;
     }>;
+  };
+  marketingSettingsService?: {
+    getConfig(): Promise<{ click_charge_amount: number }>;
   };
 }
 
@@ -60,6 +65,7 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
 
       const occurredAt = new Date();
       const identity = buildMarketingIdentity(req, String(req.query.sid || req.requestId || clickId));
+      const billingConfig = await getOutboundBillingConfig(deps);
       const result = await deps.applicantBillingRepository.processOutboundClick({
         click_id: clickId,
         airport_id: airportId,
@@ -70,6 +76,7 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
         session_hash: identity.session_hash,
         occurred_at: formatSqlDateTimeInTimezone(occurredAt, 'Asia/Shanghai'),
         event_date: getDateInTimezone('Asia/Shanghai', occurredAt),
+        click_charge_amount: billingConfig.click_charge_amount,
       });
 
       if (result.status === 'insufficient_balance' || result.status === 'unlisted' || result.status === 'no_wallet') {
@@ -84,6 +91,13 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
   });
 
   return router;
+}
+
+async function getOutboundBillingConfig(deps: OutboundDeps): Promise<{ click_charge_amount: number }> {
+  if (!deps.marketingSettingsService) {
+    return { click_charge_amount: CLICK_CHARGE_AMOUNT };
+  }
+  return deps.marketingSettingsService.getConfig();
 }
 
 function resolveTargetUrl(airport: Airport, targetKind: 'website' | 'subscription_url'): string | null {

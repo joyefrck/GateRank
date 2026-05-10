@@ -1,6 +1,7 @@
 export type AirportStatus = 'normal' | 'risk' | 'down';
 export type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
 export type AirportApplicationReviewStatus = 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
+export type AirportApplicationPaymentStatus = 'unpaid' | 'paid';
 export type RankingType = 'today' | 'stable' | 'value' | 'new' | 'risk';
 export type ProbeSampleType = 'latency' | 'download' | 'availability';
 export type ProbeScope = 'stability' | 'performance';
@@ -32,6 +33,7 @@ export interface Airport {
   manual_tags?: string[];
   auto_tags?: string[];
   total_score?: number | null;
+  paid_application_fee?: boolean;
   created_at: string;
 }
 
@@ -52,7 +54,7 @@ export interface AirportApplication {
   test_password: string;
   approved_airport_id?: number | null;
   review_status: AirportApplicationReviewStatus;
-  payment_status: 'unpaid' | 'paid';
+  payment_status: AirportApplicationPaymentStatus;
   payment_amount: number | null;
   paid_at?: string | null;
   must_change_password?: boolean | null;

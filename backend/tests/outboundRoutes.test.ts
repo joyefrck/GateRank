@@ -28,11 +28,14 @@ test('GET /outbound/airports/:id records click and redirects with GateRank sourc
           processed.push(input);
           return {
             status: 'billed',
-            billed_amount: 1,
+            billed_amount: 2.5,
             airport_name: 'Cloud Airport',
             balance_after: 9,
           };
         },
+      },
+      marketingSettingsService: {
+        getConfig: async () => ({ click_charge_amount: 2.5 }),
       },
     }),
   );
@@ -50,6 +53,7 @@ test('GET /outbound/airports/:id records click and redirects with GateRank sourc
     assert.equal(processed[0].airport_id, 9);
     assert.equal(processed[0].target_kind, 'website');
     assert.equal(processed[0].placement, 'home_card');
+    assert.equal(processed[0].click_charge_amount, 2.5);
     const location = response.headers.get('location') || '';
     const redirected = new URL(location);
     assert.equal(redirected.origin, 'https://airport.example.com');

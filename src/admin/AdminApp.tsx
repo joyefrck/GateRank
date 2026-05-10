@@ -13,6 +13,7 @@ import {
   ArrowLeft,
   ChevronLeft,
   ChevronRight,
+  MousePointerClick,
   Trash2,
   X,
 } from 'lucide-react';
@@ -23,6 +24,7 @@ import { buildPublishTokenDocsHref } from '../site/publicSite';
 type AirportStatus = 'normal' | 'risk' | 'down';
 type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
 type AirportApplicationReviewStatus = 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
+type AirportApplicationPaymentStatus = 'unpaid' | 'paid';
 type ProbeSampleType = 'latency' | 'download' | 'availability';
 type ProbeScope = 'stability' | 'performance';
 type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
@@ -60,6 +62,7 @@ interface Airport {
   score_data_days?: number | null;
   wallet_id?: number | null;
   wallet_balance?: number | null;
+  paid_application_fee?: boolean;
 }
 
 interface AirportFormState {
@@ -422,7 +425,6 @@ interface PaymentGatewaySettingsView {
   has_private_key: boolean;
   private_key_masked: string | null;
   platform_public_key: string;
-  application_fee_amount: number;
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -432,7 +434,18 @@ interface PaymentGatewaySettingsFormState {
   pid: string;
   private_key: string;
   platform_public_key: string;
+}
+
+interface MarketingSettingsView {
+  application_fee_amount: number;
+  click_charge_amount: number;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+interface MarketingSettingsFormState {
   application_fee_amount: string;
+  click_charge_amount: string;
 }
 
 interface SmtpSettingsView {
@@ -787,7 +800,8 @@ export default function AdminApp() {
 
       <div className="max-w-[1600px] mx-auto p-6 grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-6">
         <aside className="bg-white rounded-xl border border-neutral-200 p-3 h-fit">
-          <NavItem icon={<BarChart3 size={14} />} active={path.startsWith('/admin/marketing')} onClick={() => navigate('/admin/marketing')} label="营销" />
+          <NavItem icon={<BarChart3 size={14} />} active={path === '/admin/marketing'} onClick={() => navigate('/admin/marketing')} label="访问记录" />
+          <NavItem icon={<MousePointerClick size={14} />} active={path === '/admin/marketing-settings'} onClick={() => navigate('/admin/marketing-settings')} label="营销模块" />
           <NavItem icon={<Database size={14} />} active={path.startsWith('/admin/airports')} onClick={() => navigate('/admin/airports')} label="机场管理" />
           <NavItem icon={<Shield size={14} />} active={path.startsWith('/admin/applications')} onClick={() => navigate('/admin/applications')} label="入驻申请" />
           <NavItem icon={<Newspaper size={14} />} active={path.startsWith('/admin/news')} onClick={() => navigate('/admin/news')} label="News" />
@@ -800,6 +814,7 @@ export default function AdminApp() {
           {path === '/admin/applications' && <ApplicationsPage onOpenAirports={() => navigate('/admin/airports')} />}
           {path === '/admin/news' && <NewsListPage onCreate={() => navigate('/admin/news/new')} onEdit={(id) => navigate(`/admin/news/${id}`)} />}
           {path === '/admin/marketing' && <MarketingPage />}
+          {path === '/admin/marketing-settings' && <MarketingSettingsPage />}
           {(path === '/admin/news/new' || path.match(/^\/admin\/news\/\d+$/)) && (
             <NewsEditorPage
               articleId={path === '/admin/news/new' ? undefined : Number(path.split('/')[3])}
@@ -1321,7 +1336,7 @@ function MarketingPage() {
         setPagesData(null);
         setAirportsData(null);
         setSelectedAirportId(null);
-        setError(err instanceof Error ? err.message : '营销数据加载失败');
+        setError(err instanceof Error ? err.message : '访问记录加载失败');
       })
       .finally(() => {
         if (active) {
@@ -1440,7 +1455,7 @@ function MarketingPage() {
       <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h2 className="text-lg font-bold">营销</h2>
+            <h2 className="text-lg font-bold">访问记录</h2>
             <p className="mt-1 text-sm text-neutral-500">统计 GateRank 公共站访问量、机场曝光、外链点击与点击转化率。</p>
           </div>
           <button
@@ -1651,7 +1666,7 @@ function MarketingPage() {
               <tbody>
                 {trendItems.length === 0 && !loading && (
                   <tr>
-                    <td className="px-4 py-6 text-neutral-500" colSpan={5}>当前区间暂无营销趋势数据</td>
+                    <td className="px-4 py-6 text-neutral-500" colSpan={5}>当前区间暂无访问趋势数据</td>
                   </tr>
                 )}
                 {trendItems.map((item) => (
@@ -1839,7 +1854,7 @@ function MarketingPage() {
                           <div className="mt-1 text-sm text-neutral-500">{selectedDetail.date_from} ~ {selectedDetail.date_to} / {formatGranularityLabel(selectedDetail.granularity)}</div>
                         </div>
                         <div className="rounded-full border border-sky-200 bg-white/70 px-3 py-1 text-xs font-medium text-sky-700">
-                          {activeAirportSummary ? `主要来源位：${formatMarketingPlacement(activeAirportSummary.primary_placement)}` : '营销详情'}
+                          {activeAirportSummary ? `主要来源位：${formatMarketingPlacement(activeAirportSummary.primary_placement)}` : '访问详情'}
                         </div>
                       </div>
                     </section>
@@ -2110,6 +2125,129 @@ function MarketingTrendChart({
   );
 }
 
+function MarketingSettingsPage() {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [settings, setSettings] = useState<MarketingSettingsView | null>(null);
+  const [form, setForm] = useState<MarketingSettingsFormState>({
+    application_fee_amount: '300',
+    click_charge_amount: '1',
+  });
+
+  const applyView = (view: MarketingSettingsView) => {
+    setSettings(view);
+    setForm({
+      application_fee_amount: String(view.application_fee_amount || 300),
+      click_charge_amount: String(view.click_charge_amount || 1),
+    });
+  };
+
+  const fetchSettings = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/marketing/settings')) as MarketingSettingsView;
+      applyView(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载营销配置失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchSettings();
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/marketing/settings', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          application_fee_amount: Number(form.application_fee_amount),
+          click_charge_amount: Number(form.click_charge_amount),
+        }),
+      })) as MarketingSettingsView;
+      applyView(data);
+      setSuccess('营销配置已保存');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存营销配置失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 className="text-lg font-bold">营销模块</h2>
+          <p className="mt-1 text-sm text-neutral-500">配置入驻费用和 GateRank 外链每次有效点击扣费，保存后仅影响新订单和新点击。</p>
+        </div>
+        <button className="px-3 py-2 rounded border text-sm" onClick={() => void fetchSettings()} disabled={loading || saving}>
+          刷新
+        </button>
+      </div>
+
+      <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+        {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+        {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
+        {loading && <div className="text-sm text-neutral-500">加载中...</div>}
+
+        {!loading && (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
+              <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
+              <ReadField label="当前入驻费用" value={settings ? `¥${settings.application_fee_amount}` : '-'} />
+              <ReadField label="当前点击费用" value={settings ? `¥${settings.click_charge_amount} / 次` : '-'} />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <FormField label="入驻费用 (元)" hint="申请人后台新建入驻支付订单时使用。">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.application_fee_amount}
+                  onChange={(e) => setForm({ ...form, application_fee_amount: e.target.value })}
+                />
+              </FormField>
+              <FormField label="每次点击费用 (元)" hint="GateRank 到机场官网的每次有效跳转扣费。">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  value={form.click_charge_amount}
+                  onChange={(e) => setForm({ ...form, click_charge_amount: e.target.value })}
+                />
+              </FormField>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-bold text-white disabled:opacity-60"
+                onClick={() => void save()}
+                disabled={saving}
+              >
+                {saving ? '保存中...' : '保存营销配置'}
+              </button>
+            </div>
+          </>
+        )}
+      </section>
+    </div>
+  );
+}
+
 function SystemSettingsPage() {
   const [activeTab, setActiveTab] = useState<SystemSettingsTab>('notifications');
   const [refreshTick, setRefreshTick] = useState(0);
@@ -2123,7 +2261,7 @@ function SystemSettingsPage() {
             {activeTab === 'notifications'
               ? '通知设置支持 Telegram 直发和 Webhook 转发，保存后立即生效。'
               : activeTab === 'payment_gateway'
-                ? '支付配置用于申请人后台下单和支付回调验签，申请金额默认 1000 元但可在这里调整。'
+                ? '支付配置用于申请人后台下单和支付回调验签，商户号和密钥保存后立即生效。'
                 : activeTab === 'smtp'
                   ? 'SMTP 配置用于发送申请账号凭证邮件和审批通过邮件。'
                   : activeTab === 'x_oauth'
@@ -2583,7 +2721,6 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
     pid: '',
     private_key: '',
     platform_public_key: '',
-    application_fee_amount: '1000',
   });
 
   const applyView = (view: PaymentGatewaySettingsView) => {
@@ -2593,7 +2730,6 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
       pid: view.pid || '',
       private_key: '',
       platform_public_key: view.platform_public_key || '',
-      application_fee_amount: String(view.application_fee_amount || 1000),
     });
     setClearPrivateKey(false);
   };
@@ -2624,7 +2760,6 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
         enabled: form.enabled,
         pid: form.pid.trim(),
         platform_public_key: form.platform_public_key.trim(),
-        application_fee_amount: Number(form.application_fee_amount || 1000),
       };
       if (clearPrivateKey) {
         payload.private_key = '';
@@ -2648,7 +2783,7 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
     <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
       <div>
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">支付配置</div>
-        <p className="mt-1 text-sm text-neutral-500">申请人后台创建支付订单时会读取这里的金额、商户号和密钥配置。</p>
+        <p className="mt-1 text-sm text-neutral-500">申请人后台创建支付订单时会读取这里的商户号和密钥配置，费用标准在营销模块中配置。</p>
       </div>
 
       {loading && <div className="text-sm text-neutral-500">加载中...</div>}
@@ -2660,7 +2795,6 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
             <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
             <ReadField label="商户号 PID" value={valueOrDash(settings?.pid)} />
             <ReadField label="商户私钥" value={settings?.has_private_key ? `已配置 (${settings?.private_key_masked || '-'})` : '未配置'} />
-            <ReadField label="申请金额" value={settings ? `¥${settings.application_fee_amount}` : '-'} />
           </div>
 
           <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
@@ -2682,16 +2816,6 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
                 value={form.pid}
                 onChange={(e) => setForm({ ...form, pid: e.target.value })}
                 placeholder="输入商户号"
-              />
-            </FormField>
-            <FormField label="申请金额 (元)" hint="默认 1000 元，后续新建支付订单按这里的金额创建。">
-              <input
-                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                type="number"
-                min="0.01"
-                step="0.01"
-                value={form.application_fee_amount}
-                onChange={(e) => setForm({ ...form, application_fee_amount: e.target.value })}
               />
             </FormField>
             <FormField
@@ -4217,9 +4341,14 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
             </thead>
             <tbody>
               {items.map((it) => (
-                <tr key={it.id} className="border-t border-neutral-100 align-middle">
+                <tr
+                  key={it.id}
+                  className={`border-t border-neutral-100 align-middle ${it.paid_application_fee ? 'font-bold text-orange-600' : ''}`}
+                >
                   <td className="px-4 py-3">
-                    <div className="font-medium whitespace-nowrap">{it.name}</div>
+                    <div className={`whitespace-nowrap ${it.paid_application_fee ? '' : 'font-medium'}`}>
+                      {it.name}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <span className="whitespace-nowrap">{hasAirportWebsite(it) ? '有' : '无'}</span>
@@ -4569,6 +4698,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [reviewStatus, setReviewStatus] = useState<'' | AirportApplicationReviewStatus>('');
+  const [paymentStatus, setPaymentStatus] = useState<'' | AirportApplicationPaymentStatus>('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selected, setSelected] = useState<AirportApplication | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -4588,6 +4718,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
       query.set('page_size', String(APPLICATIONS_PAGE_SIZE));
       if (keyword) query.set('keyword', keyword);
       if (reviewStatus) query.set('review_status', reviewStatus);
+      if (paymentStatus) query.set('payment_status', paymentStatus);
       const data = (await apiFetch(`/api/v1/admin/airport-applications?${query.toString()}`)) as {
         page: number;
         page_size: number;
@@ -4734,6 +4865,18 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
           <option value="pending">待审核</option>
           <option value="reviewed">已审核</option>
           <option value="rejected">已驳回</option>
+        </select>
+        <select
+          className="border rounded px-3 py-2 text-sm"
+          value={paymentStatus}
+          onChange={(e) => {
+            setPaymentStatus(e.target.value as '' | AirportApplicationPaymentStatus);
+            setPage(1);
+          }}
+        >
+          <option value="">全部支付状态</option>
+          <option value="unpaid">未支付</option>
+          <option value="paid">已支付</option>
         </select>
         <button className="px-3 py-2 text-sm rounded border" onClick={searchList}>查询</button>
       </div>

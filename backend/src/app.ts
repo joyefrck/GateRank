@@ -39,6 +39,7 @@ import { AggregationService } from './services/aggregationService';
 import { ManualJobService } from './services/manualJobService';
 import { MailService } from './services/mailService';
 import { MediaLibrarySettingsService } from './services/mediaLibrarySettingsService';
+import { MarketingSettingsService } from './services/marketingSettingsService';
 import { NewsContentService } from './services/newsContentService';
 import { NewsCoverImageService } from './services/newsCoverImageService';
 import { NewsMutationService } from './services/newsMutationService';
@@ -152,6 +153,9 @@ export async function createApp() {
   const paymentGatewaySettingsService = new PaymentGatewaySettingsService({
     systemSettingRepository,
   });
+  const marketingSettingsService = new MarketingSettingsService({
+    systemSettingRepository,
+  });
   const smtpSettingsService = new SmtpSettingsService({
     systemSettingRepository,
   });
@@ -228,6 +232,7 @@ export async function createApp() {
       applicantPortalAuthService,
       applicantXOAuthService,
       paymentGatewaySettingsService,
+      marketingSettingsService,
       paymentGatewayService,
       applicationNotificationService,
     }),
@@ -238,6 +243,7 @@ export async function createApp() {
     createOutboundRoutes({
       airportRepository,
       applicantBillingRepository,
+      marketingSettingsService,
     }),
   );
   app.use(
@@ -271,6 +277,7 @@ export async function createApp() {
       telegramNotificationService: applicationNotificationService,
       mediaLibrarySettingsService,
       paymentGatewaySettingsService,
+      marketingSettingsService,
       smtpSettingsService,
       xOAuthSettingsService,
       mailService,

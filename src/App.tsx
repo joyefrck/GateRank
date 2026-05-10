@@ -1875,8 +1875,8 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
   const visiblePages = buildPageWindow(safePage, totalPages);
   const seoTitle = `全量机场榜单 | 全部已上线机场评分排名 | ${PUBLIC_SITE_BRAND_NAME}`;
   const seoDescription = data
-    ? `${rankingDate} 全量榜单收录 ${formatNumber(data.total)} 个已上线机场，按公开展示分数降序排列，支持分页查看官网、状态、标签、成立日期、月付价格、试用支持与测评报告。`
-    : `${PUBLIC_SITE_BRAND_NAME} 全量榜单按公开展示分数降序展示全部已上线机场，包含官网、状态、标签、月付价格、试用支持和测评报告入口。`;
+    ? `${rankingDate} 全量榜单收录 ${formatNumber(data.total)} 个已上线机场，按公开展示分数降序排列，支持分页查看官网入口、状态、标签、成立日期、月付价格、试用支持与测评报告。`
+    : `${PUBLIC_SITE_BRAND_NAME} 全量榜单按公开展示分数降序展示全部已上线机场，包含官网入口、状态、标签、月付价格、试用支持和测评报告入口。`;
   const seoStructuredData = useMemo(
     () => ([
       {
@@ -1937,7 +1937,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
           eyebrow="全量榜单"
           title="全部已上线机场"
           subtitle="按公开展示分数降序排列"
-          description="这里汇总所有已上线机场，并统一展示官网、运行状态、标签、成立日期、月付价格、试用支持、公开分数与测评报告入口。风险机场会保留显著标识，方便用户和 AI 检索系统快速判断。"
+          description="这里汇总所有已上线机场，并统一提供官网入口、运行状态、标签、成立日期、月付价格、试用支持、公开分数与测评报告入口。风险机场会保留显著标识，方便用户和 AI 检索系统快速判断。"
           stats={[
             { label: '收录机场', value: formatNumber(data?.total || 0) },
             { label: '当前分页', value: `${safePage}/${totalPages}` },
@@ -1996,7 +1996,8 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                             </div>
                             {item.score_date && (
                               <div className="mt-2 text-[11px] font-semibold tracking-[0.08em] text-white/55">
-                                评分日期 {item.score_date}
+                                <div>评分日期</div>
+                                <div className="mt-1 font-mono text-white/70">{item.score_date}</div>
                               </div>
                             )}
                             </div>
@@ -2011,14 +2012,10 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                           </div>
 
                           <p className="mt-4 max-w-3xl text-sm leading-7 text-neutral-600">
-                            {item.airport_intro?.trim() || '该机场已进入正式榜单，当前公开页展示官网、标签、成立日期、价格与试用支持信息，便于用户快速完成横向比较。'}
+                            {item.airport_intro?.trim() || '该机场已进入正式榜单，当前公开页提供官网入口、标签、成立日期、价格与试用支持信息，便于用户快速完成横向比较。'}
                           </p>
 
                           <dl className="mt-5 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
-                            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
-                              <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">官网链接</dt>
-                              <dd className="mt-1 break-all font-semibold text-neutral-800">{item.website}</dd>
-                            </div>
                             <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
                               <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">成立日期</dt>
                               <dd className="mt-1 font-semibold text-neutral-800">{formatDateLabel(item.founded_on)}</dd>

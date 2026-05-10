@@ -352,6 +352,7 @@ test('GET /airports returns list items with latest available total_score', async
                 tags: ['长期稳定', '新手友好'],
                 manual_tags: ['长期稳定'],
                 auto_tags: ['新手友好'],
+                paid_application_fee: true,
                 created_at: '2026-03-20',
               },
               {
@@ -366,6 +367,7 @@ test('GET /airports returns list items with latest available total_score', async
                 tags: ['风险观察'],
                 manual_tags: [],
                 auto_tags: ['风险观察'],
+                paid_application_fee: false,
                 created_at: '2026-03-21',
               },
             ],
@@ -419,6 +421,7 @@ test('GET /airports returns list items with latest available total_score', async
         tags: string[];
         wallet_id: number | null;
         wallet_balance: number | null;
+        paid_application_fee: boolean;
       }>;
       page_size: number;
     };
@@ -432,6 +435,8 @@ test('GET /airports returns list items with latest available total_score', async
     assert.equal(data.items[0]?.wallet_balance, 321.45);
     assert.equal(data.items[1]?.wallet_id, 12);
     assert.equal(data.items[1]?.wallet_balance, 0);
+    assert.equal(data.items[0]?.paid_application_fee, true);
+    assert.equal(data.items[1]?.paid_application_fee, false);
 
     const overrideResponse = await fetch(`http://127.0.0.1:${port}/airports?page=3&page_size=25`);
     assert.equal(overrideResponse.status, 200);
@@ -1768,6 +1773,7 @@ test('POST /airports returns conflict for duplicate airport names', async () => 
 test('GET /airport-applications returns filtered application list', async () => {
   let capturedQuery: {
     keyword?: string;
+    paymentStatus?: string;
     reviewStatus?: string;
     page?: number;
     pageSize?: number;
@@ -1820,7 +1826,7 @@ test('GET /airport-applications returns filtered application list', async () => 
   const server = app.listen(0);
   try {
     const port = (server.address() as AddressInfo).port;
-    const response = await fetch(`http://127.0.0.1:${port}/airport-applications?review_status=pending&keyword=cloud&page=2&page_size=20`);
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications?review_status=pending&payment_status=paid&keyword=cloud&page=2&page_size=20`);
     assert.equal(response.status, 200);
     const data = (await response.json()) as {
       page: number;
@@ -1830,6 +1836,7 @@ test('GET /airport-applications returns filtered application list', async () => 
     };
     assert.deepEqual(capturedQuery, {
       keyword: 'cloud',
+      paymentStatus: 'paid',
       reviewStatus: 'pending',
       page: 2,
       pageSize: 20,
@@ -1838,6 +1845,50 @@ test('GET /airport-applications returns filtered application list', async () => 
     assert.equal(data.page_size, 20);
     assert.equal(data.total, 31);
     assert.equal(data.items[0].review_status, 'pending');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airport-applications rejects invalid payment_status', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications?payment_status=refunded`);
+    assert.equal(response.status, 400);
+    const data = (await response.json()) as { message: string };
+    assert.equal(data.message, 'payment_status must be unpaid|paid');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -2518,6 +2569,134 @@ test('PATCH /system-settings/media-libraries updates settings and writes audit l
   }
 });
 
+test('GET /marketing/settings returns billing settings', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+      marketingSettingsService: stubMarketingSettingsService({
+        application_fee_amount: 288,
+        click_charge_amount: 1.5,
+      }),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/marketing/settings`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      application_fee_amount: number;
+      click_charge_amount: number;
+    };
+    assert.equal(data.application_fee_amount, 288);
+    assert.equal(data.click_charge_amount, 1.5);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /marketing/settings updates billing settings and writes audit log', async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const audits: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, actor, requestId, payload) => {
+          audits.push({ action, actor, requestId, payload: payload as Record<string, unknown> });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+      marketingSettingsService: {
+        ...stubMarketingSettingsService(),
+        updateAdminSettings: async (input, updatedBy) => {
+          updates.push({ ...(input as Record<string, unknown>), updatedBy });
+          return {
+            application_fee_amount: input.application_fee_amount,
+            click_charge_amount: input.click_charge_amount,
+            updated_at: '2026-05-10 08:10:00',
+            updated_by: updatedBy,
+          };
+        },
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/marketing/settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({
+        application_fee_amount: 399.99,
+        click_charge_amount: 2.5,
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.deepEqual(updates, [{
+      application_fee_amount: 399.99,
+      click_charge_amount: 2.5,
+      updatedBy: 'tester',
+    }]);
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, 'update_marketing_settings');
+    assert.deepEqual(audits[0].payload, {
+      application_fee_amount: 399.99,
+      click_charge_amount: 2.5,
+    });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /system-settings/publish-tokens returns token list without plaintext', async () => {
   const app = express();
   app.use(express.json());
@@ -3149,6 +3328,7 @@ test('PATCH /airport-applications/:id/mark-paid marks awaiting payment applicati
         updateAdminSettings: async () => ({}),
         getConfig: async () => ({ application_fee_amount: 1000 }),
       },
+      marketingSettingsService: stubMarketingSettingsService(),
       auditRepository: {
         log: async (action, actor, _requestId, payload) => {
           auditLogs.push({ action, actor, payload });
@@ -3246,6 +3426,10 @@ test('PATCH /airport-applications/:id/mark-paid falls back to configured applica
         updateAdminSettings: async () => ({}),
         getConfig: async () => ({ application_fee_amount: 666 }),
       },
+      marketingSettingsService: stubMarketingSettingsService({
+        application_fee_amount: 666,
+        click_charge_amount: 1,
+      }),
       auditRepository: { log: async () => undefined },
       publicViewService: stubPublicViewService(),
     }),
@@ -3311,6 +3495,10 @@ test('PATCH /airport-applications/:id/mark-paid rejects applications outside awa
         updateAdminSettings: async () => ({}),
         getConfig: async () => ({ application_fee_amount: 666 }),
       },
+      marketingSettingsService: stubMarketingSettingsService({
+        application_fee_amount: 666,
+        click_charge_amount: 1,
+      }),
       auditRepository: { log: async () => undefined },
       publicViewService: stubPublicViewService(),
     }),
@@ -3530,6 +3718,29 @@ function stubManualJobService() {
       updated_at: '2026-03-23 10:00:00',
     }),
     getJob: async () => null,
+  };
+}
+
+function stubMarketingSettingsService(config = {
+  application_fee_amount: 300,
+  click_charge_amount: 1,
+}) {
+  return {
+    getAdminSettings: async () => ({
+      ...config,
+      updated_at: '2026-05-10 08:00:00',
+      updated_by: 'admin',
+    }),
+    updateAdminSettings: async (input: {
+      application_fee_amount?: number;
+      click_charge_amount?: number;
+    }, updatedBy: string) => ({
+      application_fee_amount: input.application_fee_amount ?? config.application_fee_amount,
+      click_charge_amount: input.click_charge_amount ?? config.click_charge_amount,
+      updated_at: '2026-05-10 08:10:00',
+      updated_by: updatedBy,
+    }),
+    getConfig: async () => config,
   };
 }
 

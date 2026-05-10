@@ -1,6 +1,7 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type {
   AirportApplication,
+  AirportApplicationPaymentStatus,
   AirportApplicationReviewStatus,
   AirportStatus,
 } from '../types/domain';
@@ -23,7 +24,7 @@ interface AirportApplicationRow extends RowDataPacket {
   test_password: string;
   approved_airport_id: number | null;
   review_status: AirportApplicationReviewStatus;
-  payment_status: 'unpaid' | 'paid';
+  payment_status: AirportApplicationPaymentStatus;
   payment_amount: number | null;
   paid_at: string | null;
   must_change_password: number | null;
@@ -214,6 +215,7 @@ export class AirportApplicationRepository {
 
   async listByQuery(query: {
     keyword?: string;
+    paymentStatus?: AirportApplicationPaymentStatus;
     reviewStatus?: AirportApplicationReviewStatus;
     page?: number;
     pageSize?: number;
@@ -227,6 +229,11 @@ export class AirportApplicationRepository {
     if (query.reviewStatus) {
       where.push('review_status = ?');
       args.push(query.reviewStatus);
+    }
+
+    if (query.paymentStatus) {
+      where.push('payment_status = ?');
+      args.push(query.paymentStatus);
     }
 
     if (query.keyword) {

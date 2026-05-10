@@ -148,6 +148,7 @@ export interface ProcessOutboundClickInput {
   session_hash: string;
   occurred_at: string;
   event_date: string;
+  click_charge_amount?: number;
 }
 
 export interface ProcessOutboundClickResult {
@@ -709,6 +710,7 @@ export class ApplicantBillingRepository {
       pay_info?: string | null;
       notify_payload_json?: Record<string, unknown> | null;
       paid_at: string;
+      click_charge_amount?: number;
     },
   ): Promise<boolean> {
     const connection = await this.pool.getConnection();
@@ -776,7 +778,8 @@ export class ApplicantBillingRepository {
         ],
       );
 
-      if (wallet.airport_id && wallet.auto_unlisted_at && nextBalance >= CLICK_CHARGE_AMOUNT) {
+      const clickChargeAmount = normalizeClickChargeAmount(input.click_charge_amount);
+      if (wallet.airport_id && wallet.auto_unlisted_at && nextBalance >= clickChargeAmount) {
         await connection.execute<ResultSetHeader>(
           `UPDATE airports
               SET is_listed = 1
@@ -830,6 +833,7 @@ export class ApplicantBillingRepository {
   }
 
   async processOutboundClick(input: ProcessOutboundClickInput): Promise<ProcessOutboundClickResult> {
+    const clickChargeAmount = normalizeClickChargeAmount(input.click_charge_amount);
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -880,7 +884,7 @@ export class ApplicantBillingRepository {
       }
 
       const balance = Number(owner.balance || 0);
-      if (balance < CLICK_CHARGE_AMOUNT) {
+      if (balance < clickChargeAmount) {
         await this.autoUnlistAirport(connection, Number(owner.wallet_id), input.airport_id);
         await this.insertClick(connection, input, owner, 'insufficient_balance', 0);
         await connection.commit();
@@ -904,14 +908,14 @@ export class ApplicantBillingRepository {
         return { status: 'duplicate', billed_amount: 0, airport_name: owner.airport_name, balance_after: balance };
       }
 
-      const nextBalance = roundMoney(balance - CLICK_CHARGE_AMOUNT);
+      const nextBalance = roundMoney(balance - clickChargeAmount);
       await connection.execute<ResultSetHeader>(
         `UPDATE applicant_wallets
             SET balance = ?
           WHERE id = ?`,
         [nextBalance, owner.wallet_id],
       );
-      await this.insertClick(connection, input, owner, 'billed', CLICK_CHARGE_AMOUNT);
+      await this.insertClick(connection, input, owner, 'billed', clickChargeAmount);
       await connection.execute<ResultSetHeader>(
         `INSERT INTO applicant_wallet_transactions (
            wallet_id, applicant_account_id, application_id, airport_id, transaction_type,
@@ -922,19 +926,19 @@ export class ApplicantBillingRepository {
           owner.applicant_account_id,
           owner.application_id,
           input.airport_id,
-          -CLICK_CHARGE_AMOUNT,
+          -clickChargeAmount,
           nextBalance,
           input.click_id,
-          `外链点击扣费 ¥${CLICK_CHARGE_AMOUNT.toFixed(2)}`,
+          `外链点击扣费 ¥${clickChargeAmount.toFixed(2)}`,
         ],
       );
 
-      if (nextBalance < CLICK_CHARGE_AMOUNT) {
+      if (nextBalance < clickChargeAmount) {
         await this.autoUnlistAirport(connection, Number(owner.wallet_id), input.airport_id);
       }
 
       await connection.commit();
-      return { status: 'billed', billed_amount: CLICK_CHARGE_AMOUNT, airport_name: owner.airport_name, balance_after: nextBalance };
+      return { status: 'billed', billed_amount: clickChargeAmount, airport_name: owner.airport_name, balance_after: nextBalance };
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -1065,4 +1069,12 @@ function toClick(row: ClickRow): ApplicantClickView {
 
 function roundMoney(value: number): number {
   return Number(value.toFixed(2));
+}
+
+function normalizeClickChargeAmount(value: unknown): number {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return CLICK_CHARGE_AMOUNT;
+  }
+  return roundMoney(amount);
 }

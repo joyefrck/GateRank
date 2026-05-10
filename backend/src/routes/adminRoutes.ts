@@ -14,17 +14,16 @@ import {
   DEFAULT_MEDIA_LIBRARY_TIMEOUT_MS,
   type MediaLibrarySettingsInput,
 } from '../services/mediaLibrarySettingsService';
+import type { MarketingSettingsInput } from '../services/marketingSettingsService';
 import { SmtpSendError } from '../services/mailService';
-import {
-  DEFAULT_APPLICATION_FEE_AMOUNT,
-  type PaymentGatewaySettingsInput,
-} from '../services/paymentGatewaySettingsService';
+import type { PaymentGatewaySettingsInput } from '../services/paymentGatewaySettingsService';
 import type { SmtpSettingsInput, SmtpTemplateKey } from '../services/smtpSettingsService';
 import type { XOAuthSettingsInput } from '../services/xOAuthSettingsService';
 import type { SchedulerDailyStat } from '../repositories/schedulerRunRepository';
 import type { AccessTokenScope } from '../utils/accessToken';
 import type {
   AirportApplicationReviewStatus,
+  AirportApplicationPaymentStatus,
   AirportStatus,
   ManualJobKind,
   MarketingAirportConversionItem,
@@ -103,6 +102,7 @@ interface AdminDeps {
   airportApplicationRepository: {
     listByQuery(query: {
       keyword?: string;
+      paymentStatus?: AirportApplicationPaymentStatus;
       reviewStatus?: AirportApplicationReviewStatus;
       page?: number;
       pageSize?: number;
@@ -220,7 +220,12 @@ interface AdminDeps {
   paymentGatewaySettingsService?: {
     getAdminSettings(): Promise<unknown>;
     updateAdminSettings(input: PaymentGatewaySettingsInput, updatedBy: string): Promise<unknown>;
-    getConfig?(): Promise<{ application_fee_amount: number }>;
+    getConfig?(): Promise<unknown>;
+  };
+  marketingSettingsService?: {
+    getAdminSettings(): Promise<unknown>;
+    updateAdminSettings(input: MarketingSettingsInput, updatedBy: string): Promise<unknown>;
+    getConfig(): Promise<{ application_fee_amount: number; click_charge_amount: number }>;
   };
   smtpSettingsService?: {
     getAdminSettings(): Promise<unknown>;
@@ -487,6 +492,33 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     }
   });
 
+  router.get('/marketing/settings', async (_req, res, next) => {
+    try {
+      res.json(await getMarketingSettingsService(deps).getAdminSettings());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/marketing/settings', async (req, res, next) => {
+    try {
+      const input = parseMarketingSettingsPayload((req.body ?? {}) as Record<string, unknown>);
+      const result = await getMarketingSettingsService(deps).updateAdminSettings(
+        input,
+        actorFromReq(req),
+      );
+      await deps.auditRepository.log(
+        'update_marketing_settings',
+        actorFromReq(req),
+        req.requestId,
+        input,
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/system-settings/telegram', async (req, res, next) => {
     try {
       res.json(await getTelegramNotificationService(deps).getAdminSettings());
@@ -727,10 +759,14 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const reviewStatus = req.query.review_status
         ? toAirportApplicationReviewStatus(req.query.review_status)
         : undefined;
+      const paymentStatus = req.query.payment_status
+        ? toAirportApplicationPaymentStatus(req.query.payment_status)
+        : undefined;
       const result = await deps.airportApplicationRepository.listByQuery({
         page,
         pageSize,
         keyword,
+        paymentStatus,
         reviewStatus,
       });
       res.json({ page, page_size: pageSize, total: result.total, items: result.items });
@@ -782,14 +818,10 @@ export function createAdminRoutes(deps: AdminDeps): Router {
 
       const paymentOrderRepository = getApplicationPaymentOrderRepository(deps);
       const latestOrder = await paymentOrderRepository.getLatestByApplicationId(applicationId);
-      const paymentGatewaySettingsService = getPaymentGatewaySettingsService(deps);
-      if (!paymentGatewaySettingsService.getConfig) {
-        throw new Error('paymentGatewaySettingsService.getConfig is not configured');
-      }
-      const paymentConfig = await paymentGatewaySettingsService.getConfig();
+      const marketingConfig = await getMarketingSettingsService(deps).getConfig();
       const paymentAmount = latestOrder?.amount && latestOrder.amount > 0
         ? Number(latestOrder.amount)
-        : Number(paymentConfig.application_fee_amount || DEFAULT_APPLICATION_FEE_AMOUNT);
+        : Number(marketingConfig.application_fee_amount);
       const paidAt = formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
 
       const marked = await deps.airportApplicationRepository.markPaid(applicationId, paymentAmount, paidAt);
@@ -2005,10 +2037,21 @@ function parsePaymentGatewaySettingsPayload(
       payload.platform_public_key === undefined
         ? undefined
         : String(payload.platform_public_key ?? '').trim(),
+  };
+}
+
+function parseMarketingSettingsPayload(
+  payload: Record<string, unknown>,
+): MarketingSettingsInput {
+  return {
     application_fee_amount:
       payload.application_fee_amount === undefined
-        ? DEFAULT_APPLICATION_FEE_AMOUNT
+        ? undefined
         : mustNumber(payload.application_fee_amount, 'application_fee_amount'),
+    click_charge_amount:
+      payload.click_charge_amount === undefined
+        ? undefined
+        : mustNumber(payload.click_charge_amount, 'click_charge_amount'),
   };
 }
 
@@ -2296,6 +2339,13 @@ function toAirportApplicationReviewStatus(value: unknown): AirportApplicationRev
   );
 }
 
+function toAirportApplicationPaymentStatus(value: unknown): AirportApplicationPaymentStatus {
+  if (value === 'unpaid' || value === 'paid') {
+    return value;
+  }
+  throw new HttpError(400, 'BAD_REQUEST', 'payment_status must be unpaid|paid');
+}
+
 function toReviewStatus(
   value: unknown,
 ): Exclude<AirportApplicationReviewStatus, 'pending' | 'awaiting_payment'> {
@@ -2452,6 +2502,13 @@ function getPaymentGatewaySettingsService(deps: AdminDeps) {
     throw new Error('paymentGatewaySettingsService is not configured');
   }
   return deps.paymentGatewaySettingsService;
+}
+
+function getMarketingSettingsService(deps: AdminDeps) {
+  if (!deps.marketingSettingsService) {
+    throw new Error('marketingSettingsService is not configured');
+  }
+  return deps.marketingSettingsService;
 }
 
 function getSmtpSettingsService(deps: AdminDeps) {

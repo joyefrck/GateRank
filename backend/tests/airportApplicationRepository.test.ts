@@ -44,3 +44,57 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
     calls.some((call) => call.sql.includes('SET websites_json = JSON_ARRAY(website)')),
   );
 });
+
+test('AirportApplicationRepository.listByQuery filters by payment status', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new AirportApplicationRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql.includes('COUNT(*)')) {
+        return [[{ total: 1 }]];
+      }
+      return [[{
+        id: 7,
+        name: 'Cloud Airport',
+        website: 'https://example.com',
+        websites_json: JSON.stringify(['https://example.com']),
+        status: 'normal',
+        plan_price_month: 10,
+        has_trial: 1,
+        subscription_url: 'https://example.com/sub',
+        applicant_email: 'contact@example.com',
+        applicant_telegram: '@cloud',
+        founded_on: '2025-01-01',
+        airport_intro: 'intro',
+        test_account: 'tester',
+        test_password: 'secret',
+        approved_airport_id: null,
+        review_status: 'pending',
+        payment_status: 'paid',
+        payment_amount: 1000,
+        paid_at: '2026-03-24 10:05:00',
+        must_change_password: 0,
+        review_note: null,
+        reviewed_by: null,
+        reviewed_at: null,
+        created_at: '2026-03-24 10:00:00',
+        updated_at: '2026-03-24 10:00:00',
+      }]];
+    },
+  } as never);
+
+  const result = await repository.listByQuery({
+    keyword: 'cloud',
+    paymentStatus: 'paid',
+    reviewStatus: 'pending',
+    page: 2,
+    pageSize: 20,
+  });
+
+  assert.equal(result.total, 1);
+  assert.equal(result.items[0]?.payment_status, 'paid');
+  assert.ok(calls[0]?.sql.includes('review_status = ?'));
+  assert.ok(calls[0]?.sql.includes('payment_status = ?'));
+  assert.deepEqual(calls[0]?.params, ['pending', 'paid', '%cloud%', '%cloud%', '%cloud%', '%cloud%', '%cloud%']);
+  assert.deepEqual(calls[1]?.params, ['pending', 'paid', '%cloud%', '%cloud%', '%cloud%', '%cloud%', '%cloud%', 20, 20]);
+});

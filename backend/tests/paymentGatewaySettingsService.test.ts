@@ -1,10 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateKeyPairSync } from 'node:crypto';
-import {
-  DEFAULT_APPLICATION_FEE_AMOUNT,
-  PaymentGatewaySettingsService,
-} from '../src/services/paymentGatewaySettingsService';
+import { PaymentGatewaySettingsService } from '../src/services/paymentGatewaySettingsService';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 1024,
@@ -25,7 +22,6 @@ test('PaymentGatewaySettingsService returns default view', async () => {
 
   const view = await service.getAdminSettings();
   assert.equal(view.enabled, false);
-  assert.equal(view.application_fee_amount, DEFAULT_APPLICATION_FEE_AMOUNT);
   assert.equal(view.has_private_key, false);
 });
 
@@ -53,12 +49,10 @@ test('PaymentGatewaySettingsService saves and masks keys', async () => {
     pid: '10086',
     private_key: privatePem,
     platform_public_key: publicPem,
-    application_fee_amount: 1888,
   }, 'admin');
 
   assert.equal(view.enabled, true);
   assert.equal(view.pid, '10086');
-  assert.equal(view.application_fee_amount, 1888);
   assert.equal(view.has_private_key, true);
   assert.ok(view.private_key_masked);
 });
@@ -87,11 +81,40 @@ test('PaymentGatewaySettingsService accepts raw base64 keys from the gateway con
     pid: '28615',
     private_key: privateRaw,
     platform_public_key: publicRaw,
-    application_fee_amount: 1000,
   }, 'admin');
 
   assert.equal(view.enabled, true);
   assert.equal(view.has_private_key, true);
+});
+
+test('PaymentGatewaySettingsService preserves legacy application fee without exposing it', async () => {
+  let storedValue: unknown = {
+    enabled: false,
+    pid: 'old-pid',
+    private_key: privateRaw,
+    platform_public_key: publicRaw,
+    application_fee_amount: 588,
+  };
+  const service = new PaymentGatewaySettingsService({
+    systemSettingRepository: {
+      getByKey: async () => ({
+        setting_key: 'payment_gateway',
+        value_json: storedValue,
+        updated_by: 'admin',
+        created_at: '2026-04-18 10:00:00',
+        updated_at: '2026-04-18 10:00:00',
+      }),
+      upsert: async (_settingKey, value) => {
+        storedValue = value;
+      },
+    },
+  });
+
+  const view = await service.updateAdminSettings({ pid: 'new-pid' }, 'admin');
+
+  assert.equal(view.pid, 'new-pid');
+  assert.equal('application_fee_amount' in view, false);
+  assert.equal((storedValue as { application_fee_amount?: number }).application_fee_amount, 588);
 });
 
 test('PaymentGatewaySettingsService rejects public key in private key field', async () => {
@@ -108,7 +131,6 @@ test('PaymentGatewaySettingsService rejects public key in private key field', as
       pid: '28615',
       private_key: publicRaw,
       platform_public_key: publicRaw,
-      application_fee_amount: 1000,
     }, 'admin'),
     (error: unknown) => {
       const next = error as { code?: string; message?: string };
@@ -133,7 +155,6 @@ test('PaymentGatewaySettingsService rejects private key in platform public key f
       pid: '28615',
       private_key: privateRaw,
       platform_public_key: privateRaw,
-      application_fee_amount: 1000,
     }, 'admin'),
     (error: unknown) => {
       const next = error as { code?: string; message?: string };

@@ -60,6 +60,81 @@ function createMockApplicantAccount(overrides: Record<string, unknown> = {}) {
   };
 }
 
+test('GET /portal/me returns marketing billing fees', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount(),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({
+          id: 7,
+          name: 'Cloud Airport',
+          website: 'https://example.com',
+          websites: ['https://example.com'],
+          review_status: 'awaiting_payment',
+          payment_status: 'unpaid',
+          payment_amount: null,
+          applicant_email: 'user@example.com',
+          applicant_telegram: '@cloud',
+          founded_on: '2025-01-01',
+          airport_intro: 'intro',
+          created_at: '2026-04-18 10:00:00',
+        }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({}),
+      },
+      marketingSettingsService: {
+        getConfig: async () => ({ application_fee_amount: 456, click_charge_amount: 2.5 }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      payment_fee_amount: number;
+      click_price: number;
+    };
+    assert.equal(data.payment_fee_amount, 456);
+    assert.equal(data.click_price, 2.5);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /portal/x-oauth/login/complete exchanges handoff code for portal token', async () => {
   const account = createMockApplicantAccount({ x_user_id: 'x-123', x_username: 'gaterank' });
   const app = express();
@@ -320,7 +395,10 @@ test('POST /portal/payment-orders creates payment order from configured amount',
         },
       },
       paymentGatewaySettingsService: {
-        getConfig: async () => ({ application_fee_amount: 1888 }),
+        getConfig: async () => ({}),
+      },
+      marketingSettingsService: {
+        getConfig: async () => ({ application_fee_amount: 1888, click_charge_amount: 2.5 }),
       },
       paymentGatewayService: {
         createOrder: async (input) => {

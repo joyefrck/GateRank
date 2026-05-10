@@ -21,6 +21,7 @@ interface AirportRow extends RowDataPacket {
   manual_tags_json: unknown;
   auto_tags_json: unknown;
   tags_json: unknown;
+  paid_application_fee?: number;
   created_at: string;
 }
 
@@ -135,6 +136,13 @@ export class AirportRepository {
          manual_tags_json,
          auto_tags_json,
          tags_json,
+         EXISTS (
+           SELECT 1
+             FROM airport_applications AS paid_application
+            WHERE paid_application.approved_airport_id = airports.id
+              AND paid_application.payment_status = 'paid'
+              AND paid_application.payment_amount > 0
+         ) AS paid_application_fee,
          created_at
          FROM airports
         ORDER BY id ASC`,
@@ -189,6 +197,13 @@ export class AirportRepository {
          manual_tags_json,
          auto_tags_json,
          tags_json,
+         EXISTS (
+           SELECT 1
+             FROM airport_applications AS paid_application
+            WHERE paid_application.approved_airport_id = airports.id
+              AND paid_application.payment_status = 'paid'
+              AND paid_application.payment_amount > 0
+         ) AS paid_application_fee,
          created_at
          FROM airports
          ${whereSql}
@@ -224,6 +239,13 @@ export class AirportRepository {
          manual_tags_json,
          auto_tags_json,
          tags_json,
+         EXISTS (
+           SELECT 1
+             FROM airport_applications AS paid_application
+            WHERE paid_application.approved_airport_id = airports.id
+              AND paid_application.payment_status = 'paid'
+              AND paid_application.payment_amount > 0
+         ) AS paid_application_fee,
          created_at
          FROM airports
         WHERE id = ?
@@ -264,6 +286,13 @@ export class AirportRepository {
          manual_tags_json,
          auto_tags_json,
          tags_json,
+         EXISTS (
+           SELECT 1
+             FROM airport_applications AS paid_application
+            WHERE paid_application.approved_airport_id = airports.id
+              AND paid_application.payment_status = 'paid'
+              AND paid_application.payment_amount > 0
+         ) AS paid_application_fee,
          created_at
          FROM airports
         WHERE id IN (${placeholders})`,
@@ -495,6 +524,7 @@ function toAirportEntity(row: AirportRow): Airport {
     tags: mergeDisplayTags(manualTags, autoTags),
     manual_tags: manualTags,
     auto_tags: autoTags,
+    paid_application_fee: Number(row.paid_application_fee || 0) > 0,
     created_at: toDateString(row.created_at),
   };
 }

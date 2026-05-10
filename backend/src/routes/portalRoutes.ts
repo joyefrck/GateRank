@@ -98,6 +98,7 @@ interface PortalDeps {
         pay_info?: string | null;
         notify_payload_json?: Record<string, unknown> | null;
         paid_at: string;
+        click_charge_amount?: number;
       },
     ): Promise<boolean>;
     listTransactions(applicantAccountId: number, limit?: number): Promise<WalletTransactionView[]>;
@@ -127,7 +128,10 @@ interface PortalDeps {
     getReturnOrigin?(): Promise<string | null>;
   };
   paymentGatewaySettingsService: {
-    getConfig(): Promise<{ application_fee_amount: number }>;
+    getConfig(): Promise<unknown>;
+  };
+  marketingSettingsService?: {
+    getConfig(): Promise<{ application_fee_amount: number; click_charge_amount: number }>;
   };
   paymentGatewayService: Pick<PaymentGatewayService, 'createOrder' | 'verifyNotificationPayload'> & {
     queryOrder?: PaymentGatewayService['queryOrder'];
@@ -250,8 +254,8 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         throw new HttpError(409, 'PAYMENT_NOT_REQUIRED', '当前申请无需再次支付');
       }
 
-      const paymentConfig = await deps.paymentGatewaySettingsService.getConfig();
-      const amount = Number(paymentConfig.application_fee_amount || APPLICATION_FEE_AMOUNT);
+      const marketingConfig = await getMarketingBillingConfig(deps);
+      const amount = Number(marketingConfig.application_fee_amount);
       const outTradeNo = `gr_${application.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
       const apiOrigin = getPaymentNotifyOrigin(req);
       const siteOrigin = getSiteOrigin(req);
@@ -294,10 +298,11 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     try {
       const session = requireApplicantSession(req);
       const account = await requireApplicantAccount(deps, session.applicant_id);
+      const marketingConfig = await getMarketingBillingConfig(deps);
       res.json({
         wallet: await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id),
         recharge_amounts: RECHARGE_AMOUNTS,
-        click_price: CLICK_CHARGE_AMOUNT,
+        click_price: marketingConfig.click_charge_amount,
       });
     } catch (error) {
       next(error);
@@ -597,12 +602,14 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
 
     const paidAt = formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
+    const marketingConfig = await getMarketingBillingConfig(deps);
     const credited = await deps.applicantBillingRepository.markRechargePaidAndCredit(outTradeNo, {
       gateway_trade_no: stringOrNull(payload.trade_no),
       pay_type: stringOrNull(payload.type) || order.pay_type,
       pay_info: buildGatewayTrace(payload),
       notify_payload_json: payload,
       paid_at: paidAt,
+      click_charge_amount: marketingConfig.click_charge_amount,
     });
     if (credited) {
       await notifyPaymentReceivedSafely(deps, {
@@ -668,12 +675,14 @@ async function syncRechargeOrder(deps: PortalDeps, order: RechargeOrderView): Pr
   }
   assertGatewayOrderMatches(order.out_trade_no, Number(order.amount), queryResult);
   const paidAt = normalizeGatewayPaidAt(queryResult.endtime);
+  const marketingConfig = await getMarketingBillingConfig(deps);
   const credited = await deps.applicantBillingRepository.markRechargePaidAndCredit(order.out_trade_no, {
     gateway_trade_no: queryResult.trade_no || order.gateway_trade_no,
     pay_type: queryResult.type || order.pay_type,
     pay_info: buildGatewayTrace(queryResult.raw),
     notify_payload_json: queryResult.raw,
     paid_at: paidAt,
+    click_charge_amount: marketingConfig.click_charge_amount,
   });
   if (credited) {
     await notifyPaymentReceivedSafely(deps, {
@@ -721,9 +730,9 @@ function normalizeGatewayPaidAt(value: string | null): string {
 async function buildPortalView(deps: PortalDeps, applicantId: number) {
   const account = await requireApplicantAccount(deps, applicantId);
   const application = await requireApplication(deps, account.application_id);
-  const [latestPaymentOrder, paymentConfig, wallet] = await Promise.all([
+  const [latestPaymentOrder, marketingConfig, wallet] = await Promise.all([
     deps.applicationPaymentOrderRepository.getLatestByApplicationId(application.id),
-    deps.paymentGatewaySettingsService.getConfig(),
+    getMarketingBillingConfig(deps),
     deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id),
   ]);
 
@@ -743,11 +752,24 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
           paid_at: latestPaymentOrder.paid_at,
         }
       : null,
-    payment_fee_amount: Number(paymentConfig.application_fee_amount || APPLICATION_FEE_AMOUNT),
-    click_price: CLICK_CHARGE_AMOUNT,
+    payment_fee_amount: Number(marketingConfig.application_fee_amount),
+    click_price: Number(marketingConfig.click_charge_amount),
     recharge_amounts: RECHARGE_AMOUNTS,
     wallet,
   };
+}
+
+async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
+  application_fee_amount: number;
+  click_charge_amount: number;
+}> {
+  if (!deps.marketingSettingsService) {
+    return {
+      application_fee_amount: APPLICATION_FEE_AMOUNT,
+      click_charge_amount: CLICK_CHARGE_AMOUNT,
+    };
+  }
+  return deps.marketingSettingsService.getConfig();
 }
 
 function toPortalAccountView(account: ApplicantAccount) {

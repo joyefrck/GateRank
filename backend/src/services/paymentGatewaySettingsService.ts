@@ -1,5 +1,4 @@
 import type { SystemSettingRecord } from '../repositories/systemSettingRepository';
-import { APPLICATION_FEE_AMOUNT } from '../config/billing';
 import { HttpError } from '../middleware/errorHandler';
 import { canParseRsaPrivateKey, canParseRsaPublicKey } from '../utils/rsaSignature';
 import { formatDateTimeInTimezoneIso } from '../utils/time';
@@ -9,7 +8,6 @@ export interface PaymentGatewaySettingsInput {
   pid?: string;
   private_key?: string;
   platform_public_key?: string;
-  application_fee_amount?: number;
 }
 
 export interface PaymentGatewaySettingsView {
@@ -18,7 +16,6 @@ export interface PaymentGatewaySettingsView {
   has_private_key: boolean;
   private_key_masked: string | null;
   platform_public_key: string;
-  application_fee_amount: number;
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -28,7 +25,6 @@ export interface PaymentGatewayConfig {
   pid: string;
   private_key: string;
   platform_public_key: string;
-  application_fee_amount: number;
 }
 
 interface PaymentGatewaySettingsServiceOptions {
@@ -39,8 +35,6 @@ interface PaymentGatewaySettingsServiceOptions {
 }
 
 const PAYMENT_GATEWAY_SETTING_KEY = 'payment_gateway';
-export const DEFAULT_APPLICATION_FEE_AMOUNT = APPLICATION_FEE_AMOUNT;
-export const LEGACY_APPLICATION_FEE_AMOUNT = 1000;
 
 export class PaymentGatewaySettingsService {
   private readonly systemSettingRepository?: PaymentGatewaySettingsServiceOptions['systemSettingRepository'];
@@ -59,7 +53,6 @@ export class PaymentGatewaySettingsService {
       has_private_key: effective.private_key.trim() !== '',
       private_key_masked: maskPrivateKey(effective.private_key),
       platform_public_key: effective.platform_public_key,
-      application_fee_amount: effective.application_fee_amount,
       updated_at: stored?.record.updated_at ? normalizeStoredUpdatedAt(stored.record.updated_at) : null,
       updated_by: stored?.record.updated_by || null,
     };
@@ -73,9 +66,14 @@ export class PaymentGatewaySettingsService {
       throw new Error('systemSettingRepository is not configured');
     }
 
+    const stored = await this.getStoredConfig();
     const nextConfig = await this.resolveConfig(input);
     validatePaymentGatewayConfig(nextConfig, input);
-    await this.systemSettingRepository.upsert(PAYMENT_GATEWAY_SETTING_KEY, nextConfig, updatedBy);
+    await this.systemSettingRepository.upsert(
+      PAYMENT_GATEWAY_SETTING_KEY,
+      preserveLegacyApplicationFee(nextConfig, stored?.record.value_json),
+      updatedBy,
+    );
     return this.getAdminSettings();
   }
 
@@ -97,10 +95,6 @@ export class PaymentGatewaySettingsService {
         input.platform_public_key === undefined
           ? base.platform_public_key
           : String(input.platform_public_key || '').trim(),
-      application_fee_amount:
-        input.application_fee_amount === undefined
-          ? base.application_fee_amount
-          : normalizeAmount(input.application_fee_amount),
     };
   }
 
@@ -130,29 +124,31 @@ function getDefaultConfig(): PaymentGatewayConfig {
     pid: '',
     private_key: '',
     platform_public_key: '',
-    application_fee_amount: DEFAULT_APPLICATION_FEE_AMOUNT,
   };
 }
 
 function normalizeConfig(value: unknown): PaymentGatewayConfig {
   const record = toObject(value);
-  const storedAmount = normalizeAmount(record.application_fee_amount);
   return {
     enabled: Boolean(record.enabled),
     pid: stringOrEmpty(record.pid),
     private_key: stringOrEmpty(record.private_key),
     platform_public_key: stringOrEmpty(record.platform_public_key),
-    application_fee_amount:
-      storedAmount === LEGACY_APPLICATION_FEE_AMOUNT ? DEFAULT_APPLICATION_FEE_AMOUNT : storedAmount,
   };
 }
 
-function normalizeAmount(value: unknown): number {
-  const amount = Number(value);
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return DEFAULT_APPLICATION_FEE_AMOUNT;
+function preserveLegacyApplicationFee(
+  config: PaymentGatewayConfig,
+  storedValue: unknown,
+): PaymentGatewayConfig & { application_fee_amount?: unknown } {
+  const stored = toObject(storedValue);
+  if (stored.application_fee_amount === undefined) {
+    return config;
   }
-  return Number(amount.toFixed(2));
+  return {
+    ...config,
+    application_fee_amount: stored.application_fee_amount,
+  };
 }
 
 function toObject(value: unknown): Record<string, unknown> {
