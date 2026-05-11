@@ -19,6 +19,7 @@ const paymentGatewayConfig = {
   pid: '28615',
   private_key: privateKey.export({ type: 'pkcs8', format: 'pem' }).toString(),
   platform_public_key: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+  notify_origin: '',
   application_fee_amount: 1000,
   usdt: {
     enabled: false,
@@ -33,6 +34,7 @@ const usdtGatewayConfig = {
   pid: '',
   private_key: '',
   platform_public_key: '',
+  notify_origin: '',
   usdt: {
     enabled: true,
     gateway_url: 'https://pay-usdt.example.com/',

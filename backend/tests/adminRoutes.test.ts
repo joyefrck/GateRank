@@ -2801,6 +2801,100 @@ test('PATCH /system-settings/telegram updates settings and writes audit log', as
   }
 });
 
+test('PATCH /system-settings/payment-gateway accepts notify origin', async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const audits: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, actor, requestId, payload) => {
+          audits.push({ action, actor, requestId, payload: payload as Record<string, unknown> });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+      paymentGatewaySettingsService: {
+        getAdminSettings: async () => null,
+        updateAdminSettings: async (input, updatedBy) => {
+          updates.push({ ...(input as Record<string, unknown>), updatedBy });
+          return {
+            enabled: true,
+            pid: '1000',
+            has_private_key: true,
+            private_key_masked: 'abc***xyz',
+            platform_public_key: 'public-key',
+            notify_origin: (input as { notify_origin?: string }).notify_origin || '',
+            notify_urls: {
+              application_payment: 'https://gate-rank.com/api/v1/portal/payment-notify',
+              recharge: 'https://gate-rank.com/api/v1/portal/recharge-notify',
+            },
+            usdt: {
+              enabled: true,
+              gateway_url: 'https://www.443ds443.com',
+              merchant_id: '1000',
+              has_secret_key: true,
+              secret_key_masked: 'sec***ret',
+            },
+            updated_at: '2026-05-11 12:00:00',
+            updated_by: updatedBy,
+          };
+        },
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/payment-gateway`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({
+        enabled: true,
+        pid: '1000',
+        notify_origin: 'https://gate-rank.com/',
+        usdt: {
+          enabled: true,
+          gateway_url: 'https://www.443ds443.com/payments/gmpay/v1/order/create-transaction',
+          merchant_id: '1000',
+        },
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(updates.length, 1);
+    assert.equal(updates[0].notify_origin, 'https://gate-rank.com/');
+    assert.equal(updates[0].updatedBy, 'tester');
+    assert.equal(audits.length, 1);
+    assert.equal(audits[0].action, 'update_system_setting_payment_gateway');
+    const data = (await response.json()) as { notify_origin: string };
+    assert.equal(data.notify_origin, 'https://gate-rank.com/');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('PATCH /system-settings/x-oauth updates X OAuth settings and writes audit log', async () => {
   const updates: Array<Record<string, unknown>> = [];
   const audits: Array<Record<string, unknown>> = [];

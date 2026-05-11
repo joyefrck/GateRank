@@ -80,6 +80,7 @@ test('PaymentGatewaySettingsService saves masks preserves and clears USDT secret
 
   const saved = await service.updateAdminSettings({
     enabled: true,
+    notify_origin: 'https://gate-rank.com/',
     usdt: {
       enabled: true,
       gateway_url: 'https://pay.example.com/',
@@ -93,6 +94,10 @@ test('PaymentGatewaySettingsService saves masks preserves and clears USDT secret
   assert.equal(saved.usdt.merchant_id, '1000');
   assert.equal(saved.usdt.has_secret_key, true);
   assert.ok(saved.usdt.secret_key_masked);
+  assert.equal(saved.notify_origin, 'https://gate-rank.com');
+  assert.equal(saved.notify_urls?.application_payment, 'https://gate-rank.com/api/v1/portal/payment-notify');
+  assert.equal(saved.notify_urls?.recharge, 'https://gate-rank.com/api/v1/portal/recharge-notify');
+  assert.equal((await service.getConfig()).notify_origin, 'https://gate-rank.com');
 
   const preserved = await service.updateAdminSettings({
     usdt: {
@@ -113,6 +118,27 @@ test('PaymentGatewaySettingsService saves masks preserves and clears USDT secret
 
   assert.equal(cleared.usdt.enabled, false);
   assert.equal(cleared.usdt.has_secret_key, false);
+});
+
+test('PaymentGatewaySettingsService rejects invalid notify origin', async () => {
+  const service = new PaymentGatewaySettingsService({
+    systemSettingRepository: {
+      getByKey: async () => null,
+      upsert: async () => undefined,
+    },
+  });
+
+  await assert.rejects(
+    () => service.updateAdminSettings({
+      notify_origin: 'gate-rank.com/api/v1/portal/payment-notify',
+    }, 'admin'),
+    (error: unknown) => {
+      const next = error as { code?: string; message?: string };
+      assert.equal(next.code, 'PAYMENT_GATEWAY_NOTIFY_ORIGIN_INVALID');
+      assert.match(String(next.message || ''), /回调地址/);
+      return true;
+    },
+  );
 });
 
 test('PaymentGatewaySettingsService normalizes legacy USDT gateway endpoint to base URL', async () => {

@@ -2176,6 +2176,8 @@ function parsePaymentGatewaySettingsPayload(
       payload.platform_public_key === undefined
         ? undefined
         : String(payload.platform_public_key ?? '').trim(),
+    notify_origin:
+      payload.notify_origin === undefined ? undefined : String(payload.notify_origin ?? '').trim(),
     usdt:
       payload.usdt === undefined
         ? undefined

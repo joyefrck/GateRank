@@ -258,7 +258,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const marketingConfig = await getMarketingBillingConfig(deps);
       const amount = Number(marketingConfig.application_fee_amount);
       const outTradeNo = `gr_${application.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
-      const apiOrigin = getPaymentNotifyOrigin(req);
+      const apiOrigin = await getPaymentNotifyOrigin(deps, req);
       const siteOrigin = getSiteOrigin(req);
       const notifyUrl = `${apiOrigin}/api/v1/portal/payment-notify`;
       const returnUrl = `${siteOrigin}/portal`;
@@ -331,7 +331,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const channel = toPaymentChannel(payload.channel);
       const amount = toRechargeAmount(payload.amount);
       const outTradeNo = `grr_${account.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
-      const apiOrigin = getPaymentNotifyOrigin(req);
+      const apiOrigin = await getPaymentNotifyOrigin(deps, req);
       const siteOrigin = getSiteOrigin(req);
       const gatewayOrder = await deps.paymentGatewayService.createOrder({
         out_trade_no: outTradeNo,
@@ -1035,7 +1035,13 @@ function getRequestOrigin(req: any): string {
   return `${proto}://${host}`;
 }
 
-function getPaymentNotifyOrigin(req: any): string {
+async function getPaymentNotifyOrigin(deps: PortalDeps, req: any): Promise<string> {
+  const config = toLooseObject(await deps.paymentGatewaySettingsService.getConfig());
+  const fromSettings = String(config.notify_origin || '').trim();
+  if (fromSettings) {
+    return fromSettings.replace(/\/+$/, '');
+  }
+
   const configured = String(process.env.PAYMENT_NOTIFY_ORIGIN || process.env.API_BASE || '').trim();
   if (configured) {
     return configured.replace(/\/+$/, '');

@@ -8,6 +8,7 @@ export interface PaymentGatewaySettingsInput {
   pid?: string;
   private_key?: string;
   platform_public_key?: string;
+  notify_origin?: string;
   usdt?: PaymentGatewayUsdtSettingsInput;
 }
 
@@ -24,6 +25,11 @@ export interface PaymentGatewaySettingsView {
   has_private_key: boolean;
   private_key_masked: string | null;
   platform_public_key: string;
+  notify_origin: string;
+  notify_urls: {
+    application_payment: string;
+    recharge: string;
+  } | null;
   usdt: PaymentGatewayUsdtSettingsView;
   updated_at: string | null;
   updated_by: string | null;
@@ -34,6 +40,7 @@ export interface PaymentGatewayConfig {
   pid: string;
   private_key: string;
   platform_public_key: string;
+  notify_origin: string;
   usdt: PaymentGatewayUsdtConfig;
 }
 
@@ -78,6 +85,8 @@ export class PaymentGatewaySettingsService {
       has_private_key: effective.private_key.trim() !== '',
       private_key_masked: maskPrivateKey(effective.private_key),
       platform_public_key: effective.platform_public_key,
+      notify_origin: effective.notify_origin,
+      notify_urls: buildNotifyUrls(effective.notify_origin),
       usdt: {
         enabled: effective.usdt.enabled,
         gateway_url: effective.usdt.gateway_url,
@@ -127,6 +136,10 @@ export class PaymentGatewaySettingsService {
         input.platform_public_key === undefined
           ? base.platform_public_key
           : String(input.platform_public_key || '').trim(),
+      notify_origin:
+        input.notify_origin === undefined
+          ? base.notify_origin
+          : normalizeOriginUrl(String(input.notify_origin || '').trim()),
       usdt: resolveUsdtConfig(base.usdt, input.usdt),
     };
   }
@@ -157,6 +170,7 @@ function getDefaultConfig(): PaymentGatewayConfig {
     pid: '',
     private_key: '',
     platform_public_key: '',
+    notify_origin: '',
     usdt: getDefaultUsdtConfig(),
   };
 }
@@ -177,6 +191,7 @@ function normalizeConfig(value: unknown): PaymentGatewayConfig {
     pid: stringOrEmpty(record.pid),
     private_key: stringOrEmpty(record.private_key),
     platform_public_key: stringOrEmpty(record.platform_public_key),
+    notify_origin: normalizeOriginUrl(stringOrEmpty(record.notify_origin)),
     usdt: normalizeUsdtConfig(record.usdt),
   };
 }
@@ -273,6 +288,20 @@ function normalizeGatewayUrl(value: string): string {
     .replace(/\/submit\.php$/i, '');
 }
 
+function normalizeOriginUrl(value: string): string {
+  return value.replace(/\/+$/, '');
+}
+
+function buildNotifyUrls(origin: string): PaymentGatewaySettingsView['notify_urls'] {
+  if (!origin) {
+    return null;
+  }
+  return {
+    application_payment: `${origin}/api/v1/portal/payment-notify`,
+    recharge: `${origin}/api/v1/portal/recharge-notify`,
+  };
+}
+
 function normalizeStoredUpdatedAt(value: unknown): string {
   if (value instanceof Date) {
     return formatDateTimeInTimezoneIso(value);
@@ -290,6 +319,7 @@ function validatePaymentGatewayConfig(
   config: PaymentGatewayConfig,
   input: PaymentGatewaySettingsInput,
 ): void {
+  validateNotifyOrigin(config.notify_origin, input.notify_origin);
   validateUsdtConfig(config.usdt, input.usdt);
 
   const shouldRequireRsaConfig = config.enabled && !config.usdt.enabled;
@@ -322,6 +352,26 @@ function validatePaymentGatewayConfig(
       );
     }
     validatePlatformPublicKey(config.platform_public_key);
+  }
+}
+
+function validateNotifyOrigin(value: string, inputValue: string | undefined): void {
+  if (inputValue === undefined && !value) {
+    return;
+  }
+  if (!value) {
+    return;
+  }
+  if (!/^https?:\/\//i.test(value)) {
+    throw new HttpError(400, 'PAYMENT_GATEWAY_NOTIFY_ORIGIN_INVALID', '回调地址必须包含 http 或 https');
+  }
+  try {
+    const parsed = new URL(value);
+    if (parsed.pathname !== '/' || parsed.search || parsed.hash) {
+      throw new Error('origin only');
+    }
+  } catch {
+    throw new HttpError(400, 'PAYMENT_GATEWAY_NOTIFY_ORIGIN_INVALID', '回调地址必须是完整 origin，例如 https://gate-rank.com');
   }
 }
 

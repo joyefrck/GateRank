@@ -155,8 +155,9 @@ cp backend/.env.example backend/.env
 
 支付回调补充：
 
-- `API_BASE`: 后端公开访问地址，支付网关回调会优先使用它生成 `notify_url`
-- `PAYMENT_NOTIFY_ORIGIN`: 可选；如果支付回调入口和普通 API 地址不同，可单独配置这个公开 origin
+- 后台“支付配置”的“回调地址”会优先用于生成支付网关 `notify_url`，例如 `https://gate-rank.com`
+- `API_BASE`: 后端公开访问地址；后台未配置回调地址时，支付网关回调会使用它生成 `notify_url`
+- `PAYMENT_NOTIFY_ORIGIN`: 可选；后台未配置回调地址且支付回调入口和普通 API 地址不同时，可单独配置这个公开 origin
 - 本地 `127.0.0.1` / `localhost` 只适合前端跳转测试，真实支付网关无法回调到本机地址；联调真实支付时需要配置成公网可访问的 API 地址或隧道地址
 
 News 模块补充：

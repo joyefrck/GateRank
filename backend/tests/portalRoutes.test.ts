@@ -508,6 +508,7 @@ test('POST /portal/payment-orders creates USDT payment order', async () => {
       paymentGatewaySettingsService: {
         getConfig: async () => ({
           enabled: true,
+          notify_origin: 'https://notify.gaterank.test',
           usdt: {
             enabled: true,
             gateway_url: 'https://pay-usdt.example.com',
@@ -550,6 +551,7 @@ test('POST /portal/payment-orders creates USDT payment order', async () => {
     assert.equal(response.status, 201);
     assert.equal(createdOrders[0].channel, 'usdt');
     assert.equal(gatewayOrders[0].channel, 'usdt');
+    assert.equal(gatewayOrders[0].notify_url, 'https://notify.gaterank.test/api/v1/portal/payment-notify');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -794,6 +796,7 @@ test('POST /portal/recharge-orders creates USDT recharge order', async () => {
       paymentGatewaySettingsService: {
         getConfig: async () => ({
           enabled: true,
+          notify_origin: 'https://notify.gaterank.test',
           usdt: {
             enabled: true,
             gateway_url: 'https://pay-usdt.example.com',
@@ -833,6 +836,7 @@ test('POST /portal/recharge-orders creates USDT recharge order', async () => {
     assert.equal(response.status, 201);
     assert.equal(rechargeOrders[0].channel, 'usdt');
     assert.equal(gatewayOrders[0].channel, 'usdt');
+    assert.equal(gatewayOrders[0].notify_url, 'https://notify.gaterank.test/api/v1/portal/recharge-notify');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

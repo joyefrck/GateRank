@@ -317,6 +317,7 @@ interface TelegramSettingsFormState {
 }
 
 type SystemSettingsTab = 'notifications' | 'payment_gateway' | 'smtp' | 'x_oauth' | 'media_libraries' | 'publish_tokens';
+type PaymentGatewaySubTab = 'epay' | 'usdt';
 
 type MarketingGranularity = 'hour' | 'day' | 'week' | 'month';
 type MarketingRangePreset = 'day' | 'week' | 'month' | 'custom';
@@ -462,6 +463,11 @@ interface PaymentGatewaySettingsView {
   has_private_key: boolean;
   private_key_masked: string | null;
   platform_public_key: string;
+  notify_origin: string;
+  notify_urls: {
+    application_payment: string;
+    recharge: string;
+  } | null;
   usdt: {
     enabled: boolean;
     gateway_url: string;
@@ -478,6 +484,7 @@ interface PaymentGatewaySettingsFormState {
   pid: string;
   private_key: string;
   platform_public_key: string;
+  notify_origin: string;
   usdt: {
     enabled: boolean;
     gateway_url: string;
@@ -1501,6 +1508,16 @@ function MarketingPage() {
     setSelectedDetail(null);
     setDetailError('');
   };
+  const maxSelectableDate = today();
+  const goToAdjacentDay = (offsetDays: number) => {
+    const nextDate = shiftDate(dateFrom, offsetDays);
+    if (offsetDays > 0 && nextDate > maxSelectableDate) {
+      return;
+    }
+    setRangePreset('day');
+    setDateFrom(nextDate);
+    setDateTo(nextDate);
+  };
 
   return (
     <div className="space-y-5">
@@ -1526,28 +1543,60 @@ function MarketingPage() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-[auto_auto_auto_minmax(0,1fr)]">
-          <select className="rounded border border-neutral-300 px-3 py-2 text-sm" value={rangePreset} onChange={(event) => setRangePreset(event.target.value as MarketingRangePreset)}>
-            <option value="day">按天</option>
-            <option value="week">按周</option>
-            <option value="month">按月</option>
-            <option value="custom">自定义</option>
-          </select>
-          <input
-            type="date"
-            className={`rounded border px-3 py-2 text-sm ${isCustomRange ? 'border-neutral-300' : 'border-neutral-200 bg-neutral-100 text-neutral-500'}`}
-            value={dateFrom}
-            onChange={(event) => setDateFrom(event.target.value)}
-            disabled={!isCustomRange}
-          />
-          <input
-            type="date"
-            className={`rounded border px-3 py-2 text-sm ${isCustomRange ? 'border-neutral-300' : 'border-neutral-200 bg-neutral-100 text-neutral-500'}`}
-            value={dateTo}
-            onChange={(event) => setDateTo(event.target.value)}
-            disabled={!isCustomRange}
-          />
-          <div className="flex min-w-0 gap-2">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+            <select className="rounded border border-neutral-300 px-3 py-2 text-sm" value={rangePreset} onChange={(event) => setRangePreset(event.target.value as MarketingRangePreset)}>
+              <option value="day">按天</option>
+              <option value="week">按周</option>
+              <option value="month">按月</option>
+              <option value="custom">自定义</option>
+            </select>
+            {rangePreset === 'day' ? (
+              <div className="grid min-w-0 grid-cols-2 gap-2 sm:flex sm:items-center">
+                <button
+                  type="button"
+                  className="order-2 inline-flex h-10 items-center justify-center gap-1 whitespace-nowrap rounded border border-neutral-300 bg-white px-3 text-sm text-neutral-700 transition hover:bg-neutral-50 sm:order-none"
+                  onClick={() => goToAdjacentDay(-1)}
+                >
+                  <ChevronLeft size={14} />
+                  上一天
+                </button>
+                <input
+                  type="date"
+                  className="order-1 col-span-2 min-w-0 rounded border border-neutral-200 bg-neutral-100 px-3 py-2 text-sm text-neutral-500 sm:order-none sm:w-36"
+                  value={dateFrom}
+                  disabled
+                />
+                <button
+                  type="button"
+                  className="order-3 inline-flex h-10 items-center justify-center gap-1 whitespace-nowrap rounded border border-neutral-300 bg-white px-3 text-sm text-neutral-700 transition hover:bg-neutral-50 disabled:cursor-not-allowed disabled:opacity-40 sm:order-none"
+                  onClick={() => goToAdjacentDay(1)}
+                  disabled={dateTo >= maxSelectableDate}
+                >
+                  后一天
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            ) : (
+              <>
+                <input
+                  type="date"
+                  className={`rounded border px-3 py-2 text-sm ${isCustomRange ? 'border-neutral-300' : 'border-neutral-200 bg-neutral-100 text-neutral-500'}`}
+                  value={dateFrom}
+                  onChange={(event) => setDateFrom(event.target.value)}
+                  disabled={!isCustomRange}
+                />
+                <input
+                  type="date"
+                  className={`rounded border px-3 py-2 text-sm ${isCustomRange ? 'border-neutral-300' : 'border-neutral-200 bg-neutral-100 text-neutral-500'}`}
+                  value={dateTo}
+                  onChange={(event) => setDateTo(event.target.value)}
+                  disabled={!isCustomRange}
+                />
+              </>
+            )}
+          </div>
+          <div className="flex min-w-0 gap-2 xl:w-1/2 xl:max-w-xl">
             <input
               className="min-w-0 w-full rounded border border-neutral-300 px-3 py-2 text-sm"
               value={keywordInput}
@@ -1696,7 +1745,7 @@ function MarketingPage() {
             <h3 className="text-base font-semibold">趋势区</h3>
             <p className="mt-1 text-sm text-neutral-500">左侧按访问和点击展示趋势，右侧补充区间内每个时间桶的明细值。</p>
           </div>
-          <MarketingTrendChart items={trendItems} />
+          <MarketingTrendChart items={trendItems} granularity={trendGranularity} dateFrom={dateFrom} dateTo={dateTo} />
         </div>
 
         <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4 xl:col-span-2">
@@ -1926,7 +1975,12 @@ function MarketingPage() {
                         </div>
                         <div className="text-xs text-neutral-500">最近点击：{formatDateTimeInBeijing(selectedDetail.summary.last_clicked_at)}</div>
                       </div>
-                      <MarketingTrendChart items={selectedDetail.trends} />
+                      <MarketingTrendChart
+                        items={selectedDetail.trends}
+                        granularity={selectedDetail.granularity}
+                        dateFrom={selectedDetail.date_from}
+                        dateTo={selectedDetail.date_to}
+                      />
                     </section>
 
                     <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -2102,11 +2156,19 @@ function MarketingMetricCard({
 
 function MarketingTrendChart({
   items,
+  granularity,
+  dateFrom,
+  dateTo,
   compact = false,
 }: {
   items: MarketingTrendPoint[];
+  granularity: MarketingGranularity;
+  dateFrom: string;
+  dateTo: string;
   compact?: boolean;
 }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
   if (items.length === 0) {
     return (
       <div className={`rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 text-sm text-neutral-500 ${compact ? 'px-4 py-8' : 'px-5 py-16'}`}>
@@ -2116,29 +2178,44 @@ function MarketingTrendChart({
   }
 
   const width = 640;
-  const height = compact ? 180 : 260;
-  const padding = 24;
+  const height = compact ? 220 : 300;
+  const padding = {
+    top: 24,
+    right: 24,
+    bottom: 48,
+    left: 56,
+  };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
   const maxValue = Math.max(
     1,
     ...items.flatMap((item) => [item.page_views, item.airport_impressions, item.outbound_clicks]),
   );
-  const xStep = items.length > 1 ? (width - padding * 2) / (items.length - 1) : 0;
+  const tickCount = 4;
+  const yTicks = Array.from({ length: tickCount + 1 }, (_, index) => Math.round((maxValue / tickCount) * index));
+  const xStep = items.length > 1 ? plotWidth / (items.length - 1) : 0;
+  const labelStep = Math.max(1, Math.ceil(items.length / 6));
+  const xLabelIndexes = new Set(items.map((_, index) => index).filter((index) => index === 0 || index === items.length - 1 || index % labelStep === 0));
   const buildPoint = (value: number, index: number) => {
-    const x = items.length === 1 ? width / 2 : padding + xStep * index;
-    const y = height - padding - ((value || 0) / maxValue) * (height - padding * 2);
+    const x = items.length === 1 ? padding.left + plotWidth / 2 : padding.left + xStep * index;
+    const y = padding.top + plotHeight - ((value || 0) / maxValue) * plotHeight;
     return {
       x,
-      y: Math.max(padding, Math.min(height - padding, y)),
+      y: Math.max(padding.top, Math.min(padding.top + plotHeight, y)),
     };
   };
   const buildSeriesPoints = (selector: (item: MarketingTrendPoint) => number) =>
     items.map((item, index) => buildPoint(selector(item), index));
+  const pageViewPoints = buildSeriesPoints((item) => item.page_views);
+  const impressionPoints = buildSeriesPoints((item) => item.airport_impressions);
+  const clickPoints = buildSeriesPoints((item) => item.outbound_clicks);
+  const pointToString = (point: { x: number; y: number }) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`;
   const buildPolyline = (selector: (item: MarketingTrendPoint) => number) =>
     buildSeriesPoints(selector)
-      .map((point) => `${point.x.toFixed(2)},${point.y.toFixed(2)}`)
+      .map(pointToString)
       .join(' ');
-  const renderMarkers = (selector: (item: MarketingTrendPoint) => number, color: string) =>
-    buildSeriesPoints(selector).map((point, index) => (
+  const renderMarkers = (points: Array<{ x: number; y: number }>, color: string) =>
+    points.map((point, index) => (
       <circle
         key={`${color}-${items[index]?.period_start || index}`}
         cx={point.x}
@@ -2149,6 +2226,27 @@ function MarketingTrendChart({
         strokeWidth="2"
       />
     ));
+  const renderHoverMarkers = (index: number) => [
+    { point: pageViewPoints[index], color: '#171717' },
+    { point: impressionPoints[index], color: '#0ea5e9' },
+    { point: clickPoints[index], color: '#10b981' },
+  ].map(({ point, color }) => (
+    <circle
+      key={`hover-${color}`}
+      cx={point.x}
+      cy={point.y}
+      r="6"
+      fill={color}
+      stroke="#ffffff"
+      strokeWidth="2.5"
+    />
+  ));
+  const tooltipItem = hoveredIndex === null ? null : items[hoveredIndex];
+  const tooltipPoint = hoveredIndex === null ? null : impressionPoints[hoveredIndex];
+  const tooltipWidth = 162;
+  const tooltipHeight = 92;
+  const tooltipX = tooltipPoint ? Math.min(width - tooltipWidth - 8, Math.max(8, tooltipPoint.x + 10)) : 0;
+  const tooltipY = tooltipPoint ? Math.max(8, Math.min(height - tooltipHeight - 8, tooltipPoint.y - tooltipHeight / 2)) : 0;
 
   return (
     <div className="space-y-3">
@@ -2158,13 +2256,86 @@ function MarketingTrendChart({
         <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />外链点击</span>
       </div>
       <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-neutral-50/70">
-        <svg viewBox={`0 0 ${width} ${height}`} className="h-[220px] min-w-[640px] w-full">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className={`${compact ? 'h-[220px]' : 'h-[260px]'} min-w-[640px] w-full`}
+          onMouseLeave={() => setHoveredIndex(null)}
+        >
+          {yTicks.map((tick) => {
+            const y = padding.top + plotHeight - (tick / maxValue) * plotHeight;
+            return (
+              <g key={`y-${tick}-${y.toFixed(2)}`}>
+                <line x1={padding.left} x2={width - padding.right} y1={y} y2={y} stroke="#e5e5e5" strokeDasharray={tick === 0 ? undefined : '4 4'} />
+                <text x={padding.left - 10} y={y + 4} textAnchor="end" className="fill-neutral-500 text-[10px]">
+                  {formatCountValue(tick)}
+                </text>
+              </g>
+            );
+          })}
+          <line x1={padding.left} x2={padding.left} y1={padding.top} y2={padding.top + plotHeight} stroke="#a3a3a3" />
+          <line x1={padding.left} x2={width - padding.right} y1={padding.top + plotHeight} y2={padding.top + plotHeight} stroke="#a3a3a3" />
+          <text x={padding.left} y={padding.top - 8} className="fill-neutral-500 text-[10px]">次数</text>
+          {items.map((item, index) => {
+            const point = pageViewPoints[index];
+            if (!xLabelIndexes.has(index)) {
+              return null;
+            }
+            return (
+              <text key={`x-${item.period_start}`} x={point.x} y={height - 16} textAnchor="middle" className="fill-neutral-500 text-[10px]">
+                {formatMarketingPeriodLabel(item.period_start, granularity, dateFrom, dateTo)}
+              </text>
+            );
+          })}
           <polyline fill="none" stroke="#171717" strokeWidth="3" points={buildPolyline((item) => item.page_views)} />
           <polyline fill="none" stroke="#0ea5e9" strokeWidth="3" points={buildPolyline((item) => item.airport_impressions)} />
           <polyline fill="none" stroke="#10b981" strokeWidth="3" points={buildPolyline((item) => item.outbound_clicks)} />
-          {renderMarkers((item) => item.page_views, '#171717')}
-          {renderMarkers((item) => item.airport_impressions, '#0ea5e9')}
-          {renderMarkers((item) => item.outbound_clicks, '#10b981')}
+          {renderMarkers(pageViewPoints, '#171717')}
+          {renderMarkers(impressionPoints, '#0ea5e9')}
+          {renderMarkers(clickPoints, '#10b981')}
+          {items.map((item, index) => {
+            const point = pageViewPoints[index];
+            const nextPoint = pageViewPoints[index + 1];
+            const previousPoint = pageViewPoints[index - 1];
+            const leftBoundary = previousPoint ? (previousPoint.x + point.x) / 2 : padding.left;
+            const rightBoundary = nextPoint ? (nextPoint.x + point.x) / 2 : width - padding.right;
+            return (
+              <rect
+                key={`hover-capture-${item.period_start}`}
+                x={leftBoundary}
+                y={padding.top}
+                width={Math.max(10, rightBoundary - leftBoundary)}
+                height={plotHeight}
+                fill="transparent"
+                onMouseEnter={() => setHoveredIndex(index)}
+                onMouseMove={() => setHoveredIndex(index)}
+              />
+            );
+          })}
+          {hoveredIndex !== null && (
+            <g className="pointer-events-none">
+              <line
+                x1={pageViewPoints[hoveredIndex].x}
+                x2={pageViewPoints[hoveredIndex].x}
+                y1={padding.top}
+                y2={padding.top + plotHeight}
+                stroke="#737373"
+                strokeDasharray="4 4"
+              />
+              {renderHoverMarkers(hoveredIndex)}
+            </g>
+          )}
+          {tooltipItem && tooltipPoint && (
+            <g className="pointer-events-none">
+              <rect x={tooltipX} y={tooltipY} width={tooltipWidth} height={tooltipHeight} rx="12" fill="#ffffff" stroke="#d4d4d4" />
+              <text x={tooltipX + 12} y={tooltipY + 20} className="fill-neutral-900 text-[11px] font-semibold">
+                {formatMarketingPeriodLabel(tooltipItem.period_start, granularity, dateFrom, dateTo)}
+              </text>
+              <text x={tooltipX + 12} y={tooltipY + 40} className="fill-neutral-700 text-[10px]">访问 PV：{formatCountValue(tooltipItem.page_views)}</text>
+              <text x={tooltipX + 12} y={tooltipY + 56} className="fill-sky-700 text-[10px]">机场曝光：{formatCountValue(tooltipItem.airport_impressions)}</text>
+              <text x={tooltipX + 12} y={tooltipY + 72} className="fill-emerald-700 text-[10px]">外链点击：{formatCountValue(tooltipItem.outbound_clicks)}</text>
+              <text x={tooltipX + 12} y={tooltipY + 88} className="fill-neutral-500 text-[10px]">CTR：{formatRatioValue(tooltipItem.ctr)}</text>
+            </g>
+          )}
         </svg>
       </div>
       <div className="grid grid-cols-2 gap-3 text-xs text-neutral-500 md:grid-cols-4">
@@ -2769,11 +2940,13 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
   const [settings, setSettings] = useState<PaymentGatewaySettingsView | null>(null);
   const [clearPrivateKey, setClearPrivateKey] = useState(false);
   const [clearUsdtSecretKey, setClearUsdtSecretKey] = useState(false);
+  const [activePaymentSubTab, setActivePaymentSubTab] = useState<PaymentGatewaySubTab>('epay');
   const [form, setForm] = useState<PaymentGatewaySettingsFormState>({
     enabled: false,
     pid: '',
     private_key: '',
     platform_public_key: '',
+    notify_origin: '',
     usdt: {
       enabled: false,
       gateway_url: '',
@@ -2789,6 +2962,7 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
       pid: view.pid || '',
       private_key: '',
       platform_public_key: view.platform_public_key || '',
+      notify_origin: view.notify_origin || '',
       usdt: {
         enabled: Boolean(view.usdt?.enabled),
         gateway_url: view.usdt?.gateway_url || '',
@@ -2826,6 +3000,7 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
         enabled: form.enabled,
         pid: form.pid.trim(),
         platform_public_key: form.platform_public_key.trim(),
+        notify_origin: form.notify_origin.trim(),
         usdt: {
           enabled: form.usdt.enabled,
           gateway_url: form.usdt.gateway_url.trim(),
@@ -2855,161 +3030,240 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
     }
   };
 
+  const hasPrivateKeyValue = Boolean(form.private_key.trim()) || Boolean(settings?.has_private_key && !clearPrivateKey);
+  const hasUsdtSecretValue = Boolean(form.usdt.secret_key.trim()) || Boolean(settings?.usdt?.has_secret_key && !clearUsdtSecretKey);
+  const epayConfigComplete = Boolean(form.pid.trim() && hasPrivateKeyValue && form.platform_public_key.trim());
+  const usdtConfigComplete = Boolean(form.usdt.gateway_url.trim() && form.usdt.merchant_id.trim() && hasUsdtSecretValue);
+  const epayStatus = !form.enabled ? '总开关关闭' : epayConfigComplete ? '已配置' : '缺配置';
+  const usdtStatus = !form.enabled ? '总开关关闭' : !form.usdt.enabled ? '未启用' : usdtConfigComplete ? '已启用' : '缺配置';
+
   return (
-    <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
-      <div>
-        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">支付配置</div>
-        <p className="mt-1 text-sm text-neutral-500">申请人后台创建支付订单时会读取这里的商户号和密钥配置，费用标准在营销模块中配置。</p>
+    <section className="overflow-hidden rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">支付配置</div>
+          <p className="mt-1 text-sm text-neutral-500">申请人后台创建支付订单时会读取这里的支付方式配置，费用标准在营销模块中配置。</p>
+        </div>
+        <div className="inline-flex w-fit items-center gap-2 rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1.5 text-xs font-medium text-neutral-600">
+          <span className={`h-2 w-2 rounded-full ${form.enabled ? 'bg-emerald-500' : 'bg-neutral-300'}`} />
+          {form.enabled ? '支付总开关已启用' : '支付总开关已关闭'}
+        </div>
       </div>
 
       {loading && <div className="text-sm text-neutral-500">加载中...</div>}
 
       {!loading && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
-            <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
-            <ReadField label="商户号 PID" value={valueOrDash(settings?.pid)} />
-            <ReadField label="商户私钥" value={settings?.has_private_key ? `已配置 (${settings?.private_key_masked || '-'})` : '未配置'} />
-          </div>
-
-          <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4">
-            <label className="inline-flex items-center gap-3 text-sm font-medium">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-neutral-300"
-                checked={form.enabled}
-                onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-              />
-              启用支付
-            </label>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField label="商户号 PID">
-              <input
-                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                value={form.pid}
-                onChange={(e) => setForm({ ...form, pid: e.target.value })}
-                placeholder="输入商户号"
-              />
-            </FormField>
-            <FormField
-              label="商户私钥"
-              hint={settings?.has_private_key
-                ? '已配置，留空则不修改；如需删除请勾选下方清空。请填写平台生成时返回的商户私钥，不要填写商户公钥或平台公钥。'
-                : '用于 RSA 下单签名。请填写平台生成时返回的商户私钥，不要填写商户公钥或平台公钥。'}
-            >
-              <div className="space-y-2">
-                <textarea
-                  className="min-h-40 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                  value={form.private_key}
-                  onChange={(e) => {
-                    setClearPrivateKey(false);
-                    setForm({ ...form, private_key: e.target.value });
-                  }}
-                  placeholder={settings?.has_private_key ? '已配置，留空则不修改' : '粘贴商户私钥，支持平台原始密钥串或 PEM'}
-                />
-                {settings?.has_private_key && (
-                  <div className="text-xs text-neutral-500">当前已保存：{settings.private_key_masked}</div>
-                )}
+          <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 space-y-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:min-w-[26rem]">
+                <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
+                <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
               </div>
-            </FormField>
-            <FormField label="平台公钥" hint="用于验证 V2 下单返回和异步通知签名。请填写支付平台后台显示的平台公钥，不要填写商户公钥或商户私钥。">
-              <textarea
-                className="min-h-40 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                value={form.platform_public_key}
-                onChange={(e) => setForm({ ...form, platform_public_key: e.target.value })}
-                placeholder="粘贴平台公钥，支持平台原始密钥串或 PEM"
-              />
-            </FormField>
-          </div>
-
-          {settings?.has_private_key && (
-            <label className="inline-flex items-center gap-3 text-sm font-medium">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-neutral-300"
-                checked={clearPrivateKey}
-                onChange={(e) => {
-                  setClearPrivateKey(e.target.checked);
-                  if (e.target.checked) {
-                    setForm({ ...form, private_key: '' });
-                  }
-                }}
-              />
-              清空已保存商户私钥
-            </label>
-          )}
-
-          <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 space-y-4">
-            <div>
-              <div className="text-sm font-bold text-neutral-900">USDT / EPUSDT</div>
-              <p className="mt-1 text-sm text-neutral-500">按 EPUSDT GMPay API 创建 USDT 支付订单，系统固定使用 CNY + USDT + TRON。</p>
-            </div>
-            <label className="inline-flex items-center gap-3 text-sm font-medium">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-neutral-300"
-                checked={form.usdt.enabled}
-                onChange={(e) => setForm({ ...form, usdt: { ...form.usdt, enabled: e.target.checked } })}
-              />
-              启用 USDT 支付
-            </label>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField label="支付网关地址" hint="请填写完整地址，包括 http 或 https；保存时会自动去除末尾斜杠。">
-                <input
-                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                  value={form.usdt.gateway_url}
-                  onChange={(e) => setForm({ ...form, usdt: { ...form.usdt, gateway_url: e.target.value } })}
-                  placeholder="https://pay.example.com"
-                />
-              </FormField>
-              <FormField label="商户ID">
-                <input
-                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                  value={form.usdt.merchant_id}
-                  onChange={(e) => setForm({ ...form, usdt: { ...form.usdt, merchant_id: e.target.value } })}
-                  placeholder="输入商户ID"
-                />
-              </FormField>
-              <FormField
-                label="通信密钥"
-                hint={settings?.usdt?.has_secret_key
-                  ? '已配置，留空则不修改；如需删除请勾选下方清空。'
-                  : '用于 EPUSDT GMPay 下单签名和回调验签。'}
-              >
-                <div className="space-y-2">
-                  <input
-                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                    value={form.usdt.secret_key}
-                    onChange={(e) => {
-                      setClearUsdtSecretKey(false);
-                      setForm({ ...form, usdt: { ...form.usdt, secret_key: e.target.value } });
-                    }}
-                    placeholder={settings?.usdt?.has_secret_key ? '已配置，留空则不修改' : '输入通信密钥'}
-                  />
-                  {settings?.usdt?.has_secret_key && (
-                    <div className="text-xs text-neutral-500">当前已保存：{settings.usdt.secret_key_masked}</div>
-                  )}
-                </div>
-              </FormField>
-            </div>
-            {settings?.usdt?.has_secret_key && (
-              <label className="inline-flex items-center gap-3 text-sm font-medium">
+              <label className="inline-flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-sm font-medium">
                 <input
                   type="checkbox"
                   className="h-4 w-4 rounded border-neutral-300"
-                  checked={clearUsdtSecretKey}
-                  onChange={(e) => {
-                    setClearUsdtSecretKey(e.target.checked);
-                    if (e.target.checked) {
-                      setForm({ ...form, usdt: { ...form.usdt, secret_key: '' } });
-                    }
-                  }}
+                  checked={form.enabled}
+                  onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
                 />
-                清空已保存 USDT 通信密钥
+                启用支付
               </label>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 space-y-4">
+            <div className="flex flex-col gap-4 xl:flex-row xl:items-end">
+              <div className="min-w-0 flex-1">
+                <FormField
+                  label="GateRank 公共回调地址"
+                  hint="只填写 origin，例如 https://gate-rank.com。普通 epay 和 USDT 都共用这里生成的回调路径。"
+                >
+                  <input
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    value={form.notify_origin}
+                    onChange={(e) => setForm({ ...form, notify_origin: e.target.value })}
+                    placeholder="https://gate-rank.com"
+                  />
+                </FormField>
+              </div>
+              <div className="grid min-w-0 grid-cols-1 gap-2 text-sm xl:w-[38rem] xl:grid-cols-2">
+                <ReadField label="入驻费回调" value={valueOrDash(settings?.notify_urls?.application_payment)} />
+                <ReadField label="充值回调" value={valueOrDash(settings?.notify_urls?.recharge)} />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-neutral-200">
+            <div className="flex flex-col gap-2 border-b border-neutral-200 bg-neutral-50 p-2 sm:flex-row">
+              <button
+                type="button"
+                className={`flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-4 py-3 text-left transition ${activePaymentSubTab === 'epay' ? 'bg-white text-neutral-950 shadow-sm' : 'text-neutral-600 hover:bg-white/70'}`}
+                onClick={() => setActivePaymentSubTab('epay')}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">普通 epay</span>
+                  <span className="mt-0.5 block truncate text-xs text-neutral-500">支付宝 / 微信 RSA 网关</span>
+                </span>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${epayConfigComplete && form.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-600'}`}>
+                  {epayStatus}
+                </span>
+              </button>
+              <button
+                type="button"
+                className={`flex min-w-0 flex-1 items-center justify-between gap-3 rounded-xl px-4 py-3 text-left transition ${activePaymentSubTab === 'usdt' ? 'bg-white text-neutral-950 shadow-sm' : 'text-neutral-600 hover:bg-white/70'}`}
+                onClick={() => setActivePaymentSubTab('usdt')}
+              >
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">USDT / GMPay</span>
+                  <span className="mt-0.5 block truncate text-xs text-neutral-500">EPUSDT 下单和回调验签</span>
+                </span>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${form.enabled && form.usdt.enabled && usdtConfigComplete ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-600'}`}>
+                  {usdtStatus}
+                </span>
+              </button>
+            </div>
+
+            {activePaymentSubTab === 'epay' ? (
+              <div className="space-y-5 p-4">
+                <div>
+                  <div className="text-sm font-bold text-neutral-900">普通 epay 支付</div>
+                  <p className="mt-1 text-sm text-neutral-500">用于支付宝、微信等普通 epay 通道。启用普通 epay 需要商户号、商户私钥和平台公钥完整。</p>
+                </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                  <ReadField label="商户号 PID" value={valueOrDash(settings?.pid)} />
+                  <ReadField label="商户私钥" value={settings?.has_private_key ? `已配置 (${settings?.private_key_masked || '-'})` : '未配置'} />
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField label="商户号 PID">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      value={form.pid}
+                      onChange={(e) => setForm({ ...form, pid: e.target.value })}
+                      placeholder="输入商户号"
+                    />
+                  </FormField>
+                  <FormField
+                    label="商户私钥"
+                    hint={settings?.has_private_key
+                      ? '已配置，留空则不修改；如需删除请勾选下方清空。请填写平台生成时返回的商户私钥，不要填写商户公钥或平台公钥。'
+                      : '用于 RSA 下单签名。请填写平台生成时返回的商户私钥，不要填写商户公钥或平台公钥。'}
+                  >
+                    <div className="space-y-2">
+                      <textarea
+                        className="min-h-40 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                        value={form.private_key}
+                        onChange={(e) => {
+                          setClearPrivateKey(false);
+                          setForm({ ...form, private_key: e.target.value });
+                        }}
+                        placeholder={settings?.has_private_key ? '已配置，留空则不修改' : '粘贴商户私钥，支持平台原始密钥串或 PEM'}
+                      />
+                      {settings?.has_private_key && (
+                        <div className="text-xs text-neutral-500">当前已保存：{settings.private_key_masked}</div>
+                      )}
+                    </div>
+                  </FormField>
+                  <FormField label="平台公钥" hint="用于验证 V2 下单返回和异步通知签名。请填写支付平台后台显示的平台公钥，不要填写商户公钥或商户私钥。">
+                    <textarea
+                      className="min-h-40 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      value={form.platform_public_key}
+                      onChange={(e) => setForm({ ...form, platform_public_key: e.target.value })}
+                      placeholder="粘贴平台公钥，支持平台原始密钥串或 PEM"
+                    />
+                  </FormField>
+                </div>
+
+                {settings?.has_private_key && (
+                  <label className="inline-flex items-center gap-3 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-neutral-300"
+                      checked={clearPrivateKey}
+                      onChange={(e) => {
+                        setClearPrivateKey(e.target.checked);
+                        if (e.target.checked) {
+                          setForm({ ...form, private_key: '' });
+                        }
+                      }}
+                    />
+                    清空已保存商户私钥
+                  </label>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-5 p-4">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-sm font-bold text-neutral-900">USDT / GMPay 支付</div>
+                    <p className="mt-1 text-sm text-neutral-500">按 EPUSDT GMPay API 创建 USDT 支付订单；支付网关地址是 GMPay 下单接口，回调地址使用上方共享配置。</p>
+                  </div>
+                  <label className="inline-flex w-fit items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-medium sm:whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-neutral-300"
+                      checked={form.usdt.enabled}
+                      onChange={(e) => setForm({ ...form, usdt: { ...form.usdt, enabled: e.target.checked } })}
+                    />
+                    启用 USDT 支付
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <FormField label="GMPay 支付网关地址" hint="填写 GMPay 域名或完整 create-transaction 接口；保存时会自动规范化。不要填写 GateRank 回调地址。">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      value={form.usdt.gateway_url}
+                      onChange={(e) => setForm({ ...form, usdt: { ...form.usdt, gateway_url: e.target.value } })}
+                      placeholder="https://www.443ds443.com/payments/gmpay/v1/order/create-transaction"
+                    />
+                  </FormField>
+                  <FormField label="商户ID">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      value={form.usdt.merchant_id}
+                      onChange={(e) => setForm({ ...form, usdt: { ...form.usdt, merchant_id: e.target.value } })}
+                      placeholder="输入商户ID"
+                    />
+                  </FormField>
+                  <FormField
+                    label="通信密钥"
+                    hint={settings?.usdt?.has_secret_key
+                      ? '已配置，留空则不修改；如需删除请勾选下方清空。'
+                      : '用于 EPUSDT GMPay 下单签名和回调验签。'}
+                  >
+                    <div className="space-y-2">
+                      <input
+                        className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                        value={form.usdt.secret_key}
+                        onChange={(e) => {
+                          setClearUsdtSecretKey(false);
+                          setForm({ ...form, usdt: { ...form.usdt, secret_key: e.target.value } });
+                        }}
+                        placeholder={settings?.usdt?.has_secret_key ? '已配置，留空则不修改' : '输入通信密钥'}
+                      />
+                      {settings?.usdt?.has_secret_key && (
+                        <div className="text-xs text-neutral-500">当前已保存：{settings.usdt.secret_key_masked}</div>
+                      )}
+                    </div>
+                  </FormField>
+                </div>
+                {settings?.usdt?.has_secret_key && (
+                  <label className="inline-flex items-center gap-3 text-sm font-medium">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-neutral-300"
+                      checked={clearUsdtSecretKey}
+                      onChange={(e) => {
+                        setClearUsdtSecretKey(e.target.checked);
+                        if (e.target.checked) {
+                          setForm({ ...form, usdt: { ...form.usdt, secret_key: '' } });
+                        }
+                      }}
+                    />
+                    清空已保存 USDT 通信密钥
+                  </label>
+                )}
+              </div>
             )}
           </div>
 
