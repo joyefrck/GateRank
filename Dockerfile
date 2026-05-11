@@ -1,5 +1,9 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
+ARG VITE_SITE_URL=https://gate-rank.com
+ARG VITE_API_BASE=
+ENV VITE_SITE_URL=$VITE_SITE_URL
+ENV VITE_API_BASE=$VITE_API_BASE
 COPY package*.json ./
 RUN npm ci
 COPY . .

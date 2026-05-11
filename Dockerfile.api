@@ -1,0 +1,19 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+RUN sed -i 's#dl-cdn.alpinelinux.org#mirrors.aliyun.com#g' /etc/apk/repositories \
+  && apk add --no-cache curl python3 py3-pip sing-box
+
+COPY package*.json ./
+RUN npm ci
+
+COPY tsconfig.json ./tsconfig.json
+COPY backend ./backend
+COPY scripts ./scripts
+COPY shared ./shared
+
+ENV NODE_ENV=production
+EXPOSE 8787
+
+CMD ["npm", "run", "server:start"]

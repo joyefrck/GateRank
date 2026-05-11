@@ -321,23 +321,24 @@ npm run server:dev
 - `/` -> `http://127.0.0.1:18088`
 - `/api` -> `http://127.0.0.1:18787`
 
-线上编排会在容器启动时从 GitHub 拉取最新代码并构建运行产物：
+线上编排使用 GitHub Actions 构建并发布到 GHCR 的生产镜像：
 
-- `gaterank-web` 使用最新代码构建前端静态产物，并通过容器内 Nginx 对外提供服务
-- `gaterank-api` 使用最新代码安装依赖并启动 `npm run server:start`
-- 当前运行容器不保证保留 Git 工作目录，发布确认不要依赖容器内 `git log`
+- `ghcr.io/joyefrck/gaterank-web:main`：前端静态产物 + Nginx
+- `ghcr.io/joyefrck/gaterank-api:main`：后端 API 运行环境
+- 容器启动阶段不再从 GitHub 下载源码，也不再执行 `npm install` 或前端构建
 
 推荐发布流程：
 
 1. 在本地完成修复并运行必要检查，例如 `npm run server:typecheck`、`npm run test:backend`、`npm run lint`
-2. 如前端构建需要更高 Node 内存，可用 `NODE_OPTIONS=--max-old-space-size=4096 npm run build`
-3. 将需要发布的提交推送到 GitHub `main`
+2. 将需要发布的提交推送到 GitHub `main`
+3. 等待 GitHub Actions 的 `Publish Docker Images` 工作流完成，确认两个镜像都已推送到 GHCR
 4. 登录 1Panel，打开「容器」->「编排」或 1Panel 终端
-5. 在编排目录执行重建命令：
+5. 在编排目录执行拉取和重启命令：
 
 ```bash
 cd /opt/1panel/docker/compose/gaterank
-docker compose up -d --force-recreate gaterank-web gaterank-api
+docker compose pull gaterank-web gaterank-api
+docker compose up -d gaterank-web gaterank-api
 ```
 
 6. 等待 `gaterank-web` 和 `gaterank-api` 启动完成后，检查容器状态、内网端口和公网接口
@@ -362,8 +363,8 @@ News 模块上线要求：
 
 说明：
 
-- 当前线上编排会在启动时重新从 GitHub 拉取最新代码，所以必须先确认代码已经 push 到 GitHub
-- `docker compose up -d --force-recreate` 会重建容器，但不会删除已挂载的 Docker volume
+- 当前线上编排只拉取镜像；如果 GHCR 镜像还没构建完成，生产不会拿到新代码
+- `docker compose up -d` 会替换镜像变更后的容器，但不会删除已挂载的 Docker volume
 - `gaterank-web` 不能直接用 `serve -s dist` 替代网关层；否则 `/news`、`/uploads`、`/sitemap.xml` 不会正确代理到 API
 - `gaterank-api` 若未挂新闻图片持久卷，`/uploads/news` 下的封面会在容器重建后丢失
 - 如果在 1Panel Web 终端里输入特殊字符出现错乱，优先用剪贴板粘贴整段命令
