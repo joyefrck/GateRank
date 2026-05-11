@@ -206,7 +206,7 @@ const SECTION_CONFIG: Record<
     title: '新入榜潜力',
     subtitle: 'New Entries',
     type: 'new',
-    limit: 3,
+    limit: 6,
   },
   risk_alerts: {
     rankingType: 'risk',
@@ -450,6 +450,9 @@ export class PublicViewService {
         if (!context) {
           return null;
         }
+        if (section === 'new_entries' && context.airport.status === 'down') {
+          return null;
+        }
         return this.buildCard(section, context, date);
       }),
     );
@@ -484,7 +487,7 @@ export class PublicViewService {
     const byValue = [...contexts].sort(compareByValueDesc);
     const byNew = [...contexts]
       .filter((context) => isNewAirportContext(context, date))
-      .sort(compareByDisplayScoreDesc);
+      .sort(compareByNewAirportEntryDesc);
     const byRisk = [...contexts]
       .filter((context) => isRiskAlertContext(context))
       .sort(compareByRiskPriority);
@@ -499,7 +502,7 @@ export class PublicViewService {
       best_value: byValue
         .slice(0, SECTION_CONFIG.best_value.limit)
         .map((context) => this.buildCard('best_value', context, date)),
-      new_entries: (byNew.length > 0 ? byNew : byScore)
+      new_entries: byNew
         .slice(0, SECTION_CONFIG.new_entries.limit)
         .map((context) => this.buildCard('new_entries', context, date)),
       risk_alerts: byRisk
@@ -741,6 +744,10 @@ function isRiskAlertContext(context: CardContext): boolean {
 
 function isNewAirportContext(context: CardContext, date: string): boolean {
   return context.airport.tags.includes('新入榜') || diffDays(context.airport.created_at, date) < NEW_AIRPORT_DAYS;
+}
+
+function compareByNewAirportEntryDesc(left: CardContext, right: CardContext): number {
+  return right.airport.created_at.localeCompare(left.airport.created_at) || right.airport.id - left.airport.id;
 }
 
 function buildCardDetails(

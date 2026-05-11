@@ -276,6 +276,149 @@ test('PublicViewService.getHomePageView reuses card context across sections for 
   });
 });
 
+test('PublicViewService.getHomePageView limits new entries to listed active airports', async () => {
+  const airportIds = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+  const airportsById = new Map(
+    airportIds.map((id) => [
+      id,
+      {
+        id,
+        name: `Airport ${id}`,
+        website: `https://airport-${id}.example.com`,
+        status: id === 8 ? 'down' as const : 'normal' as const,
+        is_listed: id !== 9,
+        plan_price_month: 12,
+        has_trial: true,
+        tags: ['新入榜'],
+        created_at: `2026-03-${String(20 - id).padStart(2, '0')}`,
+      },
+    ]),
+  );
+  const metricsById = new Map(
+    airportIds.map((id) => [
+      id,
+      {
+        airport_id: id,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 50,
+        median_download_mbps: 100,
+        packet_loss_percent: 0,
+        stable_days_streak: 5,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 0,
+        history_incidents: 0,
+      },
+    ]),
+  );
+  const scoresById = new Map(
+    airportIds.map((id) => [
+      id,
+      {
+        airport_id: id,
+        date: '2026-03-24',
+        s: 80,
+        p: 80,
+        c: 80,
+        r: 95,
+        risk_penalty: 0,
+        score: 90 - id,
+        recent_score: 90 - id,
+        historical_score: 90 - id,
+        final_score: 90 - id,
+        details: {
+          total_score: 90 - id,
+        },
+      },
+    ]),
+  );
+  const newRankingItems = airportIds.map((id, index) => ({
+    airport_id: id,
+    rank: index + 1,
+    name: `Airport ${id}`,
+    status: id === 8 ? 'down' as const : 'normal' as const,
+    tags: ['新入榜'],
+    score: 90 - id,
+    key_metrics: {
+      uptime_percent_30d: 99.9,
+      median_latency_ms: 50,
+      median_download_mbps: 100,
+      packet_loss_percent: 0,
+    },
+  }));
+
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async (id: number) => airportsById.get(id) || null,
+      getByIds: async (ids: number[]) => new Map(ids.flatMap((id) => {
+        const airport = airportsById.get(id);
+        return airport ? [[id, airport]] : [];
+      })),
+    },
+    metricsRepository: {
+      getByAirportAndDate: async (airportId: number) => metricsById.get(airportId) || null,
+      getTrend: async (airportId: number) => {
+        const metric = metricsById.get(airportId);
+        return metric ? [metric] : [];
+      },
+      getByAirportIdsAndDate: async (ids: number[]) => new Map(ids.flatMap((id) => {
+        const metric = metricsById.get(id);
+        return metric ? [[id, metric]] : [];
+      })),
+      getTrendsByAirportIds: async (ids: number[]) => new Map(ids.flatMap((id) => {
+        const metric = metricsById.get(id);
+        return metric ? [[id, [metric]]] : [];
+      })),
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async (airportId: number) => scoresById.get(airportId) || null,
+      getPublicDisplayScoreByAirportAndDate: async (airportId: number) => scoresById.get(airportId)?.final_score ?? null,
+      getPublicDisplayScoresByDate: async (ids: number[]) => new Map(ids.flatMap((id) => {
+        const score = scoresById.get(id);
+        return score ? [[id, score.final_score]] : [];
+      })),
+      getTrend: async (airportId: number) => {
+        const score = scoresById.get(airportId);
+        return score ? [score] : [];
+      },
+      getByAirportIdsAndDate: async (ids: number[]) => new Map(ids.flatMap((id) => {
+        const score = scoresById.get(id);
+        return score ? [[id, score]] : [];
+      })),
+      getTrendsByAirportIds: async (ids: number[]) => new Map(ids.flatMap((id) => {
+        const score = scoresById.get(id);
+        return score ? [[id, [score]]] : [];
+      })),
+      getPublicFullRankingByDate: async () => ({
+        total: 0,
+        items: [],
+      }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async (_date: string, listType: 'today' | 'stable' | 'value' | 'new' | 'risk') => (
+        listType === 'new' ? newRankingItems : []
+      ),
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 9,
+        realtime_tests: 18,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getHomePageView('2026-03-24');
+
+  assert.deepEqual(result.sections.new_entries.items.map((item) => item.airport_id), [1, 2, 3, 4, 5, 6]);
+  assert.equal(result.sections.new_entries.items.length, 6);
+  assert.ok(result.sections.new_entries.items.every((item) => item.airport_id !== 8 && item.airport_id !== 9));
+});
+
 test('PublicViewService.getHomePageView builds fallback cards from public scores when rankings are empty', async () => {
   const service = new PublicViewService({
     airportRepository: {

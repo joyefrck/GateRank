@@ -12,6 +12,7 @@ function createRow(
     healthyDaysStreak?: number;
     s?: number;
     tags?: string[];
+    createdAt?: string;
     stabilityTier?: 'stable' | 'minor_fluctuation' | 'volatile';
   } = {},
 ) {
@@ -23,6 +24,7 @@ function createRow(
     healthyDaysStreak = 30 - id,
     s = 90 - id,
     tags = [],
+    createdAt = '2025-01-01',
     stabilityTier = 'stable',
   } = options;
 
@@ -36,7 +38,7 @@ function createRow(
       plan_price_month: 10,
       has_trial: true,
       tags,
-      created_at: '2025-01-01',
+      created_at: createdAt,
     },
     metrics: {
       airport_id: id,
@@ -137,4 +139,17 @@ test('buildRankings does not backfill today picks with excluded airports when fe
 
   assert.deepEqual(rankings.today.map((item) => item.airport_id), [1, 2]);
   assert.equal(rankings.today.length, 2);
+});
+
+test('buildRankings sorts new airports by entry date instead of score', () => {
+  const rankings = buildRankings('2026-03-24', [
+    createRow(1, { createdAt: '2026-03-01', displayScore: 120 }),
+    createRow(2, { createdAt: '2026-03-20', displayScore: 80 }),
+    createRow(3, { createdAt: '2026-03-20', displayScore: 70 }),
+    createRow(4, { createdAt: '2026-02-10', displayScore: 200 }),
+    createRow(5, { createdAt: '2026-03-22', displayScore: 60, is_listed: false }),
+    createRow(6, { createdAt: '2026-03-23', displayScore: 50, status: 'down' }),
+  ]);
+
+  assert.deepEqual(rankings.new.map((item) => item.airport_id), [3, 2, 1]);
 });

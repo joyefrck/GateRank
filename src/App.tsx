@@ -233,6 +233,7 @@ interface ReportViewResponse {
 
 interface CardProps {
   type: CardType;
+  variant?: 'default' | 'homeCompact';
   title?: string;
   name: string;
   website?: string;
@@ -405,9 +406,9 @@ const sectionDisplayConfig: Record<
 
 const sectionOrder: HomeSectionKey[] = [
   'today_pick',
+  'new_entries',
   'most_stable',
   'best_value',
-  'new_entries',
   'risk_alerts',
 ];
 
@@ -599,6 +600,7 @@ function getStabilityTierTone(tier: StabilityTier): string {
 
 const ConclusionCard = ({
   type,
+  variant = 'default',
   title,
   name,
   website,
@@ -626,39 +628,62 @@ const ConclusionCard = ({
     risk: 'text-rose-600',
     new: 'text-sky-600',
   };
+  const isHomeCompact = variant === 'homeCompact';
+  const hasHeading = Boolean(icon || title);
+  const cardPadding = isHomeCompact ? 'p-4 md:p-5' : 'p-6 md:p-6';
+  const headingMargin = isHomeCompact ? 'mb-3' : 'mb-5';
+  const summaryMargin = isHomeCompact ? 'mb-4' : 'mb-5';
+  const scoreSize = isHomeCompact ? 'text-2xl md:text-[28px]' : 'text-3xl';
+  const tagSpacing = isHomeCompact ? 'gap-1.5 mt-2.5' : 'gap-2 mt-3';
+  const detailGridSpacing = isHomeCompact ? 'gap-2 mb-4' : 'gap-3 mb-6';
+  const detailPadding = isHomeCompact ? 'p-3' : 'p-4';
+  const conclusionMargin = isHomeCompact ? 'mb-4' : 'mb-6';
+  const conclusionText = isHomeCompact
+    ? 'text-[13px] md:text-sm font-medium leading-5 md:leading-6 text-neutral-600 line-clamp-3 md:line-clamp-2 pl-3 border-l border-neutral-200'
+    : 'text-[13px] md:text-sm font-medium leading-6 text-neutral-600 line-clamp-3 pl-4 border-l border-neutral-200';
+  const primaryButtonText = isHomeCompact ? '查看报告' : '查看完整报告';
+  const websiteButtonText = isHomeCompact ? '官网' : '打开官网';
+  const primaryButtonClass = isHomeCompact
+    ? 'w-full min-h-10 px-3 py-2 rounded-lg bg-neutral-900 text-white text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 hover:bg-neutral-800 transition-colors whitespace-nowrap'
+    : 'w-full min-h-11 px-4 py-3 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 hover:bg-neutral-800 transition-colors mt-auto relative z-10';
+  const websiteButtonClass = isHomeCompact
+    ? 'w-full min-h-10 px-3 py-2 rounded-lg border border-neutral-200 bg-white text-neutral-700 text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 hover:border-neutral-900 hover:text-neutral-900 transition-colors whitespace-nowrap'
+    : 'w-full min-h-11 mt-3 px-4 py-3 rounded-lg border border-neutral-200 bg-white text-neutral-700 text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 hover:border-neutral-900 hover:text-neutral-900 transition-colors relative z-10';
 
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true }}
-      className={`p-6 md:p-6 rounded-xl border ${styles[type]} transition-all hover:translate-y-[-2px] hover:shadow-xl group h-full flex flex-col relative overflow-hidden`}
+      className={`${cardPadding} rounded-xl border ${styles[type]} transition-all hover:translate-y-[-2px] hover:shadow-xl group h-full flex flex-col relative overflow-hidden`}
     >
       <div
         className="absolute inset-0 opacity-[0.03] pointer-events-none"
         style={{ backgroundImage: 'radial-gradient(#000 1px, transparent 0)', backgroundSize: '10px 10px' }}
       />
 
-      <div className="flex items-start justify-between gap-4 mb-5 relative z-10">
-        <div className="flex items-center gap-3">
-          {icon && (
-            <div className="p-2 rounded-lg bg-neutral-900 text-white">
-              {React.cloneElement(icon as React.ReactElement, { size: 18 })}
-            </div>
-          )}
-          {title && <h3 className="text-xs md:text-sm font-black uppercase tracking-[0.2em] text-neutral-400">{title}</h3>}
+      {hasHeading && (
+        <div className={`flex items-start justify-between gap-4 ${headingMargin} relative z-10`}>
+          <div className="flex items-center gap-3">
+            {icon && (
+              <div className="p-2 rounded-lg bg-neutral-900 text-white">
+                {React.cloneElement(icon as React.ReactElement, { size: 18 })}
+              </div>
+            )}
+            {title && <h3 className="text-xs md:text-sm font-black uppercase tracking-[0.2em] text-neutral-400">{title}</h3>}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="mb-5 relative z-10">
+      <div className={`${summaryMargin} relative z-10`}>
         <div className="flex items-start justify-between gap-4">
           <span className="font-black text-lg md:text-xl tracking-tight text-neutral-900 leading-tight pr-2">{name}</span>
           <div className="shrink-0 text-right">
             <div className="text-[10px] md:text-[11px] text-neutral-400 uppercase tracking-[0.16em] font-black mb-1">可靠性评分</div>
-            <div className={`text-3xl font-black font-mono leading-none ${scoreColors[type]}`}>{formatScoreFixed2(score)}</div>
+            <div className={`${scoreSize} font-black font-mono leading-none ${scoreColors[type]}`}>{formatScoreFixed2(score)}</div>
             {scoreDeltaVsYesterday && (
               <>
-                <div className="mt-2 text-[10px] md:text-[11px] text-neutral-400 font-black tracking-[0.08em]">
+                <div className={`${isHomeCompact ? 'mt-1.5' : 'mt-2'} text-[10px] md:text-[11px] text-neutral-400 font-black tracking-[0.08em]`}>
                   {scoreDeltaVsYesterday.label}
                 </div>
                 <div className={`mt-1 text-sm md:text-[15px] font-black font-mono ${getScoreDeltaTone(scoreDeltaVsYesterday.value)}`}>
@@ -668,23 +693,23 @@ const ConclusionCard = ({
             )}
           </div>
         </div>
-        <div className="flex flex-wrap gap-2 mt-3">
+        <div className={`flex flex-wrap ${tagSpacing}`}>
           {tags.map((tag) => (
             <TagBadge key={tag} tag={tag} />
           ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 mb-6 relative z-10">
+      <div className={`grid grid-cols-2 ${detailGridSpacing} relative z-10`}>
         {details.map((detail, idx) => (
-          <div key={`${detail.label}-${idx}`} className="bg-neutral-50 p-4 rounded-lg border border-neutral-100">
+          <div key={`${detail.label}-${idx}`} className={`bg-neutral-50 ${detailPadding} rounded-lg border border-neutral-100`}>
             <div className="text-[11px] md:text-xs text-neutral-400 font-black uppercase tracking-[0.16em] mb-1">{detail.label}</div>
             <div className="text-[15px] md:text-base font-black font-mono text-neutral-800">{detail.value}</div>
           </div>
         ))}
       </div>
 
-      <div className="mb-6 relative z-10">
+      <div className={`${conclusionMargin} relative z-10`}>
         <div className="flex items-center gap-2.5 mb-2.5">
           <div className="w-1 h-3 bg-neutral-900" />
           <div className="text-[11px] md:text-xs text-neutral-900 uppercase tracking-[0.18em] font-black">监测结论</div>
@@ -694,29 +719,31 @@ const ConclusionCard = ({
             </span>
           )}
         </div>
-        <p className="text-[13px] md:text-sm font-medium leading-6 text-neutral-600 line-clamp-3 pl-4 border-l border-neutral-200">{conclusion}</p>
+        <p className={conclusionText}>{conclusion}</p>
       </div>
 
-      <button
-        type="button"
-        className="w-full min-h-11 px-4 py-3 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 hover:bg-neutral-800 transition-colors mt-auto relative z-10"
-        onClick={onOpen}
-      >
-        查看完整报告
-        <ChevronRight className="w-3.5 h-3.5" />
-      </button>
-      {website && (
-        <a
-          href={website}
-          target="_blank"
-          rel="noreferrer"
-          onClick={onWebsiteClick}
-          className="w-full min-h-11 mt-3 px-4 py-3 rounded-lg border border-neutral-200 bg-white text-neutral-700 text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 hover:border-neutral-900 hover:text-neutral-900 transition-colors relative z-10"
+      <div className={`${isHomeCompact && website ? 'grid grid-cols-2 gap-2' : 'space-y-3'} mt-auto relative z-10`}>
+        <button
+          type="button"
+          className={primaryButtonClass}
+          onClick={onOpen}
         >
-          打开官网
-          <ExternalLink className="w-3.5 h-3.5" />
-        </a>
-      )}
+          {primaryButtonText}
+          <ChevronRight className="w-3.5 h-3.5" />
+        </button>
+        {website && (
+          <a
+            href={website}
+            target="_blank"
+            rel="noreferrer"
+            onClick={onWebsiteClick}
+            className={websiteButtonClass}
+          >
+            {websiteButtonText}
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        )}
+      </div>
     </motion.div>
   );
 };
@@ -774,7 +801,7 @@ const SectionHeader = ({
   };
 
   return (
-    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5 mb-10">
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-7 md:mb-8">
       <div className="flex items-center gap-4 md:gap-5">
         <div className={`w-10 h-10 rounded-xl ${bgClass} flex items-center justify-center text-white shadow-xl ${shadowMap[bgClass] || ''} shrink-0`}>
           <Icon className="w-[18px] h-[18px]" />
@@ -1731,11 +1758,11 @@ function HomePage({ date }: { date?: string }) {
 
   return (
     <PageFrame active="home">
-      <header className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-10 md:pb-12 text-center">
-        <h1 className="text-[34px] md:text-5xl lg:text-[56px] font-black tracking-tight mb-4 leading-[0.95] text-neutral-900">
+      <header className="max-w-7xl mx-auto px-4 pt-8 md:pt-10 pb-5 md:pb-6 text-center">
+        <h1 className="text-[34px] md:text-5xl lg:text-[56px] font-black tracking-tight mb-3 leading-[0.95] text-neutral-900">
           机场 VPN 推荐与<span className="text-neutral-400">可靠性榜单</span>
         </h1>
-        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-center gap-3 md:gap-6 text-neutral-500 mb-6">
+        <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-center gap-3 md:gap-6 text-neutral-500">
           <p className="text-[13px] md:text-sm font-medium tracking-tight leading-7">
             首页默认聚焦今日推荐，同时结合长期稳定、性价比、新入榜与风险预警五类榜单，帮助用户从不同角度快速筛选值得关注的机场 VPN 与测评报告。
           </p>
@@ -1753,30 +1780,17 @@ function HomePage({ date }: { date?: string }) {
             </div>
           </div>
         </div>
-        <div className="flex justify-center">
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            {data?.resolved_from_fallback && data.fallback_notice ? (
-              <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-[11px] md:text-xs font-black tracking-[0.12em] text-amber-700">
-                <AlertTriangle className="h-3.5 w-3.5" />
-                {data.fallback_notice}
-              </div>
-            ) : null}
-            <a
-              href={buildMethodologyHref()}
-              onClick={(event) => {
-                event.preventDefault();
-                navigate(buildMethodologyHref());
-              }}
-              className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-neutral-600 transition-colors hover:border-neutral-900 hover:text-neutral-900"
-            >
-              查看测评方法
-              <ArrowRight className="h-3.5 w-3.5" />
-            </a>
+        {data?.resolved_from_fallback && data.fallback_notice ? (
+          <div className="mt-4 flex justify-center">
+            <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-[11px] md:text-xs font-black tracking-[0.12em] text-amber-700">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              {data.fallback_notice}
+            </div>
           </div>
-        </div>
+        ) : null}
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 space-y-16 flex-grow">
+      <main className="max-w-7xl mx-auto px-4 space-y-12 md:space-y-14 flex-grow">
         {loading && <EmptySection message="正在加载最新榜单..." />}
         {error && !loading && <EmptySection message={error} />}
 
@@ -1819,6 +1833,7 @@ function HomePage({ date }: { date?: string }) {
                       >
                         <ConclusionCard
                           type={item.type}
+                          variant="homeCompact"
                           name={item.name}
                           website={buildOutboundAirportHref(item.airport_id, 'website', 'home_card')}
                           tags={item.tags}

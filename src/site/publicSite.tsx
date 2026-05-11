@@ -210,16 +210,26 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
             </a>
           </div>
         </div>
-        <a
-          className="bg-neutral-900 hover:bg-neutral-800 text-white min-h-12 px-5 py-3 rounded-lg text-[11px] md:text-xs font-black uppercase tracking-[0.18em] transition-all shadow-xl flex items-center gap-3"
-          href="/apply"
-          target="_blank"
-          rel="noreferrer"
-        >
-          <span className="hidden sm:inline">申请入驻测试</span>
-          <span className="sm:hidden">申请</span>
-          <ExternalLink className="w-3.5 h-3.5" />
-        </a>
+        <div className="flex items-center gap-2">
+          <a
+            className="min-h-11 px-4 py-2.5 rounded-lg border border-neutral-200 bg-white text-neutral-700 text-[11px] md:text-xs font-black uppercase tracking-[0.16em] transition-all hover:border-neutral-900 hover:text-neutral-900 flex items-center gap-2"
+            href="/portal"
+            target="_blank"
+            rel="noreferrer"
+          >
+            登录
+          </a>
+          <a
+            className="bg-neutral-900 hover:bg-neutral-800 text-white min-h-11 px-4 md:px-5 py-2.5 rounded-lg text-[11px] md:text-xs font-black uppercase tracking-[0.16em] transition-all shadow-xl flex items-center gap-2 md:gap-3"
+            href="/apply"
+            target="_blank"
+            rel="noreferrer"
+          >
+            <span className="hidden sm:inline">申请入驻测试</span>
+            <span className="sm:hidden">申请</span>
+            <ExternalLink className="w-3.5 h-3.5" />
+          </a>
+        </div>
       </div>
     </nav>
   );
@@ -276,7 +286,6 @@ function SiteFooter() {
           <a href={buildMethodologyHref()} onClick={(event) => { event.preventDefault(); navigate(buildMethodologyHref()); }} className="hover:text-black transition-colors">测评方法</a>
           <a href={buildNewsHref()} className="hover:text-black transition-colors">News</a>
           <a href="/apply" className="hover:text-black transition-colors">申请入驻</a>
-          <a href="/portal" target="_blank" rel="noreferrer" className="text-blue-500 hover:text-blue-600 transition-colors">申请人登录</a>
         </div>
 
         <div className="border-t border-neutral-100 pt-8">

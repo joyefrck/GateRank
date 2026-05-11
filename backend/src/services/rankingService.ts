@@ -30,8 +30,8 @@ export function buildRankings(
 
   const newSince = dateDaysAgo(date, NEW_AIRPORT_DAYS);
   const newest = activeRows
-    .filter((row) => row.airport.created_at >= newSince)
-    .sort((a, b) => rankingScoreOf(b) - rankingScoreOf(a))
+    .filter((row) => row.airport.is_listed && row.airport.created_at >= newSince)
+    .sort(compareByNewAirportEntryDesc)
     .slice(0, LIST_LIMIT);
 
   const risk = activeRows
@@ -118,4 +118,8 @@ function toRows(
 function rankingScoreOf(row: RankedAirportInput): number {
   const score = Number(row.score.details.manual_total_score ?? row.score.details.total_score ?? row.score.final_score);
   return Number.isFinite(score) ? score : row.score.final_score;
+}
+
+function compareByNewAirportEntryDesc(left: RankedAirportInput, right: RankedAirportInput): number {
+  return right.airport.created_at.localeCompare(left.airport.created_at) || right.airport.id - left.airport.id;
 }
