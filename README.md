@@ -321,10 +321,11 @@ npm run server:dev
 - `/` -> `http://127.0.0.1:18088`
 - `/api` -> `http://127.0.0.1:18787`
 
-线上编排会在容器启动时从 GitHub 拉取最新代码：
+线上编排会在容器启动时从 GitHub 拉取最新代码并构建运行产物：
 
-- `gaterank-web` 克隆 `https://github.com/joyefrck/GateRank.git` 到 `/srv/gaterank-web`，执行 `npm install`、`npm run build`，再把 `dist` 复制到 Nginx 静态目录
-- `gaterank-api` 克隆 `https://github.com/joyefrck/GateRank.git` 到 `/srv/gaterank-api`，执行 `npm install` 后启动 `npm run server:start`
+- `gaterank-web` 使用最新代码构建前端静态产物，并通过容器内 Nginx 对外提供服务
+- `gaterank-api` 使用最新代码安装依赖并启动 `npm run server:start`
+- 当前运行容器不保证保留 Git 工作目录，发布确认不要依赖容器内 `git log`
 
 推荐发布流程：
 
@@ -339,17 +340,17 @@ cd /opt/1panel/docker/compose/gaterank
 docker compose up -d --force-recreate gaterank-web gaterank-api
 ```
 
-6. 等待 `gaterank-web` 和 `gaterank-api` 启动完成后，检查容器、提交版本和线上接口
+6. 等待 `gaterank-web` 和 `gaterank-api` 启动完成后，检查容器状态、内网端口和公网接口
 
 常用验证命令：
 
 ```bash
 docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}' | grep -E 'gaterank|NAMES'
-docker exec gaterank-api sh -lc 'cd /srv/gaterank-api && git log -1 --pretty="%h %s"'
-docker exec gaterank-web sh -lc 'cd /srv/gaterank-web && git log -1 --pretty="%h %s"'
+docker inspect -f '{{.Name}} {{.Config.WorkingDir}} {{.Config.Image}}' gaterank-api gaterank-web
 curl -sS -I --connect-timeout 5 http://127.0.0.1:18088/ | head -5
 curl -sS --connect-timeout 5 http://127.0.0.1:18787/api/v1/pages/home | head -c 220
 curl -sS -I --connect-timeout 5 https://gate-rank.com/ | head -8
+curl -sS --connect-timeout 10 https://gate-rank.com/api/v1/pages/home | head -c 220
 ```
 
 News 模块上线要求：

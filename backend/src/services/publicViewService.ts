@@ -35,6 +35,7 @@ interface PublicViewDeps {
   airportRepository: {
     getById(id: number): Promise<Airport | null>;
     getByIds?(ids: number[]): Promise<Map<number, Airport>>;
+    listLatestApprovedApplicationAirports?(limit: number): Promise<Airport[]>;
   };
   metricsRepository: {
     getByAirportAndDate(airportId: number, date: string): Promise<DailyMetrics | null>;
@@ -223,7 +224,15 @@ export class PublicViewService {
   async getHomePageView(date: string): Promise<HomePageView> {
     const resolvedDate = (await this.deps.rankingRepository.getLatestAvailableDate(date)) || date;
     const resolvedFromFallback = resolvedDate !== date;
-    const [stats, fullRankingPreview, stable, value, newest, riskMonitor] = await Promise.all([
+    const [
+      stats,
+      fullRankingPreview,
+      stable,
+      value,
+      newest,
+      latestApprovedApplicationAirports,
+      riskMonitor,
+    ] = await Promise.all([
       this.deps.statsRepository.getHomeStats(resolvedDate),
       this.deps.scoreRepository.getPublicFullRankingByDate(
         resolvedDate,
@@ -233,6 +242,11 @@ export class PublicViewService {
       this.deps.rankingRepository.getRanking(resolvedDate, 'stable'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'value'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'new'),
+      this.deps.airportRepository.listLatestApprovedApplicationAirports
+        ? this.deps.airportRepository.listLatestApprovedApplicationAirports(
+            SECTION_CONFIG.new_entries.limit,
+          )
+        : Promise.resolve([]),
       this.deps.scoreRepository.getPublicRiskMonitorByDate
         ? this.deps.scoreRepository.getPublicRiskMonitorByDate(
             resolvedDate,
@@ -242,11 +256,17 @@ export class PublicViewService {
         : Promise.resolve({ total: 0, items: [] }),
     ]);
     const preloadedContexts = await this.preloadCardContexts(
-      collectRankingAirportIds(fullRankingPreview.items, stable, value, newest),
+      collectRankingAirportIds(
+        fullRankingPreview.items,
+        stable,
+        value,
+        newest,
+        latestApprovedApplicationAirports.map((airport) => ({ airport_id: airport.id })),
+      ),
       resolvedDate,
     );
     const loadCardContext = this.createCardContextLoader(preloadedContexts);
-    const [todayPickItems, stableItems, valueItems, newestItems] = await Promise.all([
+    const [todayPickItems, stableItems, valueItems, newestItems, latestApprovedApplicationItems] = await Promise.all([
       this.buildHomeSectionItems('today_pick', fullRankingPreview.items, resolvedDate, loadCardContext),
       stable.length > 0
         ? this.buildHomeSectionItems('most_stable', stable, resolvedDate, loadCardContext)
@@ -257,11 +277,32 @@ export class PublicViewService {
       newest.length > 0
         ? this.buildHomeSectionItems('new_entries', newest, resolvedDate, loadCardContext)
         : Promise.resolve([]),
+      latestApprovedApplicationAirports.length > 0
+        ? this.buildHomeSectionItems(
+            'new_entries',
+            latestApprovedApplicationAirports.map((airport) => ({ airport_id: airport.id })),
+            resolvedDate,
+            loadCardContext,
+          )
+        : Promise.resolve([]),
     ]);
+    const newEntryItems = mergeHomeSectionItems(
+      SECTION_CONFIG.new_entries.limit,
+      latestApprovedApplicationItems,
+      newestItems,
+    );
     const fallbackSections =
-      todayPickItems.length === 0 || stable.length === 0 || value.length === 0 || newest.length === 0
+      todayPickItems.length === 0 ||
+      stable.length === 0 ||
+      value.length === 0 ||
+      newEntryItems.length < SECTION_CONFIG.new_entries.limit
         ? await this.buildFallbackHomeSections(resolvedDate, loadCardContext)
         : null;
+    const finalNewEntryItems = mergeHomeSectionItems(
+      SECTION_CONFIG.new_entries.limit,
+      newEntryItems,
+      fallbackSections?.new_entries ?? [],
+    );
 
     return {
       requested_date: date,
@@ -294,7 +335,7 @@ export class PublicViewService {
         new_entries: {
           title: SECTION_CONFIG.new_entries.title,
           subtitle: SECTION_CONFIG.new_entries.subtitle,
-          items: newest.length > 0 ? newestItems : (fallbackSections?.new_entries ?? []),
+          items: finalNewEntryItems,
         },
         risk_alerts: {
           title: SECTION_CONFIG.risk_alerts.title,
@@ -695,6 +736,27 @@ function collectRankingAirportIds(...rankingLists: Array<Array<Pick<RankingItem,
       rankingLists.flatMap((items) => items.map((item) => item.airport_id)),
     ),
   );
+}
+
+function mergeHomeSectionItems(limit: number, ...groups: PublicCardItem[][]): PublicCardItem[] {
+  const safeLimit = Math.max(0, Math.floor(limit));
+  const seenAirportIds = new Set<number>();
+  const items: PublicCardItem[] = [];
+
+  for (const group of groups) {
+    for (const item of group) {
+      if (seenAirportIds.has(item.airport_id)) {
+        continue;
+      }
+      seenAirportIds.add(item.airport_id);
+      items.push(item);
+      if (items.length >= safeLimit) {
+        return items;
+      }
+    }
+  }
+
+  return items;
 }
 
 function compareByDisplayScoreDesc(left: CardContext, right: CardContext): number {

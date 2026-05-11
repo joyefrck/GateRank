@@ -331,6 +331,64 @@ export class AirportRepository {
     return new Map(rows.map((row) => [row.id, toAirportEntity(row)]));
   }
 
+  async listLatestApprovedApplicationAirports(limit: number): Promise<Airport[]> {
+    const safeLimit = Math.max(0, Math.floor(limit));
+    if (safeLimit === 0) {
+      return [];
+    }
+
+    const [rows] = await this.pool.query<AirportRow[]>(
+      `SELECT
+         airports.id,
+         application.id AS application_id,
+         airports.name,
+         airports.website,
+         airports.websites_json,
+         airports.status,
+         airports.is_listed,
+         airports.plan_price_month,
+         airports.has_trial,
+         airports.subscription_url,
+         airports.applicant_email,
+         airports.applicant_telegram,
+         airports.founded_on,
+         airports.airport_intro,
+         airports.test_account,
+         airports.test_password,
+         airports.manual_tags_json,
+         airports.auto_tags_json,
+         airports.tags_json,
+         EXISTS (
+           SELECT 1
+             FROM airport_applications AS paid_application
+            WHERE paid_application.approved_airport_id = airports.id
+              AND paid_application.payment_status = 'paid'
+              AND paid_application.payment_amount > 0
+         ) AS paid_application_fee,
+         airports.created_at
+         FROM airport_applications AS application
+         JOIN airports
+           ON airports.id = application.approved_airport_id
+        WHERE application.review_status = 'reviewed'
+          AND application.payment_status = 'paid'
+          AND application.approved_airport_id IS NOT NULL
+          AND airports.is_listed = 1
+          AND airports.status <> 'down'
+        ORDER BY COALESCE(application.reviewed_at, application.updated_at, application.created_at) DESC,
+                 application.id DESC
+        LIMIT ?`,
+      [safeLimit],
+    );
+
+    const airportsById = new Map<number, Airport>();
+    for (const row of rows) {
+      if (!airportsById.has(row.id)) {
+        airportsById.set(row.id, toAirportEntity(row));
+      }
+    }
+    return Array.from(airportsById.values());
+  }
+
   async create(input: CreateAirportInput): Promise<number> {
     const websites = normalizeWebsiteList(input.websites, input.website);
     const manualTags = normalizeTagList(input.manual_tags ?? input.tags ?? []);
