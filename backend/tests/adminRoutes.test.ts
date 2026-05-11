@@ -1931,9 +1931,285 @@ test('GET /airport-applications/:id returns full application details', async () 
     const port = (server.address() as AddressInfo).port;
     const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7`);
     assert.equal(response.status, 200);
-    const data = (await response.json()) as { id: number; test_password: string };
+    const data = (await response.json()) as { id: number; test_password: string; admin_note?: string | null };
     assert.equal(data.id, 7);
     assert.equal(data.test_password, 'secret');
+    assert.equal(data.admin_note, null);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airport-applications/:id/admin-note saves internal multiline note without auditing body', async () => {
+  const updatedNotes: Array<{ id: number; adminNote: string | null }> = [];
+  const auditLogs: Array<{ action: string; payload: unknown }> = [];
+  let currentApplication = {
+    ...(await stubAirportApplicationRepository().getById(7)),
+    admin_note: null as string | null,
+  };
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async () => currentApplication,
+        updateAdminNote: async (id, adminNote) => {
+          updatedNotes.push({ id, adminNote });
+          currentApplication = { ...currentApplication, admin_note: adminNote };
+          return true;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, _actor, _requestId, payload) => {
+          auditLogs.push({ action, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/admin-note`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({ admin_note: ' first line\nsecond line ' }),
+    });
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { admin_note: string };
+    assert.equal(data.admin_note, 'first line\nsecond line');
+    assert.deepEqual(updatedNotes, [{ id: 7, adminNote: 'first line\nsecond line' }]);
+    assert.equal(auditLogs.length, 1);
+    assert.equal(auditLogs[0]?.action, 'update_airport_application_admin_note');
+    assert.deepEqual(auditLogs[0]?.payload, { application_id: 7 });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airport-applications/:id/admin-note clears blank note', async () => {
+  const updatedNotes: Array<string | null> = [];
+  let currentApplication = {
+    ...(await stubAirportApplicationRepository().getById(7)),
+    admin_note: 'old note' as string | null,
+  };
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async () => currentApplication,
+        updateAdminNote: async (_id, adminNote) => {
+          updatedNotes.push(adminNote);
+          currentApplication = { ...currentApplication, admin_note: adminNote };
+          return true;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/admin-note`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_note: '   ' }),
+    });
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { admin_note: string | null };
+    assert.equal(data.admin_note, null);
+    assert.deepEqual(updatedNotes, [null]);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airport-applications/:id/admin-note returns 404 for missing application', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async () => null,
+        updateAdminNote: async () => true,
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/404/admin-note`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_note: 'note' }),
+    });
+    assert.equal(response.status, 404);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airport-applications/:id/admin-note rejects invalid id', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/0/admin-note`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_note: 'note' }),
+    });
+    assert.equal(response.status, 400);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airport-applications/:id/admin-note returns 409 when update fails', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        updateAdminNote: async () => false,
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/admin-note`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ admin_note: 'note' }),
+    });
+    assert.equal(response.status, 409);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -3760,6 +4036,7 @@ function stubAirportApplicationRepository() {
           paid_at: '2026-03-24 10:05:00',
           review_status: 'pending',
           review_note: null,
+          admin_note: null,
           reviewed_by: null,
           reviewed_at: null,
           created_at: '2026-03-24 10:00:00',
@@ -3789,12 +4066,14 @@ function stubAirportApplicationRepository() {
       paid_at: '2026-03-24 10:05:00',
       review_status: 'pending',
       review_note: null,
+      admin_note: null,
       reviewed_by: null,
       reviewed_at: null,
       created_at: '2026-03-24 10:00:00',
       updated_at: '2026-03-24 10:00:00',
     }),
     review: async () => true,
+    updateAdminNote: async () => true,
     deleteUnpaid: async () => true,
   };
 }

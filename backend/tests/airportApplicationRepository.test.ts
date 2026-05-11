@@ -11,7 +11,7 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
       calls.push({ sql, params });
       if (sql.includes('FROM information_schema.COLUMNS')) {
         schemaChecks += 1;
-        return [schemaChecks <= 21 ? [] : [{ 1: 1 }]];
+        return [schemaChecks <= 22 ? [] : [{ 1: 1 }]];
       }
       return [[]];
     },
@@ -33,6 +33,9 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
   );
   assert.ok(
     calls.some((call) => call.sql.includes("ALTER TABLE airport_applications ADD COLUMN payment_status ENUM('unpaid', 'paid') NOT NULL DEFAULT 'unpaid' AFTER review_status")),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airport_applications ADD COLUMN admin_note TEXT NULL AFTER review_note')),
   );
   assert.ok(
     calls.some((call) => call.sql.includes("MODIFY COLUMN review_status") && call.sql.includes("ENUM('awaiting_payment', 'pending', 'reviewed', 'rejected')")),
@@ -75,6 +78,7 @@ test('AirportApplicationRepository.listByQuery filters by payment status', async
         paid_at: '2026-03-24 10:05:00',
         must_change_password: 0,
         review_note: null,
+        admin_note: 'line one\nline two',
         reviewed_by: null,
         reviewed_at: null,
         created_at: '2026-03-24 10:00:00',
@@ -93,10 +97,31 @@ test('AirportApplicationRepository.listByQuery filters by payment status', async
 
   assert.equal(result.total, 1);
   assert.equal(result.items[0]?.payment_status, 'paid');
+  assert.equal(result.items[0]?.admin_note, 'line one\nline two');
+  assert.ok(calls[1]?.sql.includes('airport_applications.admin_note'));
   assert.ok(calls[0]?.sql.includes('review_status = ?'));
   assert.ok(calls[0]?.sql.includes('payment_status = ?'));
   assert.deepEqual(calls[0]?.params, ['pending', 'paid', '%cloud%', '%cloud%', '%cloud%', '%cloud%', '%cloud%']);
   assert.deepEqual(calls[1]?.params, ['pending', 'paid', '%cloud%', '%cloud%', '%cloud%', '%cloud%', '%cloud%', 20, 20]);
+});
+
+test('AirportApplicationRepository.updateAdminNote saves multiline note and clears empty note', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new AirportApplicationRepository({
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  } as never);
+
+  const saved = await repository.updateAdminNote(7, 'line one\nline two');
+  const cleared = await repository.updateAdminNote(7, null);
+
+  assert.equal(saved, true);
+  assert.equal(cleared, true);
+  assert.ok(calls[0]?.sql.includes('SET admin_note = ?'));
+  assert.deepEqual(calls[0]?.params, ['line one\nline two', 7]);
+  assert.deepEqual(calls[1]?.params, [null, 7]);
 });
 
 test('AirportApplicationRepository.deleteUnpaid deletes application-related records in a transaction', async () => {

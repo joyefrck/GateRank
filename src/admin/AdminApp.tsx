@@ -208,6 +208,7 @@ interface AirportApplication {
   paid_at?: string | null;
   must_change_password?: boolean | null;
   review_note?: string | null;
+  admin_note?: string | null;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   created_at: string;
@@ -4818,6 +4819,10 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
   const [reviewSaving, setReviewSaving] = useState(false);
   const [markPaidSaving, setMarkPaidSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [adminNoteEditing, setAdminNoteEditing] = useState<AirportApplication | null>(null);
+  const [adminNoteDraft, setAdminNoteDraft] = useState('');
+  const [adminNoteSaving, setAdminNoteSaving] = useState(false);
+  const [adminNoteError, setAdminNoteError] = useState('');
 
   const fetchList = async (targetPage = page) => {
     setLoading(true);
@@ -4944,6 +4949,41 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
     }
   };
 
+  const openAdminNoteModal = (item: AirportApplication) => {
+    setAdminNoteEditing(item);
+    setAdminNoteDraft(item.admin_note || '');
+    setAdminNoteError('');
+  };
+
+  const closeAdminNoteModal = () => {
+    if (adminNoteSaving) return;
+    setAdminNoteEditing(null);
+    setAdminNoteDraft('');
+    setAdminNoteError('');
+  };
+
+  const saveAdminNote = async () => {
+    if (!adminNoteEditing) return;
+    setAdminNoteSaving(true);
+    setAdminNoteError('');
+    try {
+      const data = (await apiFetch(`/api/v1/admin/airport-applications/${adminNoteEditing.id}/admin-note`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          admin_note: adminNoteDraft.trim() || null,
+        }),
+      })) as AirportApplication;
+      setItems((current) => current.map((item) => (item.id === data.id ? data : item)));
+      setSelected((current) => (current?.id === data.id ? data : current));
+      setAdminNoteEditing(null);
+      setAdminNoteDraft('');
+    } catch (err) {
+      setAdminNoteError(err instanceof Error ? err.message : '备注保存失败');
+    } finally {
+      setAdminNoteSaving(false);
+    }
+  };
+
   useEffect(() => {
     void fetchList();
   }, []);
@@ -5021,32 +5061,38 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
         <div className="text-sm text-neutral-500">加载中...</div>
       ) : (
         <div className="overflow-x-auto rounded border border-neutral-200">
-          <table className="w-full min-w-[1340px] table-fixed text-sm">
+          <table className="w-full min-w-[1420px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
-                <th className="w-[15%] text-left px-4 py-3">机场名称</th>
+                <th className="w-[7%] text-left px-4 py-3">申请 ID</th>
+                <th className="w-[14%] text-left px-4 py-3">机场名称</th>
                 <th className="w-[15%] text-left px-4 py-3">邮箱</th>
-                <th className="w-[11%] text-left px-4 py-3">Telegram</th>
-                <th className="w-[10%] text-left px-4 py-3">成立日期</th>
-                <th className="w-[10%] text-left px-4 py-3">支付状态</th>
-                <th className="w-[10%] text-left px-4 py-3">已支付金额</th>
-                <th className="w-[10%] text-left px-4 py-3">审批状态</th>
-                <th className="w-[11%] text-left px-4 py-3">提交时间</th>
-                <th className="w-[8%] text-left px-4 py-3">操作</th>
+                <th className="w-[10%] text-left px-4 py-3">Telegram</th>
+                <th className="w-[13%] text-left px-4 py-3">备注</th>
+                <th className="w-[9%] text-left px-4 py-3">支付状态</th>
+                <th className="w-[9%] text-left px-4 py-3">已支付金额</th>
+                <th className="w-[9%] text-left px-4 py-3">审批状态</th>
+                <th className="w-[8%] text-left px-4 py-3">提交时间</th>
+                <th className="w-[6%] text-left px-4 py-3">操作</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id} className="border-t border-neutral-100 align-middle">
+                  <td className="px-4 py-3 whitespace-nowrap font-mono text-neutral-700">#{item.id}</td>
                   <td className="px-4 py-3">
                     <div className="font-medium whitespace-nowrap">{item.name}</div>
                     <div className="mt-1 text-xs text-neutral-500 truncate" title={item.website}>{item.website}</div>
                   </td>
-                  <td className="px-4 py-3 truncate" title={item.applicant_email}>{item.applicant_email}</td>
+                  <td className="px-4 py-3 truncate" title={item.applicant_email}>
+                    <EmailComposeLink email={item.applicant_email} />
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <TelegramProfileLink value={item.applicant_telegram} />
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">{item.founded_on}</td>
+                  <td className="px-4 py-3">
+                    <AdminNoteButton note={item.admin_note} onClick={() => openAdminNoteModal(item)} />
+                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">{item.payment_status === 'paid' ? '已支付' : '未支付'}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatMoneyOrDash(item.payment_amount)}</td>
                   <td className="px-4 py-3 whitespace-nowrap">{formatApplicationReviewStatus(item.review_status)}</td>
@@ -5069,7 +5115,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
               ))}
               {items.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-4 py-12 text-center text-sm text-neutral-500">
+                  <td colSpan={10} className="px-4 py-12 text-center text-sm text-neutral-500">
                     当前没有匹配的申请记录
                   </td>
                 </tr>
@@ -5159,11 +5205,12 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                       <p className="mt-1 text-sm text-neutral-500">仅详情页展示测试账号与密码。</p>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                      <ReadField label="联系邮箱" value={selected.applicant_email} />
+                      <ReadField label="联系邮箱" value={<EmailComposeLink email={selected.applicant_email} />} />
                       <ReadField label="Telegram" value={<TelegramProfileLink value={selected.applicant_telegram} />} />
                       <ReadField label="测试账号" value={selected.test_account} />
                       <ReadField label="测试密码" value={selected.test_password} />
                     </div>
+                    <ReadField label="后台内部备注" value={valueOrDash(selected.admin_note)} />
                     <ReadField label="机场基本介绍" value={selected.airport_intro} />
                   </section>
 
@@ -5259,6 +5306,62 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                 onClick={() => void submitReview()}
               >
                 {reviewSaving ? '提交中...' : selected?.review_status === 'awaiting_payment' ? '待支付' : isReviewLocked ? '已处理' : '保存审核结果'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {adminNoteEditing && (
+        <div className="fixed inset-0 z-[60] bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl rounded-[24px] border border-neutral-200 bg-white shadow-[0_28px_100px_-36px_rgba(0,0,0,0.55)] overflow-hidden">
+            <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold tracking-tight">编辑沟通备注</h3>
+                <p className="mt-1 text-sm text-neutral-500">
+                  #{adminNoteEditing.id} {adminNoteEditing.name}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="w-10 h-10 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-900 disabled:opacity-50"
+                disabled={adminNoteSaving}
+                onClick={closeAdminNoteModal}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="px-6 py-5 space-y-3">
+              {adminNoteError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {adminNoteError}
+                </div>
+              )}
+              <textarea
+                className="min-h-48 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm leading-6 outline-none transition focus:border-neutral-900 disabled:bg-neutral-50"
+                value={adminNoteDraft}
+                disabled={adminNoteSaving}
+                onChange={(e) => setAdminNoteDraft(e.target.value)}
+                placeholder="记录和用户沟通后的结论，支持多行输入"
+              />
+              <div className="text-xs text-neutral-500">该备注仅管理后台可见，不会展示给申请人。</div>
+            </div>
+            <div className="border-t border-neutral-200 px-6 py-5 flex items-center justify-end gap-3 bg-white">
+              <button
+                type="button"
+                className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50"
+                disabled={adminNoteSaving}
+                onClick={closeAdminNoteModal}
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50"
+                disabled={adminNoteSaving}
+                onClick={() => void saveAdminNote()}
+              >
+                {adminNoteSaving ? '保存中...' : '保存备注'}
               </button>
             </div>
           </div>
@@ -6068,6 +6171,40 @@ function TelegramProfileLink({ value }: { value: string | null | undefined }) {
   );
 }
 
+function EmailComposeLink({ email }: { email: string | null | undefined }) {
+  const normalizedEmail = (email || '').trim();
+  if (!normalizedEmail) {
+    return <span>-</span>;
+  }
+
+  const href = `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(normalizedEmail)}`;
+  return (
+    <a
+      className="font-medium text-blue-600 underline underline-offset-2 hover:text-blue-700"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      title={`用 Gmail 发邮件给 ${normalizedEmail}`}
+    >
+      {normalizedEmail}
+    </a>
+  );
+}
+
+function AdminNoteButton({ note, onClick }: { note: string | null | undefined; onClick: () => void }) {
+  const summary = summarizeAdminNote(note);
+  return (
+    <button
+      type="button"
+      className="max-w-full text-left text-blue-600 underline underline-offset-2 hover:text-blue-700"
+      title={note?.trim() || '添加备注'}
+      onClick={onClick}
+    >
+      <span className="block truncate">{summary}</span>
+    </button>
+  );
+}
+
 function FormField({
   label,
   hint,
@@ -6342,6 +6479,14 @@ function formatApplicationReviewStatus(status: AirportApplicationReviewStatus): 
     return '已审核';
   }
   return '已驳回';
+}
+
+function summarizeAdminNote(note: string | null | undefined): string {
+  const normalized = (note || '').trim().replace(/\s+/g, ' ');
+  if (!normalized) {
+    return '添加备注';
+  }
+  return normalized.length > 28 ? `${normalized.slice(0, 28)}...` : normalized;
 }
 
 function formatProbeSampleLabel(sample: ProbeSample): string {

@@ -59,6 +59,7 @@ export interface AirportApplication {
   paid_at?: string | null;
   must_change_password?: boolean | null;
   review_note?: string | null;
+  admin_note?: string | null;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
   created_at: string;

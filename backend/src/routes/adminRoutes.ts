@@ -118,6 +118,7 @@ interface AdminDeps {
         reviewed_at: string;
       },
     ): Promise<boolean>;
+    updateAdminNote?(id: number, adminNote: string | null): Promise<boolean>;
     markPaid?(id: number, paymentAmount: number, paidAt: string): Promise<boolean>;
     deleteUnpaid(id: number): Promise<boolean>;
   };
@@ -818,6 +819,40 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         application_id: applicationId,
       });
       res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/airport-applications/:id/admin-note', async (req, res, next) => {
+    try {
+      const applicationId = toPositiveInt(req.params.id, 0);
+      if (applicationId <= 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'application id must be positive integer');
+      }
+
+      if (!deps.airportApplicationRepository.updateAdminNote) {
+        throw new Error('airportApplicationRepository.updateAdminNote is not configured');
+      }
+
+      const application = await deps.airportApplicationRepository.getById(applicationId);
+      if (!application) {
+        throw new HttpError(404, 'AIRPORT_APPLICATION_NOT_FOUND', `application ${applicationId} not found`);
+      }
+
+      const payload = (req.body ?? {}) as Record<string, unknown>;
+      const adminNote = optionalString(payload.admin_note) || null;
+      const updated = await deps.airportApplicationRepository.updateAdminNote(applicationId, adminNote);
+      if (!updated) {
+        throw new HttpError(409, 'AIRPORT_APPLICATION_ADMIN_NOTE_NOT_UPDATED', '后台备注保存失败');
+      }
+
+      await deps.auditRepository.log('update_airport_application_admin_note', actorFromReq(req), req.requestId, {
+        application_id: applicationId,
+      });
+
+      const updatedApplication = await deps.airportApplicationRepository.getById(applicationId);
+      res.json(updatedApplication);
     } catch (error) {
       next(error);
     }

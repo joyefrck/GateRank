@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS airport_applications (
   payment_amount DECIMAL(10,2) NULL,
   paid_at DATETIME NULL,
   review_note TEXT NULL,
+  admin_note TEXT NULL,
   reviewed_by VARCHAR(128) NULL,
   reviewed_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

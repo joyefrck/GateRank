@@ -29,6 +29,7 @@ interface AirportApplicationRow extends RowDataPacket {
   paid_at: string | null;
   must_change_password: number | null;
   review_note: string | null;
+  admin_note: string | null;
   reviewed_by: string | null;
   reviewed_at: string | null;
   created_at: string;
@@ -100,6 +101,7 @@ export class AirportApplicationRepository {
         payment_amount DECIMAL(10,2) NULL,
         paid_at DATETIME NULL,
         review_note TEXT NULL,
+        admin_note TEXT NULL,
         reviewed_by VARCHAR(128) NULL,
         reviewed_at DATETIME NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -138,7 +140,8 @@ export class AirportApplicationRepository {
     await this.ensureColumn('payment_amount', 'DECIMAL(10,2) NULL AFTER payment_status');
     await this.ensureColumn('paid_at', 'DATETIME NULL AFTER payment_amount');
     await this.ensureColumn('review_note', 'TEXT NULL AFTER paid_at');
-    await this.ensureColumn('reviewed_by', 'VARCHAR(128) NULL AFTER review_note');
+    await this.ensureColumn('admin_note', 'TEXT NULL AFTER review_note');
+    await this.ensureColumn('reviewed_by', 'VARCHAR(128) NULL AFTER admin_note');
     await this.ensureColumn('reviewed_at', 'DATETIME NULL AFTER reviewed_by');
     await this.pool.query(
       `ALTER TABLE airport_applications
@@ -273,6 +276,7 @@ export class AirportApplicationRepository {
          DATE_FORMAT(airport_applications.paid_at, '%Y-%m-%d %H:%i:%s') AS paid_at,
          account.must_change_password AS must_change_password,
          airport_applications.review_note,
+         airport_applications.admin_note,
          airport_applications.reviewed_by,
          airport_applications.reviewed_at,
          airport_applications.created_at,
@@ -316,6 +320,7 @@ export class AirportApplicationRepository {
          DATE_FORMAT(airport_applications.paid_at, '%Y-%m-%d %H:%i:%s') AS paid_at,
          account.must_change_password AS must_change_password,
          airport_applications.review_note,
+         airport_applications.admin_note,
          airport_applications.reviewed_by,
          airport_applications.reviewed_at,
          airport_applications.created_at,
@@ -403,6 +408,17 @@ export class AirportApplicationRepository {
         WHERE id = ?
           AND payment_status != 'paid'`,
       [paymentAmount, paidAt, id],
+    );
+
+    return result.affectedRows > 0;
+  }
+
+  async updateAdminNote(id: number, adminNote: string | null): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE airport_applications
+          SET admin_note = ?
+        WHERE id = ?`,
+      [adminNote, id],
     );
 
     return result.affectedRows > 0;
@@ -544,6 +560,7 @@ function toAirportApplicationEntity(row: AirportApplicationRow): AirportApplicat
     must_change_password:
       row.must_change_password == null ? null : Boolean(row.must_change_password),
     review_note: row.review_note,
+    admin_note: row.admin_note,
     reviewed_by: row.reviewed_by,
     reviewed_at: toDateTimeString(row.reviewed_at),
     created_at: toDateTimeString(row.created_at),
