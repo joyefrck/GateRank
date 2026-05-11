@@ -50,6 +50,11 @@ export interface WalletTransactionView {
   created_at: string;
 }
 
+export interface PaginatedBillingRecords<T> {
+  items: T[];
+  total: number;
+}
+
 export interface ApplicantClickView {
   id: number;
   click_id: string;
@@ -805,6 +810,39 @@ export class ApplicantBillingRepository {
     return rows.map(toRechargeOrder);
   }
 
+  async listRechargeOrdersByAirportId(
+    airportId: number,
+    page = 1,
+    pageSize = 20,
+  ): Promise<PaginatedBillingRecords<RechargeOrderView>> {
+    const offset = (page - 1) * pageSize;
+    const [[countRow], [rows]] = await Promise.all([
+      this.pool.query<Array<RowDataPacket & { total: number }>>(
+        `SELECT COUNT(*) AS total
+           FROM applicant_wallets w
+           JOIN applicant_recharge_orders o ON o.applicant_account_id = w.applicant_account_id
+          WHERE w.airport_id = ?`,
+        [airportId],
+      ),
+      this.pool.query<RechargeOrderRow[]>(
+        `SELECT o.id, o.applicant_account_id, o.out_trade_no, o.gateway_trade_no, o.channel, o.amount, o.status,
+                o.pay_type, o.pay_info, o.notify_payload_json,
+                DATE_FORMAT(o.paid_at, '%Y-%m-%d %H:%i:%s') AS paid_at,
+                DATE_FORMAT(o.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+           FROM applicant_wallets w
+           JOIN applicant_recharge_orders o ON o.applicant_account_id = w.applicant_account_id
+          WHERE w.airport_id = ?
+          ORDER BY o.created_at DESC, o.id DESC
+          LIMIT ? OFFSET ?`,
+        [airportId, pageSize, offset],
+      ),
+    ]);
+    return {
+      items: rows.map(toRechargeOrder),
+      total: Number(countRow[0]?.total || 0),
+    };
+  }
+
   async markRechargePaidAndCredit(
     outTradeNo: string,
     input: {
@@ -918,6 +956,40 @@ export class ApplicantBillingRepository {
       [applicantAccountId, limit],
     );
     return rows.map(toTransaction);
+  }
+
+  async listWalletTransactionsByAirportId(
+    airportId: number,
+    page = 1,
+    pageSize = 20,
+    transactionType?: WalletTransactionType,
+  ): Promise<PaginatedBillingRecords<WalletTransactionView>> {
+    const offset = (page - 1) * pageSize;
+    const typeFilter = transactionType ? ' AND t.transaction_type = ?' : '';
+    const params = transactionType ? [airportId, transactionType] : [airportId];
+    const [[countRow], [rows]] = await Promise.all([
+      this.pool.query<Array<RowDataPacket & { total: number }>>(
+        `SELECT COUNT(*) AS total
+           FROM applicant_wallets w
+           JOIN applicant_wallet_transactions t ON t.wallet_id = w.id
+          WHERE w.airport_id = ?${typeFilter}`,
+        params,
+      ),
+      this.pool.query<TransactionRow[]>(
+        `SELECT t.id, t.transaction_type, t.amount, t.balance_after, t.reference_type, t.reference_id, t.description,
+                DATE_FORMAT(t.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+           FROM applicant_wallets w
+           JOIN applicant_wallet_transactions t ON t.wallet_id = w.id
+          WHERE w.airport_id = ?${typeFilter}
+          ORDER BY t.created_at DESC, t.id DESC
+          LIMIT ? OFFSET ?`,
+        [...params, pageSize, offset],
+      ),
+    ]);
+    return {
+      items: rows.map(toTransaction),
+      total: Number(countRow[0]?.total || 0),
+    };
   }
 
   async listClicks(applicantAccountId: number, limit = 50): Promise<ApplicantClickView[]> {

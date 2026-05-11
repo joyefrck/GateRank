@@ -15,6 +15,7 @@ export type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover
 
 export interface Airport {
   id: number;
+  application_id?: number | null;
   name: string;
   website: string;
   websites?: string[];

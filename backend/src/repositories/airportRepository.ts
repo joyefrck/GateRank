@@ -4,6 +4,7 @@ import { mergeDisplayTags, normalizeTagList } from '../utils/tags';
 
 interface AirportRow extends RowDataPacket {
   id: number;
+  application_id: number | null;
   name: string;
   website: string;
   websites_json: unknown;
@@ -119,6 +120,13 @@ export class AirportRepository {
     const [rows] = await this.pool.query<AirportRow[]>(
       `SELECT
          id,
+         (
+           SELECT application.id
+             FROM airport_applications AS application
+            WHERE application.approved_airport_id = airports.id
+            ORDER BY application.id DESC
+            LIMIT 1
+         ) AS application_id,
          name,
          website,
          websites_json,
@@ -180,6 +188,13 @@ export class AirportRepository {
     const [rows] = await this.pool.query<AirportRow[]>(
       `SELECT
          id,
+         (
+           SELECT application.id
+             FROM airport_applications AS application
+            WHERE application.approved_airport_id = airports.id
+            ORDER BY application.id DESC
+            LIMIT 1
+         ) AS application_id,
          name,
          website,
          websites_json,
@@ -222,6 +237,13 @@ export class AirportRepository {
     const [rows] = await this.pool.query<AirportRow[]>(
       `SELECT
          id,
+         (
+           SELECT application.id
+             FROM airport_applications AS application
+            WHERE application.approved_airport_id = airports.id
+            ORDER BY application.id DESC
+            LIMIT 1
+         ) AS application_id,
          name,
          website,
          websites_json,
@@ -269,6 +291,13 @@ export class AirportRepository {
     const [rows] = await this.pool.query<AirportRow[]>(
       `SELECT
          id,
+         (
+           SELECT application.id
+             FROM airport_applications AS application
+            WHERE application.approved_airport_id = airports.id
+            ORDER BY application.id DESC
+            LIMIT 1
+         ) AS application_id,
          name,
          website,
          websites_json,
@@ -507,6 +536,7 @@ function toAirportEntity(row: AirportRow): Airport {
   const websites = normalizeWebsiteList(normalizeTagList(row.websites_json), row.website);
   return {
     id: row.id,
+    application_id: row.application_id == null ? null : Number(row.application_id),
     name: row.name,
     website: websites[0],
     websites,

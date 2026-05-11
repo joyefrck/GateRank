@@ -16,6 +16,7 @@ import {
   MousePointerClick,
   Trash2,
   X,
+  Eye,
 } from 'lucide-react';
 import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
@@ -36,6 +37,7 @@ type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
 
 interface Airport {
   id: number;
+  application_id?: number | null;
   name: string;
   website: string;
   websites?: string[];
@@ -83,6 +85,40 @@ interface AirportFormState {
   manual_tags: string[];
   wallet_id: number | null;
   wallet_balance: number | null;
+}
+
+type BillingDetailTab = 'recharge' | 'consumption';
+
+interface RechargeOrderRecord {
+  id: number;
+  applicant_account_id: number;
+  out_trade_no: string;
+  gateway_trade_no: string | null;
+  channel: 'alipay' | 'wxpay' | 'usdt';
+  amount: number;
+  status: 'created' | 'paid' | 'failed' | 'expired' | 'canceled';
+  pay_type: string | null;
+  pay_info: string | null;
+  paid_at: string | null;
+  created_at: string;
+}
+
+interface WalletTransactionRecord {
+  id: number;
+  transaction_type: 'recharge' | 'click_charge' | 'adjustment';
+  amount: number;
+  balance_after: number;
+  reference_type: string | null;
+  reference_id: string | null;
+  description: string;
+  created_at: string;
+}
+
+interface PaginatedResponse<T> {
+  page: number;
+  page_size: number;
+  total: number;
+  items: T[];
 }
 
 interface AirportDashboardView {
@@ -658,6 +694,7 @@ const DEFAULT_PUBLISH_TOKEN_SCOPES = PUBLISH_TOKEN_SCOPES.map((item) => item.val
 const TOKEN_KEY = 'gaterank_admin_token';
 const ADMIN_DEFAULT_PATH = '/admin/marketing';
 const AIRPORTS_PAGE_SIZE = 50;
+const AIRPORT_BILLING_PAGE_SIZE = 20;
 const APPLICATIONS_PAGE_SIZE = 20;
 const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = ['applicant_credentials', 'application_approved'];
 const SMTP_TEMPLATE_SCENARIOS: Record<
@@ -4248,6 +4285,22 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
   const [balanceSaving, setBalanceSaving] = useState(false);
   const [balanceError, setBalanceError] = useState('');
   const [balanceMessage, setBalanceMessage] = useState('');
+  const [billingAirport, setBillingAirport] = useState<Airport | null>(null);
+  const [billingTab, setBillingTab] = useState<BillingDetailTab>('recharge');
+  const [rechargeRecords, setRechargeRecords] = useState<PaginatedResponse<RechargeOrderRecord>>({
+    page: 1,
+    page_size: AIRPORT_BILLING_PAGE_SIZE,
+    total: 0,
+    items: [],
+  });
+  const [consumptionRecords, setConsumptionRecords] = useState<PaginatedResponse<WalletTransactionRecord>>({
+    page: 1,
+    page_size: AIRPORT_BILLING_PAGE_SIZE,
+    total: 0,
+    items: [],
+  });
+  const [billingLoading, setBillingLoading] = useState(false);
+  const [billingError, setBillingError] = useState('');
 
   const fetchList = async (targetPage = page) => {
     setLoading(true);
@@ -4381,6 +4434,81 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
     }
   };
 
+  const openBillingDetail = (airport: Airport) => {
+    setBillingAirport(airport);
+    setBillingTab('recharge');
+    setRechargeRecords({
+      page: 1,
+      page_size: AIRPORT_BILLING_PAGE_SIZE,
+      total: 0,
+      items: [],
+    });
+    setConsumptionRecords({
+      page: 1,
+      page_size: AIRPORT_BILLING_PAGE_SIZE,
+      total: 0,
+      items: [],
+    });
+    setBillingError('');
+  };
+
+  const closeBillingDetail = () => {
+    setBillingAirport(null);
+    setBillingError('');
+  };
+
+  const fetchBillingDetail = async (tab: BillingDetailTab, targetPage: number) => {
+    if (!billingAirport) return;
+    setBillingLoading(true);
+    setBillingError('');
+    try {
+      const query = new URLSearchParams();
+      query.set('page', String(targetPage));
+      query.set('page_size', String(AIRPORT_BILLING_PAGE_SIZE));
+      const endpoint = tab === 'recharge'
+        ? `/api/v1/admin/airports/${billingAirport.id}/recharge-orders`
+        : `/api/v1/admin/airports/${billingAirport.id}/wallet-transactions`;
+      if (tab === 'recharge') {
+        const data = (await apiFetch(`${endpoint}?${query.toString()}`)) as PaginatedResponse<RechargeOrderRecord>;
+        setRechargeRecords(data);
+      } else {
+        const data = (await apiFetch(`${endpoint}?${query.toString()}`)) as PaginatedResponse<WalletTransactionRecord>;
+        setConsumptionRecords(data);
+      }
+    } catch (err) {
+      setBillingError(err instanceof Error ? err.message : '加载明细失败');
+    } finally {
+      setBillingLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!billingAirport) return;
+    const targetPage = billingTab === 'recharge' ? rechargeRecords.page : consumptionRecords.page;
+    void fetchBillingDetail(billingTab, targetPage);
+  }, [billingAirport?.id, billingTab, rechargeRecords.page, consumptionRecords.page]);
+
+  const switchBillingTab = (tab: BillingDetailTab) => {
+    setBillingTab(tab);
+    if (tab === 'recharge' && rechargeRecords.page !== 1) {
+      setRechargeRecords({ ...rechargeRecords, page: 1 });
+    }
+    if (tab === 'consumption' && consumptionRecords.page !== 1) {
+      setConsumptionRecords({ ...consumptionRecords, page: 1 });
+    }
+  };
+
+  const goToBillingPage = (nextPage: number) => {
+    const current = billingTab === 'recharge' ? rechargeRecords : consumptionRecords;
+    const totalBillingPages = Math.max(1, Math.ceil(current.total / AIRPORT_BILLING_PAGE_SIZE));
+    const boundedPage = Math.min(totalBillingPages, Math.max(1, nextPage));
+    if (billingTab === 'recharge') {
+      setRechargeRecords({ ...rechargeRecords, page: boundedPage });
+    } else {
+      setConsumptionRecords({ ...consumptionRecords, page: boundedPage });
+    }
+  };
+
   const totalPages = Math.max(1, Math.ceil(total / AIRPORTS_PAGE_SIZE));
   const firstItemNo = total === 0 ? 0 : (page - 1) * AIRPORTS_PAGE_SIZE + 1;
   const lastItemNo = Math.min(total, page * AIRPORTS_PAGE_SIZE);
@@ -4393,6 +4521,10 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
     setPage(1);
     void fetchList(1);
   };
+  const activeBillingData = billingTab === 'recharge' ? rechargeRecords : consumptionRecords;
+  const billingTotalPages = Math.max(1, Math.ceil(activeBillingData.total / AIRPORT_BILLING_PAGE_SIZE));
+  const billingFirstItemNo = activeBillingData.total === 0 ? 0 : (activeBillingData.page - 1) * AIRPORT_BILLING_PAGE_SIZE + 1;
+  const billingLastItemNo = Math.min(activeBillingData.total, activeBillingData.page * AIRPORT_BILLING_PAGE_SIZE);
 
   return (
     <div className="space-y-4">
@@ -4431,19 +4563,20 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       {error && <div className="text-sm text-rose-600">{error}</div>}
       {loading ? <div className="text-sm text-neutral-500">加载中...</div> : (
         <div className="overflow-x-auto rounded border border-neutral-200">
-          <table className="w-full min-w-[1500px] table-fixed text-sm">
+          <table className="w-full min-w-[1600px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
-                <th className="w-[12%] text-left px-4 py-3">名称</th>
-                <th className="w-[7%] text-left px-4 py-3">网站</th>
+                <th className="w-[6%] text-left px-4 py-3">申请 ID</th>
+                <th className="w-[11%] text-left px-4 py-3">名称</th>
+                <th className="w-[6%] text-left px-4 py-3">网站</th>
                 <th className="w-[7%] text-left px-4 py-3">状态</th>
                 <th className="w-[7%] text-left px-4 py-3">是否上架</th>
-                <th className="w-[7%] text-left px-4 py-3">月价</th>
-                <th className="w-[7%] text-left px-4 py-3">总分</th>
-                <th className="w-[7%] text-left px-4 py-3">试用</th>
-                <th className="w-[8%] text-left px-4 py-3">订阅链接</th>
-                <th className="w-[8%] text-left px-4 py-3">用户余额</th>
-                <th className="w-[20%] text-left px-4 py-3">标签</th>
+                <th className="w-[6%] text-left px-4 py-3">月价</th>
+                <th className="w-[6%] text-left px-4 py-3">总分</th>
+                <th className="w-[6%] text-left px-4 py-3">试用</th>
+                <th className="w-[7%] text-left px-4 py-3">订阅链接</th>
+                <th className="w-[9%] text-left px-4 py-3">用户余额</th>
+                <th className="w-[19%] text-left px-4 py-3">标签</th>
                 <th className="sticky right-0 z-20 w-[10%] text-left px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
                   操作
                 </th>
@@ -4455,6 +4588,9 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                   key={it.id}
                   className={`border-t border-neutral-100 align-middle ${it.paid_application_fee ? 'font-bold text-orange-600' : ''}`}
                 >
+                  <td className="px-4 py-3 whitespace-nowrap font-mono text-neutral-700">
+                    {it.application_id ? `#${it.application_id}` : '-'}
+                  </td>
                   <td className="px-4 py-3">
                     <div className={`whitespace-nowrap ${it.paid_application_fee ? '' : 'font-medium'}`}>
                       {it.name}
@@ -4471,7 +4607,20 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                   <td className="px-4 py-3 whitespace-nowrap">
                     {it.subscription_url ? '有' : '无'}
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatMoneyOrDash(it.wallet_balance)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      <span>{formatMoneyOrDash(it.wallet_balance)}</span>
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 hover:border-neutral-900 hover:text-neutral-900"
+                        title="查看充值和消费记录"
+                        aria-label={`查看 ${it.name} 的充值和消费记录`}
+                        onClick={() => openBillingDetail(it)}
+                      >
+                        <Eye size={14} />
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <TagBadgeGroup tags={it.tags || []} size="sm" />
                   </td>
@@ -4516,6 +4665,137 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
           </button>
         </div>
       </div>
+
+      {billingAirport && (
+        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="w-full max-w-5xl max-h-[88vh] rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col">
+            <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-2xl font-bold tracking-tight">余额明细 - {billingAirport.name}</h3>
+                <p className="text-sm text-neutral-500">当前用户余额：{formatMoneyOrDash(billingAirport.wallet_balance)}</p>
+              </div>
+              <button
+                type="button"
+                className="w-10 h-10 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-900"
+                onClick={closeBillingDetail}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-4 overscroll-contain">
+              <div className="inline-flex rounded-2xl bg-neutral-100 p-1">
+                <button
+                  type="button"
+                  className={`rounded-xl px-4 py-2 text-sm font-medium ${billingTab === 'recharge' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-white'}`}
+                  onClick={() => switchBillingTab('recharge')}
+                >
+                  充值记录
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-xl px-4 py-2 text-sm font-medium ${billingTab === 'consumption' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-white'}`}
+                  onClick={() => switchBillingTab('consumption')}
+                >
+                  消费记录
+                </button>
+              </div>
+
+              {billingError && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{billingError}</div>}
+
+              <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+                {billingTab === 'recharge' ? (
+                  <table className="w-full min-w-[900px] text-sm">
+                    <thead className="bg-neutral-50">
+                      <tr>
+                        <th className="text-left px-4 py-3">订单号</th>
+                        <th className="text-left px-4 py-3">渠道</th>
+                        <th className="text-left px-4 py-3">金额</th>
+                        <th className="text-left px-4 py-3">状态</th>
+                        <th className="text-left px-4 py-3">创建时间</th>
+                        <th className="text-left px-4 py-3">支付时间</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rechargeRecords.items.map((record) => (
+                        <tr key={record.id} className="border-t border-neutral-100">
+                          <td className="px-4 py-3 font-mono text-xs text-neutral-700">{record.out_trade_no}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatRechargeChannel(record.channel)}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatMoneyOrDash(record.amount)}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatRechargeStatus(record.status)}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatDateTimeInBeijing(record.created_at)}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatDateTimeInBeijing(record.paid_at)}</td>
+                        </tr>
+                      ))}
+                      {!billingLoading && rechargeRecords.items.length === 0 && (
+                        <tr>
+                          <td colSpan={6} className="px-4 py-10 text-center text-sm text-neutral-500">暂无充值记录</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                ) : (
+                  <table className="w-full min-w-[900px] text-sm">
+                    <thead className="bg-neutral-50">
+                      <tr>
+                        <th className="text-left px-4 py-3">扣费金额</th>
+                        <th className="text-left px-4 py-3">扣费后余额</th>
+                        <th className="text-left px-4 py-3">说明</th>
+                        <th className="text-left px-4 py-3">关联编号</th>
+                        <th className="text-left px-4 py-3">时间</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {consumptionRecords.items.map((record) => (
+                        <tr key={record.id} className="border-t border-neutral-100">
+                          <td className="px-4 py-3 whitespace-nowrap">{formatMoneyOrDash(record.amount)}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatMoneyOrDash(record.balance_after)}</td>
+                          <td className="px-4 py-3">{record.description}</td>
+                          <td className="px-4 py-3 font-mono text-xs text-neutral-700">{valueOrDash(record.reference_id)}</td>
+                          <td className="px-4 py-3 whitespace-nowrap">{formatDateTimeInBeijing(record.created_at)}</td>
+                        </tr>
+                      ))}
+                      {!billingLoading && consumptionRecords.items.length === 0 && (
+                        <tr>
+                          <td colSpan={5} className="px-4 py-10 text-center text-sm text-neutral-500">暂无消费记录</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {billingLoading && <div className="text-sm text-neutral-500">加载中...</div>}
+
+              <div className="flex items-center justify-between gap-3 flex-wrap text-sm text-neutral-600">
+                <div>
+                  共 {activeBillingData.total} 条记录
+                  {activeBillingData.total > 0 ? `，当前 ${billingFirstItemNo}-${billingLastItemNo} 条` : ''}
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    className="inline-flex items-center gap-1 rounded border border-neutral-200 px-3 py-2 disabled:opacity-40"
+                    disabled={activeBillingData.page <= 1 || billingLoading}
+                    onClick={() => goToBillingPage(activeBillingData.page - 1)}
+                  >
+                    <ChevronLeft size={14} /> 上一页
+                  </button>
+                  <span className="min-w-16 text-center">
+                    {activeBillingData.page} / {billingTotalPages}
+                  </span>
+                  <button
+                    className="inline-flex items-center gap-1 rounded border border-neutral-200 px-3 py-2 disabled:opacity-40"
+                    disabled={activeBillingData.page >= billingTotalPages || billingLoading}
+                    onClick={() => goToBillingPage(activeBillingData.page + 1)}
+                  >
+                    下一页 <ChevronRight size={14} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {editing && (
         <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -5061,43 +5341,43 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
         <div className="text-sm text-neutral-500">加载中...</div>
       ) : (
         <div className="overflow-x-auto rounded border border-neutral-200">
-          <table className="w-full min-w-[1420px] table-fixed text-sm">
+          <table className="w-full min-w-[1500px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
-                <th className="w-[7%] text-left px-4 py-3">申请 ID</th>
-                <th className="w-[14%] text-left px-4 py-3">机场名称</th>
-                <th className="w-[15%] text-left px-4 py-3">邮箱</th>
-                <th className="w-[10%] text-left px-4 py-3">Telegram</th>
-                <th className="w-[13%] text-left px-4 py-3">备注</th>
-                <th className="w-[9%] text-left px-4 py-3">支付状态</th>
-                <th className="w-[9%] text-left px-4 py-3">已支付金额</th>
-                <th className="w-[9%] text-left px-4 py-3">审批状态</th>
-                <th className="w-[8%] text-left px-4 py-3">提交时间</th>
-                <th className="w-[6%] text-left px-4 py-3">操作</th>
+                <th className="w-[5%] text-left px-3 py-3">申请 ID</th>
+                <th className="w-[14%] text-left px-3 py-3">机场名称</th>
+                <th className="w-[17%] text-left px-3 py-3">邮箱</th>
+                <th className="w-[10%] text-left px-3 py-3">Telegram</th>
+                <th className="w-[11%] text-left px-3 py-3">备注</th>
+                <th className="w-[7%] text-left px-3 py-3">支付状态</th>
+                <th className="w-[8%] text-left px-3 py-3">已支付金额</th>
+                <th className="w-[7%] text-left px-3 py-3">审批状态</th>
+                <th className="w-[13%] text-left px-3 py-3">提交时间</th>
+                <th className="w-[8%] text-left px-3 py-3">操作</th>
               </tr>
             </thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id} className="border-t border-neutral-100 align-middle">
-                  <td className="px-4 py-3 whitespace-nowrap font-mono text-neutral-700">#{item.id}</td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3 whitespace-nowrap font-mono text-neutral-700">#{item.id}</td>
+                  <td className="px-3 py-3">
                     <div className="font-medium whitespace-nowrap">{item.name}</div>
                     <div className="mt-1 text-xs text-neutral-500 truncate" title={item.website}>{item.website}</div>
                   </td>
-                  <td className="px-4 py-3 truncate" title={item.applicant_email}>
+                  <td className="px-3 py-3 truncate" title={item.applicant_email}>
                     <EmailComposeLink email={item.applicant_email} />
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-3 py-3 whitespace-nowrap">
                     <TelegramProfileLink value={item.applicant_telegram} />
                   </td>
-                  <td className="px-4 py-3">
+                  <td className="px-3 py-3">
                     <AdminNoteButton note={item.admin_note} onClick={() => openAdminNoteModal(item)} />
                   </td>
-                  <td className="px-4 py-3 whitespace-nowrap">{item.payment_status === 'paid' ? '已支付' : '未支付'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatMoneyOrDash(item.payment_amount)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatApplicationReviewStatus(item.review_status)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{item.created_at}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
+                  <td className="px-3 py-3 whitespace-nowrap">{item.payment_status === 'paid' ? '已支付' : '未支付'}</td>
+                  <td className="px-3 py-3 whitespace-nowrap">{formatMoneyOrDash(item.payment_amount)}</td>
+                  <td className="px-3 py-3 whitespace-nowrap">{formatApplicationReviewStatus(item.review_status)}</td>
+                  <td className="px-3 py-3 whitespace-nowrap">{item.created_at}</td>
+                  <td className="px-3 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-3">
                       <button className="underline" onClick={() => void openDetail(item.id)}>查看详情</button>
                       {item.payment_status !== 'paid' && (
@@ -6345,6 +6625,20 @@ function formatMoneyOrDash(value: number | null | undefined): string {
     return '-';
   }
   return `¥${Number(value).toFixed(2)}`;
+}
+
+function formatRechargeChannel(channel: RechargeOrderRecord['channel']): string {
+  if (channel === 'alipay') return '支付宝';
+  if (channel === 'wxpay') return '微信支付';
+  return 'USDT';
+}
+
+function formatRechargeStatus(status: RechargeOrderRecord['status']): string {
+  if (status === 'created') return '待支付';
+  if (status === 'paid') return '已支付';
+  if (status === 'failed') return '失败';
+  if (status === 'expired') return '已过期';
+  return '已取消';
 }
 
 function today(): string {

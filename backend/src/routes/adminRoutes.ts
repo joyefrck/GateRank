@@ -20,6 +20,11 @@ import type { PaymentGatewaySettingsInput } from '../services/paymentGatewaySett
 import type { SmtpSettingsInput, SmtpTemplateKey } from '../services/smtpSettingsService';
 import type { XOAuthSettingsInput } from '../services/xOAuthSettingsService';
 import type { SchedulerDailyStat } from '../repositories/schedulerRunRepository';
+import type {
+  RechargeOrderView,
+  WalletTransactionType,
+  WalletTransactionView,
+} from '../repositories/applicantBillingRepository';
 import type { AccessTokenScope } from '../utils/accessToken';
 import type {
   AirportApplicationReviewStatus,
@@ -133,6 +138,17 @@ interface AdminDeps {
   applicantBillingRepository?: {
     linkAirportByApplicationId(applicationId: number, airportId: number): Promise<void>;
     listWalletsByAirportIds?(airportIds: number[]): Promise<Map<number, { id: number; balance: number }>>;
+    listRechargeOrdersByAirportId?(
+      airportId: number,
+      page?: number,
+      pageSize?: number,
+    ): Promise<{ items: RechargeOrderView[]; total: number }>;
+    listWalletTransactionsByAirportId?(
+      airportId: number,
+      page?: number,
+      pageSize?: number,
+      transactionType?: WalletTransactionType,
+    ): Promise<{ items: WalletTransactionView[]; total: number }>;
     addWalletBalanceAdjustment?(input: {
       airport_id: number;
       amount: number;
@@ -1187,6 +1203,56 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       res.json({ airport_id: airportId, updated: true });
     } catch (error) {
       next(normalizeAirportMutationError(error));
+    }
+  });
+
+  router.get('/airports/:id/recharge-orders', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const airport = await deps.airportRepository.getById(airportId);
+      if (!airport) {
+        throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
+      }
+      const page = toPositiveInt(req.query.page, 1);
+      const pageSize = toBoundedPositiveInt(req.query.page_size, 20, 100);
+      const billingRepository = deps.applicantBillingRepository;
+      if (!billingRepository?.listRechargeOrdersByAirportId) {
+        throw new Error('applicantBillingRepository.listRechargeOrdersByAirportId is not configured');
+      }
+      const result = await billingRepository.listRechargeOrdersByAirportId(airportId, page, pageSize);
+      res.json({
+        page,
+        page_size: pageSize,
+        total: result.total,
+        items: result.items,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/airports/:id/wallet-transactions', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const airport = await deps.airportRepository.getById(airportId);
+      if (!airport) {
+        throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
+      }
+      const page = toPositiveInt(req.query.page, 1);
+      const pageSize = toBoundedPositiveInt(req.query.page_size, 20, 100);
+      const billingRepository = deps.applicantBillingRepository;
+      if (!billingRepository?.listWalletTransactionsByAirportId) {
+        throw new Error('applicantBillingRepository.listWalletTransactionsByAirportId is not configured');
+      }
+      const result = await billingRepository.listWalletTransactionsByAirportId(airportId, page, pageSize, 'click_charge');
+      res.json({
+        page,
+        page_size: pageSize,
+        total: result.total,
+        items: result.items,
+      });
+    } catch (error) {
+      next(error);
     }
   });
 

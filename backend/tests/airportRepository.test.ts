@@ -85,6 +85,7 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
           manual_tags_json: JSON.stringify([]),
           auto_tags_json: JSON.stringify([]),
           tags_json: JSON.stringify([]),
+          application_id: 101,
           paid_application_fee: 1,
           created_at: '2026-03-24 10:00:00',
         },
@@ -107,6 +108,7 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
           manual_tags_json: JSON.stringify([]),
           auto_tags_json: JSON.stringify([]),
           tags_json: JSON.stringify([]),
+          application_id: null,
           paid_application_fee: 0,
           created_at: '2026-03-24 10:00:00',
         },
@@ -117,8 +119,11 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
   const result = await repository.listByQuery({ page: 1, pageSize: 20 });
 
   assert.equal(result.total, 2);
+  assert.equal(result.items[0]?.application_id, 101);
+  assert.equal(result.items[1]?.application_id, null);
   assert.equal(result.items[0]?.paid_application_fee, true);
   assert.equal(result.items[1]?.paid_application_fee, false);
+  assert.ok(calls[1]?.sql.includes('application.approved_airport_id = airports.id'));
   assert.ok(calls[1]?.sql.includes("paid_application.payment_status = 'paid'"));
   assert.ok(calls[1]?.sql.includes('paid_application.payment_amount > 0'));
 });

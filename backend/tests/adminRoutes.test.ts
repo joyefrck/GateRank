@@ -343,6 +343,7 @@ test('GET /airports returns list items with latest available total_score', async
             items: [
               {
                 id: 1,
+                application_id: 101,
                 name: 'Alpha',
                 website: 'https://alpha.example.com',
                 websites: ['https://alpha.example.com'],
@@ -358,6 +359,7 @@ test('GET /airports returns list items with latest available total_score', async
               },
               {
                 id: 2,
+                application_id: null,
                 name: 'Beta',
                 website: '',
                 websites: [],
@@ -418,6 +420,7 @@ test('GET /airports returns list items with latest available total_score', async
     const data = (await response.json()) as {
       items: Array<{
         id: number;
+        application_id: number | null;
         total_score: number | null;
         tags: string[];
         wallet_id: number | null;
@@ -431,6 +434,8 @@ test('GET /airports returns list items with latest available total_score', async
     assert.equal(data.items.length, 2);
     assert.equal(data.items[0]?.total_score, 88.6);
     assert.equal(data.items[1]?.total_score, null);
+    assert.equal(data.items[0]?.application_id, 101);
+    assert.equal(data.items[1]?.application_id, null);
     assert.deepEqual(data.items[0]?.tags, ['长期稳定', '新手友好']);
     assert.equal(data.items[0]?.wallet_id, 11);
     assert.equal(data.items[0]?.wallet_balance, 321.45);
@@ -593,6 +598,275 @@ test('POST /airports/:id/wallet/adjustments validates amount and missing wallet'
     const data = (await missingWalletResponse.json()) as { code: string };
     assert.equal(data.code, 'AIRPORT_WALLET_NOT_FOUND');
     assert.equal(adjustmentCalls, 1);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/recharge-orders returns paginated recharge records', async () => {
+  const calls: Array<{ airportId: number; page?: number; pageSize?: number }> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantBillingRepository: {
+        linkAirportByApplicationId: async () => undefined,
+        listRechargeOrdersByAirportId: async (airportId, page, pageSize) => {
+          calls.push({ airportId, page, pageSize });
+          return {
+            total: 2,
+            items: [
+              {
+                id: 8,
+                applicant_account_id: 22,
+                out_trade_no: 'grr_new',
+                gateway_trade_no: 'gw_new',
+                channel: 'usdt',
+                amount: 300,
+                status: 'paid',
+                pay_type: 'usdt',
+                pay_info: 'https://pay.example.com/new',
+                paid_at: '2026-05-10T12:00:00+08:00',
+                created_at: '2026-05-10T11:59:00+08:00',
+              },
+              {
+                id: 7,
+                applicant_account_id: 22,
+                out_trade_no: 'grr_old',
+                gateway_trade_no: null,
+                channel: 'alipay',
+                amount: 100,
+                status: 'created',
+                pay_type: null,
+                pay_info: null,
+                paid_at: null,
+                created_at: '2026-05-09T11:59:00+08:00',
+              },
+            ],
+          };
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/recharge-orders?page=2&page_size=10`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls, [{ airportId: 1, page: 2, pageSize: 10 }]);
+    const data = (await response.json()) as {
+      page: number;
+      page_size: number;
+      total: number;
+      items: Array<{ out_trade_no: string; status: string }>;
+    };
+    assert.equal(data.page, 2);
+    assert.equal(data.page_size, 10);
+    assert.equal(data.total, 2);
+    assert.deepEqual(data.items.map((item) => item.out_trade_no), ['grr_new', 'grr_old']);
+    assert.deepEqual(data.items.map((item) => item.status), ['paid', 'created']);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/wallet-transactions returns paginated click charge records only', async () => {
+  const calls: Array<{ airportId: number; page?: number; pageSize?: number; transactionType?: string }> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantBillingRepository: {
+        linkAirportByApplicationId: async () => undefined,
+        listWalletTransactionsByAirportId: async (airportId, page, pageSize, transactionType) => {
+          calls.push({ airportId, page, pageSize, transactionType });
+          return {
+            total: 1,
+            items: [
+              {
+                id: 11,
+                transaction_type: 'click_charge',
+                amount: -0.6,
+                balance_after: 99.4,
+                reference_type: 'outbound_click',
+                reference_id: 'click-1',
+                description: '官网点击扣费',
+                created_at: '2026-05-10T12:00:00+08:00',
+              },
+            ],
+          };
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/wallet-transactions?page=3&page_size=5`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls, [{ airportId: 1, page: 3, pageSize: 5, transactionType: 'click_charge' }]);
+    const data = (await response.json()) as {
+      total: number;
+      items: Array<{ transaction_type: string; reference_id: string }>;
+    };
+    assert.equal(data.total, 1);
+    assert.deepEqual(data.items.map((item) => item.transaction_type), ['click_charge']);
+    assert.equal(data.items[0]?.reference_id, 'click-1');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id billing detail endpoints return empty pagination for airports without wallet records', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantBillingRepository: {
+        linkAirportByApplicationId: async () => undefined,
+        listRechargeOrdersByAirportId: async () => ({ items: [], total: 0 }),
+        listWalletTransactionsByAirportId: async () => ({ items: [], total: 0 }),
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    for (const path of ['/airports/1/recharge-orders', '/airports/1/wallet-transactions']) {
+      const response = await fetch(`http://127.0.0.1:${port}${path}`);
+      assert.equal(response.status, 200);
+      const data = (await response.json()) as { page: number; page_size: number; total: number; items: unknown[] };
+      assert.equal(data.page, 1);
+      assert.equal(data.page_size, 20);
+      assert.equal(data.total, 0);
+      assert.deepEqual(data.items, []);
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id billing detail endpoints return 404 for missing airport', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: {
+        ...stubAirportRepository(),
+        getById: async () => null,
+      },
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantBillingRepository: {
+        linkAirportByApplicationId: async () => undefined,
+        listRechargeOrdersByAirportId: async () => ({ items: [], total: 0 }),
+        listWalletTransactionsByAirportId: async () => ({ items: [], total: 0 }),
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    for (const path of ['/airports/404/recharge-orders', '/airports/404/wallet-transactions']) {
+      const response = await fetch(`http://127.0.0.1:${port}${path}`);
+      assert.equal(response.status, 404);
+      const data = (await response.json()) as { code: string };
+      assert.equal(data.code, 'AIRPORT_NOT_FOUND');
+    }
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
