@@ -555,7 +555,6 @@ interface SmtpSettingsFormState {
   from_name: string;
   from_email: string;
   reply_to: string;
-  test_to: string;
   templates: SmtpTemplateMap;
 }
 
@@ -3442,7 +3441,6 @@ function summarizeTemplateBody(body: string): string {
 function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [settings, setSettings] = useState<SmtpSettingsView | null>(null);
@@ -3460,7 +3458,6 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
     from_name: 'GateRank',
     from_email: '',
     reply_to: '',
-    test_to: '',
     templates: getDefaultSmtpTemplates(),
   });
 
@@ -3476,7 +3473,6 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
       from_name: view.from_name || 'GateRank',
       from_email: view.from_email || '',
       reply_to: view.reply_to || '',
-      test_to: '',
       templates: cloneSmtpTemplates(view.templates),
     });
     setClearPassword(false);
@@ -3534,37 +3530,6 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
       setError(err instanceof Error ? err.message : '保存失败');
     } finally {
       setSaving(false);
-    }
-  };
-
-  const sendTest = async () => {
-    const testTo = form.test_to.trim();
-    if (!testTo) {
-      setError('请先填写测试收件人邮箱');
-      setSuccess('');
-      return;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testTo)) {
-      setError('请输入有效的测试收件人邮箱');
-      setSuccess('');
-      return;
-    }
-    setTesting(true);
-    setError('');
-    setSuccess('');
-    try {
-      await apiFetch('/api/v1/admin/system-settings/smtp/test', {
-        method: 'POST',
-        body: JSON.stringify({
-          ...buildPayload(),
-          test_to: testTo,
-        }),
-      });
-      setSuccess('测试邮件已发送');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '测试发送失败');
-    } finally {
-      setTesting(false);
     }
   };
 
@@ -3733,10 +3698,6 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
             </label>
           )}
 
-          <FormField label="测试收件人邮箱" hint="仅在点击“发送测试邮件”时必填。测试发送会使用当前表单里的配置，不依赖是否已保存。">
-            <input className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900" type="email" value={form.test_to} onChange={(e) => setForm({ ...form, test_to: e.target.value })} placeholder="test@example.com" />
-          </FormField>
-
           <section className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">邮件场景与模板</div>
@@ -3900,10 +3861,7 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
           {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
           {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
 
-          <div className="flex items-center justify-end gap-3">
-            <button className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50" disabled={testing} onClick={() => void sendTest()}>
-              {testing ? '发送中...' : '发送测试邮件'}
-            </button>
+          <div className="flex items-center justify-end">
             <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
               {saving ? '保存中...' : '保存配置'}
             </button>
