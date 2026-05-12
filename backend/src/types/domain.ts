@@ -560,6 +560,45 @@ export interface PerformanceRunInput {
   diagnostics?: Record<string, unknown>;
 }
 
+export interface SubscriptionNodeSnapshotNode {
+  name: string;
+  region?: string | null;
+  type: string;
+  outbound: Record<string, unknown>;
+  raw_uri: string;
+}
+
+export interface SubscriptionNodeSnapshotUnsupportedNode {
+  uri: string;
+  reason: string;
+}
+
+export interface SubscriptionNodeSnapshot {
+  id: number;
+  airport_id: number;
+  captured_at: string;
+  source: string;
+  subscription_url: string | null;
+  subscription_format: string | null;
+  parsed_nodes_count: number;
+  supported_nodes_count: number;
+  nodes: SubscriptionNodeSnapshotNode[];
+  unsupported_nodes: SubscriptionNodeSnapshotUnsupportedNode[];
+  created_at: string;
+}
+
+export interface SubscriptionNodeSnapshotInput {
+  airport_id: number;
+  captured_at: string;
+  source?: string;
+  subscription_url?: string | null;
+  subscription_format?: string | null;
+  parsed_nodes_count?: number;
+  supported_nodes_count?: number;
+  nodes: SubscriptionNodeSnapshotNode[];
+  unsupported_nodes?: SubscriptionNodeSnapshotUnsupportedNode[];
+}
+
 export interface AdminAuthResponse {
   token: string;
   expires_at: string;

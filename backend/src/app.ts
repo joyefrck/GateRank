@@ -20,6 +20,7 @@ import { ScoreRepository } from './repositories/scoreRepository';
 import { SchedulerRunRepository } from './repositories/schedulerRunRepository';
 import { SchedulerTaskRepository } from './repositories/schedulerTaskRepository';
 import { StatsRepository } from './repositories/statsRepository';
+import { SubscriptionNodeSnapshotRepository } from './repositories/subscriptionNodeSnapshotRepository';
 import { ManualJobRepository } from './repositories/manualJobRepository';
 import { MarketingEventRepository } from './repositories/marketingEventRepository';
 import { SystemSettingRepository } from './repositories/systemSettingRepository';
@@ -78,6 +79,8 @@ export async function createApp() {
   await probeSampleRepository.ensureSchema();
   const performanceRunRepository = new PerformanceRunRepository(pool);
   await performanceRunRepository.ensureSchema();
+  const subscriptionNodeSnapshotRepository = new SubscriptionNodeSnapshotRepository(pool);
+  await subscriptionNodeSnapshotRepository.ensureSchema();
   const manualJobRepository = new ManualJobRepository(pool);
   await manualJobRepository.ensureSchema();
   const schedulerTaskRepository = new SchedulerTaskRepository(pool);
@@ -270,6 +273,7 @@ export async function createApp() {
       applicantBillingRepository,
       probeSampleRepository,
       performanceRunRepository,
+      subscriptionNodeSnapshotRepository,
       metricsRepository,
       scoreRepository,
       recomputeService,

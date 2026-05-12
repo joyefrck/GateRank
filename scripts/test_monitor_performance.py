@@ -6,12 +6,16 @@ import unittest
 from unittest.mock import patch
 
 from scripts.monitor_performance import (
+    Config,
     NodeAvailabilityResult,
+    NodeProbeResult,
     build_config,
     build_run_payload,
     check_nodes_availability,
+    nodes_from_snapshot,
     normalize_subscription_text,
     parse_node_line,
+    run_for_airport,
     select_nodes,
 )
 
@@ -25,6 +29,31 @@ class PickLastRandom:
 
 
 class MonitorPerformanceTests(unittest.TestCase):
+    def make_config(self) -> Config:
+        return Config(
+            api_base="http://127.0.0.1:8787",
+            admin_api_key="test-key",
+            admin_bearer_token=None,
+            all_airports=False,
+            airport_id=1,
+            airport_keyword=None,
+            airport_status=None,
+            http_timeout=1,
+            proxy_port=7890,
+            proxy_startup_timeout=1,
+            latency_attempts=1,
+            latency_sample_interval_seconds=0,
+            speed_timeout=1,
+            speed_connections=1,
+            page_size=100,
+            source="test-performance",
+            test_url_latency="https://www.google.com/generate_204",
+            test_url_speed="https://speed.cloudflare.com/__down?bytes=1000",
+            sing_box_bin="sing-box",
+            trigger_aggregate=False,
+            trigger_recompute=False,
+        )
+
     def test_normalize_subscription_text_supports_base64(self) -> None:
         plain = "trojan://pass@example.com:443?type=ws&host=cdn.example.com&path=%2Fws#HK-1"
         encoded = base64.b64encode(plain.encode("utf-8")).decode("utf-8")
@@ -162,7 +191,6 @@ class MonitorPerformanceTests(unittest.TestCase):
                 "2026-05-07T00:00:06+08:00",
             ],
         )
-
         self.assertEqual(payload["latency_samples_ms"], [100, 120, 300])
         self.assertEqual(
             payload["latency_sampled_at"],
@@ -172,6 +200,160 @@ class MonitorPerformanceTests(unittest.TestCase):
                 "2026-05-07T00:00:06+08:00",
             ],
         )
+
+    def test_run_for_airport_saves_snapshot_when_subscription_parses(self) -> None:
+        config = self.make_config()
+        airport = {"id": 1, "name": "Alpha", "subscription_url": "https://sub.example.com"}
+        saved_snapshots = []
+
+        def fake_probe_node(_config, node):
+            return NodeProbeResult(
+                node=node,
+                latency_samples_ms=[100],
+                latency_sampled_at=["2026-05-13T12:00:00+08:00"],
+                proxy_latency_samples_ms=[180],
+                download_mbps=50,
+                failures=0,
+                total_attempts=1,
+            )
+
+        with (
+            patch("scripts.monitor_performance.fetch_subscription", return_value="trojan://secret@hk.example.com:443#HK-1"),
+            patch("scripts.monitor_performance.post_subscription_node_snapshot", side_effect=lambda _config, _airport_id, payload: saved_snapshots.append(payload) or {"snapshot_id": 9}),
+            patch("scripts.monitor_performance.check_nodes_availability", return_value=[
+                NodeAvailabilityResult(parse_node_line("trojan://secret@hk.example.com:443#HK-1"), True),
+            ]),
+            patch("scripts.monitor_performance.probe_node", side_effect=fake_probe_node),
+        ):
+            result = run_for_airport(config, airport, "2026-05-13T12:00:00+08:00")
+
+        payload = result["payload"]
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["diagnostics"]["node_source"], "fresh_subscription")
+        self.assertEqual(payload["diagnostics"]["snapshot_id"], 9)
+        self.assertEqual(saved_snapshots[0]["nodes"][0]["raw_uri"], "trojan://secret@hk.example.com:443#HK-1")
+        self.assertEqual(saved_snapshots[0]["nodes"][0]["outbound"]["server"], "hk.example.com")
+
+    def test_run_for_airport_uses_cached_snapshot_when_subscription_fetch_fails(self) -> None:
+        config = self.make_config()
+        airport = {"id": 1, "name": "Alpha", "subscription_url": "https://one-time.example.com/sub"}
+        snapshot = {
+            "id": 12,
+            "captured_at": "2026-05-12T10:00:00+08:00",
+            "subscription_url": "https://old.example.com/sub",
+            "subscription_format": "plain",
+            "nodes": [{
+                "name": "SG-1",
+                "region": "SG",
+                "type": "trojan",
+                "outbound": {"type": "trojan", "tag": "proxy", "server": "sg.example.com", "server_port": 443, "password": "secret"},
+                "raw_uri": "trojan://secret@sg.example.com:443#SG-1",
+            }],
+        }
+
+        def fake_probe_node(_config, node):
+            return NodeProbeResult(
+                node=node,
+                latency_samples_ms=[90],
+                latency_sampled_at=["2026-05-13T12:00:00+08:00"],
+                proxy_latency_samples_ms=[120],
+                download_mbps=60,
+                failures=0,
+                total_attempts=1,
+            )
+
+        with (
+            patch("scripts.monitor_performance.fetch_subscription", side_effect=RuntimeError("already used")),
+            patch("scripts.monitor_performance.get_latest_subscription_node_snapshot", return_value=snapshot),
+            patch("scripts.monitor_performance.check_nodes_availability", return_value=[
+                NodeAvailabilityResult(nodes_from_snapshot(snapshot)[0][0], True),
+            ]),
+            patch("scripts.monitor_performance.probe_node", side_effect=fake_probe_node),
+        ):
+            result = run_for_airport(config, airport, "2026-05-13T12:00:00+08:00")
+
+        payload = result["payload"]
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["selected_nodes"][0]["name"], "SG-1")
+        self.assertEqual(payload["diagnostics"]["node_source"], "cached_snapshot")
+        self.assertEqual(payload["diagnostics"]["cache_snapshot_id"], 12)
+        self.assertEqual(payload["diagnostics"]["subscription_refresh_error_code"], "subscription_fetch_failed")
+
+    def test_run_for_airport_uses_cached_snapshot_when_subscription_format_is_unsupported(self) -> None:
+        config = self.make_config()
+        airport = {"id": 1, "name": "Alpha", "subscription_url": "https://sub.example.com"}
+        snapshot = {
+            "id": 13,
+            "captured_at": "2026-05-12T10:00:00+08:00",
+            "subscription_url": "https://sub.example.com",
+            "subscription_format": "plain",
+            "nodes": [{
+                "name": "JP-1",
+                "region": "JP",
+                "type": "trojan",
+                "outbound": {"type": "trojan", "tag": "proxy", "server": "jp.example.com", "server_port": 443, "password": "secret"},
+                "raw_uri": "trojan://secret@jp.example.com:443#JP-1",
+            }],
+        }
+
+        with (
+            patch("scripts.monitor_performance.fetch_subscription", return_value="proxies:\n  - name: JP"),
+            patch("scripts.monitor_performance.get_latest_subscription_node_snapshot", return_value=snapshot),
+            patch("scripts.monitor_performance.check_nodes_availability", return_value=[
+                NodeAvailabilityResult(nodes_from_snapshot(snapshot)[0][0], True),
+            ]),
+            patch("scripts.monitor_performance.probe_node", return_value=NodeProbeResult(
+                node=nodes_from_snapshot(snapshot)[0][0],
+                latency_samples_ms=[88],
+                latency_sampled_at=["2026-05-13T12:00:00+08:00"],
+                proxy_latency_samples_ms=[],
+                download_mbps=None,
+                failures=0,
+                total_attempts=1,
+            )),
+        ):
+            result = run_for_airport(config, airport, "2026-05-13T12:00:00+08:00")
+
+        self.assertEqual(result["payload"]["status"], "success")
+        self.assertEqual(result["payload"]["diagnostics"]["node_source"], "cached_snapshot")
+        self.assertEqual(result["payload"]["diagnostics"]["subscription_refresh_error_code"], "unsupported_subscription_format")
+
+    def test_run_for_airport_keeps_original_failure_when_no_cached_snapshot_exists(self) -> None:
+        config = self.make_config()
+        airport = {"id": 1, "name": "Alpha", "subscription_url": "https://one-time.example.com/sub"}
+        with (
+            patch("scripts.monitor_performance.fetch_subscription", side_effect=RuntimeError("already used")),
+            patch("scripts.monitor_performance.get_latest_subscription_node_snapshot", side_effect=RuntimeError("404 not found")),
+        ):
+            result = run_for_airport(config, airport, "2026-05-13T12:00:00+08:00")
+
+        self.assertEqual(result["payload"]["status"], "failed")
+        self.assertEqual(result["payload"]["error_code"], "subscription_fetch_failed")
+        self.assertEqual(result["payload"]["diagnostics"]["node_source"], "none")
+
+    def test_nodes_from_snapshot_skips_cached_nodes_without_server_or_port(self) -> None:
+        nodes, invalid_nodes = nodes_from_snapshot({
+            "nodes": [
+                {
+                    "name": "Broken",
+                    "region": "HK",
+                    "type": "trojan",
+                    "outbound": {"type": "trojan", "server": "hk.example.com"},
+                    "raw_uri": "trojan://secret@hk.example.com:443#Broken",
+                },
+                {
+                    "name": "Valid",
+                    "region": "HK",
+                    "type": "trojan",
+                    "outbound": {"type": "trojan", "server": "valid.example.com", "server_port": 443},
+                    "raw_uri": "trojan://secret@valid.example.com:443#Valid",
+                },
+            ],
+        })
+
+        self.assertEqual([node.name for node in nodes], ["Valid"])
+        self.assertEqual(invalid_nodes[0]["name"], "Broken")
+        self.assertEqual(invalid_nodes[0]["reason"], "cached_node_missing_server")
 
 
 if __name__ == "__main__":

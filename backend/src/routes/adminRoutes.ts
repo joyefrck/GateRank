@@ -42,6 +42,10 @@ import type {
   SchedulerRunStatus,
   SchedulerTaskKey,
   StabilityTier,
+  SubscriptionNodeSnapshot,
+  SubscriptionNodeSnapshotInput,
+  SubscriptionNodeSnapshotNode,
+  SubscriptionNodeSnapshotUnsupportedNode,
 } from '../types/domain';
 import {
   computeEffectiveLatencyStats,
@@ -177,6 +181,10 @@ interface AdminDeps {
     insert(input: PerformanceRunInput): Promise<number>;
     getLatestByAirportAndDate(airportId: number, date: string): Promise<unknown | null>;
     getLatestByAirportBeforeDate(airportId: number, date: string): Promise<unknown | null>;
+  };
+  subscriptionNodeSnapshotRepository?: {
+    insert(input: SubscriptionNodeSnapshotInput): Promise<number>;
+    getLatestByAirport(airportId: number): Promise<SubscriptionNodeSnapshot | null>;
   };
   metricsRepository: {
     upsertDaily(input: DailyMetricsInput): Promise<void>;
@@ -1402,6 +1410,40 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         scope: probeScope || null,
         items,
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/airports/:id/subscription-node-snapshots', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const input = toSubscriptionNodeSnapshotInput(airportId, req.body ?? {});
+      const snapshotId = await getSubscriptionNodeSnapshotRepository(deps).insert(input);
+      await deps.auditRepository.log('insert_subscription_node_snapshot', actorFromReq(req), req.requestId, {
+        snapshot_id: snapshotId,
+        airport_id: input.airport_id,
+        captured_at: input.captured_at,
+        source: input.source,
+        subscription_format: input.subscription_format,
+        parsed_nodes_count: input.parsed_nodes_count,
+        supported_nodes_count: input.supported_nodes_count,
+        unsupported_nodes_count: input.unsupported_nodes?.length || 0,
+      });
+      res.status(201).json({ snapshot_id: snapshotId, airport_id: input.airport_id, captured_at: input.captured_at });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/airports/:id/subscription-node-snapshots/latest', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const snapshot = await getSubscriptionNodeSnapshotRepository(deps).getLatestByAirport(airportId);
+      if (!snapshot) {
+        throw new HttpError(404, 'SUBSCRIPTION_NODE_SNAPSHOT_NOT_FOUND', 'subscription node snapshot not found');
+      }
+      res.json(snapshot);
     } catch (error) {
       next(error);
     }
@@ -2662,6 +2704,32 @@ function toPerformanceRunInput(payload: Record<string, unknown>): PerformanceRun
   };
 }
 
+function toSubscriptionNodeSnapshotInput(
+  airportId: number,
+  payload: Record<string, unknown>,
+): SubscriptionNodeSnapshotInput {
+  const payloadAirportId = payload.airport_id === undefined ? airportId : toAirportId(payload.airport_id);
+  if (payloadAirportId !== airportId) {
+    throw new HttpError(400, 'BAD_REQUEST', 'airport_id must match path airport id');
+  }
+  const nodes = toSubscriptionSnapshotNodeArray(payload.nodes);
+  if (nodes.length === 0) {
+    throw new HttpError(400, 'BAD_REQUEST', 'nodes must include at least one reusable node');
+  }
+  const unsupportedNodes = toUnsupportedSubscriptionNodeArray(payload.unsupported_nodes);
+  return {
+    airport_id: airportId,
+    captured_at: mustDateTime(payload.captured_at, 'captured_at'),
+    source: optionalString(payload.source) || 'cron-performance',
+    subscription_url: optionalString(payload.subscription_url) || null,
+    subscription_format: optionalString(payload.subscription_format) || null,
+    parsed_nodes_count: optionalNumber(payload.parsed_nodes_count) ?? nodes.length + unsupportedNodes.length,
+    supported_nodes_count: optionalNumber(payload.supported_nodes_count) ?? nodes.length,
+    nodes,
+    unsupported_nodes: unsupportedNodes,
+  };
+}
+
 function toDateTimeArray(value: unknown, fieldName: string): string[] {
   if (value === undefined || value === null) {
     return [];
@@ -2744,6 +2812,13 @@ function getAccessTokenService(deps: AdminDeps) {
     throw new Error('accessTokenService is not configured');
   }
   return deps.accessTokenService;
+}
+
+function getSubscriptionNodeSnapshotRepository(deps: AdminDeps): NonNullable<AdminDeps['subscriptionNodeSnapshotRepository']> {
+  if (!deps.subscriptionNodeSnapshotRepository) {
+    throw new Error('subscriptionNodeSnapshotRepository is not configured');
+  }
+  return deps.subscriptionNodeSnapshotRepository;
 }
 
 function numberOrNull(value: unknown): number | null {
@@ -2839,6 +2914,62 @@ function toPerformanceNodeArray(value: unknown): PerformanceRunNode[] {
       };
     })
     .filter((item) => item.name);
+}
+
+function toSubscriptionSnapshotNodeArray(value: unknown): SubscriptionNodeSnapshotNode[] {
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'nodes must be array');
+  }
+  return value.map((item, index) => toSubscriptionSnapshotNode(item, index));
+}
+
+function toSubscriptionSnapshotNode(value: unknown, index: number): SubscriptionNodeSnapshotNode {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}] must be object`);
+  }
+  const record = value as Record<string, unknown>;
+  const name = optionalString(record.name);
+  const type = optionalString(record.type);
+  const rawUri = optionalString(record.raw_uri);
+  const outbound = record.outbound;
+  if (!name) {
+    throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}].name is required`);
+  }
+  if (!type) {
+    throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}].type is required`);
+  }
+  if (!rawUri) {
+    throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}].raw_uri is required`);
+  }
+  if (!outbound || typeof outbound !== 'object' || Array.isArray(outbound)) {
+    throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}].outbound must be object`);
+  }
+  return {
+    name,
+    region: record.region == null ? null : String(record.region),
+    type,
+    outbound: outbound as Record<string, unknown>,
+    raw_uri: rawUri,
+  };
+}
+
+function toUnsupportedSubscriptionNodeArray(value: unknown): SubscriptionNodeSnapshotUnsupportedNode[] {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'unsupported_nodes must be array');
+  }
+  return value
+    .filter((item) => item && typeof item === 'object' && !Array.isArray(item))
+    .map((item) => {
+      const record = item as Record<string, unknown>;
+      return {
+        uri: String(record.uri || ''),
+        reason: String(record.reason || ''),
+      };
+    })
+    .filter((item) => item.uri || item.reason);
 }
 
 function performanceNodesOrEmpty(value: unknown): Array<Record<string, unknown>> {

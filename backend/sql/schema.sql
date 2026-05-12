@@ -286,6 +286,23 @@ CREATE TABLE IF NOT EXISTS airport_performance_runs (
   CONSTRAINT fk_perf_runs_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
 );
 
+CREATE TABLE IF NOT EXISTS airport_subscription_node_snapshots (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  airport_id BIGINT UNSIGNED NOT NULL,
+  captured_at DATETIME NOT NULL,
+  source VARCHAR(128) NOT NULL DEFAULT 'cron-performance',
+  subscription_url VARCHAR(1024) NULL,
+  subscription_format VARCHAR(64) NULL,
+  parsed_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
+  supported_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
+  nodes_json JSON NOT NULL,
+  unsupported_nodes_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_subscription_node_snapshots_airport_time (airport_id, captured_at DESC),
+  CONSTRAINT fk_subscription_node_snapshots_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
+);
+
 CREATE TABLE IF NOT EXISTS airport_scores_daily (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   airport_id BIGINT UNSIGNED NOT NULL,

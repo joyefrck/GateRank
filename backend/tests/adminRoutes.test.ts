@@ -104,6 +104,138 @@ test('POST /performance-runs stores run diagnostics and performance samples', as
   }
 });
 
+test('POST /airports/:id/subscription-node-snapshots stores reusable nodes without auditing credentials', async () => {
+  const insertedSnapshots: unknown[] = [];
+  const audits: Array<{ action: string; payload: unknown }> = [];
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      subscriptionNodeSnapshotRepository: {
+        insert: async (input) => {
+          insertedSnapshots.push(input);
+          return 55;
+        },
+        getLatestByAirport: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, _actor, _requestId, payload) => {
+          audits.push({ action, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/9/subscription-node-snapshots`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        airport_id: 9,
+        captured_at: '2026-05-13T12:34:56+08:00',
+        source: 'cron-performance',
+        subscription_url: 'https://sub.example.com',
+        subscription_format: 'plain',
+        parsed_nodes_count: 2,
+        supported_nodes_count: 1,
+        nodes: [{
+          name: 'HK-1',
+          region: 'HK',
+          type: 'trojan',
+          outbound: { type: 'trojan', server: 'hk.example.com', server_port: 443, password: 'secret' },
+          raw_uri: 'trojan://secret@hk.example.com:443#HK-1',
+        }],
+        unsupported_nodes: [{ uri: 'unknown://node', reason: 'unsupported_scheme' }],
+      }),
+    });
+    const data = (await response.json()) as { snapshot_id: number; airport_id: number };
+
+    assert.equal(response.status, 201);
+    assert.equal(data.snapshot_id, 55);
+    assert.equal(data.airport_id, 9);
+    assert.equal(insertedSnapshots.length, 1);
+    assert.equal(audits[0]?.action, 'insert_subscription_node_snapshot');
+    assert.equal(JSON.stringify(audits[0]?.payload).includes('secret'), false);
+    assert.equal(JSON.stringify(audits[0]?.payload).includes('raw_uri'), false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/subscription-node-snapshots/latest returns latest reusable node snapshot', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      subscriptionNodeSnapshotRepository: {
+        insert: async () => 1,
+        getLatestByAirport: async (airportId) => ({
+          id: 12,
+          airport_id: airportId,
+          captured_at: '2026-05-13T12:34:56+08:00',
+          source: 'cron-performance',
+          subscription_url: 'https://sub.example.com',
+          subscription_format: 'base64',
+          parsed_nodes_count: 1,
+          supported_nodes_count: 1,
+          nodes: [{
+            name: 'SG-1',
+            region: 'SG',
+            type: 'trojan',
+            outbound: { type: 'trojan', server: 'sg.example.com', server_port: 443 },
+            raw_uri: 'trojan://password@sg.example.com:443#SG-1',
+          }],
+          unsupported_nodes: [],
+          created_at: '2026-05-13T12:35:00+08:00',
+        }),
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/9/subscription-node-snapshots/latest`);
+    const data = (await response.json()) as { id: number; nodes: Array<{ name: string }> };
+
+    assert.equal(response.status, 200);
+    assert.equal(data.id, 12);
+    assert.equal(data.nodes[0]?.name, 'SG-1');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /scheduler/tasks returns task list', async () => {
   const app = express();
   app.use(express.json());
@@ -4531,6 +4663,23 @@ function stubMetricsRepository() {
     getTrend: async () => [],
     patchComplaintCount: async () => undefined,
     patchIncidentCount: async () => undefined,
+  };
+}
+
+function stubProbeSampleRepository() {
+  return {
+    insertProbeSample: async () => 1,
+    insertPacketLossSample: async () => 1,
+    listProbeSamples: async () => [],
+    listLatestProbeSamples: async () => [],
+  };
+}
+
+function stubPerformanceRunRepository() {
+  return {
+    insert: async () => 1,
+    getLatestByAirportAndDate: async () => null,
+    getLatestByAirportBeforeDate: async () => null,
   };
 }
 

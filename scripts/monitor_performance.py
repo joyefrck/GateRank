@@ -110,6 +110,26 @@ class NodeAvailabilityResult:
     error_code: str | None = None
 
 
+@dataclass
+class SubscriptionRefreshError(Exception):
+    status: str
+    error_code: str
+    error_message: str
+    subscription_format: str | None = None
+    parsed_nodes_count: int = 0
+    supported_nodes_count: int = 0
+    unsupported_nodes: list[dict[str, str]] | None = None
+
+
+@dataclass
+class NodeSourceResult:
+    nodes: list[ParsedNode]
+    unsupported_nodes: list[dict[str, str]]
+    subscription_format: str | None
+    node_source: str
+    diagnostics: dict[str, Any]
+
+
 def main() -> int:
     try:
         config = build_config()
@@ -317,40 +337,36 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         }
 
     try:
-        subscription_text = fetch_subscription(config, subscription_url)
-    except Exception as exc:
+        node_source = resolve_nodes_for_airport(config, airport_id, subscription_url, sampled_at)
+    except SubscriptionRefreshError as exc:
+        diagnostics: dict[str, Any] = {
+            "subscription_url": subscription_url,
+            "node_source": "none",
+        }
+        if exc.unsupported_nodes:
+            diagnostics["unsupported_nodes_count"] = len(exc.unsupported_nodes)
+            diagnostics["unsupported_nodes"] = exc.unsupported_nodes
         payload = build_run_payload(
             airport_id=airport_id,
             sampled_at=sampled_at,
             source=config.source,
-            status="failed",
-            error_code="subscription_fetch_failed",
-            error_message=str(exc),
-            diagnostics={"subscription_url": subscription_url},
+            status=exc.status,
+            subscription_format=exc.subscription_format,
+            parsed_nodes_count=exc.parsed_nodes_count,
+            supported_nodes_count=exc.supported_nodes_count,
+            error_code=exc.error_code,
+            error_message=exc.error_message,
+            diagnostics=diagnostics,
         )
         return {
             "payload": payload,
             "summary": summary_from_payload(payload, airport_name),
         }
 
-    normalized_subscription, subscription_format = normalize_subscription_text(subscription_text)
-    if not normalized_subscription:
-        payload = build_run_payload(
-            airport_id=airport_id,
-            sampled_at=sampled_at,
-            source=config.source,
-            status="skipped",
-            subscription_format=subscription_format,
-            error_code="unsupported_subscription_format",
-            error_message="subscription content is not a supported URL list",
-            diagnostics={"subscription_url": subscription_url},
-        )
-        return {
-            "payload": payload,
-            "summary": summary_from_payload(payload, airport_name),
-        }
-
-    parsed_nodes, unsupported_nodes = parse_nodes(normalized_subscription)
+    parsed_nodes = node_source.nodes
+    unsupported_nodes = node_source.unsupported_nodes
+    subscription_format = node_source.subscription_format
+    diagnostics = node_source.diagnostics
     selected_nodes = select_nodes(parsed_nodes)
     availability_results = check_nodes_availability(config, parsed_nodes)
     availability_summary = summarize_node_availability(availability_results)
@@ -363,7 +379,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
     total_failures = 0
     partial_errors: list[str] = []
 
-    if not parsed_nodes or not selected_nodes:
+    if not selected_nodes:
         payload = build_run_payload(
             airport_id=airport_id,
             sampled_at=sampled_at,
@@ -372,7 +388,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             subscription_format=subscription_format,
             parsed_nodes_count=len(parsed_nodes),
             supported_nodes_count=len(parsed_nodes),
-            selected_nodes=[node_to_summary(node) for node in selected_nodes],
+            selected_nodes=[],
             tested_nodes=[],
             available_nodes_count=availability_summary["available_nodes_count"],
             unavailable_nodes_count=availability_summary["unavailable_nodes_count"],
@@ -381,6 +397,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             error_code="no_supported_nodes",
             error_message="no testable nodes selected from subscription",
             diagnostics={
+                **diagnostics,
                 "unsupported_nodes_count": len(unsupported_nodes),
                 "unsupported_nodes": unsupported_nodes,
                 "node_availability": availability_summary["nodes"],
@@ -455,6 +472,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         error_code=error_code,
         error_message=error_message,
         diagnostics={
+            **diagnostics,
             "subscription_url": subscription_url,
             "latency_measurement": "tcp_connect_to_node_server",
             "latency_probe_target": "node_server",
@@ -478,6 +496,124 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         "payload": payload,
         "summary": summary_from_payload(payload, airport_name),
     }
+
+
+def resolve_nodes_for_airport(
+    config: Config,
+    airport_id: int,
+    subscription_url: str,
+    sampled_at: str,
+) -> NodeSourceResult:
+    try:
+        subscription_text = fetch_subscription(config, subscription_url)
+    except Exception as exc:
+        return resolve_cached_nodes_or_raise(
+            config,
+            airport_id,
+            subscription_url,
+            SubscriptionRefreshError(
+                status="failed",
+                error_code="subscription_fetch_failed",
+                error_message=str(exc),
+            ),
+        )
+
+    normalized_subscription, subscription_format = normalize_subscription_text(subscription_text)
+    if not normalized_subscription:
+        return resolve_cached_nodes_or_raise(
+            config,
+            airport_id=airport_id,
+            subscription_url=subscription_url,
+            refresh_error=SubscriptionRefreshError(
+                status="skipped",
+                error_code="unsupported_subscription_format",
+                error_message="subscription content is not a supported URL list",
+                subscription_format=subscription_format,
+            ),
+        )
+
+    parsed_nodes, unsupported_nodes = parse_nodes(normalized_subscription)
+    if not parsed_nodes:
+        return resolve_cached_nodes_or_raise(
+            config,
+            airport_id=airport_id,
+            subscription_url=subscription_url,
+            refresh_error=SubscriptionRefreshError(
+                status="skipped",
+                error_code="no_supported_nodes",
+                error_message="no testable nodes selected from subscription",
+                subscription_format=subscription_format,
+                parsed_nodes_count=0,
+                supported_nodes_count=0,
+                unsupported_nodes=unsupported_nodes,
+            ),
+        )
+
+    diagnostics: dict[str, Any] = {"node_source": "fresh_subscription"}
+    try:
+        snapshot = post_subscription_node_snapshot(
+            config,
+            airport_id,
+            {
+                "airport_id": airport_id,
+                "captured_at": sampled_at,
+                "source": config.source,
+                "subscription_url": subscription_url,
+                "subscription_format": subscription_format,
+                "parsed_nodes_count": len(parsed_nodes),
+                "supported_nodes_count": len(parsed_nodes),
+                "nodes": [node_to_snapshot(node) for node in parsed_nodes],
+                "unsupported_nodes": unsupported_nodes,
+            },
+        )
+        diagnostics["snapshot_id"] = snapshot.get("snapshot_id")
+    except Exception as exc:
+        diagnostics["snapshot_save_error"] = str(exc)
+
+    return NodeSourceResult(
+        nodes=parsed_nodes,
+        unsupported_nodes=unsupported_nodes,
+        subscription_format=subscription_format,
+        node_source="fresh_subscription",
+        diagnostics=diagnostics,
+    )
+
+
+def resolve_cached_nodes_or_raise(
+    config: Config,
+    airport_id: int,
+    subscription_url: str,
+    refresh_error: SubscriptionRefreshError,
+) -> NodeSourceResult:
+    try:
+        snapshot = get_latest_subscription_node_snapshot(config, airport_id)
+    except Exception:
+        raise refresh_error
+
+    nodes, invalid_nodes = nodes_from_snapshot(snapshot)
+    if not nodes:
+        raise refresh_error
+
+    diagnostics: dict[str, Any] = {
+        "node_source": "cached_snapshot",
+        "cache_snapshot_id": snapshot.get("id"),
+        "cache_captured_at": snapshot.get("captured_at"),
+        "cache_subscription_url": snapshot.get("subscription_url"),
+        "subscription_refresh_error_code": refresh_error.error_code,
+        "subscription_refresh_error_message": refresh_error.error_message,
+        "subscription_refresh_url": subscription_url,
+    }
+    if invalid_nodes:
+        diagnostics["invalid_cached_nodes_count"] = len(invalid_nodes)
+        diagnostics["invalid_cached_nodes"] = invalid_nodes
+
+    return NodeSourceResult(
+        nodes=nodes,
+        unsupported_nodes=[],
+        subscription_format=str(snapshot.get("subscription_format") or refresh_error.subscription_format or "cached_snapshot"),
+        node_source="cached_snapshot",
+        diagnostics=diagnostics,
+    )
 
 
 def build_run_payload(
@@ -1131,6 +1267,14 @@ def post_performance_run(config: Config, payload: dict[str, Any]) -> dict[str, A
     return request_json(config, "POST", "/api/v1/admin/performance-runs", payload)
 
 
+def post_subscription_node_snapshot(config: Config, airport_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+    return request_json(config, "POST", f"/api/v1/admin/airports/{airport_id}/subscription-node-snapshots", payload)
+
+
+def get_latest_subscription_node_snapshot(config: Config, airport_id: int) -> dict[str, Any]:
+    return request_json(config, "GET", f"/api/v1/admin/airports/{airport_id}/subscription-node-snapshots/latest")
+
+
 def post_admin_action(config: Config, path: str) -> dict[str, Any]:
     return request_json(config, "POST", path)
 
@@ -1177,6 +1321,52 @@ def node_to_summary(node: ParsedNode) -> dict[str, Any]:
         "region": node.region,
         "type": node.node_type,
     }
+
+
+def node_to_snapshot(node: ParsedNode) -> dict[str, Any]:
+    return {
+        "name": node.name,
+        "region": node.region,
+        "type": node.node_type,
+        "outbound": node.outbound,
+        "raw_uri": node.raw_uri,
+    }
+
+
+def nodes_from_snapshot(snapshot: dict[str, Any]) -> tuple[list[ParsedNode], list[dict[str, str]]]:
+    nodes: list[ParsedNode] = []
+    invalid_nodes: list[dict[str, str]] = []
+    raw_nodes = snapshot.get("nodes")
+    if not isinstance(raw_nodes, list):
+        return nodes, [{"name": "", "reason": "snapshot_nodes_not_array"}]
+    for index, item in enumerate(raw_nodes):
+        if not isinstance(item, dict):
+            invalid_nodes.append({"name": f"#{index}", "reason": "cached_node_not_object"})
+            continue
+        name = str(item.get("name") or "")
+        node_type = str(item.get("type") or "")
+        raw_uri = str(item.get("raw_uri") or "")
+        region_value = item.get("region")
+        outbound = item.get("outbound")
+        if not isinstance(outbound, dict):
+            invalid_nodes.append({"name": name or f"#{index}", "reason": "cached_node_missing_outbound"})
+            continue
+        if not outbound.get("server") or not outbound.get("server_port"):
+            invalid_nodes.append({"name": name or f"#{index}", "reason": "cached_node_missing_server"})
+            continue
+        if not name or not node_type or not raw_uri:
+            invalid_nodes.append({"name": name or f"#{index}", "reason": "cached_node_missing_identity"})
+            continue
+        nodes.append(
+            ParsedNode(
+                name=name,
+                node_type=node_type,
+                region=None if region_value in (None, "") else str(region_value),
+                outbound=outbound,
+                raw_uri=raw_uri,
+            )
+        )
+    return nodes, invalid_nodes
 
 
 def split_host_port(value: str) -> tuple[str, int]:
