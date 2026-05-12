@@ -80,6 +80,21 @@ class MonitorPerformanceTests(unittest.TestCase):
         self.assertEqual(trojan_node.region, "US")
         self.assertEqual(trojan_node.outbound["transport"]["type"], "ws")
 
+    def test_parse_anytls_node_builds_tls_outbound(self) -> None:
+        uri = "anytls://letmein@example.com/?sni=real.example.com&insecure=1#HK-anytls"
+        node = parse_node_line(uri)
+        assert node is not None
+
+        self.assertEqual(node.node_type, "anytls")
+        self.assertEqual(node.region, "HK")
+        self.assertEqual(node.outbound["type"], "anytls")
+        self.assertEqual(node.outbound["server"], "example.com")
+        self.assertEqual(node.outbound["server_port"], 443)
+        self.assertEqual(node.outbound["password"], "letmein")
+        self.assertEqual(node.outbound["tls"]["enabled"], True)
+        self.assertEqual(node.outbound["tls"]["server_name"], "real.example.com")
+        self.assertEqual(node.outbound["tls"]["insecure"], True)
+
     def test_select_nodes_randomly_picks_one_node_per_detected_region(self) -> None:
         uris = [
             "trojan://password@hk.example.com:443#HK-A",

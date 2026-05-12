@@ -622,6 +622,8 @@ def parse_node_line(line: str) -> ParsedNode | None:
         return parse_trojan_node(line)
     if line.startswith("vless://"):
         return parse_vless_node(line)
+    if line.startswith("anytls://"):
+        return parse_anytls_node(line)
     return None
 
 
@@ -760,6 +762,29 @@ def parse_vless_node(uri: str) -> ParsedNode:
             short_id=first_query(query, "sid", ""),
         )
     return ParsedNode(name=name, node_type="vless", region=detect_region(name), outbound=outbound, raw_uri=uri)
+
+
+def parse_anytls_node(uri: str) -> ParsedNode:
+    parsed = urlparse(uri)
+    server = require_value(parsed.hostname, "anytls_server")
+    port = parsed.port or 443
+    password = unquote(require_value(parsed.username, "anytls_password"))
+    name = unquote(parsed.fragment or f"anytls-{server}:{port}")
+    query = parse_qs(parsed.query)
+    outbound: dict[str, Any] = {
+        "type": "anytls",
+        "tag": "proxy",
+        "server": server,
+        "server_port": port,
+        "password": password,
+    }
+    apply_tls(
+        outbound,
+        True,
+        server_name=first_query(query, "sni", parsed.hostname or ""),
+        insecure=first_query(query, "insecure", "0").lower() in {"1", "true"},
+    )
+    return ParsedNode(name=name, node_type="anytls", region=detect_region(name), outbound=outbound, raw_uri=uri)
 
 
 def apply_transport(
