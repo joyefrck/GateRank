@@ -2,10 +2,21 @@ import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql
 import { CLICK_CHARGE_AMOUNT, CLICK_DEDUPE_HOURS } from '../config/billing';
 import { sqlDateTimeToTimezoneIso } from '../utils/time';
 
+export const LOW_BALANCE_WARNING_THRESHOLD = 30;
+
 export type BillingPaymentChannel = 'alipay' | 'wxpay' | 'usdt';
 export type BillingOrderStatus = 'created' | 'paid' | 'failed' | 'expired' | 'canceled';
 export type WalletTransactionType = 'recharge' | 'click_charge' | 'adjustment';
 export type ClickBillingStatus = 'billed' | 'duplicate' | 'insufficient_balance' | 'unlisted' | 'no_wallet';
+export type BillingMailNotificationType = 'low_balance_warning' | 'airport_auto_unlisted' | 'airport_online';
+
+export interface BillingMailNotificationEvent {
+  type: BillingMailNotificationType;
+  to: string;
+  airportName: string;
+  balance: number;
+  thresholdAmount: number;
+}
 
 export interface ApplicantWalletView {
   id: number;
@@ -14,6 +25,9 @@ export interface ApplicantWalletView {
   airport_id: number | null;
   balance: number;
   auto_unlisted_at: string | null;
+  low_balance_notified_at?: string | null;
+  applicant_email?: string | null;
+  airport_name?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -133,13 +147,18 @@ interface AirportOwnerRow extends RowDataPacket {
   application_id: number | null;
   wallet_id: number | null;
   balance: number | null;
+  low_balance_notified_at: string | null;
+  applicant_email: string | null;
 }
 
 interface ListingSyncRow extends RowDataPacket {
   wallet_id: number;
   airport_id: number | null;
+  airport_name: string | null;
+  applicant_email: string | null;
   balance: number;
   auto_unlisted_at: string | null;
+  low_balance_notified_at: string | null;
   is_listed: number | null;
 }
 
@@ -149,6 +168,7 @@ export interface BillingListingSyncResult {
   unlisted: number;
   unchanged: number;
   skipped: number;
+  notification_events: BillingMailNotificationEvent[];
 }
 
 interface ApplicationIdRow extends RowDataPacket {
@@ -177,6 +197,12 @@ export interface ProcessOutboundClickResult {
   billed_amount: number;
   airport_name: string;
   balance_after: number | null;
+  notification_events: BillingMailNotificationEvent[];
+}
+
+export interface RechargeCreditResult {
+  credited: boolean;
+  notification_events: BillingMailNotificationEvent[];
 }
 
 export class ApplicantBillingRepository {
@@ -191,6 +217,7 @@ export class ApplicantBillingRepository {
         airport_id BIGINT UNSIGNED NULL,
         balance DECIMAL(10,2) NOT NULL DEFAULT 0,
         auto_unlisted_at DATETIME NULL,
+        low_balance_notified_at DATETIME NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
@@ -273,6 +300,8 @@ export class ApplicantBillingRepository {
         INDEX idx_outbound_click_records_account_time (applicant_account_id, occurred_at DESC)
       )
     `);
+
+    await this.ensureColumn('low_balance_notified_at', 'DATETIME NULL AFTER auto_unlisted_at');
   }
 
   async backfillLegacyAirportWallets(): Promise<LegacyWalletBackfillResult> {
@@ -422,6 +451,7 @@ export class ApplicantBillingRepository {
     const [rows] = await this.pool.query<WalletRow[]>(
       `SELECT id, applicant_account_id, application_id, airport_id, balance,
               DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+              DATE_FORMAT(low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at,
               DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
               DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
          FROM applicant_wallets
@@ -440,6 +470,7 @@ export class ApplicantBillingRepository {
     const [rows] = await this.pool.query<WalletRow[]>(
       `SELECT id, applicant_account_id, application_id, airport_id, balance,
               DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+              DATE_FORMAT(low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at,
               DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
               DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
          FROM applicant_wallets
@@ -488,6 +519,7 @@ export class ApplicantBillingRepository {
       const [updatedRows] = await connection.query<WalletRow[]>(
         `SELECT id, applicant_account_id, application_id, airport_id, balance,
                 DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+                DATE_FORMAT(low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at,
                 DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
                 DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
            FROM applicant_wallets
@@ -513,6 +545,7 @@ export class ApplicantBillingRepository {
       unlisted: 0,
       unchanged: 0,
       skipped: 0,
+      notification_events: [],
     };
     const connection = await this.pool.getConnection();
     try {
@@ -520,12 +553,17 @@ export class ApplicantBillingRepository {
       const [rows] = await connection.query<ListingSyncRow[]>(
         `SELECT w.id AS wallet_id,
                 w.airport_id,
+                a.name AS airport_name,
+                aa.email AS applicant_email,
                 w.balance,
                 DATE_FORMAT(w.auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+                DATE_FORMAT(w.low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at,
                 a.is_listed
            FROM applicant_wallets w
            LEFT JOIN airports a
              ON a.id = w.airport_id
+           LEFT JOIN applicant_accounts aa
+             ON aa.id = w.applicant_account_id
           WHERE w.airport_id IS NOT NULL
           FOR UPDATE`,
       );
@@ -551,13 +589,32 @@ export class ApplicantBillingRepository {
             );
             await connection.execute<ResultSetHeader>(
               `UPDATE applicant_wallets
-                  SET auto_unlisted_at = NULL
+                  SET auto_unlisted_at = NULL,
+                      low_balance_notified_at = CASE WHEN balance >= ? THEN NULL ELSE low_balance_notified_at END
                 WHERE id = ?`,
-              [row.wallet_id],
+              [LOW_BALANCE_WARNING_THRESHOLD, row.wallet_id],
             );
+            pushBillingNotificationEvent(result.notification_events, 'airport_online', row, balance);
             result.restored += 1;
           } else {
             result.unchanged += 1;
+          }
+          if (balance >= LOW_BALANCE_WARNING_THRESHOLD && row.low_balance_notified_at) {
+            await connection.execute<ResultSetHeader>(
+              `UPDATE applicant_wallets
+                  SET low_balance_notified_at = NULL
+                WHERE id = ?`,
+              [row.wallet_id],
+            );
+          }
+          if (balance < LOW_BALANCE_WARNING_THRESHOLD && !row.low_balance_notified_at) {
+            await connection.execute<ResultSetHeader>(
+              `UPDATE applicant_wallets
+                  SET low_balance_notified_at = NOW()
+                WHERE id = ?`,
+              [row.wallet_id],
+            );
+            pushBillingNotificationEvent(result.notification_events, 'low_balance_warning', row, balance);
           }
           continue;
         }
@@ -575,6 +632,7 @@ export class ApplicantBillingRepository {
               WHERE id = ?`,
             [row.wallet_id],
           );
+          pushBillingNotificationEvent(result.notification_events, 'airport_auto_unlisted', row, balance);
           result.unlisted += 1;
         } else {
           result.unchanged += 1;
@@ -718,6 +776,7 @@ export class ApplicantBillingRepository {
     const [rows] = await connection.query<WalletRow[]>(
       `SELECT id, applicant_account_id, application_id, airport_id, balance,
               DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+              DATE_FORMAT(low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at,
               DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
               DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
          FROM applicant_wallets
@@ -733,6 +792,7 @@ export class ApplicantBillingRepository {
     const [rows] = await this.pool.query<WalletRow[]>(
       `SELECT id, applicant_account_id, application_id, airport_id, balance,
               DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+              DATE_FORMAT(low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at,
               DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
               DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
          FROM applicant_wallets
@@ -795,19 +855,35 @@ export class ApplicantBillingRepository {
     return result.affectedRows > 0;
   }
 
-  async listRechargeOrders(applicantAccountId: number, limit = 20): Promise<RechargeOrderView[]> {
-    const [rows] = await this.pool.query<RechargeOrderRow[]>(
-      `SELECT id, applicant_account_id, out_trade_no, gateway_trade_no, channel, amount, status,
-              pay_type, pay_info, notify_payload_json,
-              DATE_FORMAT(paid_at, '%Y-%m-%d %H:%i:%s') AS paid_at,
-              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
-         FROM applicant_recharge_orders
-        WHERE applicant_account_id = ?
-        ORDER BY id DESC
-        LIMIT ?`,
-      [applicantAccountId, limit],
-    );
-    return rows.map(toRechargeOrder);
+  async listRechargeOrders(
+    applicantAccountId: number,
+    page = 1,
+    pageSize = 20,
+  ): Promise<PaginatedBillingRecords<RechargeOrderView>> {
+    const offset = (page - 1) * pageSize;
+    const [[countRow], [rows]] = await Promise.all([
+      this.pool.query<Array<RowDataPacket & { total: number }>>(
+        `SELECT COUNT(*) AS total
+           FROM applicant_recharge_orders
+          WHERE applicant_account_id = ?`,
+        [applicantAccountId],
+      ),
+      this.pool.query<RechargeOrderRow[]>(
+        `SELECT id, applicant_account_id, out_trade_no, gateway_trade_no, channel, amount, status,
+                pay_type, pay_info, notify_payload_json,
+                DATE_FORMAT(paid_at, '%Y-%m-%d %H:%i:%s') AS paid_at,
+                DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+           FROM applicant_recharge_orders
+          WHERE applicant_account_id = ?
+          ORDER BY id DESC
+          LIMIT ? OFFSET ?`,
+        [applicantAccountId, pageSize, offset],
+      ),
+    ]);
+    return {
+      items: rows.map(toRechargeOrder),
+      total: Number(countRow[0]?.total || 0),
+    };
   }
 
   async listRechargeOrdersByAirportId(
@@ -853,8 +929,9 @@ export class ApplicantBillingRepository {
       paid_at: string;
       click_charge_amount?: number;
     },
-  ): Promise<boolean> {
+  ): Promise<RechargeCreditResult> {
     const connection = await this.pool.getConnection();
+    const notificationEvents: BillingMailNotificationEvent[] = [];
     try {
       await connection.beginTransaction();
       const [orderRows] = await connection.query<RechargeOrderRow[]>(
@@ -868,7 +945,7 @@ export class ApplicantBillingRepository {
       const order = orderRows[0];
       if (!order || order.status === 'paid') {
         await connection.rollback();
-        return false;
+        return { credited: false, notification_events: [] };
       }
 
       await connection.execute<ResultSetHeader>(
@@ -898,9 +975,10 @@ export class ApplicantBillingRepository {
       const nextBalance = roundMoney(Number(wallet.balance) + Number(order.amount));
       await connection.execute<ResultSetHeader>(
         `UPDATE applicant_wallets
-            SET balance = ?
+            SET balance = ?,
+                low_balance_notified_at = CASE WHEN ? >= ? THEN NULL ELSE low_balance_notified_at END
           WHERE id = ?`,
-        [nextBalance, wallet.id],
+        [nextBalance, nextBalance, LOW_BALANCE_WARNING_THRESHOLD, wallet.id],
       );
       await connection.execute<ResultSetHeader>(
         `INSERT IGNORE INTO applicant_wallet_transactions (
@@ -933,10 +1011,11 @@ export class ApplicantBillingRepository {
             WHERE id = ?`,
           [wallet.id],
         );
+        pushBillingNotificationEvent(notificationEvents, 'airport_online', wallet, nextBalance);
       }
 
       await connection.commit();
-      return true;
+      return { credited: true, notification_events: notificationEvents };
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -945,17 +1024,33 @@ export class ApplicantBillingRepository {
     }
   }
 
-  async listTransactions(applicantAccountId: number, limit = 50): Promise<WalletTransactionView[]> {
-    const [rows] = await this.pool.query<TransactionRow[]>(
-      `SELECT id, transaction_type, amount, balance_after, reference_type, reference_id, description,
-              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
-         FROM applicant_wallet_transactions
-        WHERE applicant_account_id = ?
-        ORDER BY id DESC
-        LIMIT ?`,
-      [applicantAccountId, limit],
-    );
-    return rows.map(toTransaction);
+  async listTransactions(
+    applicantAccountId: number,
+    page = 1,
+    pageSize = 20,
+  ): Promise<PaginatedBillingRecords<WalletTransactionView>> {
+    const offset = (page - 1) * pageSize;
+    const [[countRow], [rows]] = await Promise.all([
+      this.pool.query<Array<RowDataPacket & { total: number }>>(
+        `SELECT COUNT(*) AS total
+           FROM applicant_wallet_transactions
+          WHERE applicant_account_id = ?`,
+        [applicantAccountId],
+      ),
+      this.pool.query<TransactionRow[]>(
+        `SELECT id, transaction_type, amount, balance_after, reference_type, reference_id, description,
+                DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+           FROM applicant_wallet_transactions
+          WHERE applicant_account_id = ?
+          ORDER BY id DESC
+          LIMIT ? OFFSET ?`,
+        [applicantAccountId, pageSize, offset],
+      ),
+    ]);
+    return {
+      items: rows.map(toTransaction),
+      total: Number(countRow[0]?.total || 0),
+    };
   }
 
   async listWalletTransactionsByAirportId(
@@ -992,19 +1087,35 @@ export class ApplicantBillingRepository {
     };
   }
 
-  async listClicks(applicantAccountId: number, limit = 50): Promise<ApplicantClickView[]> {
-    const [rows] = await this.pool.query<ClickRow[]>(
-      `SELECT c.id, c.click_id, c.airport_id, a.name AS airport_name, c.placement, c.target_kind,
-              c.target_url, c.billing_status, c.billed_amount,
-              DATE_FORMAT(c.occurred_at, '%Y-%m-%d %H:%i:%s') AS occurred_at
-         FROM outbound_click_records c
-         LEFT JOIN airports a ON a.id = c.airport_id
-        WHERE c.applicant_account_id = ?
-        ORDER BY c.id DESC
-        LIMIT ?`,
-      [applicantAccountId, limit],
-    );
-    return rows.map(toClick);
+  async listClicks(
+    applicantAccountId: number,
+    page = 1,
+    pageSize = 20,
+  ): Promise<PaginatedBillingRecords<ApplicantClickView>> {
+    const offset = (page - 1) * pageSize;
+    const [[countRow], [rows]] = await Promise.all([
+      this.pool.query<Array<RowDataPacket & { total: number }>>(
+        `SELECT COUNT(*) AS total
+           FROM outbound_click_records
+          WHERE applicant_account_id = ?`,
+        [applicantAccountId],
+      ),
+      this.pool.query<ClickRow[]>(
+        `SELECT c.id, c.click_id, c.airport_id, a.name AS airport_name, c.placement, c.target_kind,
+                c.target_url, c.billing_status, c.billed_amount,
+                DATE_FORMAT(c.occurred_at, '%Y-%m-%d %H:%i:%s') AS occurred_at
+           FROM outbound_click_records c
+           LEFT JOIN airports a ON a.id = c.airport_id
+          WHERE c.applicant_account_id = ?
+          ORDER BY c.id DESC
+          LIMIT ? OFFSET ?`,
+        [applicantAccountId, pageSize, offset],
+      ),
+    ]);
+    return {
+      items: rows.map(toClick),
+      total: Number(countRow[0]?.total || 0),
+    };
   }
 
   async processOutboundClick(input: ProcessOutboundClickInput): Promise<ProcessOutboundClickResult> {
@@ -1017,10 +1128,12 @@ export class ApplicantBillingRepository {
            a.id AS airport_id,
            a.name AS airport_name,
            a.is_listed,
+           aa.email AS applicant_email,
            aa.id AS applicant_account_id,
            ap.id AS application_id,
            w.id AS wallet_id,
-           w.balance
+           w.balance,
+           DATE_FORMAT(w.low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at
          FROM airports a
          LEFT JOIN airport_applications ap ON ap.approved_airport_id = a.id
          LEFT JOIN applicant_accounts aa ON aa.application_id = ap.id
@@ -1031,6 +1144,7 @@ export class ApplicantBillingRepository {
         [input.airport_id],
       );
       const owner = ownerRows[0];
+      const notificationEvents: BillingMailNotificationEvent[] = [];
       if (!owner) {
         throw new Error('airport not found');
       }
@@ -1038,7 +1152,13 @@ export class ApplicantBillingRepository {
       if (!owner.is_listed) {
         await this.insertClick(connection, input, owner, 'unlisted', 0);
         await connection.commit();
-        return { status: 'unlisted', billed_amount: 0, airport_name: owner.airport_name, balance_after: owner.balance == null ? null : Number(owner.balance) };
+        return {
+          status: 'unlisted',
+          billed_amount: 0,
+          airport_name: owner.airport_name,
+          balance_after: owner.balance == null ? null : Number(owner.balance),
+          notification_events: [],
+        };
       }
 
       if (!owner.wallet_id && owner.applicant_account_id && owner.application_id) {
@@ -1050,20 +1170,34 @@ export class ApplicantBillingRepository {
         const wallet = await this.getWalletForAccount(connection, Number(owner.applicant_account_id));
         owner.wallet_id = wallet?.id || null;
         owner.balance = wallet ? Number(wallet.balance) : null;
+        owner.low_balance_notified_at = wallet?.low_balance_notified_at || null;
       }
 
       if (!owner.wallet_id || !owner.applicant_account_id || !owner.application_id) {
         await this.insertClick(connection, input, owner, 'no_wallet', 0);
         await connection.commit();
-        return { status: 'no_wallet', billed_amount: 0, airport_name: owner.airport_name, balance_after: owner.balance == null ? null : Number(owner.balance) };
+        return {
+          status: 'no_wallet',
+          billed_amount: 0,
+          airport_name: owner.airport_name,
+          balance_after: owner.balance == null ? null : Number(owner.balance),
+          notification_events: [],
+        };
       }
 
       const balance = Number(owner.balance || 0);
       if (balance < clickChargeAmount) {
         await this.autoUnlistAirport(connection, Number(owner.wallet_id), input.airport_id);
         await this.insertClick(connection, input, owner, 'insufficient_balance', 0);
+        pushBillingNotificationEvent(notificationEvents, 'airport_auto_unlisted', owner, balance);
         await connection.commit();
-        return { status: 'insufficient_balance', billed_amount: 0, airport_name: owner.airport_name, balance_after: balance };
+        return {
+          status: 'insufficient_balance',
+          billed_amount: 0,
+          airport_name: owner.airport_name,
+          balance_after: balance,
+          notification_events: notificationEvents,
+        };
       }
 
       const [duplicateRows] = await connection.query<RowDataPacket[]>(
@@ -1080,7 +1214,13 @@ export class ApplicantBillingRepository {
       if (duplicateRows.length > 0) {
         await this.insertClick(connection, input, owner, 'duplicate', 0);
         await connection.commit();
-        return { status: 'duplicate', billed_amount: 0, airport_name: owner.airport_name, balance_after: balance };
+        return {
+          status: 'duplicate',
+          billed_amount: 0,
+          airport_name: owner.airport_name,
+          balance_after: balance,
+          notification_events: [],
+        };
       }
 
       const nextBalance = roundMoney(balance - clickChargeAmount);
@@ -1110,10 +1250,25 @@ export class ApplicantBillingRepository {
 
       if (nextBalance < clickChargeAmount) {
         await this.autoUnlistAirport(connection, Number(owner.wallet_id), input.airport_id);
+        pushBillingNotificationEvent(notificationEvents, 'airport_auto_unlisted', owner, nextBalance);
+      } else if (nextBalance < LOW_BALANCE_WARNING_THRESHOLD && !owner.low_balance_notified_at) {
+        await connection.execute<ResultSetHeader>(
+          `UPDATE applicant_wallets
+              SET low_balance_notified_at = NOW()
+            WHERE id = ?`,
+          [owner.wallet_id],
+        );
+        pushBillingNotificationEvent(notificationEvents, 'low_balance_warning', owner, nextBalance);
       }
 
       await connection.commit();
-      return { status: 'billed', billed_amount: clickChargeAmount, airport_name: owner.airport_name, balance_after: nextBalance };
+      return {
+        status: 'billed',
+        billed_amount: clickChargeAmount,
+        airport_name: owner.airport_name,
+        balance_after: nextBalance,
+        notification_events: notificationEvents,
+      };
     } catch (error) {
       await connection.rollback();
       throw error;
@@ -1124,12 +1279,17 @@ export class ApplicantBillingRepository {
 
   private async getWalletForAccount(connection: PoolConnection, applicantAccountId: number): Promise<WalletRow | null> {
     const [rows] = await connection.query<WalletRow[]>(
-      `SELECT id, applicant_account_id, application_id, airport_id, balance,
-              DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
-              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
-              DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
-         FROM applicant_wallets
-        WHERE applicant_account_id = ?
+      `SELECT w.id, w.applicant_account_id, w.application_id, w.airport_id, w.balance,
+              DATE_FORMAT(w.auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+              DATE_FORMAT(w.low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at,
+              DATE_FORMAT(w.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+              DATE_FORMAT(w.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at,
+              aa.email AS applicant_email,
+              a.name AS airport_name
+         FROM applicant_wallets w
+         LEFT JOIN applicant_accounts aa ON aa.id = w.applicant_account_id
+         LEFT JOIN airports a ON a.id = w.airport_id
+        WHERE w.applicant_account_id = ?
         LIMIT 1
         FOR UPDATE`,
       [applicantAccountId],
@@ -1183,6 +1343,17 @@ export class ApplicantBillingRepository {
       [walletId],
     );
   }
+
+  private async ensureColumn(columnName: string, definition: string): Promise<void> {
+    try {
+      await this.pool.query(`ALTER TABLE applicant_wallets ADD COLUMN ${columnName} ${definition}`);
+    } catch (error) {
+      if (isDuplicateColumnError(error)) {
+        return;
+      }
+      throw error;
+    }
+  }
 }
 
 function toWallet(row: WalletRow): ApplicantWalletView {
@@ -1193,9 +1364,34 @@ function toWallet(row: WalletRow): ApplicantWalletView {
     airport_id: row.airport_id == null ? null : Number(row.airport_id),
     balance: Number(row.balance),
     auto_unlisted_at: row.auto_unlisted_at ? sqlDateTimeToTimezoneIso(row.auto_unlisted_at) : null,
+    low_balance_notified_at: row.low_balance_notified_at ? sqlDateTimeToTimezoneIso(row.low_balance_notified_at) : null,
     created_at: sqlDateTimeToTimezoneIso(row.created_at),
     updated_at: sqlDateTimeToTimezoneIso(row.updated_at),
   };
+}
+
+function pushBillingNotificationEvent(
+  events: BillingMailNotificationEvent[],
+  type: BillingMailNotificationType,
+  source: {
+    applicant_email?: string | null;
+    airport_name?: string | null;
+    balance?: number | null;
+  },
+  balance: number,
+): void {
+  const to = String(source.applicant_email || '').trim();
+  const airportName = String(source.airport_name || '').trim();
+  if (!to || !airportName) {
+    return;
+  }
+  events.push({
+    type,
+    to,
+    airportName,
+    balance,
+    thresholdAmount: LOW_BALANCE_WARNING_THRESHOLD,
+  });
 }
 
 function toRechargeOrder(row: RechargeOrderRow): RechargeOrderView {
@@ -1252,4 +1448,15 @@ function normalizeClickChargeAmount(value: unknown): number {
     return CLICK_CHARGE_AMOUNT;
   }
   return roundMoney(amount);
+}
+
+function isDuplicateColumnError(error: unknown): boolean {
+  return Boolean(
+    error
+    && typeof error === 'object'
+    && (
+      (error as { code?: unknown }).code === 'ER_DUP_FIELDNAME'
+      || (error as { errno?: unknown }).errno === 1060
+    ),
+  );
 }

@@ -21,6 +21,7 @@ import {
 import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
 import { buildPublishTokenDocsHref } from '../site/publicSite';
+import { manualTotalScoreInputValue } from './scoreInput';
 
 type AirportStatus = 'normal' | 'risk' | 'down';
 type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
@@ -496,6 +497,7 @@ interface PaymentGatewaySettingsFormState {
 interface MarketingSettingsView {
   application_fee_amount: number;
   click_charge_amount: number;
+  admin_telegram_username: string | null;
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -503,6 +505,7 @@ interface MarketingSettingsView {
 interface MarketingSettingsFormState {
   application_fee_amount: string;
   click_charge_amount: string;
+  admin_telegram_username: string;
 }
 
 interface SmtpSettingsView {
@@ -521,9 +524,15 @@ interface SmtpSettingsView {
   updated_by: string | null;
 }
 
-type SmtpTemplateKey = 'applicant_credentials' | 'application_approved';
+type SmtpTemplateKey =
+  | 'applicant_credentials'
+  | 'application_approved'
+  | 'low_balance_warning'
+  | 'airport_auto_unlisted'
+  | 'airport_online';
 
 interface SmtpTemplateItem {
+  enabled: boolean;
   subject: string;
   body: string;
 }
@@ -531,6 +540,9 @@ interface SmtpTemplateItem {
 interface SmtpTemplateMap {
   applicant_credentials: SmtpTemplateItem;
   application_approved: SmtpTemplateItem;
+  low_balance_warning: SmtpTemplateItem;
+  airport_auto_unlisted: SmtpTemplateItem;
+  airport_online: SmtpTemplateItem;
 }
 
 interface SmtpSettingsFormState {
@@ -703,7 +715,13 @@ const ADMIN_DEFAULT_PATH = '/admin/marketing';
 const AIRPORTS_PAGE_SIZE = 50;
 const AIRPORT_BILLING_PAGE_SIZE = 20;
 const APPLICATIONS_PAGE_SIZE = 20;
-const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = ['applicant_credentials', 'application_approved'];
+const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = [
+  'applicant_credentials',
+  'application_approved',
+  'low_balance_warning',
+  'airport_auto_unlisted',
+  'airport_online',
+];
 const SMTP_TEMPLATE_SCENARIOS: Record<
   SmtpTemplateKey,
   {
@@ -736,6 +754,45 @@ const SMTP_TEMPLATE_SCENARIOS: Record<
     sampleValues: {
       airport_name: '大象网络',
       applicant_email: 'owner@example.com',
+      site_name: 'GateRank',
+    },
+  },
+  low_balance_warning: {
+    title: '余额低于30元提醒',
+    trigger: '自动扣费或欠费同步发现余额低于 30 元且本轮尚未提醒时发送。',
+    description: '用于提醒机场账户余额偏低，建议及时充值。',
+    variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
+    sampleValues: {
+      airport_name: '大象网络',
+      applicant_email: 'owner@example.com',
+      current_balance: '18.50',
+      threshold_amount: '30.00',
+      site_name: 'GateRank',
+    },
+  },
+  airport_auto_unlisted: {
+    title: '机场余额不足下线提醒',
+    trigger: '机场因余额不足被系统自动下线后发送。',
+    description: '用于告知机场已因余额不足暂时下线，余额足够后会自动上线。',
+    variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
+    sampleValues: {
+      airport_name: '大象网络',
+      applicant_email: 'owner@example.com',
+      current_balance: '0.40',
+      threshold_amount: '30.00',
+      site_name: 'GateRank',
+    },
+  },
+  airport_online: {
+    title: '机场上线通知',
+    trigger: '机场充值后余额足够并由系统自动恢复上线时发送。',
+    description: '用于通知机场已经恢复上线。',
+    variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
+    sampleValues: {
+      airport_name: '大象网络',
+      applicant_email: 'owner@example.com',
+      current_balance: '120.00',
+      threshold_amount: '30.00',
       site_name: 'GateRank',
     },
   },
@@ -829,7 +886,7 @@ export default function AdminApp() {
 
   return (
     <div className="min-h-screen bg-neutral-100 text-neutral-900">
-      <header className="bg-white border-b border-neutral-200 px-6 h-16 flex items-center justify-between">
+      <header className="sticky top-0 z-30 bg-white border-b border-neutral-200 px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3 font-bold tracking-tight">
           <span className="w-8 h-8 rounded bg-neutral-900 text-white flex items-center justify-center"><Shield size={16} /></span>
           GateRank Admin
@@ -857,7 +914,7 @@ export default function AdminApp() {
       </header>
 
       <div className="max-w-[1600px] mx-auto p-6 grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-6">
-        <aside className="bg-white rounded-xl border border-neutral-200 p-3 h-fit">
+        <aside className="bg-white rounded-xl border border-neutral-200 p-3 h-fit md:sticky md:top-[88px]">
           <NavItem icon={<BarChart3 size={14} />} active={path === '/admin/marketing'} onClick={() => navigate('/admin/marketing')} label="访问记录" />
           <NavItem icon={<MousePointerClick size={14} />} active={path === '/admin/marketing-settings'} onClick={() => navigate('/admin/marketing-settings')} label="营销模块" />
           <NavItem icon={<Database size={14} />} active={path.startsWith('/admin/airports')} onClick={() => navigate('/admin/airports')} label="机场管理" />
@@ -2357,6 +2414,7 @@ function MarketingSettingsPage() {
   const [form, setForm] = useState<MarketingSettingsFormState>({
     application_fee_amount: '300',
     click_charge_amount: '1',
+    admin_telegram_username: '',
   });
 
   const applyView = (view: MarketingSettingsView) => {
@@ -2364,6 +2422,7 @@ function MarketingSettingsPage() {
     setForm({
       application_fee_amount: String(view.application_fee_amount || 300),
       click_charge_amount: String(view.click_charge_amount || 1),
+      admin_telegram_username: view.admin_telegram_username ? `@${view.admin_telegram_username}` : '',
     });
   };
 
@@ -2394,6 +2453,7 @@ function MarketingSettingsPage() {
         body: JSON.stringify({
           application_fee_amount: Number(form.application_fee_amount),
           click_charge_amount: Number(form.click_charge_amount),
+          admin_telegram_username: form.admin_telegram_username,
         }),
       })) as MarketingSettingsView;
       applyView(data);
@@ -2429,6 +2489,7 @@ function MarketingSettingsPage() {
               <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
               <ReadField label="当前入驻费用" value={settings ? `¥${settings.application_fee_amount}` : '-'} />
               <ReadField label="当前点击费用" value={settings ? `¥${settings.click_charge_amount} / 次` : '-'} />
+              <ReadField label="系统管理员 Telegram" value={settings?.admin_telegram_username ? `@${settings.admin_telegram_username}` : '-'} />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2450,6 +2511,14 @@ function MarketingSettingsPage() {
                   step="0.01"
                   value={form.click_charge_amount}
                   onChange={(e) => setForm({ ...form, click_charge_amount: e.target.value })}
+                />
+              </FormField>
+              <FormField label="系统管理员 Telegram" hint="支持 @username / username / t.me/username，申请人后台会用它打开 Telegram 客户端。">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  value={form.admin_telegram_username}
+                  onChange={(e) => setForm({ ...form, admin_telegram_username: e.target.value })}
+                  placeholder="@gaterank_admin"
                 />
               </FormField>
             </div>
@@ -2486,7 +2555,7 @@ function SystemSettingsPage() {
               : activeTab === 'payment_gateway'
                 ? '支付配置用于申请人后台下单和支付回调验签，商户号和密钥保存后立即生效。'
                 : activeTab === 'smtp'
-                  ? 'SMTP 配置用于发送申请账号凭证邮件和审批通过邮件。'
+                  ? 'SMTP 配置用于发送申请、审批、余额和上下线提醒邮件。'
                   : activeTab === 'x_oauth'
                     ? 'X 登录配置用于申请人后台绑定和 X 一键登录，保存后立即生效。'
                 : activeTab === 'media_libraries'
@@ -3284,6 +3353,7 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
 function getDefaultSmtpTemplates(): SmtpTemplateMap {
   return {
     applicant_credentials: {
+      enabled: true,
       subject: 'GateRank 申请后台账号已开通 - {{airport_name}}',
       body: [
         '您好，{{airport_name}} 的申请已提交成功。',
@@ -3296,6 +3366,7 @@ function getDefaultSmtpTemplates(): SmtpTemplateMap {
       ].join('\n'),
     },
     application_approved: {
+      enabled: true,
       subject: 'GateRank 审批通过通知 - {{airport_name}}',
       body: [
         '您好，{{airport_name}} 的 GateRank 入驻申请已审批通过。',
@@ -3303,26 +3374,58 @@ function getDefaultSmtpTemplates(): SmtpTemplateMap {
         '后续如需补充资料，请联系管理员。',
       ].join('\n'),
     },
+    low_balance_warning: {
+      enabled: true,
+      subject: 'GateRank 余额提醒 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 当前账户余额已低于 {{threshold_amount}} 元。',
+        '',
+        '为避免影响机场在 GateRank 的展示和跳转服务，建议您方便时及时完成充值。',
+        '',
+        '如已完成充值，请忽略本邮件。感谢您的理解与支持。',
+      ].join('\n'),
+    },
+    airport_auto_unlisted: {
+      enabled: true,
+      subject: 'GateRank 机场下线提醒 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 当前因账户余额不足，已暂时从 GateRank 下线。',
+        '',
+        '请您及时充值。余额足够后，系统会立即为该机场恢复上线。',
+        '',
+        '感谢您的理解与配合，如需协助请联系 GateRank 管理员。',
+      ].join('\n'),
+    },
+    airport_online: {
+      enabled: true,
+      subject: 'GateRank 机场上线通知 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 已经恢复上线。',
+        '',
+        '该机场现在可以继续在 GateRank 正常展示并接收跳转访问。',
+        '',
+        '感谢您对 GateRank 的支持。',
+      ].join('\n'),
+    },
   };
 }
 
 function cloneSmtpTemplates(templates?: SmtpTemplateMap | null): SmtpTemplateMap {
   const defaults = getDefaultSmtpTemplates();
-  return {
-    applicant_credentials: {
-      subject: templates?.applicant_credentials?.subject || defaults.applicant_credentials.subject,
-      body: templates?.applicant_credentials?.body || defaults.applicant_credentials.body,
-    },
-    application_approved: {
-      subject: templates?.application_approved?.subject || defaults.application_approved.subject,
-      body: templates?.application_approved?.body || defaults.application_approved.body,
-    },
-  };
+  return SMTP_TEMPLATE_ORDER.reduce((next, key) => {
+    next[key] = {
+      enabled: templates?.[key]?.enabled ?? defaults[key].enabled,
+      subject: templates?.[key]?.subject || defaults[key].subject,
+      body: templates?.[key]?.body || defaults[key].body,
+    };
+    return next;
+  }, {} as SmtpTemplateMap);
 }
 
 function renderSmtpTemplatePreview(template: SmtpTemplateItem, values: Record<string, string>): SmtpTemplateItem {
   const render = (text: string) => text.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => values[key] ?? '');
   return {
+    enabled: template.enabled,
     subject: render(template.subject),
     body: render(template.body),
   };
@@ -3345,7 +3448,8 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
   const [settings, setSettings] = useState<SmtpSettingsView | null>(null);
   const [clearPassword, setClearPassword] = useState(false);
   const [templateEditorKey, setTemplateEditorKey] = useState<SmtpTemplateKey | null>(null);
-  const [templateDraft, setTemplateDraft] = useState<SmtpTemplateItem>({ subject: '', body: '' });
+  const [templateDraft, setTemplateDraft] = useState<SmtpTemplateItem>({ enabled: true, subject: '', body: '' });
+  const [togglingTemplateKey, setTogglingTemplateKey] = useState<SmtpTemplateKey | null>(null);
   const [form, setForm] = useState<SmtpSettingsFormState>({
     enabled: false,
     host: '',
@@ -3434,6 +3538,17 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
   };
 
   const sendTest = async () => {
+    const testTo = form.test_to.trim();
+    if (!testTo) {
+      setError('请先填写测试收件人邮箱');
+      setSuccess('');
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testTo)) {
+      setError('请输入有效的测试收件人邮箱');
+      setSuccess('');
+      return;
+    }
     setTesting(true);
     setError('');
     setSuccess('');
@@ -3442,7 +3557,7 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
         method: 'POST',
         body: JSON.stringify({
           ...buildPayload(),
-          test_to: form.test_to.trim(),
+          test_to: testTo,
         }),
       });
       setSuccess('测试邮件已发送');
@@ -3460,8 +3575,21 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
 
   const closeTemplateEditor = () => {
     setTemplateEditorKey(null);
-    setTemplateDraft({ subject: '', body: '' });
+    setTemplateDraft({ enabled: true, subject: '', body: '' });
   };
+
+  useEffect(() => {
+    if (!templateEditorKey) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeTemplateEditor();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [templateEditorKey]);
 
   const applyTemplateDraft = () => {
     if (!templateEditorKey) {
@@ -3472,12 +3600,31 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
       templates: {
         ...form.templates,
         [templateEditorKey]: {
+          enabled: form.templates[templateEditorKey].enabled,
           subject: templateDraft.subject.trim(),
           body: templateDraft.body.trim(),
         },
       },
     });
     closeTemplateEditor();
+  };
+
+  const toggleTemplateEnabled = async (key: SmtpTemplateKey, enabled: boolean) => {
+    setTogglingTemplateKey(key);
+    setError('');
+    setSuccess('');
+    try {
+      const data = (await apiFetch(`/api/v1/admin/system-settings/smtp/templates/${key}/enabled`, {
+        method: 'PATCH',
+        body: JSON.stringify({ enabled }),
+      })) as SmtpSettingsView;
+      applyView(data);
+      setSuccess(enabled ? '邮件模板已开启' : '邮件模板已关闭');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '模板开关保存失败');
+    } finally {
+      setTogglingTemplateKey(null);
+    }
   };
 
   const activeScenario = templateEditorKey ? SMTP_TEMPLATE_SCENARIOS[templateEditorKey] : null;
@@ -3489,7 +3636,7 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
     <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
       <div>
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">邮件配置</div>
-        <p className="mt-1 text-sm text-neutral-500">用于发送账号凭证邮件和审批通过邮件。</p>
+        <p className="mt-1 text-sm text-neutral-500">用于发送申请、审批、余额和上下线提醒邮件。</p>
       </div>
 
       {loading && <div className="text-sm text-neutral-500">加载中...</div>}
@@ -3594,52 +3741,161 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
             <div>
               <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">邮件场景与模板</div>
               <p className="mt-1 text-sm text-neutral-500">
-                以下场景会触发系统邮件。模板支持变量替换，修改后需要点击下方“保存配置”才会正式生效。
+                以下场景会触发系统邮件。开关点击后立即生效；主题和正文修改后需要点击下方“保存配置”才会正式生效。
               </p>
             </div>
-            <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-              {SMTP_TEMPLATE_ORDER.map((key) => {
-                const scenario = SMTP_TEMPLATE_SCENARIOS[key];
-                const template = form.templates[key];
-                return (
-                  <div key={key} className="rounded-2xl border border-neutral-200 bg-white p-4 space-y-3">
-                    <div className="flex items-start justify-between gap-3">
+            <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
+              <div className="grid grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.5fr)_100px_92px] gap-3 border-b border-neutral-200 bg-neutral-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
+                <div>模板</div>
+                <div>主题</div>
+                <div>开关</div>
+                <div className="text-right">设置</div>
+              </div>
+              <div className="divide-y divide-neutral-100">
+                {SMTP_TEMPLATE_ORDER.map((key) => {
+                  const scenario = SMTP_TEMPLATE_SCENARIOS[key];
+                  const template = form.templates[key];
+                  return (
+                    <div key={key} className="grid grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.5fr)_100px_92px] items-center gap-3 px-4 py-3">
                       <div>
-                        <div className="text-base font-semibold text-neutral-900">{scenario.title}</div>
-                        <div className="mt-1 text-sm text-neutral-500">{scenario.description}</div>
+                        <div className="text-sm font-semibold text-neutral-900">{scenario.title}</div>
+                        <div className="mt-1 truncate text-xs text-neutral-500" title={scenario.trigger}>{scenario.trigger}</div>
                       </div>
-                      <button
-                        type="button"
-                        className="shrink-0 rounded-xl border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-50"
-                        onClick={() => openTemplateEditor(key)}
-                      >
-                        编辑模板
-                      </button>
+                      <div className="min-w-0 text-sm text-neutral-700">
+                        <div className="truncate" title={template.subject}>{template.subject}</div>
+                        <div className="mt-1 truncate text-xs text-neutral-400" title={summarizeTemplateBody(template.body)}>
+                          {summarizeTemplateBody(template.body)}
+                        </div>
+                      </div>
+                      <label className="inline-flex items-center gap-2 text-sm font-medium text-neutral-700">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-neutral-300"
+                          checked={template.enabled}
+                          disabled={togglingTemplateKey === key}
+                          onChange={(e) => void toggleTemplateEnabled(key, e.target.checked)}
+                        />
+                        {template.enabled ? '开启' : '关闭'}
+                      </label>
+                      <div className="text-right">
+                        <button
+                          type="button"
+                          className="rounded-xl border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-50"
+                          onClick={() => openTemplateEditor(key)}
+                        >
+                          设置
+                        </button>
+                      </div>
                     </div>
-                    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
-                      <div className="font-medium text-neutral-900">触发时机</div>
-                      <div className="mt-1">{scenario.trigger}</div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {templateEditorKey && activeScenario && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={closeTemplateEditor}>
+              <div
+                className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="smtp-template-editor-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-4 border-b border-neutral-200 pb-4">
+                  <div>
+                    <h3 id="smtp-template-editor-title" className="text-xl font-bold tracking-tight">{activeScenario.title}</h3>
+                    <p className="mt-1 text-sm text-neutral-500">{activeScenario.trigger}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-full border border-neutral-200 p-2 text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900"
+                    aria-label="关闭模板设置"
+                    onClick={closeTemplateEditor}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <section className="mt-5 rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">模板编辑</div>
+                    <p className="mt-1 text-sm text-neutral-500">支持纯文本和变量替换，变量会在发送时注入真实内容。</p>
+                  </div>
+                  <FormField label="邮件主题">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      value={templateDraft.subject}
+                      onChange={(e) => setTemplateDraft({ ...templateDraft, subject: e.target.value })}
+                    />
+                  </FormField>
+                  <FormField label="邮件正文" hint="纯文本模板，换行会按原样保留。">
+                    <textarea
+                      className="min-h-[220px] w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      value={templateDraft.body}
+                      onChange={(e) => setTemplateDraft({ ...templateDraft, body: e.target.value })}
+                    />
+                  </FormField>
+                </section>
+
+                <section className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">可用变量</div>
+                      <p className="mt-1 text-sm text-neutral-500">{activeScenario.description}</p>
                     </div>
-                    <ReadField label="邮件主题" value={template.subject} />
-                    <ReadField label="正文摘要" value={summarizeTemplateBody(template.body)} />
-                    <div className="space-y-2">
-                      <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">可用变量</div>
-                      <div className="flex flex-wrap gap-2">
-                        {scenario.variables.map((variable) => (
-                          <span
-                            key={variable}
-                            className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-700"
-                          >
-                            {variable}
-                          </span>
+                    <div className="flex flex-wrap gap-2">
+                      {activeScenario.variables.map((variable) => (
+                        <span
+                          key={variable}
+                          className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-700"
+                        >
+                          {variable}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+                      <div className="text-sm font-medium text-neutral-900">示例变量值</div>
+                      <div className="mt-3 grid gap-2">
+                        {Object.entries(activeScenario.sampleValues).map(([key, value]) => (
+                          <div key={key} className="flex items-start justify-between gap-4 text-sm">
+                            <code className="rounded bg-white px-2 py-1 text-xs">{`{{${key}}}`}</code>
+                            <span className="text-right text-neutral-600 break-all">{value}</span>
+                          </div>
                         ))}
                       </div>
                     </div>
                   </div>
-                );
-              })}
+
+                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">预览效果</div>
+                      <p className="mt-1 text-sm text-neutral-500">以下预览使用示例变量渲染，仅用于确认模板内容。</p>
+                    </div>
+                    <ReadField label="预览主题" value={templatePreview?.subject || '-'} />
+                    <ReadField label="预览正文" value={templatePreview?.body || '-'} />
+                  </div>
+                </section>
+
+                <div className="mt-5 flex items-center justify-end gap-3 border-t border-neutral-200 pt-4">
+                  <button
+                    type="button"
+                    className="rounded-2xl border border-neutral-300 px-4 py-2.5 text-sm font-medium hover:bg-neutral-50"
+                    onClick={closeTemplateEditor}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-2xl bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white"
+                    onClick={applyTemplateDraft}
+                  >
+                    应用模板修改
+                  </button>
+                </div>
+              </div>
             </div>
-          </section>
+          )}
 
           {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
           {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
@@ -3655,104 +3911,6 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
         </>
       )}
 
-      {templateEditorKey && activeScenario && (
-        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl max-h-[90vh] rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col">
-            <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <h3 className="text-2xl font-bold tracking-tight">{activeScenario.title}</h3>
-                <p className="text-sm text-neutral-500">{activeScenario.trigger}</p>
-              </div>
-              <button
-                type="button"
-                className="w-10 h-10 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-900"
-                onClick={closeTemplateEditor}
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-6 overscroll-contain">
-              <section className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">模板编辑</div>
-                  <p className="mt-1 text-sm text-neutral-500">支持纯文本和变量替换，变量会在发送时注入真实内容。</p>
-                </div>
-                <FormField label="邮件主题">
-                  <input
-                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                    value={templateDraft.subject}
-                    onChange={(e) => setTemplateDraft({ ...templateDraft, subject: e.target.value })}
-                  />
-                </FormField>
-                <FormField label="邮件正文" hint="纯文本模板，换行会按原样保留。">
-                  <textarea
-                    className="min-h-[220px] w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                    value={templateDraft.body}
-                    onChange={(e) => setTemplateDraft({ ...templateDraft, body: e.target.value })}
-                  />
-                </FormField>
-              </section>
-
-              <section className="grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
-                <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">可用变量</div>
-                    <p className="mt-1 text-sm text-neutral-500">{activeScenario.description}</p>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {activeScenario.variables.map((variable) => (
-                      <span
-                        key={variable}
-                        className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-700"
-                      >
-                        {variable}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
-                    <div className="text-sm font-medium text-neutral-900">示例变量值</div>
-                    <div className="mt-3 grid gap-2">
-                      {Object.entries(activeScenario.sampleValues).map(([key, value]) => (
-                        <div key={key} className="flex items-start justify-between gap-4 text-sm">
-                          <code className="rounded bg-white px-2 py-1 text-xs">{`{{${key}}}`}</code>
-                          <span className="text-right text-neutral-600 break-all">{value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
-                  <div>
-                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">预览效果</div>
-                    <p className="mt-1 text-sm text-neutral-500">以下预览使用示例变量渲染，仅用于确认模板内容。</p>
-                  </div>
-                  <ReadField label="预览主题" value={templatePreview?.subject || '-'} />
-                  <ReadField label="预览正文" value={templatePreview?.body || '-'} />
-                </div>
-              </section>
-            </div>
-
-            <div className="border-t border-neutral-200 px-6 py-4 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                className="rounded-2xl border border-neutral-300 px-4 py-2.5 text-sm font-medium hover:bg-neutral-50"
-                onClick={closeTemplateEditor}
-              >
-                取消
-              </button>
-              <button
-                type="button"
-                className="rounded-2xl bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white"
-                onClick={applyTemplateDraft}
-              >
-                应用模板修改
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }
@@ -5964,9 +6122,8 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
   }, [airportId, date]);
 
   useEffect(() => {
-    const totalScore = dashboard?.base.total_score;
-    setManualTotalScoreInput(totalScore === null || totalScore === undefined ? '' : String(totalScore));
-  }, [dashboard?.date, dashboard?.base.id, dashboard?.base.total_score]);
+    setManualTotalScoreInput(manualTotalScoreInputValue(dashboard?.base.manual_total_score));
+  }, [dashboard?.date, dashboard?.base.id, dashboard?.base.manual_total_score]);
 
   useEffect(() => {
     if (!job || (job.status !== 'queued' && job.status !== 'running')) {

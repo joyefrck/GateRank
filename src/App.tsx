@@ -26,6 +26,8 @@ import {
   EyeOff,
   Link2,
   Unlink,
+  Send,
+  Headphones,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -381,11 +383,21 @@ interface PortalViewResponse {
   payment_fee_amount: number;
   payment_methods: PaymentChannel[];
   click_price: number;
+  admin_telegram_username: string | null;
   recharge_amounts: number[];
   wallet: PortalWalletView;
 }
 
+interface PortalPaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
 type PaymentChannel = 'alipay' | 'wxpay' | 'usdt';
+
+const PORTAL_BILLING_PAGE_SIZE = 20;
 
 interface PortalLoginResponse {
   token: string;
@@ -1108,12 +1120,23 @@ function PortalDataTable({
   headers,
   rows,
   emptyText,
+  pagination,
 }: {
   title: string;
   headers: string[];
   rows: React.ReactNode[][];
   emptyText: string;
+  pagination?: {
+    total: number;
+    page: number;
+    pageSize: number;
+    onPageChange: (page: number) => void;
+  };
 }) {
+  const totalPages = pagination ? Math.max(1, Math.ceil(pagination.total / pagination.pageSize)) : 1;
+  const firstItemNo = pagination && pagination.total > 0 ? (pagination.page - 1) * pagination.pageSize + 1 : 0;
+  const lastItemNo = pagination ? Math.min(pagination.total, pagination.page * pagination.pageSize) : 0;
+
   return (
     <div className="mt-6 rounded-[24px] border border-slate-200 bg-white">
       <div className="border-b border-slate-200 px-4 py-3 text-sm font-black text-slate-950">{title}</div>
@@ -1141,6 +1164,34 @@ function PortalDataTable({
           </tbody>
         </table>
       </div>
+      {pagination && pagination.total > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3 text-xs text-slate-500">
+          <div>
+            共 {pagination.total} 条，当前 {firstItemNo}-{lastItemNo} 条
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-black text-slate-600 disabled:opacity-40"
+              disabled={pagination.page <= 1}
+              onClick={() => pagination.onPageChange(pagination.page - 1)}
+            >
+              上一页
+            </button>
+            <span className="min-w-16 text-center font-black text-slate-700">
+              {pagination.page} / {totalPages}
+            </span>
+            <button
+              type="button"
+              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 font-black text-slate-600 disabled:opacity-40"
+              disabled={pagination.page >= totalPages}
+              onClick={() => pagination.onPageChange(pagination.page + 1)}
+            >
+              下一页
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -3125,6 +3176,12 @@ function ApplicationPage() {
 }
 
 function PortalPage() {
+  const createEmptyPortalPage = <T,>(): PortalPaginatedResponse<T> => ({
+    items: [],
+    total: 0,
+    page: 1,
+    page_size: PORTAL_BILLING_PAGE_SIZE,
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -3141,9 +3198,15 @@ function PortalPage() {
   const [creatingRecharge, setCreatingRecharge] = useState('');
   const [cancelingRechargeOrder, setCancelingRechargeOrder] = useState('');
   const [portalTab, setPortalTab] = useState<PortalTabKey>('overview');
-  const [rechargeOrders, setRechargeOrders] = useState<PortalRechargeOrderView[]>([]);
-  const [walletTransactions, setWalletTransactions] = useState<PortalWalletTransactionView[]>([]);
-  const [clickRecords, setClickRecords] = useState<PortalClickView[]>([]);
+  const [rechargeOrders, setRechargeOrders] = useState<PortalPaginatedResponse<PortalRechargeOrderView>>(
+    () => createEmptyPortalPage<PortalRechargeOrderView>(),
+  );
+  const [walletTransactions, setWalletTransactions] = useState<PortalPaginatedResponse<PortalWalletTransactionView>>(
+    () => createEmptyPortalPage<PortalWalletTransactionView>(),
+  );
+  const [clickRecords, setClickRecords] = useState<PortalPaginatedResponse<PortalClickView>>(
+    () => createEmptyPortalPage<PortalClickView>(),
+  );
   const [applicationForm, setApplicationForm] = useState<ApplicationFormState>(createApplicationForm());
   const [savingApplication, setSavingApplication] = useState(false);
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
@@ -3164,7 +3227,7 @@ function PortalPage() {
     },
   });
 
-  const loadView = async () => {
+  const loadView = async (billingPages?: Partial<Record<'recharge' | 'transactions' | 'clicks', number>>) => {
     const token = getPortalToken();
     if (!token) {
       setView(null);
@@ -3179,7 +3242,7 @@ function PortalPage() {
       data = await syncPendingApplicationPayment(data);
       setView(data);
       setLoginEmail(data.account.email);
-      await loadPortalBillingData();
+      await loadPortalBillingData(billingPages);
     } catch (err) {
       clearPortalToken();
       setView(null);
@@ -3189,16 +3252,21 @@ function PortalPage() {
     }
   };
 
-  const loadPortalBillingData = async () => {
+  const loadPortalBillingData = async (
+    pages: Partial<Record<'recharge' | 'transactions' | 'clicks', number>> = {},
+  ) => {
+    const rechargePage = pages.recharge ?? rechargeOrders.page;
+    const transactionsPage = pages.transactions ?? walletTransactions.page;
+    const clicksPage = pages.clicks ?? clickRecords.page;
     let [orders, transactions, clicks] = await Promise.all([
-      portalApiRequest<{ items: PortalRechargeOrderView[] }>('/api/v1/portal/recharge-orders?limit=20'),
-      portalApiRequest<{ items: PortalWalletTransactionView[] }>('/api/v1/portal/wallet-transactions?limit=50'),
-      portalApiRequest<{ items: PortalClickView[] }>('/api/v1/portal/clicks?limit=50'),
+      portalApiRequest<PortalPaginatedResponse<PortalRechargeOrderView>>(`/api/v1/portal/recharge-orders?page=${rechargePage}&page_size=${PORTAL_BILLING_PAGE_SIZE}`),
+      portalApiRequest<PortalPaginatedResponse<PortalWalletTransactionView>>(`/api/v1/portal/wallet-transactions?page=${transactionsPage}&page_size=${PORTAL_BILLING_PAGE_SIZE}`),
+      portalApiRequest<PortalPaginatedResponse<PortalClickView>>(`/api/v1/portal/clicks?page=${clicksPage}&page_size=${PORTAL_BILLING_PAGE_SIZE}`),
     ]);
     orders = await syncPendingRechargeOrders(orders);
-    setRechargeOrders(orders.items);
-    setWalletTransactions(transactions.items);
-    setClickRecords(clicks.items);
+    setRechargeOrders(orders);
+    setWalletTransactions(transactions);
+    setClickRecords(clicks);
   };
 
   const syncPendingApplicationPayment = async (portalView: PortalViewResponse): Promise<PortalViewResponse> => {
@@ -3218,8 +3286,8 @@ function PortalPage() {
   };
 
   const syncPendingRechargeOrders = async (
-    orders: { items: PortalRechargeOrderView[] },
-  ): Promise<{ items: PortalRechargeOrderView[] }> => {
+    orders: PortalPaginatedResponse<PortalRechargeOrderView>,
+  ): Promise<PortalPaginatedResponse<PortalRechargeOrderView>> => {
     const pendingOrders = orders.items.filter((item) => item.status === 'created');
     if (pendingOrders.length === 0) {
       return orders;
@@ -3247,6 +3315,9 @@ function PortalPage() {
     );
     return {
       items: orders.items.map((item) => syncedByOrderNo.get(item.out_trade_no) || item),
+      total: orders.total,
+      page: orders.page,
+      page_size: orders.page_size,
     };
   };
 
@@ -3275,10 +3346,10 @@ function PortalPage() {
     setIsApplicationModalOpen(false);
     setIsPasswordRequiredModalOpen(false);
     setView(null);
-    setRechargeOrders([]);
+    setRechargeOrders(createEmptyPortalPage<PortalRechargeOrderView>());
     setCancelingRechargeOrder('');
-    setWalletTransactions([]);
-    setClickRecords([]);
+    setWalletTransactions(createEmptyPortalPage<PortalWalletTransactionView>());
+    setClickRecords(createEmptyPortalPage<PortalClickView>());
     setPortalTab('overview');
     setLoading(false);
     setLoginPassword('');
@@ -3501,7 +3572,19 @@ function PortalPage() {
         method: 'POST',
         body: JSON.stringify({ amount, channel }),
       });
-      setRechargeOrders((current) => data.recharge_order ? [data.recharge_order, ...current.filter((item) => item.out_trade_no !== data.recharge_order?.out_trade_no)] : current);
+      setRechargeOrders((current) => data.recharge_order
+        ? {
+            ...current,
+            page: 1,
+            total: current.items.some((item) => item.out_trade_no === data.recharge_order?.out_trade_no)
+              ? current.total
+              : current.total + 1,
+            items: [
+              data.recharge_order,
+              ...current.items.filter((item) => item.out_trade_no !== data.recharge_order?.out_trade_no),
+            ].slice(0, current.page_size),
+          }
+        : current);
       const payInfo = data.recharge_order?.pay_info || '';
       if (/^https?:\/\//i.test(payInfo)) {
         if (pendingWindow) {
@@ -3523,7 +3606,7 @@ function PortalPage() {
       setError(err instanceof Error ? err.message : '创建充值订单失败');
     } finally {
       setCreatingRecharge('');
-      await loadView();
+      await loadView({ recharge: 1 });
     }
   };
 
@@ -3549,9 +3632,12 @@ function PortalPage() {
         { method: 'POST' },
       );
       if (data.recharge_order) {
-        setRechargeOrders((current) => current.map((item) => (
-          item.out_trade_no === data.recharge_order?.out_trade_no ? data.recharge_order : item
-        )));
+        setRechargeOrders((current) => ({
+          ...current,
+          items: current.items.map((item) => (
+            item.out_trade_no === data.recharge_order?.out_trade_no ? data.recharge_order : item
+          )),
+        }));
       }
       setSuccess('充值订单已取消');
     } catch (err) {
@@ -3632,6 +3718,16 @@ function PortalPage() {
     window.setTimeout(() => {
       document.getElementById('portal-password-change-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 0);
+  };
+
+  const changePortalBillingPage = (
+    kind: 'recharge' | 'transactions' | 'clicks',
+    nextPage: number,
+  ) => {
+    setError('');
+    void loadPortalBillingData({ [kind]: nextPage }).catch((err) => {
+      setError(err instanceof Error ? err.message : '分页数据加载失败');
+    });
   };
 
   const renderApplicationDetailsSection = (portalView: PortalViewResponse) => {
@@ -3814,7 +3910,7 @@ function PortalPage() {
         title="最近充值订单"
         emptyText="暂无充值订单"
         headers={['订单号', '渠道', '金额', '状态', '创建时间', '操作']}
-        rows={rechargeOrders.map((item) => [
+        rows={rechargeOrders.items.map((item) => [
           item.out_trade_no,
           formatPaymentChannelLabel(item.channel),
           `¥${formatMetric(item.amount)}`,
@@ -3840,6 +3936,12 @@ function PortalPage() {
             </div>
           ) : '-',
         ])}
+        pagination={{
+          total: rechargeOrders.total,
+          page: rechargeOrders.page,
+          pageSize: rechargeOrders.page_size,
+          onPageChange: (page) => changePortalBillingPage('recharge', page),
+        }}
         />
       </PortalSectionCard>
     );
@@ -3854,7 +3956,7 @@ function PortalPage() {
         title="最近点击"
         emptyText="暂无点击记录"
         headers={['时间', '机场', '来源位', '目标', '扣费状态', '金额']}
-        rows={clickRecords.map((item) => [
+        rows={clickRecords.items.map((item) => [
           formatDateTimeLabel(item.occurred_at),
           item.airport_name || `#${item.airport_id}`,
           formatPortalPlacement(item.placement),
@@ -3862,6 +3964,12 @@ function PortalPage() {
           formatClickBillingStatus(item.billing_status),
           `¥${formatMetric(item.billed_amount)}`,
         ])}
+        pagination={{
+          total: clickRecords.total,
+          page: clickRecords.page,
+          pageSize: clickRecords.page_size,
+          onPageChange: (page) => changePortalBillingPage('clicks', page),
+        }}
       />
     </PortalSectionCard>
   );
@@ -3875,13 +3983,19 @@ function PortalPage() {
         title="余额流水"
         emptyText="暂无余额流水"
         headers={['时间', '类型', '金额', '余额', '说明']}
-        rows={walletTransactions.map((item) => [
+        rows={walletTransactions.items.map((item) => [
           formatDateTimeLabel(item.created_at),
           formatTransactionType(item.transaction_type),
           `${item.amount >= 0 ? '+' : ''}¥${formatMetric(item.amount)}`,
           `¥${formatMetric(item.balance_after)}`,
           item.description,
         ])}
+        pagination={{
+          total: walletTransactions.total,
+          page: walletTransactions.page,
+          pageSize: walletTransactions.page_size,
+          onPageChange: (page) => changePortalBillingPage('transactions', page),
+        }}
       />
     </PortalSectionCard>
   );
@@ -4304,6 +4418,26 @@ function PortalPage() {
           <PortalInfoCard eyebrow="Click Price" title="点击单价" value={`¥${formatMetric(view.click_price)} / 次`} tone="blue" />
           <PortalInfoCard eyebrow="Listing" title="上架状态" value={view.wallet.auto_unlisted_at ? '欠费下架' : '正常'} tone={view.wallet.auto_unlisted_at ? 'amber' : 'green'} />
         </div>
+        {view.admin_telegram_username && (
+          <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-5 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-sky-100 bg-sky-50 text-sky-700 shadow-[0_8px_24px_rgba(14,165,233,0.12)]">
+                <Headphones className="h-6 w-6" />
+              </div>
+              <div>
+                <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Support</div>
+                <div className="mt-1 text-sm font-black text-slate-950">系统管理员客服</div>
+              </div>
+            </div>
+            <a
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-4 py-3 text-sm font-black text-sky-700 transition hover:border-sky-200 hover:bg-sky-100/70 md:w-auto"
+              href={buildTelegramResolveUrl(view.admin_telegram_username)}
+            >
+              <Send className="h-4 w-4" />
+              <span className="break-all">@{view.admin_telegram_username}</span>
+            </a>
+          </div>
+        )}
       </PortalSectionCard>
     );
     const isApplicationApproved = view.application.review_status === 'reviewed';
@@ -4546,6 +4680,10 @@ function formatTransactionType(type: PortalWalletTransactionView['transaction_ty
     default:
       return '调整';
   }
+}
+
+function buildTelegramResolveUrl(username: string): string {
+  return `tg://resolve?domain=${encodeURIComponent(username)}`;
 }
 
 function formatPortalPlacement(value: string): string {

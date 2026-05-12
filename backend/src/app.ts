@@ -117,10 +117,17 @@ export async function createApp() {
   const marketingSettingsService = new MarketingSettingsService({
     systemSettingRepository,
   });
+  const smtpSettingsService = new SmtpSettingsService({
+    systemSettingRepository,
+  });
+  const mailService = new MailService({
+    smtpSettingsService,
+  });
   const schedulerTaskExecutor = new SchedulerTaskExecutor({
     airportRepository,
     aggregationService,
     applicantBillingRepository,
+    mailService,
     marketingSettingsService,
     recomputeService,
     riskCheckService,
@@ -158,17 +165,11 @@ export async function createApp() {
   const paymentGatewaySettingsService = new PaymentGatewaySettingsService({
     systemSettingRepository,
   });
-  const smtpSettingsService = new SmtpSettingsService({
-    systemSettingRepository,
-  });
   const xOAuthSettingsService = new XOAuthSettingsService({
     systemSettingRepository,
   });
   const accessTokenService = new AccessTokenService({
     accessTokenRepository,
-  });
-  const mailService = new MailService({
-    smtpSettingsService,
   });
   const paymentGatewayService = new PaymentGatewayService({
     paymentGatewaySettingsService,
@@ -237,6 +238,7 @@ export async function createApp() {
       marketingSettingsService,
       paymentGatewayService,
       applicationNotificationService,
+      mailService,
     }),
   );
 
@@ -246,6 +248,7 @@ export async function createApp() {
       airportRepository,
       applicantBillingRepository,
       marketingSettingsService,
+      mailService,
     }),
   );
   app.use(

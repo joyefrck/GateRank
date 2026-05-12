@@ -14,9 +14,15 @@ export interface SmtpSettingsInput {
   templates?: Partial<Record<SmtpTemplateKey, Partial<SmtpTemplateConfigItem>>>;
 }
 
-export type SmtpTemplateKey = 'applicant_credentials' | 'application_approved';
+export type SmtpTemplateKey =
+  | 'applicant_credentials'
+  | 'application_approved'
+  | 'low_balance_warning'
+  | 'airport_auto_unlisted'
+  | 'airport_online';
 
 export interface SmtpTemplateConfigItem {
+  enabled: boolean;
   subject: string;
   body: string;
 }
@@ -24,6 +30,9 @@ export interface SmtpTemplateConfigItem {
 export interface SmtpTemplateConfig {
   applicant_credentials: SmtpTemplateConfigItem;
   application_approved: SmtpTemplateConfigItem;
+  low_balance_warning: SmtpTemplateConfigItem;
+  airport_auto_unlisted: SmtpTemplateConfigItem;
+  airport_online: SmtpTemplateConfigItem;
 }
 
 export interface SmtpSettingsView {
@@ -96,6 +105,30 @@ export class SmtpSettingsService {
       throw new Error('systemSettingRepository is not configured');
     }
     const nextConfig = await this.resolveConfig(input);
+    await this.systemSettingRepository.upsert(SMTP_SETTING_KEY, nextConfig, updatedBy);
+    return this.getAdminSettings();
+  }
+
+  async updateTemplateEnabled(
+    templateKey: SmtpTemplateKey,
+    enabled: boolean,
+    updatedBy: string,
+  ): Promise<SmtpSettingsView> {
+    if (!this.systemSettingRepository) {
+      throw new Error('systemSettingRepository is not configured');
+    }
+    const stored = await this.getStoredConfig();
+    const base = stored?.config || getDefaultConfig();
+    const nextConfig: SmtpConfig = {
+      ...base,
+      templates: {
+        ...base.templates,
+        [templateKey]: {
+          ...base.templates[templateKey],
+          enabled,
+        },
+      },
+    };
     await this.systemSettingRepository.upsert(SMTP_SETTING_KEY, nextConfig, updatedBy);
     return this.getAdminSettings();
   }
@@ -173,6 +206,7 @@ function normalizeConfig(value: unknown): SmtpConfig {
 function getDefaultTemplates(): SmtpTemplateConfig {
   return {
     applicant_credentials: {
+      enabled: true,
       subject: 'GateRank 申请后台账号已开通 - {{airport_name}}',
       body: [
         '您好，{{airport_name}} 的申请已提交成功。',
@@ -185,11 +219,45 @@ function getDefaultTemplates(): SmtpTemplateConfig {
       ].join('\n'),
     },
     application_approved: {
+      enabled: true,
       subject: 'GateRank 审批通过通知 - {{airport_name}}',
       body: [
         '您好，{{airport_name}} 的 GateRank 入驻申请已审批通过。',
         '',
         '后续如需补充资料，请联系管理员。',
+      ].join('\n'),
+    },
+    low_balance_warning: {
+      enabled: true,
+      subject: 'GateRank 余额提醒 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 当前账户余额已低于 {{threshold_amount}} 元。',
+        '',
+        '为避免影响机场在 GateRank 的展示和跳转服务，建议您方便时及时完成充值。',
+        '',
+        '如已完成充值，请忽略本邮件。感谢您的理解与支持。',
+      ].join('\n'),
+    },
+    airport_auto_unlisted: {
+      enabled: true,
+      subject: 'GateRank 机场下线提醒 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 当前因账户余额不足，已暂时从 GateRank 下线。',
+        '',
+        '请您及时充值。余额足够后，系统会立即为该机场恢复上线。',
+        '',
+        '感谢您的理解与配合，如需协助请联系 GateRank 管理员。',
+      ].join('\n'),
+    },
+    airport_online: {
+      enabled: true,
+      subject: 'GateRank 机场上线通知 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 已经恢复上线。',
+        '',
+        '该机场现在可以继续在 GateRank 正常展示并接收跳转访问。',
+        '',
+        '感谢您对 GateRank 的支持。',
       ].join('\n'),
     },
   };
@@ -210,6 +278,18 @@ function normalizeTemplates(
       record.application_approved,
       fallback.application_approved || defaults.application_approved,
     ),
+    low_balance_warning: normalizeTemplateItem(
+      record.low_balance_warning,
+      fallback.low_balance_warning || defaults.low_balance_warning,
+    ),
+    airport_auto_unlisted: normalizeTemplateItem(
+      record.airport_auto_unlisted,
+      fallback.airport_auto_unlisted || defaults.airport_auto_unlisted,
+    ),
+    airport_online: normalizeTemplateItem(
+      record.airport_online,
+      fallback.airport_online || defaults.airport_online,
+    ),
   };
 }
 
@@ -219,6 +299,7 @@ function normalizeTemplateItem(
 ): SmtpTemplateConfigItem {
   const record = toObject(value);
   return {
+    enabled: boolOrDefault(record.enabled, fallback.enabled),
     subject: stringOrEmpty(record.subject) || fallback.subject,
     body: stringOrEmpty(record.body) || fallback.body,
   };

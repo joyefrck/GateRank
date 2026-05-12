@@ -239,12 +239,57 @@ test('ApplicantBillingRepository.syncListingStatusByBalance reconciles listing a
     unlisted: 1,
     unchanged: 1,
     skipped: 1,
+    notification_events: [],
   });
   assert.match(calls[1]!.sql!, /FROM applicant_wallets w/);
   assert.match(calls[1]!.sql!, /FOR UPDATE/);
   assert.deepEqual(
     calls.filter((call) => call.kind === 'execute').map((call) => call.params),
-    [[101], [1], [102], [2], [103], [3]],
+    [[101], [30, 1], [1], [102], [2], [103], [30, 3], [3]],
   );
   assert.deepEqual(calls.map((call) => call.kind).slice(-2), ['commit', 'release']);
+});
+
+test('ApplicantBillingRepository.syncListingStatusByBalance emits low balance notification once', async () => {
+  const executes: Array<{ sql: string; params?: unknown[] }> = [];
+  const connection = {
+    beginTransaction: async () => undefined,
+    commit: async () => undefined,
+    rollback: async () => undefined,
+    release: () => undefined,
+    query: async () => [[
+      {
+        wallet_id: 7,
+        airport_id: 107,
+        airport_name: 'Cloud Airport',
+        applicant_email: 'owner@example.com',
+        balance: 18.5,
+        auto_unlisted_at: null,
+        low_balance_notified_at: null,
+        is_listed: 1,
+      },
+    ]],
+    execute: async (sql: string, params?: unknown[]) => {
+      executes.push({ sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  };
+  const repository = new ApplicantBillingRepository({
+    getConnection: async () => connection,
+  } as never);
+
+  const result = await repository.syncListingStatusByBalance(1);
+
+  assert.equal(result.unlisted, 0);
+  assert.equal(result.unchanged, 1);
+  assert.equal(result.notification_events.length, 1);
+  assert.deepEqual(result.notification_events[0], {
+    type: 'low_balance_warning',
+    to: 'owner@example.com',
+    airportName: 'Cloud Airport',
+    balance: 18.5,
+    thresholdAmount: 30,
+  });
+  assert.match(executes[0]!.sql, /low_balance_notified_at = NOW/);
+  assert.deepEqual(executes[0]!.params, [7]);
 });

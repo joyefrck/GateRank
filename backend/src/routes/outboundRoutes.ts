@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { CLICK_CHARGE_AMOUNT } from '../config/billing';
 import { HttpError } from '../middleware/errorHandler';
+import type { BillingMailNotificationEvent } from '../repositories/applicantBillingRepository';
+import { sendBillingMailNotificationsSafely, type BillingMailService } from '../services/billingMailNotificationService';
 import type { Airport } from '../types/domain';
 import { buildMarketingIdentity } from '../utils/marketing';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
@@ -27,11 +29,13 @@ interface OutboundDeps {
       billed_amount: number;
       airport_name: string;
       balance_after: number | null;
+      notification_events?: BillingMailNotificationEvent[];
     }>;
   };
   marketingSettingsService?: {
     getConfig(): Promise<{ click_charge_amount: number }>;
   };
+  mailService?: BillingMailService;
 }
 
 const OUTBOUND_TARGETS = ['website', 'subscription_url'] as const;
@@ -78,6 +82,7 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
         event_date: getDateInTimezone('Asia/Shanghai', occurredAt),
         click_charge_amount: billingConfig.click_charge_amount,
       });
+      await sendBillingMailNotificationsSafely(deps.mailService, result.notification_events);
 
       if (result.status === 'insufficient_balance' || result.status === 'unlisted' || result.status === 'no_wallet') {
         res.status(402).send(renderUnavailablePage(`${airport.name} 当前暂不可访问`));

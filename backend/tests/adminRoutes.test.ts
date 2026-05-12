@@ -3240,6 +3240,77 @@ test('POST /system-settings/smtp/test returns SMTP validation errors', async () 
   }
 });
 
+test('PATCH /system-settings/smtp/templates/:key/enabled updates one template switch and audits', async () => {
+  const updates: Array<Record<string, unknown>> = [];
+  const audits: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, actor, requestId, payload) => {
+          audits.push({ action, actor, requestId, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+      smtpSettingsService: {
+        getAdminSettings: async () => ({}),
+        updateAdminSettings: async () => ({}),
+        updateTemplateEnabled: async (templateKey, enabled, updatedBy) => {
+          updates.push({ templateKey, enabled, updatedBy });
+          return {
+            templates: {
+              [templateKey]: {
+                enabled,
+                subject: 'GateRank 余额提醒 - {{airport_name}}',
+                body: 'body',
+              },
+            },
+          };
+        },
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/system-settings/smtp/templates/low_balance_warning/enabled`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({ enabled: false }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(updates, [{ templateKey: 'low_balance_warning', enabled: false, updatedBy: 'tester' }]);
+    assert.equal(audits[0]?.action, 'update_system_setting_smtp_template_enabled');
+    assert.deepEqual(audits[0]?.payload, { template_key: 'low_balance_warning', enabled: false });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('PATCH /system-settings/media-libraries updates settings and writes audit log', async () => {
   const updates: Array<Record<string, unknown>> = [];
   const audits: Array<Record<string, unknown>> = [];
@@ -3365,6 +3436,7 @@ test('GET /marketing/settings returns billing settings', async () => {
       marketingSettingsService: stubMarketingSettingsService({
         application_fee_amount: 288,
         click_charge_amount: 1.5,
+        admin_telegram_username: 'gaterank_admin',
       }),
     }),
   );
@@ -3377,9 +3449,11 @@ test('GET /marketing/settings returns billing settings', async () => {
     const data = (await response.json()) as {
       application_fee_amount: number;
       click_charge_amount: number;
+      admin_telegram_username: string | null;
     };
     assert.equal(data.application_fee_amount, 288);
     assert.equal(data.click_charge_amount, 1.5);
+    assert.equal(data.admin_telegram_username, 'gaterank_admin');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -3426,6 +3500,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
           return {
             application_fee_amount: input.application_fee_amount,
             click_charge_amount: input.click_charge_amount,
+            admin_telegram_username: input.admin_telegram_username ?? null,
             updated_at: '2026-05-10 08:10:00',
             updated_by: updatedBy,
           };
@@ -3443,12 +3518,14 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
       body: JSON.stringify({
         application_fee_amount: 399.99,
         click_charge_amount: 2.5,
+        admin_telegram_username: '@gaterank_admin',
       }),
     });
     assert.equal(response.status, 200);
     assert.deepEqual(updates, [{
       application_fee_amount: 399.99,
       click_charge_amount: 2.5,
+      admin_telegram_username: '@gaterank_admin',
       updatedBy: 'tester',
     }]);
     assert.equal(audits.length, 1);
@@ -3456,6 +3533,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
     assert.deepEqual(audits[0].payload, {
       application_fee_amount: 399.99,
       click_charge_amount: 2.5,
+      admin_telegram_username: '@gaterank_admin',
     });
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -4490,26 +4568,37 @@ function stubManualJobService() {
   };
 }
 
-function stubMarketingSettingsService(config = {
+function stubMarketingSettingsService(config: {
+  application_fee_amount: number;
+  click_charge_amount: number;
+  admin_telegram_username?: string | null;
+} = {
   application_fee_amount: 300,
   click_charge_amount: 1,
+  admin_telegram_username: null,
 }) {
+  const normalizedConfig = {
+    ...config,
+    admin_telegram_username: config.admin_telegram_username ?? null,
+  };
   return {
     getAdminSettings: async () => ({
-      ...config,
+      ...normalizedConfig,
       updated_at: '2026-05-10 08:00:00',
       updated_by: 'admin',
     }),
     updateAdminSettings: async (input: {
       application_fee_amount?: number;
       click_charge_amount?: number;
+      admin_telegram_username?: string | null;
     }, updatedBy: string) => ({
-      application_fee_amount: input.application_fee_amount ?? config.application_fee_amount,
-      click_charge_amount: input.click_charge_amount ?? config.click_charge_amount,
+      application_fee_amount: input.application_fee_amount ?? normalizedConfig.application_fee_amount,
+      click_charge_amount: input.click_charge_amount ?? normalizedConfig.click_charge_amount,
+      admin_telegram_username: input.admin_telegram_username ?? normalizedConfig.admin_telegram_username,
       updated_at: '2026-05-10 08:10:00',
       updated_by: updatedBy,
     }),
-    getConfig: async () => config,
+    getConfig: async () => normalizedConfig,
   };
 }
 

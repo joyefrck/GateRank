@@ -6,11 +6,13 @@ import { formatDateTimeInTimezoneIso } from '../utils/time';
 export interface MarketingSettingsInput {
   application_fee_amount?: number;
   click_charge_amount?: number;
+  admin_telegram_username?: string | null;
 }
 
 export interface MarketingSettingsView {
   application_fee_amount: number;
   click_charge_amount: number;
+  admin_telegram_username: string | null;
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -18,6 +20,7 @@ export interface MarketingSettingsView {
 export interface MarketingBillingConfig {
   application_fee_amount: number;
   click_charge_amount: number;
+  admin_telegram_username: string | null;
 }
 
 interface MarketingSettingsServiceOptions {
@@ -66,6 +69,10 @@ export class MarketingSettingsService {
         input.click_charge_amount === undefined
           ? base.click_charge_amount
           : normalizePositiveAmount(input.click_charge_amount, 'click_charge_amount'),
+      admin_telegram_username:
+        input.admin_telegram_username === undefined
+          ? base.admin_telegram_username
+          : normalizeTelegramUsername(input.admin_telegram_username),
     };
 
     await this.systemSettingRepository.upsert(MARKETING_BILLING_SETTING_KEY, nextConfig, updatedBy);
@@ -117,6 +124,7 @@ function getBaseDefaults(): MarketingBillingConfig {
   return {
     application_fee_amount: DEFAULT_MARKETING_APPLICATION_FEE_AMOUNT,
     click_charge_amount: DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT,
+    admin_telegram_username: null,
   };
 }
 
@@ -131,6 +139,7 @@ function normalizeConfig(value: unknown, defaults: MarketingBillingConfig): Mark
       record.click_charge_amount,
       defaults.click_charge_amount,
     ),
+    admin_telegram_username: normalizeStoredTelegramUsername(record.admin_telegram_username),
   };
 }
 
@@ -148,6 +157,28 @@ function normalizePositiveAmount(value: unknown, fieldName: string): number {
     throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be greater than 0`);
   }
   return Number(amount.toFixed(2));
+}
+
+function normalizeTelegramUsername(value: unknown): string | null {
+  const raw = String(value ?? '').trim();
+  if (!raw) {
+    return null;
+  }
+  const withoutProtocol = raw.replace(/^https?:\/\/(?:www\.)?/i, '');
+  const withoutHost = withoutProtocol.replace(/^t\.me\//i, '');
+  const username = withoutHost.replace(/^@+/, '').replace(/\/+$/, '').trim();
+  if (!/^[A-Za-z0-9_]{5,32}$/.test(username)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'admin_telegram_username must be a valid Telegram username');
+  }
+  return username;
+}
+
+function normalizeStoredTelegramUsername(value: unknown): string | null {
+  try {
+    return normalizeTelegramUsername(value);
+  } catch {
+    return null;
+  }
 }
 
 function toObject(value: unknown): Record<string, unknown> {

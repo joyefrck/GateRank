@@ -5,6 +5,7 @@ import type {
   SmtpSettingsInput,
   SmtpSettingsService,
   SmtpTemplateConfigItem,
+  SmtpTemplateKey,
 } from './smtpSettingsService';
 
 interface MailServiceOptions {
@@ -55,7 +56,7 @@ export class MailService {
     portalLoginUrl: string;
   }): Promise<void> {
     const config = await this.requireConfigured();
-    const rendered = renderTemplate(config.templates.applicant_credentials, {
+    const rendered = renderConfiguredTemplate(config, 'applicant_credentials', {
       airport_name: input.airportName,
       applicant_email: input.to,
       portal_email: input.portalEmail,
@@ -63,6 +64,9 @@ export class MailService {
       portal_login_url: input.portalLoginUrl,
       site_name: 'GateRank',
     });
+    if (!rendered) {
+      return;
+    }
     await this.sendWithConfig(config, {
       to: input.to,
       subject: rendered.subject,
@@ -75,11 +79,68 @@ export class MailService {
     airportName: string;
   }): Promise<void> {
     const config = await this.requireConfigured();
-    const rendered = renderTemplate(config.templates.application_approved, {
+    const rendered = renderConfiguredTemplate(config, 'application_approved', {
       airport_name: input.airportName,
       applicant_email: input.to,
       site_name: 'GateRank',
     });
+    if (!rendered) {
+      return;
+    }
+    await this.sendWithConfig(config, {
+      to: input.to,
+      subject: rendered.subject,
+      text: rendered.body,
+    });
+  }
+
+  async sendLowBalanceWarningEmail(input: {
+    to: string;
+    airportName: string;
+    balance: number;
+    thresholdAmount: number;
+  }): Promise<void> {
+    await this.sendBillingTemplateEmail('low_balance_warning', input);
+  }
+
+  async sendAirportAutoUnlistedEmail(input: {
+    to: string;
+    airportName: string;
+    balance: number;
+    thresholdAmount: number;
+  }): Promise<void> {
+    await this.sendBillingTemplateEmail('airport_auto_unlisted', input);
+  }
+
+  async sendAirportOnlineEmail(input: {
+    to: string;
+    airportName: string;
+    balance: number;
+    thresholdAmount: number;
+  }): Promise<void> {
+    await this.sendBillingTemplateEmail('airport_online', input);
+  }
+
+  private async sendBillingTemplateEmail(
+    templateKey: Extract<SmtpTemplateKey, 'low_balance_warning' | 'airport_auto_unlisted' | 'airport_online'>,
+    input: {
+      to: string;
+      airportName: string;
+      balance: number;
+      thresholdAmount: number;
+    },
+  ): Promise<void> {
+    const config = await this.requireConfigured();
+    const rendered = renderConfiguredTemplate(config, templateKey, {
+      airport_name: input.airportName,
+      applicant_email: input.to,
+      current_balance: input.balance.toFixed(2),
+      threshold_amount: input.thresholdAmount.toFixed(2),
+      site_name: 'GateRank',
+    });
+    if (!rendered) {
+      return;
+    }
     await this.sendWithConfig(config, {
       to: input.to,
       subject: rendered.subject,
@@ -152,6 +213,18 @@ function renderTemplate(
     subject: replaceTemplateVariables(template.subject, variables),
     body: replaceTemplateVariables(template.body, variables),
   };
+}
+
+function renderConfiguredTemplate(
+  config: SmtpConfig,
+  templateKey: SmtpTemplateKey,
+  variables: Record<string, string>,
+): { subject: string; body: string } | null {
+  const template = config.templates[templateKey];
+  if (!template.enabled) {
+    return null;
+  }
+  return renderTemplate(template, variables);
 }
 
 function replaceTemplateVariables(template: string, variables: Record<string, string>): string {

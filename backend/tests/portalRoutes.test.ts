@@ -33,11 +33,11 @@ function createMockBillingRepository(overrides: Record<string, unknown> = {}) {
     }),
     createRechargeOrder: async () => 1,
     getRechargeOrderByOutTradeNo: async () => null,
-    listRechargeOrders: async () => [],
+    listRechargeOrders: async () => ({ items: [], total: 0 }),
     cancelRechargeOrder: async () => true,
     markRechargePaidAndCredit: async () => true,
-    listTransactions: async () => [],
-    listClicks: async () => [],
+    listTransactions: async () => ({ items: [], total: 0 }),
+    listClicks: async () => ({ items: [], total: 0 }),
     ...overrides,
   };
 }
@@ -104,7 +104,11 @@ test('GET /portal/me returns marketing billing fees', async () => {
         getConfig: async () => ({}),
       },
       marketingSettingsService: {
-        getConfig: async () => ({ application_fee_amount: 456, click_charge_amount: 2.5 }),
+        getConfig: async () => ({
+          application_fee_amount: 456,
+          click_charge_amount: 2.5,
+          admin_telegram_username: 'gaterank_admin',
+        }),
       },
       paymentGatewayService: {
         createOrder: async () => {
@@ -127,9 +131,120 @@ test('GET /portal/me returns marketing billing fees', async () => {
     const data = (await response.json()) as {
       payment_fee_amount: number;
       click_price: number;
+      admin_telegram_username: string | null;
     };
     assert.equal(data.payment_fee_amount, 456);
     assert.equal(data.click_price, 2.5);
+    assert.equal(data.admin_telegram_username, 'gaterank_admin');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET portal billing lists return paginated data and safe defaults', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const calls: Array<{ kind: string; page?: number; pageSize?: number }> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount(),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({ id: 7, name: 'Cloud Airport' }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository({
+        listRechargeOrders: async (_accountId: number, page?: number, pageSize?: number) => {
+          calls.push({ kind: 'recharge', page, pageSize });
+          return {
+            total: 21,
+            items: [{
+              id: 1,
+              applicant_account_id: 1,
+              out_trade_no: 'grr_1',
+              gateway_trade_no: null,
+              channel: 'usdt',
+              amount: 100,
+              status: 'created',
+              pay_type: null,
+              pay_info: null,
+              paid_at: null,
+              created_at: '2026-05-10T10:00:00+08:00',
+            }],
+          };
+        },
+        listClicks: async (_accountId: number, page?: number, pageSize?: number) => {
+          calls.push({ kind: 'clicks', page, pageSize });
+          return { total: 0, items: [] };
+        },
+        listTransactions: async (_accountId: number, page?: number, pageSize?: number) => {
+          calls.push({ kind: 'transactions', page, pageSize });
+          return { total: 0, items: [] };
+        },
+      }),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({}),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const auth = { Authorization: `Bearer ${token}` };
+    const rechargeResponse = await fetch(`http://127.0.0.1:${port}/portal/recharge-orders?page=2&page_size=20`, { headers: auth });
+    const clicksResponse = await fetch(`http://127.0.0.1:${port}/portal/clicks?page=bad&page_size=bad`, { headers: auth });
+    const transactionsResponse = await fetch(`http://127.0.0.1:${port}/portal/wallet-transactions?page=3&page_size=200`, { headers: auth });
+
+    assert.equal(rechargeResponse.status, 200);
+    assert.equal(clicksResponse.status, 200);
+    assert.equal(transactionsResponse.status, 200);
+    assert.deepEqual(await rechargeResponse.json(), {
+      items: [{
+        id: 1,
+        applicant_account_id: 1,
+        out_trade_no: 'grr_1',
+        gateway_trade_no: null,
+        channel: 'usdt',
+        amount: 100,
+        status: 'created',
+        pay_type: null,
+        pay_info: null,
+        paid_at: null,
+        created_at: '2026-05-10T10:00:00+08:00',
+      }],
+      total: 21,
+      page: 2,
+      page_size: 20,
+    });
+    assert.deepEqual(calls, [
+      { kind: 'recharge', page: 2, pageSize: 20 },
+      { kind: 'clicks', page: 1, pageSize: 20 },
+      { kind: 'transactions', page: 3, pageSize: 100 },
+    ]);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

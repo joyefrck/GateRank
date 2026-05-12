@@ -248,6 +248,7 @@ interface AdminDeps {
   smtpSettingsService?: {
     getAdminSettings(): Promise<unknown>;
     updateAdminSettings(input: SmtpSettingsInput, updatedBy: string): Promise<unknown>;
+    updateTemplateEnabled?(templateKey: SmtpTemplateKey, enabled: boolean, updatedBy: string): Promise<unknown>;
   };
   xOAuthSettingsService?: {
     getAdminSettings(): Promise<unknown>;
@@ -256,6 +257,9 @@ interface AdminDeps {
   mailService?: {
     sendTestMail(input: SmtpSettingsInput & { test_to: string }): Promise<void>;
     sendApplicationApprovedEmail(input: { to: string; airportName: string }): Promise<void>;
+    sendLowBalanceWarningEmail?(input: { to: string; airportName: string; balance: number; thresholdAmount: number }): Promise<void>;
+    sendAirportAutoUnlistedEmail?(input: { to: string; airportName: string; balance: number; thresholdAmount: number }): Promise<void>;
+    sendAirportOnlineEmail?(input: { to: string; airportName: string; balance: number; thresholdAmount: number }): Promise<void>;
   };
   accessTokenService?: {
     listAdminTokens(): Promise<unknown>;
@@ -671,6 +675,31 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         actorFromReq(req),
         req.requestId,
         input,
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/system-settings/smtp/templates/:key/enabled', async (req, res, next) => {
+    try {
+      const templateKey = toSmtpTemplateKey(req.params.key);
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const enabled = optionalBoolean(payload.enabled);
+      if (enabled === undefined) {
+        throw new HttpError(400, 'BAD_REQUEST', 'enabled must be boolean');
+      }
+      const smtpSettingsService = getSmtpSettingsService(deps);
+      if (!smtpSettingsService.updateTemplateEnabled) {
+        throw new Error('smtpSettingsService.updateTemplateEnabled is not configured');
+      }
+      const result = await smtpSettingsService.updateTemplateEnabled(templateKey, enabled, actorFromReq(req));
+      await deps.auditRepository.log(
+        'update_system_setting_smtp_template_enabled',
+        actorFromReq(req),
+        req.requestId,
+        { template_key: templateKey, enabled },
       );
       res.json(result);
     } catch (error) {
@@ -2210,6 +2239,10 @@ function parseMarketingSettingsPayload(
       payload.click_charge_amount === undefined
         ? undefined
         : mustNumber(payload.click_charge_amount, 'click_charge_amount'),
+    admin_telegram_username:
+      payload.admin_telegram_username === undefined
+        ? undefined
+        : optionalString(payload.admin_telegram_username),
   };
 }
 
@@ -2270,21 +2303,37 @@ function parseSmtpTemplatePayload(
   value: unknown,
 ): NonNullable<SmtpSettingsInput['templates']> {
   const payload = toPlainObject(value, 'templates');
-  const keys: SmtpTemplateKey[] = ['applicant_credentials', 'application_approved'];
   const templates: NonNullable<SmtpSettingsInput['templates']> = {};
 
-  for (const key of keys) {
+  for (const key of SMTP_TEMPLATE_KEYS) {
     if (payload[key] === undefined) {
       continue;
     }
     const item = toPlainObject(payload[key], `templates.${key}`);
     templates[key] = {
+      enabled: item.enabled === undefined ? undefined : optionalBoolean(item.enabled),
       subject: item.subject === undefined ? undefined : String(item.subject ?? '').trim(),
       body: item.body === undefined ? undefined : String(item.body ?? '').trim(),
     };
   }
 
   return templates;
+}
+
+const SMTP_TEMPLATE_KEYS: SmtpTemplateKey[] = [
+  'applicant_credentials',
+  'application_approved',
+  'low_balance_warning',
+  'airport_auto_unlisted',
+  'airport_online',
+];
+
+function toSmtpTemplateKey(value: unknown): SmtpTemplateKey {
+  const key = String(value || '').trim();
+  if ((SMTP_TEMPLATE_KEYS as string[]).includes(key)) {
+    return key as SmtpTemplateKey;
+  }
+  throw new HttpError(400, 'BAD_REQUEST', 'template key must be valid SMTP template key');
 }
 
 function parsePexelsMediaLibraryPayload(

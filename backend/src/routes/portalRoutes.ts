@@ -8,9 +8,13 @@ import type { ApplicationPaymentOrder } from '../repositories/applicationPayment
 import type {
   ApplicantClickView,
   ApplicantWalletView,
+  BillingMailNotificationEvent,
+  PaginatedBillingRecords,
+  RechargeCreditResult,
   RechargeOrderView,
   WalletTransactionView,
 } from '../repositories/applicantBillingRepository';
+import { sendBillingMailNotificationsSafely, type BillingMailService } from '../services/billingMailNotificationService';
 import { verifyPassword, hashPassword } from '../utils/password';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
@@ -49,7 +53,7 @@ interface PortalDeps {
         test_account: string;
         test_password: string;
       },
-    ): Promise<boolean>;
+    ): Promise<boolean | RechargeCreditResult>;
     markPaid(id: number, paymentAmount: number, paidAt: string): Promise<boolean>;
   };
   applicationPaymentOrderRepository: {
@@ -73,7 +77,7 @@ interface PortalDeps {
         notify_payload_json?: Record<string, unknown> | null;
         paid_at: string;
       },
-    ): Promise<boolean>;
+    ): Promise<boolean | RechargeCreditResult>;
     expireOpenOrdersByApplicationId(applicationId: number): Promise<number>;
   };
   applicantBillingRepository: {
@@ -89,7 +93,11 @@ interface PortalDeps {
       pay_info?: string | null;
     }): Promise<number>;
     getRechargeOrderByOutTradeNo(outTradeNo: string): Promise<RechargeOrderView | null>;
-    listRechargeOrders(applicantAccountId: number, limit?: number): Promise<RechargeOrderView[]>;
+    listRechargeOrders(
+      applicantAccountId: number,
+      page?: number,
+      pageSize?: number,
+    ): Promise<PaginatedBillingRecords<RechargeOrderView>>;
     cancelRechargeOrder(applicantAccountId: number, outTradeNo: string): Promise<boolean>;
     markRechargePaidAndCredit(
       outTradeNo: string,
@@ -101,9 +109,17 @@ interface PortalDeps {
         paid_at: string;
         click_charge_amount?: number;
       },
-    ): Promise<boolean>;
-    listTransactions(applicantAccountId: number, limit?: number): Promise<WalletTransactionView[]>;
-    listClicks(applicantAccountId: number, limit?: number): Promise<ApplicantClickView[]>;
+    ): Promise<boolean | RechargeCreditResult>;
+    listTransactions(
+      applicantAccountId: number,
+      page?: number,
+      pageSize?: number,
+    ): Promise<PaginatedBillingRecords<WalletTransactionView>>;
+    listClicks(
+      applicantAccountId: number,
+      page?: number,
+      pageSize?: number,
+    ): Promise<PaginatedBillingRecords<ApplicantClickView>>;
   };
   applicantPortalAuthService: {
     login(email: string, password: string): Promise<{
@@ -132,7 +148,11 @@ interface PortalDeps {
     getConfig(): Promise<unknown>;
   };
   marketingSettingsService?: {
-    getConfig(): Promise<{ application_fee_amount: number; click_charge_amount: number }>;
+    getConfig(): Promise<{
+      application_fee_amount: number;
+      click_charge_amount?: number;
+      admin_telegram_username?: string | null;
+    }>;
   };
   paymentGatewayService: Pick<PaymentGatewayService, 'createOrder' | 'verifyNotificationPayload'> & {
     queryOrder?: PaymentGatewayService['queryOrder'];
@@ -140,6 +160,7 @@ interface PortalDeps {
   applicationNotificationService?: {
     notifyPaymentReceived(input: PaymentReceivedNotificationInput): Promise<void>;
   };
+  mailService?: BillingMailService;
 }
 
 export function createPortalRoutes(deps: PortalDeps): Router {
@@ -313,7 +334,9 @@ export function createPortalRoutes(deps: PortalDeps): Router {
   router.get('/portal/recharge-orders', portalAuth, async (req, res, next) => {
     try {
       const session = requireApplicantSession(req);
-      res.json({ items: await deps.applicantBillingRepository.listRechargeOrders(session.applicant_id, parseLimit(req.query.limit)) });
+      const { page, pageSize } = parsePagination(req.query);
+      const result = await deps.applicantBillingRepository.listRechargeOrders(session.applicant_id, page, pageSize);
+      res.json({ items: result.items, total: result.total, page, page_size: pageSize });
     } catch (error) {
       next(error);
     }
@@ -419,7 +442,9 @@ export function createPortalRoutes(deps: PortalDeps): Router {
   router.get('/portal/clicks', portalAuth, async (req, res, next) => {
     try {
       const session = requireApplicantSession(req);
-      res.json({ items: await deps.applicantBillingRepository.listClicks(session.applicant_id, parseLimit(req.query.limit)) });
+      const { page, pageSize } = parsePagination(req.query);
+      const result = await deps.applicantBillingRepository.listClicks(session.applicant_id, page, pageSize);
+      res.json({ items: result.items, total: result.total, page, page_size: pageSize });
     } catch (error) {
       next(error);
     }
@@ -428,7 +453,9 @@ export function createPortalRoutes(deps: PortalDeps): Router {
   router.get('/portal/wallet-transactions', portalAuth, async (req, res, next) => {
     try {
       const session = requireApplicantSession(req);
-      res.json({ items: await deps.applicantBillingRepository.listTransactions(session.applicant_id, parseLimit(req.query.limit)) });
+      const { page, pageSize } = parsePagination(req.query);
+      const result = await deps.applicantBillingRepository.listTransactions(session.applicant_id, page, pageSize);
+      res.json({ items: result.items, total: result.total, page, page_size: pageSize });
     } catch (error) {
       next(error);
     }
@@ -604,15 +631,18 @@ export function createPortalRoutes(deps: PortalDeps): Router {
 
     const paidAt = formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
     const marketingConfig = await getMarketingBillingConfig(deps);
-    const credited = await deps.applicantBillingRepository.markRechargePaidAndCredit(outTradeNo, {
+    const creditResult = normalizeRechargeCreditResult(
+      await deps.applicantBillingRepository.markRechargePaidAndCredit(outTradeNo, {
       gateway_trade_no: getNotificationGatewayTradeNo(payload),
       pay_type: getNotificationPayType(payload, order.channel, order.pay_type || order.channel),
       pay_info: buildGatewayTrace(payload),
       notify_payload_json: payload,
       paid_at: paidAt,
       click_charge_amount: marketingConfig.click_charge_amount,
-    });
-    if (credited) {
+      }),
+    );
+    await sendBillingMailNotificationsSafely(deps.mailService, creditResult.notification_events);
+    if (creditResult.credited) {
       await notifyPaymentReceivedSafely(deps, {
         paymentType: 'wallet_recharge_paid',
         applicantAccountId: order.applicant_account_id,
@@ -677,15 +707,18 @@ async function syncRechargeOrder(deps: PortalDeps, order: RechargeOrderView): Pr
   assertGatewayOrderMatches(order.out_trade_no, Number(order.amount), queryResult);
   const paidAt = normalizeGatewayPaidAt(queryResult.endtime);
   const marketingConfig = await getMarketingBillingConfig(deps);
-  const credited = await deps.applicantBillingRepository.markRechargePaidAndCredit(order.out_trade_no, {
+  const creditResult = normalizeRechargeCreditResult(
+    await deps.applicantBillingRepository.markRechargePaidAndCredit(order.out_trade_no, {
     gateway_trade_no: queryResult.trade_no || order.gateway_trade_no,
     pay_type: queryResult.type || order.pay_type,
     pay_info: buildGatewayTrace(queryResult.raw),
     notify_payload_json: queryResult.raw,
     paid_at: paidAt,
     click_charge_amount: marketingConfig.click_charge_amount,
-  });
-  if (credited) {
+    }),
+  );
+  await sendBillingMailNotificationsSafely(deps.mailService, creditResult.notification_events);
+  if (creditResult.credited) {
     await notifyPaymentReceivedSafely(deps, {
       paymentType: 'wallet_recharge_paid',
       applicantAccountId: order.applicant_account_id,
@@ -696,7 +729,22 @@ async function syncRechargeOrder(deps: PortalDeps, order: RechargeOrderView): Pr
       paidAt,
     });
   }
-  return credited;
+  return creditResult.credited;
+}
+
+function normalizeRechargeCreditResult(value: boolean | RechargeCreditResult): RechargeCreditResult {
+  if (typeof value === 'boolean') {
+    return {
+      credited: value,
+      notification_events: [],
+    };
+  }
+  return {
+    credited: Boolean(value.credited),
+    notification_events: Array.isArray(value.notification_events)
+      ? value.notification_events as BillingMailNotificationEvent[]
+      : [],
+  };
 }
 
 async function queryGatewayOrder(
@@ -758,6 +806,7 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
     payment_fee_amount: Number(marketingConfig.application_fee_amount),
     payment_methods: paymentMethods,
     click_price: Number(marketingConfig.click_charge_amount),
+    admin_telegram_username: marketingConfig.admin_telegram_username,
     recharge_amounts: RECHARGE_AMOUNTS,
     wallet,
   };
@@ -766,14 +815,21 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
 async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
   application_fee_amount: number;
   click_charge_amount: number;
+  admin_telegram_username: string | null;
 }> {
   if (!deps.marketingSettingsService) {
     return {
       application_fee_amount: APPLICATION_FEE_AMOUNT,
       click_charge_amount: CLICK_CHARGE_AMOUNT,
+      admin_telegram_username: null,
     };
   }
-  return deps.marketingSettingsService.getConfig();
+  const config = await deps.marketingSettingsService.getConfig();
+  return {
+    application_fee_amount: Number(config.application_fee_amount || APPLICATION_FEE_AMOUNT),
+    click_charge_amount: Number(config.click_charge_amount || CLICK_CHARGE_AMOUNT),
+    admin_telegram_username: config.admin_telegram_username ?? null,
+  };
 }
 
 function toPortalAccountView(account: ApplicantAccount) {
@@ -1006,12 +1062,19 @@ function toRechargeAmount(value: unknown): number {
   return amount;
 }
 
-function parseLimit(value: unknown): number {
-  const num = Number(value || 50);
+function parsePagination(query: Record<string, unknown>): { page: number; pageSize: number } {
+  return {
+    page: parsePositiveInt(query.page, 1, 1000000),
+    pageSize: parsePositiveInt(query.page_size, 20, 100),
+  };
+}
+
+function parsePositiveInt(value: unknown, fallback: number, max: number): number {
+  const num = Number(value || fallback);
   if (!Number.isFinite(num)) {
-    return 50;
+    return fallback;
   }
-  return Math.min(100, Math.max(1, Math.floor(num)));
+  return Math.min(max, Math.max(1, Math.floor(num)));
 }
 
 function requireApplicantSession(req: any): { applicant_id: number; email: string } {
