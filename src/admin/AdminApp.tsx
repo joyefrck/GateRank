@@ -6,6 +6,7 @@ import {
   BarChart3,
   Newspaper,
   Activity,
+  Menu,
   RefreshCw,
   LogOut,
   Plus,
@@ -711,6 +712,50 @@ const DEFAULT_PUBLISH_TOKEN_SCOPES = PUBLISH_TOKEN_SCOPES.map((item) => item.val
 
 const TOKEN_KEY = 'gaterank_admin_token';
 const ADMIN_DEFAULT_PATH = '/admin/marketing';
+const ADMIN_NAV_ITEMS = [
+  {
+    path: '/admin/marketing',
+    label: '访问记录',
+    icon: BarChart3,
+    isActive: (path: string) => path === '/admin/marketing',
+  },
+  {
+    path: '/admin/marketing-settings',
+    label: '营销模块',
+    icon: MousePointerClick,
+    isActive: (path: string) => path === '/admin/marketing-settings',
+  },
+  {
+    path: '/admin/airports',
+    label: '机场管理',
+    icon: Database,
+    isActive: (path: string) => path.startsWith('/admin/airports'),
+  },
+  {
+    path: '/admin/applications',
+    label: '入驻申请',
+    icon: Shield,
+    isActive: (path: string) => path.startsWith('/admin/applications'),
+  },
+  {
+    path: '/admin/news',
+    label: 'News',
+    icon: Newspaper,
+    isActive: (path: string) => path.startsWith('/admin/news'),
+  },
+  {
+    path: '/admin/scheduler',
+    label: '任务调度',
+    icon: Activity,
+    isActive: (path: string) => path.startsWith('/admin/scheduler'),
+  },
+  {
+    path: '/admin/settings',
+    label: '系统设置',
+    icon: Bell,
+    isActive: (path: string) => path.startsWith('/admin/settings'),
+  },
+];
 const AIRPORTS_PAGE_SIZE = 50;
 const AIRPORT_BILLING_PAGE_SIZE = 20;
 const APPLICATIONS_PAGE_SIZE = 20;
@@ -844,6 +889,7 @@ async function safeJson(response: Response): Promise<unknown> {
 export default function AdminApp() {
   const [path, setPath] = useState(window.location.pathname);
   const [adminToken, setAdminToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname);
     window.addEventListener('popstate', onPop);
@@ -859,7 +905,14 @@ export default function AdminApp() {
   const navigate = (to: string) => {
     window.history.pushState({}, '', to);
     setPath(to);
+    setMobileNavOpen(false);
   };
+
+  const activeAdminSection = useMemo(
+    () => ADMIN_NAV_ITEMS.find((item) => item.isActive(path)) || ADMIN_NAV_ITEMS[0],
+    [path],
+  );
+  const ActiveAdminIcon = activeAdminSection.icon;
 
   if (path === '/admin/login') {
     return (
@@ -885,14 +938,25 @@ export default function AdminApp() {
 
   return (
     <div className="min-h-screen bg-neutral-100 text-neutral-900">
-      <header className="sticky top-0 z-30 bg-white border-b border-neutral-200 px-6 h-16 flex items-center justify-between">
-        <div className="flex items-center gap-3 font-bold tracking-tight">
-          <span className="w-8 h-8 rounded bg-neutral-900 text-white flex items-center justify-center"><Shield size={16} /></span>
-          GateRank Admin
+      <header className="sticky top-0 z-30 bg-white border-b border-neutral-200 px-3 md:px-6 h-16 flex items-center justify-between">
+        <div className="flex min-w-0 items-center gap-2 md:gap-3 font-bold tracking-tight">
+          <button
+            type="button"
+            className="md:hidden w-9 h-9 rounded border border-neutral-300 bg-white flex items-center justify-center"
+            aria-label={mobileNavOpen ? '关闭菜单' : '打开菜单'}
+            aria-expanded={mobileNavOpen}
+            onClick={() => setMobileNavOpen((open) => !open)}
+          >
+            {mobileNavOpen ? <X size={17} /> : <Menu size={17} />}
+          </button>
+          <span className="hidden md:flex w-8 h-8 rounded bg-neutral-900 text-white items-center justify-center"><Shield size={16} /></span>
+          <span className="md:hidden w-8 h-8 rounded bg-neutral-900 text-white flex items-center justify-center"><ActiveAdminIcon size={16} /></span>
+          <span className="hidden md:inline">GateRank Admin</span>
+          <span className="md:hidden min-w-0 truncate">{activeAdminSection.label}</span>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-1.5 md:gap-2">
           <a
-            className="text-sm px-3 py-1.5 rounded border border-neutral-300 bg-white"
+            className="text-xs md:text-sm px-2 md:px-3 py-1.5 rounded border border-neutral-300 bg-white"
             href="/"
             target="_blank"
             rel="noreferrer"
@@ -900,30 +964,36 @@ export default function AdminApp() {
             前台首页
           </a>
           <button
-            className="text-sm px-3 py-1.5 rounded bg-neutral-900 text-white"
+            className="text-xs md:text-sm px-2 md:px-3 py-1.5 rounded bg-neutral-900 text-white"
             onClick={() => {
               localStorage.removeItem(TOKEN_KEY);
               setAdminToken(null);
               navigate('/admin/login');
             }}
           >
-            <span className="inline-flex items-center gap-2"><LogOut size={14} />退出</span>
+            <span className="inline-flex items-center gap-1.5 md:gap-2"><LogOut size={14} />退出</span>
           </button>
         </div>
       </header>
 
-      <div className="max-w-[1600px] mx-auto p-6 grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-6">
-        <aside className="bg-white rounded-xl border border-neutral-200 p-3 h-fit md:sticky md:top-[88px]">
-          <NavItem icon={<BarChart3 size={14} />} active={path === '/admin/marketing'} onClick={() => navigate('/admin/marketing')} label="访问记录" />
-          <NavItem icon={<MousePointerClick size={14} />} active={path === '/admin/marketing-settings'} onClick={() => navigate('/admin/marketing-settings')} label="营销模块" />
-          <NavItem icon={<Database size={14} />} active={path.startsWith('/admin/airports')} onClick={() => navigate('/admin/airports')} label="机场管理" />
-          <NavItem icon={<Shield size={14} />} active={path.startsWith('/admin/applications')} onClick={() => navigate('/admin/applications')} label="入驻申请" />
-          <NavItem icon={<Newspaper size={14} />} active={path.startsWith('/admin/news')} onClick={() => navigate('/admin/news')} label="News" />
-          <NavItem icon={<Activity size={14} />} active={path.startsWith('/admin/scheduler')} onClick={() => navigate('/admin/scheduler')} label="任务调度" />
-          <NavItem icon={<Bell size={14} />} active={path.startsWith('/admin/settings')} onClick={() => navigate('/admin/settings')} label="系统设置" />
+      {mobileNavOpen && (
+        <div className="fixed inset-0 z-20 md:hidden" onClick={() => setMobileNavOpen(false)}>
+          <div className="absolute inset-0 bg-black/20" />
+          <nav
+            className="absolute left-3 right-3 top-[72px] bg-white rounded-xl border border-neutral-200 p-3 shadow-xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <AdminNavList path={path} onNavigate={navigate} />
+          </nav>
+        </div>
+      )}
+
+      <div className="max-w-[1600px] mx-auto p-3 md:p-6 grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-6">
+        <aside className="hidden md:block bg-white rounded-xl border border-neutral-200 p-3 h-fit md:sticky md:top-[88px]">
+          <AdminNavList path={path} onNavigate={navigate} />
         </aside>
 
-        <main className="bg-white rounded-xl border border-neutral-200 p-6">
+        <main className="bg-white rounded-xl border border-neutral-200 p-4 md:p-6">
           {path === '/admin/airports' && <AirportsPage onOpenAirport={(id) => navigate(`/admin/airports/${id}/data`)} />}
           {path === '/admin/applications' && <ApplicationsPage onOpenAirports={() => navigate('/admin/airports')} />}
           {path === '/admin/news' && <NewsListPage onCreate={() => navigate('/admin/news/new')} onEdit={(id) => navigate(`/admin/news/${id}`)} />}
@@ -966,6 +1036,26 @@ function NavItem({
       {icon}
       {label}
     </button>
+  );
+}
+
+function AdminNavList({ path, onNavigate }: { path: string; onNavigate: (path: string) => void }) {
+  return (
+    <>
+      {ADMIN_NAV_ITEMS.map((item) => {
+        const Icon = item.icon;
+        return (
+          <div key={item.path}>
+            <NavItem
+              icon={<Icon size={14} />}
+              active={item.isActive(path)}
+              onClick={() => onNavigate(item.path)}
+              label={item.label}
+            />
+          </div>
+        );
+      })}
+    </>
   );
 }
 
