@@ -1778,7 +1778,7 @@ function MarketingPage() {
           <div className="flex items-start justify-between gap-3 flex-wrap">
             <div>
               <h3 className="text-base font-semibold">外部来源</h3>
-              <p className="mt-1 text-sm text-neutral-500">按来源平台或 referrer host 聚合识别站外引流表现。</p>
+              <p className="mt-1 text-sm text-neutral-500">按 referrer host 或 utm_source 聚合可识别来源，不等同于 Google Search Console / Bing Webmaster Tools 的搜索流量报表。</p>
             </div>
             <div className="rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs text-neutral-600">
               来源数：{formatCountValue(overview?.filters.sources.length)}
@@ -1797,6 +1797,13 @@ function MarketingPage() {
               hint="按 page_view 占比估算"
               tone="default"
             />
+          </div>
+          <div className="rounded-xl border border-sky-100 bg-sky-50 px-4 py-3 text-xs leading-relaxed text-sky-900">
+            <div className="font-semibold">统计口径</div>
+            <p className="mt-1">
+              占比按来源 PV / 总 PV 计算；点击是 GateRank 站内记录到的外链点击，并按当前会话来源归因。
+              Direct / Unknown 表示无 referrer 且无 UTM，可能来自直接访问、隐私浏览器、App 内打开或搜索引擎隐藏 referrer，不能反向归因到 Google。
+            </p>
           </div>
           <div className="overflow-x-auto rounded-2xl border border-neutral-200">
             <table className="min-w-full text-sm">
