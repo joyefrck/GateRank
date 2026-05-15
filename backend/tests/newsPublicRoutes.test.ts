@@ -96,12 +96,19 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
     });
     assert.equal(response.status, 200);
     const html = await response.text();
-    assert.match(html, /\.topbar-inner\s*\{[\s\S]*height:\s*72px;/);
-    assert.match(html, /\.brand-subtitle\s*\{[\s\S]*letter-spacing:\s*0\.28em;/);
-    assert.match(html, /\.nav-links\s*\{[\s\S]*font-size:\s*13px;[\s\S]*letter-spacing:\s*0\.18em;/);
-    assert.match(html, /\.nav-link\.is-news\s*\{[\s\S]*font-family:\s*var\(--serif\);[\s\S]*font-size:\s*18px;/);
-    assert.match(html, /<span class="brand-subtitle">GateRank<\/span>/);
-    assert.match(html, /<a class="nav-link is-news is-active" href="\/news">News<\/a>/);
+    assert.match(html, /\.public-top-nav-inner\s*\{[\s\S]*height:\s*72px;/);
+    assert.match(html, /\.public-top-nav-links\s*\{[\s\S]*font-size:\s*13px;[\s\S]*letter-spacing:\s*2\.34px;/);
+    assert.match(html, /data-public-top-nav="true"/);
+    assert.match(html, /<span class="public-top-nav-brand-title">机场榜GateRank<\/span>/);
+    assert.match(html, /<a class="public-top-nav-link" href="\/methodology" data-client-nav="true">测评方法<\/a>/);
+    assert.match(html, /<a class="public-top-nav-link is-active" href="\/news">News<\/a>/);
+    assert.match(html, /<a class="public-top-nav-login" href="\/portal" target="_blank" rel="noreferrer">登录<\/a>/);
+    assert.match(html, /<a class="public-top-nav-apply" href="\/apply" target="_blank" rel="noreferrer">/);
+    assert.match(html, /<path d="M15 3h6v6"><\/path>/);
+    assert.doesNotMatch(html, /nav-link is-news/);
+    assert.doesNotMatch(html, /\.nav-link\.is-news/);
+    assert.doesNotMatch(html, /\.topbar-inner/);
+    assert.doesNotMatch(html, /\.nav-link\s*\{/);
     assert.match(html, /<h1 class="news-index-title">机场榜GateRank News：机场行业观察、机场测评与风险动态<\/h1>/);
     assert.match(html, /<h2 class="hero-title">头条文章<\/h2>/);
     assert.doesNotMatch(html, /<h1 class="hero-title">/);
@@ -256,9 +263,15 @@ test('GET /news/:slug returns server-rendered HTML with seo metadata', async () 
     assert.match(html, /"@type":"Article"/);
     assert.match(html, /"image":\["http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/cover\.webp"\]/);
     assert.match(html, /分享到 Reddit/);
-    assert.match(html, /\.topbar-inner\s*\{[\s\S]*height:\s*72px;/);
-    assert.match(html, /\.nav-link\.is-news\s*\{[\s\S]*font-family:\s*var\(--serif\);[\s\S]*font-size:\s*18px;/);
-    assert.match(html, /<a class="nav-link is-news is-active" href="\/news">News<\/a>/);
+    assert.match(html, /\.public-top-nav-inner\s*\{[\s\S]*height:\s*72px;/);
+    assert.match(html, /<span class="public-top-nav-brand-title">机场榜GateRank<\/span>/);
+    assert.match(html, /<a class="public-top-nav-link is-active" href="\/news">News<\/a>/);
+    assert.match(html, /<a class="public-top-nav-apply" href="\/apply" target="_blank" rel="noreferrer">/);
+    assert.match(html, /<path d="M15 3h6v6"><\/path>/);
+    assert.doesNotMatch(html, /nav-link is-news/);
+    assert.doesNotMatch(html, /\.nav-link\.is-news/);
+    assert.doesNotMatch(html, /\.topbar-inner/);
+    assert.doesNotMatch(html, /\.nav-link\s*\{/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

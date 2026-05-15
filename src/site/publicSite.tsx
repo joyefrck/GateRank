@@ -1,16 +1,11 @@
 import React, { useEffect } from 'react';
-import { ExternalLink, Zap } from 'lucide-react';
+import { Zap } from 'lucide-react';
 
 import { PUBLIC_SITE_BRAND_NAME } from '../../shared/publicBrand';
+import { type PublicNavigationKind } from '../../shared/publicNavigation';
+import { PUBLIC_TOP_NAV_STYLES, renderPublicTopNav } from '../../shared/publicTopNav';
 
-export type NavigationKind = 'home' | 'full_ranking' | 'risk_monitor' | 'methodology' | 'docs';
-
-const primaryCtaTextStyle: React.CSSProperties = {
-  color: '#fff',
-  WebkitTextFillColor: '#fff',
-  forcedColorAdjust: 'none',
-  colorScheme: 'light',
-};
+export type NavigationKind = PublicNavigationKind | 'docs';
 
 export interface SeoConfig {
   title: string;
@@ -175,100 +170,26 @@ export function PageFrame({
 }
 
 function PublicTopNav({ active }: { active: NavigationKind }) {
-  return (
-    <nav className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-neutral-100">
-      <div className="max-w-7xl mx-auto px-4 h-[72px] flex items-center justify-between gap-4">
-        <div className="flex items-center gap-10">
-          <a
-            href="/"
-            className="flex items-center gap-3"
-            onClick={(event) => {
-              event.preventDefault();
-              navigate('/');
-            }}
-          >
-            <div className="w-9 h-9 bg-neutral-900 rounded-lg flex items-center justify-center shadow-xl">
-              <Zap className="text-white w-5 h-5" />
-            </div>
-            <span className="font-black text-lg tracking-tighter leading-none">{PUBLIC_SITE_BRAND_NAME}</span>
-          </a>
-          <div className="hidden lg:flex items-center gap-3 text-[13px] font-black uppercase tracking-[0.18em]">
-            <PublicNavLink href="/" label="今日推荐" active={active === 'home'} />
-            <PublicNavLink href="/rankings/all" label="全量榜单" active={active === 'full_ranking'} />
-            <a
-              href={buildRiskMonitorHref()}
-              onClick={(event) => {
-                event.preventDefault();
-                navigate(buildRiskMonitorHref());
-              }}
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 transition-colors ${
-                active === 'risk_monitor'
-                  ? 'bg-rose-50 text-rose-600 ring-1 ring-rose-100 shadow-sm'
-                  : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
-              }`}
-            >
-              跑路监测
-              <span className="rounded-md bg-rose-500 px-2 py-1 text-[10px] tracking-[0.18em] text-white">快照</span>
-            </a>
-            <PublicNavLink href={buildMethodologyHref()} label="测评方法" active={active === 'methodology'} />
-            <a
-              href={buildNewsHref()}
-              className="rounded-full px-4 py-2 text-[18px] text-[#c93a2e] transition-all hover:bg-neutral-100 font-serif"
-            >
-              News
-            </a>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <a
-            className="min-h-11 px-4 py-2.5 rounded-lg border border-neutral-200 bg-white text-neutral-700 text-[11px] md:text-xs font-black uppercase tracking-[0.16em] transition-all hover:border-neutral-900 hover:text-neutral-900 flex items-center gap-2"
-            href="/portal"
-            target="_blank"
-            rel="noreferrer"
-          >
-            登录
-          </a>
-          <a
-            className="min-h-11 px-4 md:px-5 py-2.5 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.16em] transition-all shadow-[0_16px_34px_rgba(17,17,17,0.20)] hover:bg-neutral-800 flex items-center gap-2 md:gap-3"
-            href="/apply"
-            target="_blank"
-            rel="noreferrer"
-            style={primaryCtaTextStyle}
-          >
-            <span className="hidden sm:inline">申请入驻测试</span>
-            <span className="sm:hidden">申请</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        </div>
-      </div>
-    </nav>
-  );
-}
+  const resolvedActive: PublicNavigationKind = active === 'docs' ? 'home' : active;
 
-function PublicNavLink({
-  href,
-  label,
-  active,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-}) {
   return (
-    <a
-      href={href}
-      className={`rounded-full px-4 py-2 transition-all ${
-        active
-          ? 'bg-rose-50 text-rose-600 ring-1 ring-rose-100 shadow-sm'
-          : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100'
-      }`}
-      onClick={(event) => {
-        event.preventDefault();
-        navigate(href);
-      }}
-    >
-      {label}
-    </a>
+    <>
+      <style>{PUBLIC_TOP_NAV_STYLES}</style>
+      <div
+        onClick={(event) => {
+          const link = (event.target as HTMLElement).closest('a[data-client-nav="true"]');
+          if (!link) {
+            return;
+          }
+          event.preventDefault();
+          const href = link.getAttribute('href');
+          if (href) {
+            navigate(href);
+          }
+        }}
+        dangerouslySetInnerHTML={{ __html: renderPublicTopNav(resolvedActive) }}
+      />
+    </>
   );
 }
 

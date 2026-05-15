@@ -1,5 +1,6 @@
 import type { PublicNewsArticleView, PublicNewsListView } from './newsPublicService';
 import { formatNewsDate, formatNewsDateTime } from '../utils/news';
+import { PUBLIC_TOP_NAV_STYLES, renderPublicTopNav } from '../../../shared/publicTopNav';
 
 interface RenderListPageOptions {
   siteUrl: string;
@@ -13,6 +14,7 @@ interface RenderArticlePageOptions {
 }
 
 const sharedStyles = `
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap');
   :root {
     --surface: rgba(255,255,255,0.94);
     --text: #111111;
@@ -24,7 +26,13 @@ const sharedStyles = `
     --serif: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
   }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  html {
+    scroll-behavior: smooth;
+    scrollbar-gutter: stable;
+  }
+  @supports not (scrollbar-gutter: stable) {
+    html { overflow-y: scroll; }
+  }
   body {
     margin: 0;
     font-family: var(--sans);
@@ -48,14 +56,7 @@ const sharedStyles = `
       linear-gradient(90deg, #111111 1px, transparent 1px);
     background-size: 40px 40px;
   }
-  .topbar {
-    position: sticky;
-    top: 0;
-    z-index: 50;
-    backdrop-filter: blur(12px);
-    background: rgba(255,255,255,0.8);
-    border-bottom: 1px solid rgb(245,245,245);
-  }
+  ${PUBLIC_TOP_NAV_STYLES}
   .main-wrap,
   .footer-inner,
   .footer-links,
@@ -64,181 +65,6 @@ const sharedStyles = `
     margin: 0 auto;
     position: relative;
     z-index: 1;
-  }
-  .topbar-inner {
-    width: min(1280px, 100%);
-    margin: 0 auto;
-    padding: 0 16px;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 72px;
-    gap: 16px;
-  }
-  .topbar-start {
-    display: flex;
-    align-items: center;
-    gap: 40px;
-    min-width: 0;
-  }
-  .brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-  }
-  .brand-mark {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    background: #111111;
-    color: #ffffff;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
-  }
-  .brand-mark svg {
-    width: 20px;
-    height: 20px;
-    display: block;
-  }
-  .brand-mark path {
-    stroke: #ffffff;
-    stroke-width: 2.25;
-    fill: none;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  .brand-text {
-    display: flex;
-    flex-direction: column;
-    line-height: 1;
-  }
-  .brand-title {
-    font-weight: 900;
-    font-size: 18px;
-    letter-spacing: -0.05em;
-    line-height: 1;
-  }
-  .brand-subtitle {
-    margin-top: 0;
-    font-size: 10px;
-    line-height: 1;
-    letter-spacing: 0.28em;
-    text-transform: uppercase;
-    color: rgb(163,163,163);
-    font-weight: 900;
-  }
-  .nav-links {
-    display: none;
-    align-items: center;
-    gap: 12px;
-    font-size: 13px;
-    font-weight: 900;
-    letter-spacing: 0.18em;
-    text-transform: uppercase;
-  }
-  .apply-link {
-    background: #111111;
-    color: #ffffff;
-    min-height: 48px;
-    padding: 12px 20px;
-    border-radius: 8px;
-    font-size: 11px;
-    font-weight: 900;
-    letter-spacing: 0.18em;
-    transition: 180ms ease;
-    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
-    display: inline-flex;
-    align-items: center;
-    gap: 12px;
-    text-transform: uppercase;
-    white-space: nowrap;
-  }
-  .apply-link:hover {
-    background: #1f1f1f;
-  }
-  .apply-link .apply-short {
-    display: none;
-  }
-  .nav-link {
-    padding: 8px 16px;
-    border-radius: 999px;
-    color: rgb(115,115,115);
-    transition: 180ms ease;
-    display: inline-flex;
-    align-items: center;
-    line-height: 1;
-  }
-  .nav-link:hover { color: #111111; background: rgb(245,245,245); }
-  .nav-link.is-active {
-    background: #111111;
-    color: #ffffff;
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
-  }
-  .nav-link.is-news {
-    color: var(--accent);
-    font-family: var(--serif);
-    font-size: 18px;
-    background: transparent;
-    box-shadow: none;
-  }
-  .nav-link.is-news:hover {
-    background: rgb(245,245,245);
-  }
-  .nav-link.is-news.is-active {
-    color: var(--accent);
-    background: transparent;
-    box-shadow: none;
-  }
-  .risk-link {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    border-radius: 999px;
-    padding: 8px 16px;
-    color: rgb(115,115,115);
-    transition: 180ms ease;
-    line-height: 1;
-  }
-  .risk-link:hover {
-    color: #111111;
-  }
-  .risk-badge {
-    border-radius: 6px;
-    background: rgb(244,63,94);
-    padding: 4px 8px;
-    font-size: 10px;
-    letter-spacing: 0.18em;
-    color: #ffffff;
-    font-weight: 900;
-    line-height: 1;
-  }
-  @media (min-width: 768px) {
-    .brand-subtitle {
-      font-size: 11px;
-    }
-    .apply-link {
-      font-size: 12px;
-    }
-  }
-  @media (min-width: 1024px) {
-    .nav-links {
-      display: flex;
-    }
-  }
-  @media (max-width: 639px) {
-    .apply-link {
-      padding-left: 16px;
-      padding-right: 16px;
-    }
-    .apply-link .apply-long {
-      display: none;
-    }
-    .apply-link .apply-short {
-      display: inline;
-    }
   }
   .main-wrap {
     padding: 36px 0 72px;
@@ -795,7 +621,7 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
     jsonLd,
     body: `
       <div class="page-shell">
-        ${renderTopbar('news')}
+        ${renderPublicTopNav('news')}
         <main class="main-wrap">
           <section>
             <div class="eyebrow">GateRank Newsroom</div>
@@ -892,7 +718,7 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
     jsonLd,
     body: `
       <div class="page-shell">
-        ${renderTopbar('news')}
+        ${renderPublicTopNav('news')}
         <div class="article-progress"><div class="article-progress-bar" id="reading-progress"></div></div>
         <main class="main-wrap">
           ${preview ? '<div class="preview-banner">Preview Mode · 该预览页不进入索引，不写入 sitemap</div>' : ''}
@@ -1072,42 +898,6 @@ function renderPagination(basePath: string, currentPage: number, totalPages: num
         return `<a href="${href}" class="${page === currentPage ? 'is-current' : ''}">${page}</a>`;
       }).join('')}
     </nav>
-  `;
-}
-
-function renderTopbar(active: 'news' | 'home' | 'rankings' | 'methodology'): string {
-  return `
-    <header class="topbar">
-      <div class="topbar-inner">
-        <div class="topbar-start">
-          <a class="brand" href="/">
-            <span class="brand-mark" aria-hidden="true">
-              <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
-                <path d="M13 2 6 13h5l-1 9 8-12h-5l0-8Z"></path>
-              </svg>
-            </span>
-            <span class="brand-text">
-              <span class="brand-title">机场榜</span>
-              <span class="brand-subtitle">GateRank</span>
-            </span>
-          </a>
-          <nav class="nav-links">
-            <a class="nav-link ${active === 'home' ? 'is-active' : ''}" href="/">今日推荐</a>
-            <a class="nav-link ${active === 'rankings' ? 'is-active' : ''}" href="/rankings/all">全量榜单</a>
-            <a class="risk-link" href="/risk-monitor">跑路监测 <span class="risk-badge">快照</span></a>
-            <a class="nav-link ${active === 'methodology' ? 'is-active' : ''}" href="/methodology">测评方法</a>
-            <a class="nav-link is-news ${active === 'news' ? 'is-active' : ''}" href="/news">News</a>
-          </nav>
-        </div>
-        <a class="apply-link" href="/apply" target="_blank" rel="noreferrer">
-          <span class="apply-long">申请入驻测试</span>
-          <span class="apply-short">申请</span>
-          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">
-            <path d="M7 17 17 7M9 7h8v8" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"></path>
-          </svg>
-        </a>
-      </div>
-    </header>
   `;
 }
 
