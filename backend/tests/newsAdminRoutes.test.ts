@@ -594,14 +594,14 @@ test('news admin routes delete draft and archived articles only', async () => {
     assert.equal(draftResponse.status, 204);
     assert.equal(articles.some((article) => article.id === 1), false);
 
-    const archivedResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/2`, {
-      method: 'DELETE',
+    const archivedResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/2/delete`, {
+      method: 'POST',
     });
     assert.equal(archivedResponse.status, 204);
     assert.equal(articles.some((article) => article.id === 2), false);
 
-    const publishedResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/3`, {
-      method: 'DELETE',
+    const publishedResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/3/delete`, {
+      method: 'POST',
     });
     assert.equal(publishedResponse.status, 409);
     const publishedData = (await publishedResponse.json()) as { code: string; message: string };

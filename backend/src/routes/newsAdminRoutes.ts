@@ -149,21 +149,17 @@ export function createNewsAdminRoutes(deps: NewsAdminDeps): Router {
   router.delete('/news/:id', async (req, res, next) => {
     try {
       const id = parseArticleId(req.params.id);
-      const article = await newsMutationService.requireArticle(id);
-      if (article.status === 'published') {
-        throw new HttpError(409, 'NEWS_DELETE_NOT_ALLOWED', '已发布文章不能删除，请先下线');
-      }
+      await deleteNewsArticle(deps, newsMutationService, id, actorFromReq(req), req.requestId);
+      res.status(204).send();
+    } catch (error) {
+      next(error);
+    }
+  });
 
-      const deleted = await deps.newsRepository.deleteById(id);
-      if (!deleted) {
-        throw new HttpError(404, 'NEWS_NOT_FOUND', `news article ${id} not found`);
-      }
-
-      await deps.auditRepository.log('delete_news_article', actorFromReq(req), req.requestId, {
-        article_id: id,
-        slug: article.slug,
-        status: article.status,
-      });
+  router.post('/news/:id/delete', async (req, res, next) => {
+    try {
+      const id = parseArticleId(req.params.id);
+      await deleteNewsArticle(deps, newsMutationService, id, actorFromReq(req), req.requestId);
       res.status(204).send();
     } catch (error) {
       next(error);
@@ -256,6 +252,30 @@ async function requireEditableSlug(
   if (current.status !== 'draft' && nextSlug !== current.slug) {
     throw new HttpError(400, 'BAD_REQUEST', '已发布文章的 slug 不能修改');
   }
+}
+
+async function deleteNewsArticle(
+  deps: NewsAdminDeps,
+  newsMutationService: NewsMutationService,
+  id: number,
+  actor: string,
+  requestId: string,
+): Promise<void> {
+  const article = await newsMutationService.requireArticle(id);
+  if (article.status === 'published') {
+    throw new HttpError(409, 'NEWS_DELETE_NOT_ALLOWED', '已发布文章不能删除，请先下线');
+  }
+
+  const deleted = await deps.newsRepository.deleteById(id);
+  if (!deleted) {
+    throw new HttpError(404, 'NEWS_NOT_FOUND', `news article ${id} not found`);
+  }
+
+  await deps.auditRepository.log('delete_news_article', actor, requestId, {
+    article_id: id,
+    slug: article.slug,
+    status: article.status,
+  });
 }
 
 function toPositiveInt(value: unknown, fallback: number): number {

@@ -107,6 +107,8 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
   const [status, setStatus] = useState<'all' | NewsArticle['status']>('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -145,9 +147,36 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
     return () => {
       active = false;
     };
-  }, [keyword, page, status]);
+  }, [keyword, page, status, reloadKey]);
 
   const totalPages = Math.max(1, Math.ceil(total / 12));
+
+  async function deleteArticleFromList(item: NewsListResponse['items'][number]): Promise<void> {
+    if (item.status === 'published') {
+      return;
+    }
+    const confirmed = window.confirm(`确认删除「${item.title || '未命名文章'}」？删除后不能恢复。`);
+    if (!confirmed) {
+      return;
+    }
+
+    setDeletingId(item.id);
+    setError('');
+    try {
+      await apiFetch<void>(`/api/v1/admin/news/${item.id}/delete`, {
+        method: 'POST',
+      });
+      if (items.length === 1 && page > 1) {
+        setPage((value) => Math.max(1, value - 1));
+      } else {
+        setReloadKey((value) => value + 1);
+      }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '文章删除失败');
+    } finally {
+      setDeletingId(null);
+    }
+  }
 
   return (
     <section className="space-y-6">
@@ -238,12 +267,24 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
                   <td className="px-4 py-4 text-neutral-600">{formatDateTime(item.published_at)}</td>
                   <td className="px-4 py-4 text-neutral-600">{formatDateTime(item.updated_at)}</td>
                   <td className="px-4 py-4 text-right">
-                    <button
-                      className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-medium hover:bg-neutral-50"
-                      onClick={() => onEdit(item.id)}
-                    >
-                      编辑
-                    </button>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-medium hover:bg-neutral-50"
+                        onClick={() => onEdit(item.id)}
+                      >
+                        编辑
+                      </button>
+                      {item.status !== 'published' ? (
+                        <button
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                          onClick={() => void deleteArticleFromList(item)}
+                          disabled={deletingId === item.id}
+                        >
+                          <Trash2 size={14} />
+                          删除
+                        </button>
+                      ) : null}
+                    </div>
                   </td>
                 </tr>
               ))
@@ -341,7 +382,6 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
 
   const readingMinutes = useMemo(() => estimateReadingMinutes(form.content_markdown), [form.content_markdown]);
   const isSlugLocked = form.status !== 'draft';
-  const canDeleteArticle = Boolean(articleId) && form.status !== 'published';
 
   function validateManualSlug(): boolean {
     if (form.slug.trim()) {
@@ -459,30 +499,6 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
       setNotice('文章已下线');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '文章下线失败');
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function deleteArticle(): Promise<void> {
-    if (!articleId || form.status === 'published') {
-      return;
-    }
-    const confirmed = window.confirm('确认删除这篇文章？删除后不能恢复。');
-    if (!confirmed) {
-      return;
-    }
-
-    setSaving(true);
-    setError('');
-    setNotice('');
-    try {
-      await apiFetch<void>(`/api/v1/admin/news/${articleId}`, {
-        method: 'DELETE',
-      });
-      onBack();
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : '文章删除失败');
     } finally {
       setSaving(false);
     }
@@ -675,16 +691,6 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
             >
               <Archive size={16} />
               下线文章
-            </button>
-          ) : null}
-          {canDeleteArticle ? (
-            <button
-              className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
-              onClick={() => void deleteArticle()}
-              disabled={saving}
-            >
-              <Trash2 size={16} />
-              删除文章
             </button>
           ) : null}
         </div>
