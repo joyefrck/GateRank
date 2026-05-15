@@ -5,6 +5,13 @@ import { PUBLIC_SITE_BRAND_NAME } from '../../shared/publicBrand';
 
 export type NavigationKind = 'home' | 'full_ranking' | 'risk_monitor' | 'methodology' | 'docs';
 
+const primaryCtaTextStyle: React.CSSProperties = {
+  color: '#fff',
+  WebkitTextFillColor: '#fff',
+  forcedColorAdjust: 'none',
+  colorScheme: 'light',
+};
+
 export interface SeoConfig {
   title: string;
   description: string;
@@ -226,6 +233,7 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
             href="/apply"
             target="_blank"
             rel="noreferrer"
+            style={primaryCtaTextStyle}
           >
             <span className="hidden sm:inline">申请入驻测试</span>
             <span className="sm:hidden">申请</span>

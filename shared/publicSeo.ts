@@ -15,8 +15,8 @@ export const PUBLIC_SEO_PATHS = {
 } as const;
 
 export const PUBLIC_FRONTEND_ASSETS = {
-  script: '/assets/index.js?v=20260515-cta-black',
-  stylesheet: '/assets/index.css?v=20260515-cta-black',
+  script: '/assets/index.js?v=20260515-cta-white',
+  stylesheet: '/assets/index.css?v=20260515-cta-white',
 } as const;
 
 export function buildHomeSeo(input?: {

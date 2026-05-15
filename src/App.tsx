@@ -73,6 +73,13 @@ const LazyPublishTokenDocsPage = lazy(async () => {
   return { default: module.PublishTokenDocsPage };
 });
 
+const primaryCtaTextStyle: React.CSSProperties = {
+  color: '#fff',
+  WebkitTextFillColor: '#fff',
+  forcedColorAdjust: 'none',
+  colorScheme: 'light',
+};
+
 function XLogo({ className = '' }: { className?: string }) {
   return (
     <svg
@@ -749,6 +756,7 @@ const ConclusionCard = ({
             rel="noreferrer"
             onClick={onWebsiteClick}
             className={websiteButtonClass}
+            style={primaryCtaTextStyle}
           >
             {websiteButtonText}
             <ExternalLink className="w-3.5 h-3.5" />
@@ -2150,6 +2158,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                               targetUrl: item.website,
                             })}
                             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_32px_rgba(17,17,17,0.18)] transition hover:bg-neutral-800"
+                            style={primaryCtaTextStyle}
                           >
                             打开官网
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -2461,6 +2470,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                               targetUrl: item.website,
                             })}
                             className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_32px_rgba(17,17,17,0.18)] transition hover:bg-neutral-800"
+                            style={primaryCtaTextStyle}
                           >
                             打开官网
                             <ExternalLink className="w-3.5 h-3.5" />
