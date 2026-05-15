@@ -32,7 +32,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\//);
       assert.match(html, h1Pattern);
       assert.match(html, /<script type="application\/ld\+json">/);
-      assert.match(html, /<script type="module" src="\/assets\/index\.js"><\/script>/);
+      assert.match(html, /<script type="module" src="\/assets\/index\.js\?v=20260515-button-color"><\/script>/);
       assert.match(html, /\.topbar nav a\.active \{ background: #fff1f2; color: #e11d48;/);
       assert.match(html, /\.topbar nav a\.apply-link \{ background: #f43f5e; color: #fff;/);
     }
