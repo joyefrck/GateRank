@@ -75,7 +75,9 @@ export function createNewsAdminRoutes(deps: NewsAdminDeps): Router {
 
   router.post('/news', async (req, res, next) => {
     try {
-      const article = await newsMutationService.create((req.body ?? {}) as Record<string, unknown>);
+      const payload = (req.body ?? {}) as Record<string, unknown>;
+      requireManualSlug(payload);
+      const article = await newsMutationService.create(payload);
       await deps.auditRepository.log('create_news_article', actorFromReq(req), req.requestId, {
         article_id: article.id,
         slug: article.slug,
@@ -93,7 +95,9 @@ export function createNewsAdminRoutes(deps: NewsAdminDeps): Router {
   router.patch('/news/:id', async (req, res, next) => {
     try {
       const id = parseArticleId(req.params.id);
-      const article = await newsMutationService.update(id, (req.body ?? {}) as Record<string, unknown>);
+      const payload = (req.body ?? {}) as Record<string, unknown>;
+      await requireEditableSlug(newsMutationService, id, payload);
+      const article = await newsMutationService.update(id, payload);
       await deps.auditRepository.log('update_news_article', actorFromReq(req), req.requestId, {
         article_id: id,
         slug: article.slug,
@@ -111,7 +115,9 @@ export function createNewsAdminRoutes(deps: NewsAdminDeps): Router {
   router.post('/news/:id/publish', async (req, res, next) => {
     try {
       const id = parseArticleId(req.params.id);
-      const article = await newsMutationService.publish(id, (req.body ?? {}) as Record<string, unknown>);
+      const payload = (req.body ?? {}) as Record<string, unknown>;
+      await requireEditableSlug(newsMutationService, id, payload);
+      const article = await newsMutationService.publish(id, payload);
       await deps.auditRepository.log('publish_news_article', actorFromReq(req), req.requestId, {
         article_id: id,
         slug: article.slug,
@@ -135,6 +141,30 @@ export function createNewsAdminRoutes(deps: NewsAdminDeps): Router {
         slug: article.slug,
       });
       res.json(article);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete('/news/:id', async (req, res, next) => {
+    try {
+      const id = parseArticleId(req.params.id);
+      const article = await newsMutationService.requireArticle(id);
+      if (article.status === 'published') {
+        throw new HttpError(409, 'NEWS_DELETE_NOT_ALLOWED', '已发布文章不能删除，请先下线');
+      }
+
+      const deleted = await deps.newsRepository.deleteById(id);
+      if (!deleted) {
+        throw new HttpError(404, 'NEWS_NOT_FOUND', `news article ${id} not found`);
+      }
+
+      await deps.auditRepository.log('delete_news_article', actorFromReq(req), req.requestId, {
+        article_id: id,
+        slug: article.slug,
+        status: article.status,
+      });
+      res.status(204).send();
     } catch (error) {
       next(error);
     }
@@ -207,6 +237,25 @@ function optionalString(value: unknown): string | undefined {
     return undefined;
   }
   return String(value).trim();
+}
+
+function requireManualSlug(payload: Record<string, unknown>): void {
+  if (!normalizeString(payload.slug)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'slug 不能为空');
+  }
+}
+
+async function requireEditableSlug(
+  newsMutationService: NewsMutationService,
+  id: number,
+  payload: Record<string, unknown>,
+): Promise<void> {
+  requireManualSlug(payload);
+  const current = await newsMutationService.requireArticle(id);
+  const nextSlug = normalizeString(payload.slug);
+  if (current.status !== 'draft' && nextSlug !== current.slug) {
+    throw new HttpError(400, 'BAD_REQUEST', '已发布文章的 slug 不能修改');
+  }
 }
 
 function toPositiveInt(value: unknown, fallback: number): number {

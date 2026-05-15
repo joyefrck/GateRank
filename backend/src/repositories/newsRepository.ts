@@ -303,6 +303,14 @@ export class NewsRepository {
     return result.affectedRows > 0;
   }
 
+  async deleteById(id: number): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      'DELETE FROM news_articles WHERE id = ?',
+      [id],
+    );
+    return result.affectedRows > 0;
+  }
+
   async findAdjacentPublished(article: NewsArticle): Promise<{
     previous: NewsArticleListItem | null;
     next: NewsArticleListItem | null;

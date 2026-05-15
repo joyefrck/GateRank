@@ -300,6 +300,320 @@ test('news admin routes auto-generate excerpt when publish payload omits it', as
   }
 });
 
+test('news admin routes require manually entered slug', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    '/api/v1/admin',
+    createNewsAdminRoutes({
+      auditRepository: { log: async () => undefined } as never,
+      newsRepository: {
+        listByQuery: async () => ({ items: [], total: 0 }),
+        getById: async () => null,
+        create: async () => {
+          throw new Error('should not create without slug');
+        },
+        update: async () => {
+          throw new Error('should not update without slug');
+        },
+      } as never,
+      newsContentService: {
+        render: (markdown: string) => ({
+          html: markdown,
+          headings: [],
+          reading_minutes: 1,
+          plain_text: markdown,
+        }),
+      } as never,
+      newsPublicService: {
+        getPreviewArticleView: async () => null,
+      } as never,
+      pexelsCoverService: createPexelsServiceStub(),
+      newsCoverImageService: createNewsCoverImageServiceStub(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: '缺少 slug',
+        slug: '',
+        excerpt: '摘要',
+        cover_image_url: '',
+        content_markdown: 'hello',
+      }),
+    });
+    assert.equal(createResponse.status, 400);
+    const createData = (await createResponse.json()) as { code: string; message: string };
+    assert.equal(createData.code, 'BAD_REQUEST');
+    assert.equal(createData.message, 'slug 不能为空');
+
+    const publishResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/1/publish`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: '缺少 slug',
+        content_markdown: 'hello',
+      }),
+    });
+    assert.equal(publishResponse.status, 400);
+    const publishData = (await publishResponse.json()) as { code: string; message: string };
+    assert.equal(publishData.code, 'BAD_REQUEST');
+    assert.equal(publishData.message, 'slug 不能为空');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('news admin routes reject slug changes after article is published', async () => {
+  const articles: StoredArticle[] = [{
+    id: 1,
+    title: '已发布文章',
+    slug: 'published-article',
+    excerpt: '摘要',
+    cover_image_url: '',
+    content_markdown: '旧正文',
+    content_html: '<p class="news-paragraph">旧正文</p>',
+    status: 'published',
+    published_at: '2026-03-28 10:00:00',
+    created_at: '2026-03-28 10:00:00',
+    updated_at: '2026-03-28 10:00:00',
+  }];
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.requestId = 'test-request-id';
+    next();
+  });
+  app.use(
+    '/api/v1/admin',
+    createNewsAdminRoutes({
+      auditRepository: {
+        log: async () => undefined,
+      } as never,
+      newsRepository: {
+        listByQuery: async () => ({ items: [], total: 0 }),
+        getById: async (id: number) => articles.find((article) => article.id === id) || null,
+        create: async () => 1,
+        update: async (id: number, input: Partial<StoredArticle>) => {
+          const index = articles.findIndex((article) => article.id === id);
+          if (index === -1) {
+            return false;
+          }
+          articles[index] = {
+            ...articles[index],
+            ...input,
+            updated_at: '2026-03-28 12:00:00',
+          };
+          return true;
+        },
+      } as never,
+      newsContentService: {
+        render: (markdown: string) => ({
+          html: `<p class="news-paragraph">${markdown}</p>`,
+          headings: [],
+          reading_minutes: 2,
+          plain_text: markdown,
+        }),
+      } as never,
+      newsPublicService: {
+        getPreviewArticleView: async () => null,
+      } as never,
+      pexelsCoverService: createPexelsServiceStub(),
+      newsCoverImageService: createNewsCoverImageServiceStub(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const updateResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/1`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: '已发布文章',
+        slug: 'published-article',
+        excerpt: '摘要',
+        cover_image_url: '',
+        content_markdown: '新正文',
+      }),
+    });
+    assert.equal(updateResponse.status, 200);
+    assert.equal(articles[0]?.content_markdown, '新正文');
+    assert.equal(articles[0]?.slug, 'published-article');
+
+    const renameResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/1`, {
+      method: 'PATCH',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: '已发布文章',
+        slug: 'renamed-article',
+        excerpt: '摘要',
+        cover_image_url: '',
+        content_markdown: '再改正文',
+      }),
+    });
+    assert.equal(renameResponse.status, 400);
+    const renameData = (await renameResponse.json()) as { code: string; message: string };
+    assert.equal(renameData.code, 'BAD_REQUEST');
+    assert.equal(renameData.message, '已发布文章的 slug 不能修改');
+    assert.equal(articles[0]?.content_markdown, '新正文');
+    assert.equal(articles[0]?.slug, 'published-article');
+
+    const publishResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/1/publish`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        title: '已发布文章',
+        slug: 'renamed-again',
+        excerpt: '摘要',
+        cover_image_url: '',
+        content_markdown: '发布正文',
+      }),
+    });
+    assert.equal(publishResponse.status, 400);
+    const publishData = (await publishResponse.json()) as { code: string; message: string };
+    assert.equal(publishData.code, 'BAD_REQUEST');
+    assert.equal(publishData.message, '已发布文章的 slug 不能修改');
+    assert.equal(articles[0]?.slug, 'published-article');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('news admin routes delete draft and archived articles only', async () => {
+  const articles: StoredArticle[] = [
+    {
+      id: 1,
+      title: '草稿文章',
+      slug: 'draft-article',
+      excerpt: '摘要',
+      cover_image_url: '',
+      content_markdown: '草稿正文',
+      content_html: '<p class="news-paragraph">草稿正文</p>',
+      status: 'draft',
+      published_at: null,
+      created_at: '2026-03-28 10:00:00',
+      updated_at: '2026-03-28 10:00:00',
+    },
+    {
+      id: 2,
+      title: '已下线文章',
+      slug: 'archived-article',
+      excerpt: '摘要',
+      cover_image_url: '',
+      content_markdown: '下线正文',
+      content_html: '<p class="news-paragraph">下线正文</p>',
+      status: 'archived',
+      published_at: '2026-03-28 10:00:00',
+      created_at: '2026-03-28 10:00:00',
+      updated_at: '2026-03-28 10:00:00',
+    },
+    {
+      id: 3,
+      title: '已发布文章',
+      slug: 'published-article',
+      excerpt: '摘要',
+      cover_image_url: '',
+      content_markdown: '发布正文',
+      content_html: '<p class="news-paragraph">发布正文</p>',
+      status: 'published',
+      published_at: '2026-03-28 10:00:00',
+      created_at: '2026-03-28 10:00:00',
+      updated_at: '2026-03-28 10:00:00',
+    },
+  ];
+  const auditEntries: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.requestId = 'test-request-id';
+    next();
+  });
+  app.use(
+    '/api/v1/admin',
+    createNewsAdminRoutes({
+      auditRepository: {
+        log: async (_action: string, _actor: string, _requestId: string, payload: Record<string, unknown>) => {
+          auditEntries.push(payload);
+        },
+      } as never,
+      newsRepository: {
+        listByQuery: async () => ({ items: [], total: 0 }),
+        getById: async (id: number) => articles.find((article) => article.id === id) || null,
+        create: async () => 1,
+        update: async () => true,
+        deleteById: async (id: number) => {
+          const index = articles.findIndex((article) => article.id === id);
+          if (index === -1) {
+            return false;
+          }
+          articles.splice(index, 1);
+          return true;
+        },
+      } as never,
+      newsContentService: {
+        render: (markdown: string) => ({
+          html: `<p class="news-paragraph">${markdown}</p>`,
+          headings: [],
+          reading_minutes: 2,
+          plain_text: markdown,
+        }),
+      } as never,
+      newsPublicService: {
+        getPreviewArticleView: async () => null,
+      } as never,
+      pexelsCoverService: createPexelsServiceStub(),
+      newsCoverImageService: createNewsCoverImageServiceStub(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const draftResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/1`, {
+      method: 'DELETE',
+    });
+    assert.equal(draftResponse.status, 204);
+    assert.equal(articles.some((article) => article.id === 1), false);
+
+    const archivedResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/2`, {
+      method: 'DELETE',
+    });
+    assert.equal(archivedResponse.status, 204);
+    assert.equal(articles.some((article) => article.id === 2), false);
+
+    const publishedResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/3`, {
+      method: 'DELETE',
+    });
+    assert.equal(publishedResponse.status, 409);
+    const publishedData = (await publishedResponse.json()) as { code: string; message: string };
+    assert.equal(publishedData.code, 'NEWS_DELETE_NOT_ALLOWED');
+    assert.equal(publishedData.message, '已发布文章不能删除，请先下线');
+    assert.equal(articles.some((article) => article.id === 3), true);
+    assert.deepEqual(auditEntries.map((entry) => entry.article_id), [1, 2]);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('news admin routes return 409 on slug conflict', async () => {
   const app = express();
   app.use(express.json());

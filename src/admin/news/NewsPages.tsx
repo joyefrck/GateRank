@@ -10,9 +10,10 @@ import {
   Save,
   Search,
   Send,
+  Trash2,
   X,
 } from 'lucide-react';
-import { estimateReadingMinutes, slugifyNewsText } from '../../news/renderMarkdown';
+import { estimateReadingMinutes } from '../../news/renderMarkdown';
 
 const TOKEN_KEY = 'gaterank_admin_token';
 const COVER_SEARCH_PER_PAGE = 12;
@@ -283,7 +284,6 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
-  const [slugTouched, setSlugTouched] = useState(Boolean(articleId));
   const [coverSearchQuery, setCoverSearchQuery] = useState('');
   const [coverSearchResults, setCoverSearchResults] = useState<PexelsCoverCandidate[]>([]);
   const [coverSearchPage, setCoverSearchPage] = useState(1);
@@ -298,7 +298,6 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   useEffect(() => {
     if (!articleId) {
       setForm(emptyForm);
-      setSlugTouched(false);
       setLoading(false);
       setError('');
       return;
@@ -313,17 +312,15 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
         if (!active) {
           return;
         }
-        const shouldAutoGenerateSlug = article.status === 'draft';
         setForm({
           title: article.title,
-          slug: shouldAutoGenerateSlug ? slugifyNewsText(article.title) : article.slug,
+          slug: article.slug,
           excerpt: article.excerpt,
           cover_image_url: article.cover_image_url,
           content_markdown: article.content_markdown,
           status: article.status,
           published_at: article.published_at,
         });
-        setSlugTouched(!shouldAutoGenerateSlug);
       })
       .catch((err: unknown) => {
         if (!active) {
@@ -342,22 +339,24 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
     };
   }, [articleId]);
 
-  useEffect(() => {
-    if (slugTouched) {
-      return;
-    }
-    setForm((current) => {
-      const nextSlug = slugifyNewsText(current.title);
-      if (current.slug === nextSlug) {
-        return current;
-      }
-      return { ...current, slug: nextSlug };
-    });
-  }, [form.title, slugTouched]);
-
   const readingMinutes = useMemo(() => estimateReadingMinutes(form.content_markdown), [form.content_markdown]);
+  const isSlugLocked = form.status !== 'draft';
+  const canDeleteArticle = Boolean(articleId) && form.status !== 'published';
+
+  function validateManualSlug(): boolean {
+    if (form.slug.trim()) {
+      return true;
+    }
+    setError('Slug 必填，请手动输入。');
+    setNotice('');
+    return false;
+  }
 
   async function saveDraft(): Promise<NewsArticle | null> {
+    if (!validateManualSlug()) {
+      return null;
+    }
+
     setSaving(true);
     setError('');
     setNotice('');
@@ -398,6 +397,10 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   }
 
   async function publishArticle(): Promise<void> {
+    if (!validateManualSlug()) {
+      return;
+    }
+
     let targetId = articleId;
     if (!targetId) {
       const draft = await saveDraft();
@@ -456,6 +459,30 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
       setNotice('文章已下线');
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '文章下线失败');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function deleteArticle(): Promise<void> {
+    if (!articleId || form.status === 'published') {
+      return;
+    }
+    const confirmed = window.confirm('确认删除这篇文章？删除后不能恢复。');
+    if (!confirmed) {
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      await apiFetch<void>(`/api/v1/admin/news/${articleId}`, {
+        method: 'DELETE',
+      });
+      onBack();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '文章删除失败');
     } finally {
       setSaving(false);
     }
@@ -640,7 +667,7 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
             <Send size={16} />
             发布文章
           </button>
-          {articleId ? (
+          {articleId && form.status === 'published' ? (
             <button
               className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700 disabled:opacity-50"
               onClick={() => void archiveArticle()}
@@ -648,6 +675,16 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
             >
               <Archive size={16} />
               下线文章
+            </button>
+          ) : null}
+          {canDeleteArticle ? (
+            <button
+              className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-white px-4 py-2.5 text-sm font-medium text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              onClick={() => void deleteArticle()}
+              disabled={saving}
+            >
+              <Trash2 size={16} />
+              删除文章
             </button>
           ) : null}
         </div>
@@ -668,33 +705,24 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
               />
             </Field>
 
-            <Field
-              label="Slug"
-              action={(
-                <button
-                  type="button"
-                  className="text-xs font-medium text-neutral-500 hover:text-neutral-900"
-                  onClick={() => setSlugTouched(false)}
-                >
-                  按标题生成
-                </button>
-              )}
-            >
+            <Field label="Slug">
               <input
-                className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+                className={`w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400 ${
+                  isSlugLocked ? 'cursor-not-allowed bg-neutral-50 text-neutral-500' : ''
+                }`}
                 value={form.slug}
-                onChange={(event) => {
-                  const nextValue = event.target.value;
-                  setSlugTouched(nextValue.trim().length > 0);
-                  setForm((current) => ({ ...current, slug: nextValue }));
-                }}
+                onChange={(event) => setForm((current) => ({ ...current, slug: event.target.value }))}
                 placeholder="ji-chang-bang-de-chuang-jian-si-lu"
+                required
+                readOnly={isSlugLocked}
                 spellCheck={false}
                 autoCapitalize="none"
                 autoCorrect="off"
               />
               <div className="mt-2 text-xs leading-5 text-neutral-500">
-                用于文章链接。默认跟随标题自动生成；手动修改后会保持你的输入。
+                {isSlugLocked
+                  ? '文章发布后 slug 会锁定，避免已公开链接失效。'
+                  : '用于文章链接，必填。请手动输入稳定的英文、数字或连字符 slug。'}
               </div>
             </Field>
 
