@@ -222,7 +222,7 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
             登录
           </a>
           <a
-            className="min-h-11 px-4 md:px-5 py-2.5 rounded-lg bg-rose-500 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.16em] transition-all shadow-[0_16px_34px_rgba(244,63,94,0.22)] hover:bg-rose-600 flex items-center gap-2 md:gap-3"
+            className="min-h-11 px-4 md:px-5 py-2.5 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.16em] transition-all shadow-[0_16px_34px_rgba(17,17,17,0.20)] hover:bg-neutral-800 flex items-center gap-2 md:gap-3"
             href="/apply"
             target="_blank"
             rel="noreferrer"

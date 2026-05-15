@@ -658,8 +658,8 @@ const ConclusionCard = ({
     ? 'w-full min-h-10 px-3 py-2 rounded-lg bg-neutral-900 text-white text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 hover:bg-neutral-800 transition-colors whitespace-nowrap'
     : 'w-full min-h-11 px-4 py-3 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 hover:bg-neutral-800 transition-colors mt-auto relative z-10';
   const websiteButtonClass = isHomeCompact
-    ? 'w-full min-h-10 px-3 py-2 rounded-lg border border-neutral-200 bg-white text-neutral-700 text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 hover:border-neutral-900 hover:text-neutral-900 transition-colors whitespace-nowrap'
-    : 'w-full min-h-11 mt-3 px-4 py-3 rounded-lg border border-neutral-200 bg-white text-neutral-700 text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 hover:border-neutral-900 hover:text-neutral-900 transition-colors relative z-10';
+    ? 'w-full min-h-10 px-3 py-2 rounded-lg bg-neutral-900 text-white text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 hover:bg-neutral-800 transition-colors whitespace-nowrap'
+    : 'w-full min-h-11 mt-3 px-4 py-3 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 shadow-[0_14px_32px_rgba(17,17,17,0.18)] hover:bg-neutral-800 transition-colors relative z-10';
 
   return (
     <motion.div
@@ -2149,7 +2149,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                               targetKind: 'website',
                               targetUrl: item.website,
                             })}
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_32px_rgba(16,185,129,0.20)] transition hover:bg-emerald-600"
+                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_32px_rgba(17,17,17,0.18)] transition hover:bg-neutral-800"
                           >
                             打开官网
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -2460,7 +2460,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                               targetKind: 'website',
                               targetUrl: item.website,
                             })}
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_32px_rgba(16,185,129,0.20)] transition hover:bg-emerald-600"
+                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_32px_rgba(17,17,17,0.18)] transition hover:bg-neutral-800"
                           >
                             打开官网
                             <ExternalLink className="w-3.5 h-3.5" />
