@@ -52,6 +52,7 @@ import {
   buildRiskMonitorSeo,
   formatAirportStatusLabel,
 } from '../shared/publicSeo';
+import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import { trackPageView } from './site/analytics';
 import {
   createTrackedOutboundClickHandler,
@@ -62,11 +63,6 @@ import {
   useMarketingImpression,
 } from './site/marketing';
 import { PUBLIC_SITE_BRAND_NAME } from '../shared/publicBrand';
-
-const LazyMethodologyPage = lazy(async () => {
-  const module = await import('./pages/methodology/MethodologyPage');
-  return { default: module.MethodologyPage };
-});
 
 const LazyPublishTokenDocsPage = lazy(async () => {
   const module = await import('./pages/publishTokenDocs/PublishTokenDocsPage');
@@ -4836,11 +4832,7 @@ export default function App() {
   }
 
   if (route.kind === 'methodology') {
-    return (
-      <Suspense fallback={<RouteLoadingFallback />}>
-        <LazyMethodologyPage />
-      </Suspense>
-    );
+    return <MethodologyPage />;
   }
 
   if (route.kind === 'publish_token_docs') {

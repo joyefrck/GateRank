@@ -1,6 +1,8 @@
 import {StrictMode, type ComponentType} from 'react';
 import {createRoot} from 'react-dom/client';
+import App from './App.tsx';
 import './index.css';
+import { initializeAnalytics } from './site/analytics.ts';
 
 const isAdminPath = window.location.pathname.startsWith('/admin');
 const root = createRoot(document.getElementById('root')!);
@@ -20,10 +22,6 @@ async function bootstrap(): Promise<void> {
     return;
   }
 
-  const [{ initializeAnalytics }, { default: App }] = await Promise.all([
-    import('./site/analytics.ts'),
-    import('./App.tsx'),
-  ]);
   initializeAnalytics();
   renderApp(App);
 }
