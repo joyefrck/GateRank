@@ -42,6 +42,9 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     try {
       const requestedDate = parseDateQuery(req.query.date);
       const page = toPositiveInt(req.query.page, 1);
+      if (redirectDefaultDateQuery(req, res, PUBLIC_RANKING_PATH, requestedDate, page)) {
+        return;
+      }
       const view = await deps.publicViewService.getFullRankingView(
         requestedDate || getDateInTimezone(),
         page,
@@ -59,6 +62,9 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     try {
       const requestedDate = parseDateQuery(req.query.date);
       const page = toPositiveInt(req.query.page, 1);
+      if (redirectDefaultDateQuery(req, res, PUBLIC_RISK_MONITOR_PATH, requestedDate, page)) {
+        return;
+      }
       const view = await deps.publicViewService.getRiskMonitorView(
         requestedDate || getDateInTimezone(),
         page,
@@ -131,6 +137,29 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   });
 
   return router;
+}
+
+const PUBLIC_RANKING_PATH = '/rankings/all';
+const PUBLIC_RISK_MONITOR_PATH = '/risk-monitor';
+
+function redirectDefaultDateQuery(
+  req: { query: Record<string, unknown> },
+  res: { redirect(status: number, path: string): void },
+  pathname: string,
+  requestedDate: string | undefined,
+  page: number,
+): boolean {
+  if (!requestedDate || req.query.date !== requestedDate || requestedDate !== getDateInTimezone()) {
+    return false;
+  }
+
+  const search = new URLSearchParams();
+  if (page > 1) {
+    search.set('page', String(page));
+  }
+  const query = search.toString();
+  res.redirect(301, `${pathname}${query ? `?${query}` : ''}`);
+  return true;
 }
 
 function parseDateQuery(input: unknown): string | undefined {

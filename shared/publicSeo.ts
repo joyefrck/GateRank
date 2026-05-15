@@ -15,7 +15,7 @@ export const PUBLIC_SEO_PATHS = {
 } as const;
 
 export const PUBLIC_FRONTEND_ASSETS = {
-  script: '/assets/index.js?v=20260515-methodology-fast',
+  script: '/assets/index.js?v=20260515-ranking-url-clean',
   stylesheet: '/assets/index.css?v=20260515-methodology-fast',
 } as const;
 

@@ -975,19 +975,25 @@ function parseRoute(): RouteState {
 
   if (fullRankingMatch) {
     const page = Number(params.get('page') || '1');
+    const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+    const date = normalizePublicListDate(params.get('date') || undefined);
+    canonicalizeCurrentPublicListUrl(buildFullRankingHref(date, safePage));
     return {
       kind: 'full_ranking',
-      date: params.get('date') || undefined,
-      page: Number.isFinite(page) && page > 0 ? page : 1,
+      date,
+      page: safePage,
     };
   }
 
   if (riskMonitorMatch) {
     const page = Number(params.get('page') || '1');
+    const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+    const date = normalizePublicListDate(params.get('date') || undefined);
+    canonicalizeCurrentPublicListUrl(buildRiskMonitorHref(date, safePage));
     return {
       kind: 'risk_monitor',
-      date: params.get('date') || undefined,
-      page: Number.isFinite(page) && page > 0 ? page : 1,
+      date,
+      page: safePage,
     };
   }
 
@@ -995,6 +1001,17 @@ function parseRoute(): RouteState {
     kind: 'home',
     date: params.get('date') || undefined,
   };
+}
+
+function normalizePublicListDate(date: string | undefined): string | undefined {
+  return date === todayInShanghai() ? undefined : date;
+}
+
+function canonicalizeCurrentPublicListUrl(canonicalPath: string): void {
+  const currentPath = `${window.location.pathname}${window.location.search}`;
+  if (currentPath !== canonicalPath) {
+    window.history.replaceState({}, '', canonicalPath);
+  }
 }
 
 function formatNumber(value: number): string {
@@ -2203,7 +2220,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                       type="button"
                       className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={safePage <= 1}
-                      onClick={() => navigate(buildFullRankingHref(data.date, safePage - 1))}
+                      onClick={() => navigate(buildFullRankingHref(date, safePage - 1))}
                     >
                       <ChevronLeft className="h-4 w-4" />
                       上一页
@@ -2217,7 +2234,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                             ? 'bg-neutral-900 text-white shadow-lg'
                             : 'border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-900 hover:text-neutral-900'
                         }`}
-                        onClick={() => navigate(buildFullRankingHref(data.date, pageNumber))}
+                        onClick={() => navigate(buildFullRankingHref(date, pageNumber))}
                       >
                         {pageNumber}
                       </button>
@@ -2226,7 +2243,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                       type="button"
                       className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={safePage >= totalPages}
-                      onClick={() => navigate(buildFullRankingHref(data.date, safePage + 1))}
+                      onClick={() => navigate(buildFullRankingHref(date, safePage + 1))}
                     >
                       下一页
                       <ChevronRight className="h-4 w-4" />
@@ -2515,7 +2532,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                       type="button"
                       className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={safePage <= 1}
-                      onClick={() => navigate(buildRiskMonitorHref(data.date, safePage - 1))}
+                      onClick={() => navigate(buildRiskMonitorHref(date, safePage - 1))}
                     >
                       <ChevronLeft className="h-4 w-4" />
                       上一页
@@ -2529,7 +2546,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                             ? 'bg-neutral-900 text-white shadow-lg'
                             : 'border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-900 hover:text-neutral-900'
                         }`}
-                        onClick={() => navigate(buildRiskMonitorHref(data.date, pageNumber))}
+                        onClick={() => navigate(buildRiskMonitorHref(date, pageNumber))}
                       >
                         {pageNumber}
                       </button>
@@ -2538,7 +2555,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                       type="button"
                       className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={safePage >= totalPages}
-                      onClick={() => navigate(buildRiskMonitorHref(data.date, safePage + 1))}
+                      onClick={() => navigate(buildRiskMonitorHref(date, safePage + 1))}
                     >
                       下一页
                       <ChevronRight className="h-4 w-4" />

@@ -4,6 +4,7 @@ import { AddressInfo } from 'node:net';
 import express from 'express';
 import { createPublicPageRoutes } from '../src/routes/publicPageRoutes';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../src/types/domain';
+import { getDateInTimezone } from '../src/utils/time';
 
 test('public SEO routes return crawlable HTML with unique head and H1 content', async () => {
   const app = express();
@@ -32,7 +33,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\//);
       assert.match(html, h1Pattern);
       assert.match(html, /<script type="application\/ld\+json">/);
-      assert.match(html, /<script type="module" src="\/assets\/index\.js\?v=20260515-methodology-fast"><\/script>/);
+      assert.match(html, /<script type="module" src="\/assets\/index\.js\?v=20260515-ranking-url-clean"><\/script>/);
       assert.match(html, /\.topbar nav a\.active \{ background: #fff1f2; color: #e11d48;/);
       assert.match(html, /\.topbar nav a\.apply-link \{ background: #111111; color: #fff;/);
       assert.match(html, /\.topbar nav a\.apply-link\.active \{ background: #111111; color: #fff;/);
@@ -56,6 +57,24 @@ test('GET /rankings/all includes ranking items and report links in raw HTML', as
     assert.match(html, /#1/);
     assert.match(html, /98\.6/);
     assert.match(html, /href="\/airports\/nebula">测评报告<\/a>/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /rankings/all redirects default date query to clean paginated URL', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const today = getDateInTimezone();
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/all?date=${today}&page=2`, {
+      redirect: 'manual',
+    });
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), '/rankings/all?page=2');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
