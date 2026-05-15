@@ -27,6 +27,9 @@ function emitSeoAssets(siteUrl: string): Plugin {
     <loc>${normalizedSiteUrl}/apply</loc>
   </url>
   <url>
+    <loc>${normalizedSiteUrl}/risk-monitor</loc>
+  </url>
+  <url>
     <loc>${normalizedSiteUrl}/publish-token-docs</loc>
   </url>
 </urlset>
@@ -65,6 +68,20 @@ export default defineConfig(({mode}) => {
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
+      },
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          entryFileNames: 'assets/[name].js',
+          assetFileNames: (assetInfo) => {
+            const name = assetInfo.names?.[0] || assetInfo.name || '';
+            if (name.endsWith('.css')) {
+              return 'assets/[name][extname]';
+            }
+            return 'assets/[name]-[hash][extname]';
+          },
+        },
       },
     },
     server: {

@@ -315,6 +315,14 @@ test('GET /sitemap.xml includes published news urls', async () => {
           },
         ],
       } as never,
+      publicViewService: {
+        getFullRankingView: async () => ({
+          items: [
+            { report_url: '/reports/7?date=2026-03-28' },
+            { report_url: null },
+          ],
+        }),
+      },
     }),
   );
   app.use(errorHandler);
@@ -330,6 +338,8 @@ test('GET /sitemap.xml includes published news urls', async () => {
     assert.equal(response.status, 200);
     const xml = await response.text();
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/publish-token-docs<\/loc>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/risk-monitor<\/loc>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/reports\/7\?date=2026-03-28<\/loc>/);
     assert.match(xml, /<lastmod>2026-03-29T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news<\/loc>/);

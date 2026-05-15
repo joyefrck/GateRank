@@ -5,10 +5,16 @@ import { renderNewsArticlePage, renderNewsIndexPage } from '../services/newsPage
 import { renderPublishTokenDocsPage, renderPublishTokenDocsRawMarkdown } from '../services/publishTokenDocsPageRenderer';
 import type { NewsPublicService } from '../services/newsPublicService';
 import { buildServerPageViewRecord } from '../utils/marketing';
+import { getDateInTimezone } from '../utils/time';
 import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from '../../../shared/publishTokenDocs';
 
 interface NewsPublicDeps {
   newsPublicService: NewsPublicService;
+  publicViewService?: {
+    getFullRankingView(date: string, page: number, pageSize: number): Promise<{
+      items: Array<{ report_url?: string | null }>;
+    }>;
+  };
   marketingRepository?: {
     insertMany(records: ReturnType<typeof buildServerPageViewRecord>[]): Promise<void>;
   };
@@ -96,13 +102,16 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
   router.get('/sitemap.xml', async (req, res) => {
     const siteUrl = getSiteUrl(req);
     const items = await deps.newsPublicService.getSitemapItems();
+    const reportUrls = await getReportSitemapUrls(deps);
     const urls = [
       '/',
       '/rankings/all',
       '/methodology',
       '/apply',
+      '/risk-monitor',
       '/publish-token-docs',
       '/news',
+      ...reportUrls,
       ...items.map((item) => `/news/${item.slug}`),
     ];
     const xml = buildSitemapXml(siteUrl, urls, items, {
@@ -112,6 +121,21 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
   });
 
   return router;
+}
+
+async function getReportSitemapUrls(deps: NewsPublicDeps): Promise<string[]> {
+  if (!deps.publicViewService) {
+    return [];
+  }
+  try {
+    const view = await deps.publicViewService.getFullRankingView(getDateInTimezone(), 1, 100);
+    return view.items
+      .map((item) => item.report_url || '')
+      .filter((url) => url.startsWith('/reports/'));
+  } catch (error) {
+    console.error('[sitemap] failed to load report urls', { error });
+    return [];
+  }
 }
 
 function getSiteUrl(req: Request): string {

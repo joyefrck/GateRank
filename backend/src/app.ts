@@ -30,6 +30,7 @@ import { createNewsAdminRoutes } from './routes/newsAdminRoutes';
 import { createPortalRoutes } from './routes/portalRoutes';
 import { createOutboundRoutes } from './routes/outboundRoutes';
 import { createPublishRoutes } from './routes/publishRoutes';
+import { createPublicPageRoutes } from './routes/publicPageRoutes';
 import { createNewsPublicRoutes } from './routes/newsPublicRoutes';
 import { createPublicRoutes } from './routes/publicRoutes';
 import { AccessTokenService } from './services/accessTokenService';
@@ -257,6 +258,7 @@ export async function createApp() {
   app.use(
     createNewsPublicRoutes({
       newsPublicService,
+      publicViewService,
       marketingRepository: marketingEventRepository,
     }),
   );
@@ -312,6 +314,12 @@ export async function createApp() {
       accessTokenService,
       auditRepository,
       newsMutationService,
+    }),
+  );
+
+  app.use(
+    createPublicPageRoutes({
+      publicViewService,
     }),
   );
 
