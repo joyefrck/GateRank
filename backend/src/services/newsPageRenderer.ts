@@ -367,6 +367,15 @@ const sharedStyles = `
     letter-spacing: -0.035em;
     margin: 0;
   }
+  .news-index-title {
+    max-width: 920px;
+    margin: 14px 0 0;
+    font-size: clamp(34px, 5vw, 64px);
+    line-height: 1.05;
+    letter-spacing: -0.035em;
+    font-weight: 800;
+    text-wrap: balance;
+  }
   .hero-title {
     font-family: var(--sans);
     line-height: 1.02;
@@ -790,11 +799,11 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
         <main class="main-wrap">
           <section>
             <div class="eyebrow">GateRank Newsroom</div>
+            <h1 class="news-index-title">机场榜GateRank News：机场行业观察、机场测评与风险动态</h1>
             <div style="display:grid; gap: 24px; margin-top: 18px;">
               ${featured ? renderHeroCard(featured) : `
                 <div class="empty-state">
                   <div class="eyebrow" style="justify-content:center;">News</div>
-                  <h1 class="article-title" style="font-size:48px; margin:18px 0 10px;">新闻内容还在准备中</h1>
                   <p style="margin:0; font-size:16px; line-height:1.8;">第一篇文章发布后，这里会显示精选头条与最新文章流。</p>
                 </div>
               `}
@@ -813,6 +822,7 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
   const { siteUrl, article, preview = false } = options;
   const hasCover = Boolean(article.cover_image_url && article.cover_image_url.trim());
   const absoluteCoverImage = hasCover ? toAbsoluteUrl(siteUrl, article.cover_image_url) : null;
+  const articleBodyHtml = demoteBodyH1(article.content_html);
   const articlePath = preview ? `/api/v1/admin/news/${article.id}/preview` : `/news/${article.slug}`;
   const canonicalUrl = `${siteUrl}${articlePath}`;
   const title = `${article.title} | GateRank News`;
@@ -904,7 +914,7 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
                 </div>
               ` : ''}
               <div class="article-content">
-                <div class="news-body">${article.content_html}</div>
+                <div class="news-body">${articleBodyHtml}</div>
                 ${(article.previous || article.next) ? `
                   <section style="margin-top: 42px;">
                     <p class="section-label">继续阅读</p>
@@ -984,6 +994,12 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
   });
 }
 
+function demoteBodyH1(html: string): string {
+  return html
+    .replace(/<h1(\s[^>]*)?>/gi, '<h2$1>')
+    .replace(/<\/h1>/gi, '</h2>');
+}
+
 function renderHeroCard(featured: PublicNewsArticleView | PublicNewsListView['featured']) {
   if (!featured) {
     return '';
@@ -995,7 +1011,7 @@ function renderHeroCard(featured: PublicNewsArticleView | PublicNewsListView['fe
       <div class="hero-copy">
         <div>
           <div class="eyebrow">Featured Story</div>
-          <h1 class="hero-title">${escapeHtml(featured.title)}</h1>
+          <h2 class="hero-title">${escapeHtml(featured.title)}</h2>
           <p class="hero-summary">${escapeHtml(featured.excerpt)}</p>
         </div>
         <div style="display:grid; gap: 18px;">

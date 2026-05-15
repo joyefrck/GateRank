@@ -46,6 +46,7 @@ import {
 } from './site/publicSite';
 import {
   APPLY_SEO,
+  buildAirportReportPath,
   buildFullRankingSeo,
   buildHomeSeo,
   buildReportSeo,
@@ -192,6 +193,7 @@ interface ReportViewResponse {
   fallback_notice: string | null;
   airport: {
     id: number;
+    slug: string;
     name: string;
     website: string;
     status: AirportStatus;
@@ -265,6 +267,7 @@ interface CardProps {
 interface RouteState {
   kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'risk_monitor' | 'methodology' | 'publish_token_docs';
   airportId?: number;
+  airportSlug?: string;
   date?: string;
   page?: number;
 }
@@ -923,6 +926,7 @@ async function safeJson(response: Response): Promise<unknown> {
 function parseRoute(): RouteState {
   const path = window.location.pathname;
   const reportMatch = path.match(/^\/reports\/(\d+)$/);
+  const airportMatch = path.match(/^\/airports\/([a-z0-9-]+)$/);
   const fullRankingMatch = path.match(/^\/rankings\/all\/?$/);
   const riskMonitorMatch = path.match(/^\/risk-monitor\/?$/);
   const params = new URLSearchParams(window.location.search);
@@ -957,6 +961,14 @@ function parseRoute(): RouteState {
     return {
       kind: 'report',
       airportId: Number(reportMatch[1]),
+      date: params.get('date') || undefined,
+    };
+  }
+
+  if (airportMatch) {
+    return {
+      kind: 'report',
+      airportSlug: airportMatch[1],
       date: params.get('date') || undefined,
     };
   }
@@ -1817,7 +1829,7 @@ function HomePage({ date }: { date?: string }) {
     <PageFrame active="home">
       <header className="max-w-7xl mx-auto px-4 pt-8 md:pt-10 pb-5 md:pb-6 text-center">
         <h1 className="text-[34px] md:text-5xl lg:text-[56px] font-black tracking-tight mb-3 leading-[0.95] text-neutral-900">
-          机场 VPN 推荐与<span className="text-neutral-400">可靠性榜单</span>
+          机场榜：机场 VPN 推荐与<span className="text-neutral-400">可靠性榜单</span>
         </h1>
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-center gap-3 md:gap-6 text-neutral-500">
           <p className="text-[13px] md:text-sm font-medium tracking-tight leading-7">
@@ -2542,7 +2554,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
   );
 }
 
-function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
+function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airportSlug?: string; date?: string }) {
   const [data, setData] = useState<ReportViewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -2552,8 +2564,18 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
     setLoading(true);
     setError('');
 
+    const reportIdentifier = airportSlug || airportId;
+    if (!reportIdentifier) {
+      setData(null);
+      setError('报告加载失败');
+      setLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+
     const query = date ? `?date=${encodeURIComponent(date)}` : '';
-    void apiFetch<ReportViewResponse>(`/api/v1/airports/${airportId}/report-view${query}`)
+    void apiFetch<ReportViewResponse>(`/api/v1/airports/${reportIdentifier}/report-view${query}`)
       .then((next) => {
         if (active) {
           setData(next);
@@ -2574,7 +2596,7 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
     return () => {
       active = false;
     };
-  }, [airportId, date]);
+  }, [airportId, airportSlug, date]);
 
   const rankPairs = useMemo(() => {
     if (!data) {
@@ -2603,7 +2625,7 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
         '@type': 'WebPage',
         name: reportTitle,
         description: reportDescription,
-        url: buildAbsoluteUrl(buildReportHref(airportId, date)),
+        url: buildAbsoluteUrl(data ? buildAirportReportPath(data.airport.slug) : airportSlug ? buildAirportReportPath(airportSlug) : buildReportHref(airportId || 0, date)),
       },
       {
         '@context': 'https://schema.org',
@@ -2618,20 +2640,20 @@ function ReportPage({ airportId, date }: { airportId: number; date?: string }) {
           {
             '@type': 'ListItem',
             position: 2,
-            name: data?.airport.name || `机场 ${airportId}`,
-            item: buildAbsoluteUrl(buildReportHref(airportId, date)),
+            name: data?.airport.name || (airportSlug ? `机场 ${airportSlug}` : `机场 ${airportId}`),
+            item: buildAbsoluteUrl(data ? buildAirportReportPath(data.airport.slug) : airportSlug ? buildAirportReportPath(airportSlug) : buildReportHref(airportId || 0, date)),
           },
         ],
       },
     ]),
-    [airportId, data, date, reportDescription, reportTitle],
+    [airportId, airportSlug, data, date, reportDescription, reportTitle],
   );
 
   usePageSeo({
     title: reportTitle,
     description: reportDescription,
     keywords: reportSeo.keywords,
-    canonicalPath: buildReportHref(airportId, date),
+    canonicalPath: data ? buildAirportReportPath(data.airport.slug) : airportSlug ? buildAirportReportPath(airportSlug) : buildReportHref(airportId || 0, date),
     structuredData: reportStructuredData,
   });
 
@@ -4819,8 +4841,8 @@ export default function App() {
     return () => window.removeEventListener('pagehide', flush);
   }, []);
 
-  if (route.kind === 'report' && route.airportId) {
-    return <ReportPage airportId={route.airportId} date={route.date} />;
+  if (route.kind === 'report' && (route.airportId || route.airportSlug)) {
+    return <ReportPage airportId={route.airportId} airportSlug={route.airportSlug} date={route.date} />;
   }
 
   if (route.kind === 'apply') {

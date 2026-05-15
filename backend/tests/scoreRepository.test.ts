@@ -81,7 +81,7 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
     label: '对比昨天',
     value: 2.1,
   });
-  assert.equal(result.items[0].report_url, '/reports/2?date=2026-03-24');
+  assert.equal(result.items[0].report_url, '/airports/alpha-example');
   assert.equal(result.items[0].score_date, '2026-03-24');
   assert.deepEqual(result.items[0].tags, ['稳定', '热门']);
   assert.ok(calls.some((call) => call.sql.includes("a.status IN ('normal', 'risk')")));

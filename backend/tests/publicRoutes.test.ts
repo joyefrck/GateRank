@@ -372,6 +372,63 @@ test('GET /airports/:id/report-view returns report view payload', async () => {
           date: '2026-03-23',
           airport: {
             id: 1,
+            slug: 'daxiang-network',
+            name: '大象网络',
+            website: 'https://example.com',
+            status: 'normal',
+            tags: ['长期稳定'],
+          },
+          summary_card: {
+            type: 'stable',
+            name: '大象网络',
+            tags: ['长期稳定'],
+            score: 95,
+            details: [
+              { label: '稳定记录', value: '455 天' },
+              { label: '最近30天', value: '0 波动' },
+            ],
+            conclusion: '整体最均衡',
+          },
+          ranking: {
+            today_pick_rank: 1,
+            most_stable_rank: 1,
+            best_value_rank: null,
+            new_entries_rank: null,
+            risk_alerts_rank: null,
+          },
+          score_breakdown: {
+            s: 94.2,
+            p: 91.7,
+            c: 88.4,
+            r: 96,
+            final_score: 95.1,
+            risk_penalty: 4,
+            domain_penalty: 0,
+            ssl_penalty: 4,
+            complaint_penalty: 0,
+            history_penalty: 0,
+          },
+          metrics: {
+            uptime_percent_30d: 99.98,
+            median_latency_ms: 34,
+            median_download_mbps: 812,
+            packet_loss_percent: 0.1,
+            stable_days_streak: 455,
+            recent_complaints_count: 0,
+            history_incidents: 0,
+          },
+          trends: {
+            score_30d: [],
+            uptime_30d: [],
+            latency_30d: [],
+            download_30d: [],
+          },
+        }),
+        getReportViewBySlug: async (slug: string) => ({
+          date: '2026-03-23',
+          airport: {
+            id: 1,
+            slug,
             name: '大象网络',
             website: 'https://example.com',
             status: 'normal',
@@ -438,6 +495,11 @@ test('GET /airports/:id/report-view returns report view payload', async () => {
     const data = (await response.json()) as { summary_card: { score: number }; ranking: { today_pick_rank: number } };
     assert.equal(data.summary_card.score, 95);
     assert.equal(data.ranking.today_pick_rank, 1);
+
+    const slugResponse = await fetch(`http://127.0.0.1:${port}/airports/daxiang-network/report-view?date=2026-03-23`);
+    assert.equal(slugResponse.status, 200);
+    const slugData = (await slugResponse.json()) as { airport: { slug: string } };
+    assert.equal(slugData.airport.slug, 'daxiang-network');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -492,7 +554,7 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
                 label: '对比昨天',
                 value: 1.2,
               },
-              report_url: '/reports/1?date=2026-03-23',
+              report_url: '/airports/cloud-airport',
             },
           ],
         }),
@@ -647,7 +709,7 @@ test('GET /pages/risk-monitor returns paged risk monitor payload', async () => {
                 value: -5,
               },
               score_date: '2026-03-22',
-              report_url: '/reports/7?date=2026-03-22',
+              report_url: '/airports/broken-airport',
               monitor_reason: 'down',
               risk_penalty: 88,
               risk_reasons: [],

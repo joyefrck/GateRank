@@ -15,7 +15,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
     const baseUrl = `http://127.0.0.1:${port}`;
 
     const checks = [
-      ['/', /<h1>机场 VPN 推荐与可靠性榜单<\/h1>/, /机场 VPN 推荐、科学上网机场测评与可靠性榜单/],
+      ['/', /<h1>机场榜：机场 VPN 推荐与可靠性榜单<\/h1>/, /机场 VPN 推荐、科学上网机场测评与可靠性榜单/],
       ['/rankings/all', /<h1>全量机场榜单<\/h1>/, /全量机场榜单 \| 全部已上线机场评分排名/],
       ['/methodology', /<h1>机场测评方法：评分规则、测速标准与风险扣分<\/h1>/, /机场测评方法/],
       ['/apply', /<h1>申请入驻 GateRank 机场测试<\/h1>/, /申请入驻测试/],
@@ -55,26 +55,32 @@ test('GET /rankings/all includes ranking items and report links in raw HTML', as
     assert.match(html, /星云机场/);
     assert.match(html, /#1/);
     assert.match(html, /98\.6/);
-    assert.match(html, /href="\/reports\/7\?date=2026-03-23">测评报告<\/a>/);
+    assert.match(html, /href="\/airports\/nebula">测评报告<\/a>/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });
 
-test('GET /reports/:id renders report HTML and missing reports return crawlable 404 HTML', async () => {
+test('GET /airports/:slug renders report HTML and legacy reports redirect to stable URL', async () => {
   const app = express();
   app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
 
   const server = app.listen(0);
   try {
     const port = (server.address() as AddressInfo).port;
-    const okResponse = await fetch(`http://127.0.0.1:${port}/reports/7?date=2026-03-23`);
+    const okResponse = await fetch(`http://127.0.0.1:${port}/airports/nebula`);
     assert.equal(okResponse.status, 200);
     const okHtml = await okResponse.text();
     assert.match(okHtml, /<h1>星云机场 测评报告<\/h1>/);
     assert.match(okHtml, /评分拆解/);
     assert.match(okHtml, /30 天可用率/);
-    assert.match(okHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/reports\/7\?date=2026-03-23"/);
+    assert.match(okHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/airports\/nebula"/);
+
+    const legacyResponse = await fetch(`http://127.0.0.1:${port}/reports/7?date=2026-03-23`, {
+      redirect: 'manual',
+    });
+    assert.equal(legacyResponse.status, 301);
+    assert.equal(legacyResponse.headers.get('location'), '/airports/nebula');
 
     const missingResponse = await fetch(`http://127.0.0.1:${port}/reports/404`);
     assert.equal(missingResponse.status, 404);
@@ -109,6 +115,7 @@ function createPublicViewServiceStub() {
     getFullRankingView: async (): Promise<FullRankingView> => fullRankingView,
     getRiskMonitorView: async (): Promise<RiskMonitorView> => riskMonitorView,
     getReportView: async (airportId: number): Promise<ReportView | null> => (airportId === 7 ? reportView : null),
+    getReportViewBySlug: async (slug: string): Promise<ReportView | null> => (slug === 'nebula' ? reportView : null),
   };
 }
 
@@ -143,7 +150,7 @@ const homeView: HomePageView = {
             { label: '中位延迟', value: '88 ms' },
           ],
           conclusion: '适合作为今日推荐参考。',
-          report_url: '/reports/7?date=2026-03-23',
+          report_url: '/airports/nebula',
         },
       ],
     },
@@ -177,7 +184,7 @@ const fullRankingView: FullRankingView = {
       score: 98.6,
       score_delta_vs_yesterday: { label: '对比昨天', value: 1.2 },
       score_date: '2026-03-23',
-      report_url: '/reports/7?date=2026-03-23',
+      report_url: '/airports/nebula',
     },
   ],
 };
@@ -205,6 +212,7 @@ const reportView: ReportView = {
   fallback_notice: null,
   airport: {
     id: 7,
+    slug: 'nebula',
     name: '星云机场',
     website: 'https://nebula.example.com',
     status: 'normal',

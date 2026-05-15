@@ -95,7 +95,9 @@ export function resolveArticlePayload(
   const slug = normalizeString(payload.slug, current?.slug || slugifyNewsText(title));
   const excerpt = normalizeString(payload.excerpt, current?.excerpt || '');
   const coverImageUrl = normalizeString(payload.cover_image_url, current?.cover_image_url || '');
-  const contentMarkdown = normalizeString(payload.content_markdown, current?.content_markdown || '');
+  const contentMarkdown = stripLeadingMarkdownH1(
+    normalizeString(payload.content_markdown, current?.content_markdown || ''),
+  );
   const rendered = newsContentService.render(contentMarkdown);
   const resolvedExcerpt = excerpt || buildExcerpt(rendered.plain_text, title);
 
@@ -119,6 +121,10 @@ export function resolveArticlePayload(
     content_markdown: contentMarkdown,
     content_html: rendered.html,
   };
+}
+
+export function stripLeadingMarkdownH1(markdown: string): string {
+  return markdown.replace(/^\uFEFF?(?:[ \t]*\r?\n)*[ \t]{0,3}#(?!#)[ \t]+[^\r\n]*(?:\r?\n)?(?:[ \t]*\r?\n)*/, '');
 }
 
 export function buildExcerpt(plainText: string, title: string): string {

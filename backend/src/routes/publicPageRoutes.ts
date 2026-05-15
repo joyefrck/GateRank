@@ -18,6 +18,7 @@ interface PublicPageDeps {
     getFullRankingView(date: string, page: number, pageSize: number): Promise<FullRankingView>;
     getRiskMonitorView(date: string, page: number, pageSize: number): Promise<RiskMonitorView>;
     getReportView(airportId: number, date: string): Promise<ReportView | null>;
+    getReportViewBySlug?(slug: string, date: string): Promise<ReportView | null>;
   };
 }
 
@@ -85,6 +86,26 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     res.status(200).type('html').send(renderApplyPublicPage(siteUrl));
   });
 
+  router.get('/airports/:slug', async (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    try {
+      const requestedDate = parseDateQuery(req.query.date);
+      const view = await deps.publicViewService.getReportViewBySlug?.(
+        String(req.params.slug || ''),
+        requestedDate || getDateInTimezone(),
+      );
+      if (!view) {
+        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '报告不存在'));
+        return;
+      }
+
+      res.status(200).type('html').send(renderReportPublicPage(siteUrl, view, requestedDate));
+    } catch (error) {
+      console.error('[public-page] failed to render airport report page', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '报告加载失败'));
+    }
+  });
+
   router.get('/reports/:id', async (req, res) => {
     const siteUrl = getSiteOrigin(req);
     try {
@@ -101,7 +122,8 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         return;
       }
 
-      res.status(200).type('html').send(renderReportPublicPage(siteUrl, view, requestedDate));
+      res.redirect(301, `/airports/${encodeURIComponent(view.airport.slug)}`);
+      return;
     } catch (error) {
       console.error('[public-page] failed to render report page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '报告加载失败'));

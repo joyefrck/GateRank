@@ -65,9 +65,17 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
         getListView: async () => ({
           page: 1,
           page_size: 12,
-          total: 0,
+          total: 1,
           total_pages: 1,
-          featured: null,
+          featured: {
+            id: 1,
+            title: '头条文章',
+            slug: 'headline',
+            excerpt: '头条摘要',
+            cover_image_url: '/uploads/news/headline.jpg',
+            published_at: '2026-03-28 10:00:00',
+            reading_minutes: 5,
+          },
           items: [],
         }),
         getArticleViewBySlug: async () => null,
@@ -94,6 +102,9 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
     assert.match(html, /\.nav-link\.is-news\s*\{[\s\S]*font-family:\s*var\(--serif\);[\s\S]*font-size:\s*18px;/);
     assert.match(html, /<span class="brand-subtitle">GateRank<\/span>/);
     assert.match(html, /<a class="nav-link is-news is-active" href="\/news">News<\/a>/);
+    assert.match(html, /<h1 class="news-index-title">机场榜GateRank News：机场行业观察、机场测评与风险动态<\/h1>/);
+    assert.match(html, /<h2 class="hero-title">头条文章<\/h2>/);
+    assert.doesNotMatch(html, /<h1 class="hero-title">/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -318,7 +329,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
       publicViewService: {
         getFullRankingView: async () => ({
           items: [
-            { report_url: '/reports/7?date=2026-03-28' },
+            { report_url: '/airports/nebula' },
             { report_url: null },
           ],
         }),
@@ -339,7 +350,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
     const xml = await response.text();
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/publish-token-docs<\/loc>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/risk-monitor<\/loc>/);
-    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/reports\/7\?date=2026-03-28<\/loc>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/airports\/nebula<\/loc>/);
     assert.match(xml, /<lastmod>2026-03-29T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news<\/loc>/);

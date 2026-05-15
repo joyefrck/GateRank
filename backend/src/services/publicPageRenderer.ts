@@ -14,7 +14,7 @@ import {
   buildFullRankingSeo,
   buildHomeSeo,
   buildQuery,
-  buildReportPath,
+  buildAirportReportPath,
   buildReportSeo,
   buildRiskMonitorSeo,
   formatAirportStatusLabel,
@@ -67,7 +67,7 @@ export function renderHomePublicPage(siteUrl: string, view: HomePageView, reques
       <main class="page-main">
         <section class="hero">
           <div class="eyebrow">今日推荐</div>
-          <h1>机场 VPN 推荐与可靠性榜单</h1>
+          <h1>机场榜：机场 VPN 推荐与可靠性榜单</h1>
           <p>${escapeHtml(seo.description)}</p>
           <div class="metric-grid">
             ${renderMetric('监测机场', `${formatNumber(view.hero.monitored_airports)}+`)}
@@ -178,7 +178,7 @@ export function renderReportPublicPage(siteUrl: string, view: ReportView, reques
     score: view.summary_card.score,
     statusLabel: formatAirportStatusLabel(view.airport.status),
   });
-  const canonicalPath = buildReportPath(view.airport.id, requestedDate);
+  const canonicalPath = buildAirportReportPath(view.airport.slug);
 
   return renderPublicDocument({
     siteUrl,

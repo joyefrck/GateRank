@@ -11,7 +11,7 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
       calls.push({ sql, params });
       if (sql.includes('FROM information_schema.COLUMNS')) {
         schemaChecks += 1;
-        return [schemaChecks <= 11 ? [] : [{ 1: 1 }]];
+        return [schemaChecks <= 12 ? [] : [{ 1: 1 }]];
       }
       return [[]];
     },
@@ -19,6 +19,9 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
 
   await repository.ensureSchema();
 
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN slug VARCHAR(160) NULL AFTER id')),
+  );
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN websites_json JSON NULL AFTER website')),
   );
@@ -54,6 +57,9 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
   );
   assert.ok(
     calls.some((call) => call.sql.includes('SET auto_tags_json = JSON_ARRAY()')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD UNIQUE KEY uk_airports_slug (slug)')),
   );
 });
 

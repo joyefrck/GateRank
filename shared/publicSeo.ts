@@ -95,6 +95,50 @@ export function buildReportPath(airportId: number, date?: string): string {
   return `/reports/${airportId}${buildQuery({ date })}`;
 }
 
+export function buildAirportReportPath(slug: string): string {
+  return `/airports/${normalizeAirportSlug(slug)}`;
+}
+
+export function normalizeAirportSlug(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 160)
+    .replace(/-+$/g, '');
+}
+
+export function buildAirportSlugCandidate(input: { name?: string | null; website?: string | null }): string {
+  const websiteSlug = slugFromWebsite(input.website || '');
+  if (websiteSlug) {
+    return websiteSlug;
+  }
+  return normalizeAirportSlug(input.name || '');
+}
+
+function slugFromWebsite(website: string): string {
+  const raw = website.trim();
+  if (!raw) {
+    return '';
+  }
+
+  try {
+    const withProtocol = /^[a-z][a-z0-9+.-]*:\/\//i.test(raw) ? raw : `https://${raw}`;
+    const hostname = new URL(withProtocol).hostname
+      .replace(/^www\./i, '')
+      .replace(/\.$/, '');
+    const parts = hostname.split('.').filter(Boolean);
+    if (parts.length >= 2) {
+      return normalizeAirportSlug(parts.slice(0, -1).join('-'));
+    }
+    return normalizeAirportSlug(hostname);
+  } catch {
+    return normalizeAirportSlug(raw);
+  }
+}
+
 export function buildQuery(params: Record<string, string | number | undefined | null>): string {
   const search = new URLSearchParams();
   Object.entries(params).forEach(([key, value]) => {

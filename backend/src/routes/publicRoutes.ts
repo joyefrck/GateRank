@@ -86,6 +86,7 @@ interface PublicDeps {
     getFullRankingView(date: string, page: number, pageSize: number): Promise<unknown>;
     getRiskMonitorView(date: string, page: number, pageSize: number): Promise<unknown>;
     getReportView(airportId: number, date: string): Promise<unknown | null>;
+    getReportViewBySlug?(slug: string, date: string): Promise<unknown | null>;
   };
   marketingRepository?: {
     insertMany(records: ReturnType<typeof buildMarketingEventRecord>[]): Promise<void>;
@@ -355,17 +356,20 @@ export function createPublicRoutes(deps: PublicDeps): Router {
     }
   });
 
-  router.get('/airports/:id/report-view', async (req, res, next) => {
+  router.get('/airports/:identifier/report-view', async (req, res, next) => {
     try {
-      const airportId = toAirportId(req.params.id);
+      const identifier = String(req.params.identifier || '');
       const date = parseDateQuery(req.query.date);
+      const airportId = Number(identifier);
 
-      const data = await deps.publicViewService.getReportView(airportId, date);
+      const data = Number.isInteger(airportId) && airportId > 0
+        ? await deps.publicViewService.getReportView(airportId, date)
+        : await deps.publicViewService.getReportViewBySlug?.(identifier, date);
       if (!data) {
         throw new HttpError(
           404,
           'REPORT_NOT_FOUND',
-          `report view not found for airport ${airportId} date ${date}`,
+          `report view not found for airport ${identifier} date ${date}`,
         );
       }
 

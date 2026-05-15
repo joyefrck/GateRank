@@ -40,6 +40,7 @@ type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
 interface Airport {
   id: number;
   application_id?: number | null;
+  slug?: string;
   name: string;
   website: string;
   websites?: string[];
@@ -71,6 +72,7 @@ interface Airport {
 
 interface AirportFormState {
   id?: number;
+  slug: string;
   name: string;
   websites: string[];
   status: AirportStatus;
@@ -4827,6 +4829,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
     }
 
     const body = {
+      slug: editing.slug.trim() || null,
       name: editing.name.trim(),
       website: websites[0],
       websites,
@@ -5294,6 +5297,15 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                     placeholder="例如：大象网络"
                     value={editing.name}
                     onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  />
+                </FormField>
+
+                <FormField label="SEO URL Slug" hint="用于 /airports/slug 稳定报告地址；留空时后端按官网或名称自动生成。">
+                  <input
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    placeholder="例如：daxiang-network"
+                    value={editing.slug}
+                    onChange={(e) => setEditing({ ...editing, slug: e.target.value })}
                   />
                 </FormField>
 
@@ -6431,7 +6443,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
         <div className="flex items-center gap-2">
           <a
             className="px-3 py-1.5 rounded border text-sm inline-flex items-center gap-2 bg-white"
-            href={`/reports/${airportId}?date=${date}`}
+            href={dashboard?.base.slug ? `/airports/${dashboard.base.slug}` : `/reports/${airportId}?date=${date}`}
             target="_blank"
             rel="noreferrer"
           >
@@ -7137,6 +7149,7 @@ function getMarketingPresetDateFrom(preset: MarketingRangePreset, dateTo: string
 
 function createAirportForm(): AirportFormState {
   return {
+    slug: '',
     name: '',
     websites: [''],
     status: 'normal',
@@ -7159,6 +7172,7 @@ function createAirportForm(): AirportFormState {
 function toAirportForm(airport: Airport): AirportFormState {
   return {
     id: airport.id,
+    slug: airport.slug || '',
     name: airport.name,
     websites: normalizeUrlList(airport.websites?.length ? airport.websites : [airport.website]),
     status: airport.status,

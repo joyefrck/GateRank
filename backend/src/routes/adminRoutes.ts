@@ -69,6 +69,7 @@ interface AdminDeps {
     }): Promise<{ items: unknown[]; total: number }>;
     getById(id: number): Promise<unknown | null>;
     create(input: {
+      slug?: string | null;
       name: string;
       website: string;
       websites?: string[];
@@ -89,6 +90,7 @@ interface AdminDeps {
     update(
       id: number,
       input: {
+        slug?: string | null;
         name?: string;
         website?: string;
         websites?: string[];
@@ -1130,6 +1132,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     try {
       const payload = req.body ?? {};
       const name = mustString(payload.name, 'name');
+      const slug = optionalString(payload.slug) || null;
       const websiteBundle = parseWebsiteFields(payload, true);
       const primaryWebsite = websiteBundle.website as string;
       const status = payload.status ? toStatus(payload.status) : 'normal';
@@ -1150,6 +1153,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           : toStringArray(payload.tags || []);
 
       const airportId = await deps.airportRepository.create({
+        slug,
         name,
         website: primaryWebsite,
         websites: websiteBundle.websites,
@@ -1182,6 +1186,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const nextStatus = payload.status ? toStatus(payload.status) : undefined;
       ensureDownConfirmed(nextStatus, payload.confirm_down);
       const patch = {
+        slug: payload.slug === undefined ? undefined : optionalString(payload.slug) || null,
         name: optionalString(payload.name),
         website: websiteBundle.website,
         websites: websiteBundle.websites,
@@ -3010,7 +3015,14 @@ function normalizeAirportMutationError(error: unknown): unknown {
   const sqlMessage =
     typeof error === 'object' && error && 'sqlMessage' in error ? String(error.sqlMessage || '') : '';
 
+  if (code === 'AIRPORT_SLUG_CONFLICT') {
+    return new HttpError(409, 'AIRPORT_SLUG_CONFLICT', '机场 SEO URL Slug 已存在');
+  }
+
   if (code === 'ER_DUP_ENTRY') {
+    if (sqlMessage.includes('uk_airports_slug') || sqlMessage.includes('slug')) {
+      return new HttpError(409, 'AIRPORT_SLUG_CONFLICT', '机场 SEO URL Slug 已存在');
+    }
     return new HttpError(409, 'AIRPORT_NAME_CONFLICT', '机场名称已存在');
   }
 
@@ -3025,6 +3037,7 @@ function normalizeAirportMutationError(error: unknown): unknown {
       sqlMessage.includes('airport_intro') ||
       sqlMessage.includes('test_account') ||
       sqlMessage.includes('test_password') ||
+      sqlMessage.includes('slug') ||
       sqlMessage.includes('approved_airport_id')
     )
   ) {

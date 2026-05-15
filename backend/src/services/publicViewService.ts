@@ -23,6 +23,7 @@ import {
 } from '../utils/time';
 import { buildRiskReasonSummary } from '../utils/risk';
 import { buildTodayPickRows, isTodayPickEligible, type RankedAirportInput } from './rankingService';
+import { buildAirportReportPath, buildAirportSlugCandidate } from '../../../shared/publicSeo';
 
 type HomeSectionKey =
   | 'today_pick'
@@ -34,6 +35,7 @@ type HomeSectionKey =
 interface PublicViewDeps {
   airportRepository: {
     getById(id: number): Promise<Airport | null>;
+    getBySlug?(slug: string): Promise<Airport | null>;
     getByIds?(ids: number[]): Promise<Map<number, Airport>>;
     listLatestApprovedApplicationAirports?(limit: number): Promise<Airport[]>;
   };
@@ -419,6 +421,7 @@ export class PublicViewService {
       fallback_notice: resolvedFromFallback ? buildPublicFallbackNotice(date, resolvedDate) : null,
       airport: {
         id: base.airport.id,
+        slug: resolvePublicAirportSlug(base.airport),
         name: base.airport.name,
         website: base.airport.website,
         status: base.airport.status,
@@ -476,6 +479,17 @@ export class PublicViewService {
           .map((row) => ({ date: row.date, value: round2(row.median_download_mbps) })),
       },
     };
+  }
+
+  async getReportViewBySlug(slug: string, date: string): Promise<ReportView | null> {
+    if (!this.deps.airportRepository.getBySlug) {
+      return null;
+    }
+    const airport = await this.deps.airportRepository.getBySlug(slug);
+    if (!airport) {
+      return null;
+    }
+    return this.getReportView(airport.id, date);
   }
 
   private async buildHomeSectionItems(
@@ -709,7 +723,7 @@ export class PublicViewService {
       stability_tier: getCardStabilityTier(context.metrics),
       details: buildCardDetails(section, context, date),
       conclusion: buildConclusion(section, context, date),
-      report_url: `/reports/${context.airport.id}?date=${date}`,
+      report_url: buildAirportReportPath(resolvePublicAirportSlug(context.airport)),
     };
   }
 
@@ -736,6 +750,10 @@ function collectRankingAirportIds(...rankingLists: Array<Array<Pick<RankingItem,
       rankingLists.flatMap((items) => items.map((item) => item.airport_id)),
     ),
   );
+}
+
+function resolvePublicAirportSlug(airport: Pick<Airport, 'id' | 'slug' | 'name' | 'website'>): string {
+  return airport.slug || buildAirportSlugCandidate({ name: airport.name, website: airport.website }) || `airport-${airport.id}`;
 }
 
 function mergeHomeSectionItems(limit: number, ...groups: PublicCardItem[][]): PublicCardItem[] {

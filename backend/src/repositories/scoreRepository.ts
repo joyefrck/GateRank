@@ -10,6 +10,7 @@ import type {
 } from '../types/domain';
 import { buildRiskReasonSummary, deriveRiskReasonCodes } from '../utils/risk';
 import { formatDateOnly } from '../utils/time';
+import { buildAirportReportPath, buildAirportSlugCandidate } from '../../../shared/publicSeo';
 
 interface ScoreRow extends RowDataPacket {
   airport_id: number;
@@ -37,6 +38,7 @@ interface LatestDateRow extends RowDataPacket {
 
 interface PublicFullRankingRow extends RowDataPacket {
   airport_id: number;
+  slug: string | null;
   name: string;
   website: string;
   status: AirportStatus;
@@ -57,6 +59,7 @@ interface PublicDisplayScoreRow extends RowDataPacket {
 
 interface PublicRiskMonitorRow extends RowDataPacket {
   airport_id: number;
+  slug: string | null;
   name: string;
   website: string;
   status: AirportStatus;
@@ -333,6 +336,7 @@ export class ScoreRepository {
     const [rows] = await this.pool.query<PublicFullRankingRow[]>(
       `SELECT
          a.id AS airport_id,
+         a.slug,
          a.name,
          a.website,
          a.status,
@@ -403,7 +407,7 @@ export class ScoreRepository {
                 : round2(currentScore - yesterdayScore),
           },
           score_date: row.score_date ? formatDateOnly(row.score_date) : null,
-          report_url: row.score_date ? `/reports/${row.airport_id}?date=${formatDateOnly(row.score_date)}` : null,
+          report_url: row.score_date ? buildAirportReportPath(resolveAirportSlugFromRow(row)) : null,
         };
       }),
     };
@@ -432,6 +436,7 @@ export class ScoreRepository {
     const [rows] = await this.pool.query<PublicRiskMonitorRow[]>(
       `SELECT
          a.id AS airport_id,
+         a.slug,
          a.name,
          a.website,
          a.status,
@@ -532,7 +537,7 @@ export class ScoreRepository {
                 : round2(currentScore - yesterdayScore),
           },
           score_date: scoreDate,
-          report_url: scoreDate ? `/reports/${row.airport_id}?date=${scoreDate}` : null,
+          report_url: scoreDate ? buildAirportReportPath(resolveAirportSlugFromRow(row)) : null,
           monitor_reason: row.status === 'down' ? 'down' : 'risk_watch',
           risk_penalty: row.risk_penalty === null ? null : Number(row.risk_penalty),
           risk_reasons: riskReasons,
@@ -582,6 +587,10 @@ function toAirportScoreDaily(row: ScoreRow): AirportScoreDaily {
     final_score: Number(row.final_score),
     details: safeJsonObject(row.details_json),
   };
+}
+
+function resolveAirportSlugFromRow(row: { airport_id: number; slug?: string | null; name: string; website: string }): string {
+  return row.slug || buildAirportSlugCandidate({ name: row.name, website: row.website }) || `airport-${row.airport_id}`;
 }
 
 function safeJsonArray(value: unknown): string[] {

@@ -131,7 +131,7 @@ async function getReportSitemapUrls(deps: NewsPublicDeps): Promise<string[]> {
     const view = await deps.publicViewService.getFullRankingView(getDateInTimezone(), 1, 100);
     return view.items
       .map((item) => item.report_url || '')
-      .filter((url) => url.startsWith('/reports/'));
+      .filter((url) => url.startsWith('/airports/'));
   } catch (error) {
     console.error('[sitemap] failed to load report urls', { error });
     return [];

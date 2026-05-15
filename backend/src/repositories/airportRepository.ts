@@ -1,10 +1,12 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type { Airport, AirportStatus } from '../types/domain';
 import { mergeDisplayTags, normalizeTagList } from '../utils/tags';
+import { buildAirportSlugCandidate, normalizeAirportSlug } from '../../../shared/publicSeo';
 
 interface AirportRow extends RowDataPacket {
   id: number;
   application_id: number | null;
+  slug: string | null;
   name: string;
   website: string;
   websites_json: unknown;
@@ -27,6 +29,7 @@ interface AirportRow extends RowDataPacket {
 }
 
 export interface CreateAirportInput {
+  slug?: string | null;
   name: string;
   website: string;
   websites?: string[];
@@ -46,6 +49,7 @@ export interface CreateAirportInput {
 }
 
 export interface UpdateAirportInput {
+  slug?: string | null;
   name?: string;
   website?: string;
   websites?: string[];
@@ -68,6 +72,7 @@ export class AirportRepository {
   constructor(private readonly pool: Pool) {}
 
   async ensureSchema(): Promise<void> {
+    await this.ensureColumn('slug', 'VARCHAR(160) NULL AFTER id');
     await this.ensureColumn('websites_json', 'JSON NULL AFTER website');
     await this.ensureColumn('is_listed', 'TINYINT(1) NOT NULL DEFAULT 1 AFTER status');
     await this.ensureColumn('tags_json', 'JSON NULL AFTER subscription_url');
@@ -114,6 +119,9 @@ export class AirportRepository {
         WHERE auto_tags_json IS NULL
            OR JSON_TYPE(auto_tags_json) != 'ARRAY'`,
     );
+
+    await this.backfillSlugs();
+    await this.ensureUniqueIndex('uk_airports_slug', 'slug');
   }
 
   async listAll(): Promise<Airport[]> {
@@ -127,6 +135,7 @@ export class AirportRepository {
             ORDER BY application.id DESC
             LIMIT 1
          ) AS application_id,
+         slug,
          name,
          website,
          websites_json,
@@ -195,6 +204,7 @@ export class AirportRepository {
             ORDER BY application.id DESC
             LIMIT 1
          ) AS application_id,
+         slug,
          name,
          website,
          websites_json,
@@ -244,6 +254,7 @@ export class AirportRepository {
             ORDER BY application.id DESC
             LIMIT 1
          ) AS application_id,
+         slug,
          name,
          website,
          websites_json,
@@ -282,6 +293,61 @@ export class AirportRepository {
     return toAirportEntity(rows[0]);
   }
 
+  async getBySlug(slug: string): Promise<Airport | null> {
+    const normalizedSlug = normalizeAirportSlug(slug);
+    if (!normalizedSlug) {
+      return null;
+    }
+
+    const [rows] = await this.pool.query<AirportRow[]>(
+      `SELECT
+         id,
+         (
+           SELECT application.id
+             FROM airport_applications AS application
+            WHERE application.approved_airport_id = airports.id
+            ORDER BY application.id DESC
+            LIMIT 1
+         ) AS application_id,
+         slug,
+         name,
+         website,
+         websites_json,
+         status,
+         is_listed,
+         plan_price_month,
+         has_trial,
+         subscription_url,
+         applicant_email,
+         applicant_telegram,
+         founded_on,
+         airport_intro,
+         test_account,
+         test_password,
+         manual_tags_json,
+         auto_tags_json,
+         tags_json,
+         EXISTS (
+           SELECT 1
+             FROM airport_applications AS paid_application
+            WHERE paid_application.approved_airport_id = airports.id
+              AND paid_application.payment_status = 'paid'
+              AND paid_application.payment_amount > 0
+         ) AS paid_application_fee,
+         created_at
+         FROM airports
+        WHERE slug = ?
+        LIMIT 1`,
+      [normalizedSlug],
+    );
+
+    if (rows.length === 0) {
+      return null;
+    }
+
+    return toAirportEntity(rows[0]);
+  }
+
   async getByIds(ids: number[]): Promise<Map<number, Airport>> {
     if (ids.length === 0) {
       return new Map();
@@ -298,6 +364,7 @@ export class AirportRepository {
             ORDER BY application.id DESC
             LIMIT 1
          ) AS application_id,
+         slug,
          name,
          website,
          websites_json,
@@ -341,6 +408,7 @@ export class AirportRepository {
       `SELECT
          airports.id,
          application.id AS application_id,
+         airports.slug,
          airports.name,
          airports.website,
          airports.websites_json,
@@ -391,11 +459,17 @@ export class AirportRepository {
 
   async create(input: CreateAirportInput): Promise<number> {
     const websites = normalizeWebsiteList(input.websites, input.website);
+    const slug = await this.resolveAirportSlug({
+      requestedSlug: input.slug,
+      name: input.name,
+      website: websites[0],
+    });
     const manualTags = normalizeTagList(input.manual_tags ?? input.tags ?? []);
     const autoTags: string[] = [];
     const mergedTags = mergeDisplayTags(manualTags, autoTags);
     const [result] = await this.pool.execute<ResultSetHeader>(
-      `INSERT INTO airports (
+       `INSERT INTO airports (
+         slug,
          name,
          website,
          websites_json,
@@ -413,8 +487,9 @@ export class AirportRepository {
          manual_tags_json,
          auto_tags_json,
          tags_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        slug,
         input.name,
         websites[0],
         JSON.stringify(websites),
@@ -442,6 +517,17 @@ export class AirportRepository {
     const sets: string[] = [];
     const values: Array<string | number | null> = [];
 
+    if (input.slug !== undefined) {
+      const current = await this.getById(id);
+      const nextSlug = await this.resolveAirportSlug({
+        requestedSlug: input.slug,
+        name: input.name ?? current?.name ?? '',
+        website: input.website ?? input.websites?.[0] ?? current?.website ?? '',
+        excludeId: id,
+      });
+      sets.push('slug = ?');
+      values.push(nextSlug);
+    }
     if (typeof input.name === 'string') {
       sets.push('name = ?');
       values.push(input.name);
@@ -560,6 +646,101 @@ export class AirportRepository {
     }
   }
 
+  private async ensureUniqueIndex(indexName: string, columnName: string): Promise<void> {
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT 1
+         FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND INDEX_NAME = ?
+        LIMIT 1`,
+      ['airports', indexName],
+    );
+
+    if (rows.length === 0) {
+      await this.pool.query(`ALTER TABLE airports ADD UNIQUE KEY ${indexName} (${columnName})`);
+    }
+  }
+
+  private async backfillSlugs(): Promise<void> {
+    const [rows] = await this.pool.query<Array<RowDataPacket & {
+      id: number;
+      name: string;
+      website: string;
+      slug: string | null;
+    }>>(
+      `SELECT id, name, website, slug
+         FROM airports
+        WHERE slug IS NULL
+           OR slug = ''
+        ORDER BY id ASC`,
+    );
+
+    for (const row of rows) {
+      const slug = await this.resolveAirportSlug({
+        requestedSlug: null,
+        name: row.name,
+        website: row.website,
+        excludeId: Number(row.id),
+        fallbackSlug: `airport-${Number(row.id)}`,
+      });
+      await this.pool.execute<ResultSetHeader>(
+        'UPDATE airports SET slug = ? WHERE id = ?',
+        [slug, Number(row.id)],
+      );
+    }
+  }
+
+  private async resolveAirportSlug(input: {
+    requestedSlug?: string | null;
+    name: string;
+    website: string;
+    excludeId?: number;
+    fallbackSlug?: string;
+  }): Promise<string> {
+    const requestedSlug = input.requestedSlug === undefined ? undefined : normalizeAirportSlug(String(input.requestedSlug || ''));
+    if (requestedSlug) {
+      const ownerId = await this.findSlugOwnerId(requestedSlug, input.excludeId);
+      if (ownerId) {
+        const error = new Error('airport slug already exists') as Error & { code?: string };
+        error.code = 'AIRPORT_SLUG_CONFLICT';
+        throw error;
+      }
+      return requestedSlug;
+    }
+
+    const baseSlug = buildAirportSlugCandidate({ name: input.name, website: input.website })
+      || input.fallbackSlug
+      || 'airport';
+    return this.buildUniqueSlug(baseSlug, input.excludeId);
+  }
+
+  private async buildUniqueSlug(baseSlug: string, excludeId?: number): Promise<string> {
+    const normalizedBase = normalizeAirportSlug(baseSlug) || 'airport';
+    for (let index = 0; index < 1000; index += 1) {
+      const suffix = index === 0 ? '' : `-${index + 1}`;
+      const maxBaseLength = 160 - suffix.length;
+      const candidate = `${normalizedBase.slice(0, maxBaseLength).replace(/-+$/g, '')}${suffix}`;
+      const ownerId = await this.findSlugOwnerId(candidate, excludeId);
+      if (!ownerId) {
+        return candidate;
+      }
+    }
+    return `airport-${Date.now()}`;
+  }
+
+  private async findSlugOwnerId(slug: string, excludeId?: number): Promise<number | null> {
+    const [rows] = await this.pool.query<Array<RowDataPacket & { id: number }>>(
+      `SELECT id
+         FROM airports
+        WHERE slug = ?
+          ${excludeId ? 'AND id <> ?' : ''}
+        LIMIT 1`,
+      excludeId ? [slug, excludeId] : [slug],
+    );
+    return rows.length > 0 ? Number(rows[0].id) : null;
+  }
+
   private async rebuildMergedTags(id: number): Promise<void> {
     const [rows] = await this.pool.query<Array<RowDataPacket & {
       manual_tags_json: unknown;
@@ -595,6 +776,7 @@ function toAirportEntity(row: AirportRow): Airport {
   return {
     id: row.id,
     application_id: row.application_id == null ? null : Number(row.application_id),
+    slug: row.slug || buildAirportSlugCandidate({ name: row.name, website: row.website }) || `airport-${row.id}`,
     name: row.name,
     website: websites[0],
     websites,

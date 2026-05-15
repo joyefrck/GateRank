@@ -16,6 +16,7 @@ export type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover
 export interface Airport {
   id: number;
   application_id?: number | null;
+  slug?: string;
   name: string;
   website: string;
   websites?: string[];
@@ -267,7 +268,7 @@ export interface ReportView {
   date: string;
   resolved_from_fallback: boolean;
   fallback_notice: string | null;
-  airport: Pick<Airport, 'id' | 'name' | 'website' | 'status' | 'tags'>;
+  airport: Pick<Airport, 'id' | 'name' | 'website' | 'status' | 'tags'> & { slug: string };
   summary_card: Omit<PublicCardItem, 'airport_id' | 'report_url' | 'website' | 'score_delta_vs_yesterday'>;
   ranking: {
     today_pick_rank: number | null;
