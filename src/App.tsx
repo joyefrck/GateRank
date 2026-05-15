@@ -2149,7 +2149,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                               targetKind: 'website',
                               targetUrl: item.website,
                             })}
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition hover:bg-neutral-800"
+                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_32px_rgba(16,185,129,0.20)] transition hover:bg-emerald-600"
                           >
                             打开官网
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -2460,7 +2460,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                               targetKind: 'website',
                               targetUrl: item.website,
                             })}
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-neutral-900 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white transition hover:bg-neutral-800"
+                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-emerald-500 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_32px_rgba(16,185,129,0.20)] transition hover:bg-emerald-600"
                           >
                             打开官网
                             <ExternalLink className="w-3.5 h-3.5" />

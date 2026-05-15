@@ -195,7 +195,9 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
                 navigate(buildRiskMonitorHref());
               }}
               className={`inline-flex items-center gap-2 rounded-full px-4 py-2 transition-colors ${
-                active === 'risk_monitor' ? 'text-neutral-900' : 'text-neutral-500 hover:text-neutral-900'
+                active === 'risk_monitor'
+                  ? 'bg-rose-50 text-rose-600 ring-1 ring-rose-100 shadow-sm'
+                  : 'text-neutral-500 hover:bg-neutral-100 hover:text-neutral-900'
               }`}
             >
               跑路监测
@@ -220,7 +222,7 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
             登录
           </a>
           <a
-            className="bg-neutral-900 hover:bg-neutral-800 text-white min-h-11 px-4 md:px-5 py-2.5 rounded-lg text-[11px] md:text-xs font-black uppercase tracking-[0.16em] transition-all shadow-xl flex items-center gap-2 md:gap-3"
+            className="min-h-11 px-4 md:px-5 py-2.5 rounded-lg bg-rose-500 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.16em] transition-all shadow-[0_16px_34px_rgba(244,63,94,0.22)] hover:bg-rose-600 flex items-center gap-2 md:gap-3"
             href="/apply"
             target="_blank"
             rel="noreferrer"
@@ -249,7 +251,7 @@ function PublicNavLink({
       href={href}
       className={`rounded-full px-4 py-2 transition-all ${
         active
-          ? 'bg-neutral-900 text-white shadow-lg'
+          ? 'bg-rose-50 text-rose-600 ring-1 ring-rose-100 shadow-sm'
           : 'text-neutral-500 hover:text-neutral-900 hover:bg-neutral-100'
       }`}
       onClick={(event) => {
