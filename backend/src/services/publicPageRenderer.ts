@@ -31,6 +31,16 @@ interface RenderOptions {
   jsonLd: unknown;
   body: string;
   status?: number;
+  initialData?: PublicInitialData;
+}
+
+interface PublicInitialData {
+  kind: 'home' | 'full_ranking' | 'risk_monitor';
+  params: {
+    date?: string | null;
+    page?: number | null;
+  };
+  payload: unknown;
 }
 
 export function renderHomePublicPage(siteUrl: string, view: HomePageView, requestedDate?: string): string {
@@ -63,6 +73,11 @@ export function renderHomePublicPage(siteUrl: string, view: HomePageView, reques
         mainEntity: buildItemList(siteUrl, todayPickItems),
       },
     ],
+    initialData: {
+      kind: 'home',
+      params: { date: requestedDate ?? null },
+      payload: view,
+    },
     body: `
       <main class="page-main">
         <section class="hero">
@@ -108,6 +123,14 @@ export function renderFullRankingPublicPage(
       ]),
       buildRankingItemList(siteUrl, view.items),
     ],
+    initialData: {
+      kind: 'full_ranking',
+      params: {
+        date: requestedDate ?? null,
+        page,
+      },
+      payload: view,
+    },
     body: `
       <main class="page-main">
         <section class="hero hero-dark">
@@ -153,6 +176,14 @@ export function renderRiskMonitorPublicPage(
       ]),
       buildRankingItemList(siteUrl, view.items),
     ],
+    initialData: {
+      kind: 'risk_monitor',
+      params: {
+        date: requestedDate ?? null,
+        page,
+      },
+      payload: view,
+    },
     body: `
       <main class="page-main">
         <section class="hero hero-risk">
@@ -323,6 +354,9 @@ export function renderPublicHtmlError(siteUrl: string, status: number, message: 
 
 function renderPublicDocument(options: RenderOptions): string {
   const canonicalUrl = `${options.siteUrl}${options.canonicalPath}`;
+  const initialDataScript = options.initialData
+    ? `\n    <script id="__GATERANK_INITIAL_DATA__" type="application/json">${escapeJsonScript(options.initialData)}</script>`
+    : '';
   return `<!DOCTYPE html>
 <html lang="zh-CN">
   <head>
@@ -353,6 +387,7 @@ function renderPublicDocument(options: RenderOptions): string {
         ${renderFooter()}
       </div>
     </div>
+    ${initialDataScript}
     <script type="module" src="${PUBLIC_FRONTEND_ASSETS.script}"></script>
   </body>
 </html>`;
@@ -610,6 +645,15 @@ function escapeHtml(value: string): string {
 
 function escapeAttribute(value: string): string {
   return escapeHtml(value);
+}
+
+function escapeJsonScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 const styles = `

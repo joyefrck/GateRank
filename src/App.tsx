@@ -246,6 +246,17 @@ interface ReportViewResponse {
   };
 }
 
+type InitialPublicDataKind = 'home' | 'full_ranking' | 'risk_monitor';
+
+interface InitialPublicDataEnvelope<T> {
+  kind: InitialPublicDataKind;
+  params?: {
+    date?: string | null;
+    page?: number | null;
+  };
+  payload: T;
+}
+
 interface CardProps {
   type: CardType;
   variant?: 'default' | 'homeCompact';
@@ -921,6 +932,34 @@ async function safeJson(response: Response): Promise<unknown> {
   } catch {
     return null;
   }
+}
+
+function getInitialPublicData<T>(
+  kind: InitialPublicDataKind,
+  matches: (envelope: InitialPublicDataEnvelope<T>) => boolean,
+): T | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const element = document.getElementById('__GATERANK_INITIAL_DATA__');
+  if (!element?.textContent) {
+    return null;
+  }
+
+  try {
+    const envelope = JSON.parse(element.textContent) as InitialPublicDataEnvelope<T>;
+    if (envelope.kind !== kind || !matches(envelope)) {
+      return null;
+    }
+    return envelope.payload;
+  } catch {
+    return null;
+  }
+}
+
+function initialDateMatches(value: string | null | undefined, date: string | undefined): boolean {
+  return (value ?? null) === (date ?? null);
 }
 
 function parseRoute(): RouteState {
@@ -1744,12 +1783,26 @@ function ListPageHero({
 }
 
 function HomePage({ date }: { date?: string }) {
-  const [data, setData] = useState<HomePageResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialData = useMemo(
+    () => getInitialPublicData<HomePageResponse>(
+      'home',
+      (envelope) => initialDateMatches(envelope.params?.date, date),
+    ),
+    [date],
+  );
+  const [data, setData] = useState<HomePageResponse | null>(() => initialData);
+  const [loading, setLoading] = useState(() => !initialData);
   const [error, setError] = useState('');
   const [reportTimeNow, setReportTimeNow] = useState(() => Date.now());
 
   useEffect(() => {
+    if (initialData) {
+      setData(initialData);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
     let active = true;
     setLoading(true);
     setError('');
@@ -1776,7 +1829,7 @@ function HomePage({ date }: { date?: string }) {
     return () => {
       active = false;
     };
-  }, [date]);
+  }, [date, initialData]);
 
   useEffect(() => {
     if (!data?.hero.report_time_at) {
@@ -1952,11 +2005,28 @@ function HomePage({ date }: { date?: string }) {
 }
 
 function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
-  const [data, setData] = useState<FullRankingPageResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialData = useMemo(
+    () => getInitialPublicData<FullRankingPageResponse>(
+      'full_ranking',
+      (envelope) => (
+        initialDateMatches(envelope.params?.date, date) &&
+        Number(envelope.params?.page || 1) === Math.max(1, page || 1)
+      ),
+    ),
+    [date, page],
+  );
+  const [data, setData] = useState<FullRankingPageResponse | null>(() => initialData);
+  const [loading, setLoading] = useState(() => !initialData);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (initialData) {
+      setData(initialData);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
     let active = true;
     setLoading(true);
     setError('');
@@ -1987,7 +2057,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
     return () => {
       active = false;
     };
-  }, [date, page]);
+  }, [date, page, initialData]);
 
   const rankingDate = data?.date || date || '今日';
   const safePage = data?.page || page || 1;
@@ -2260,11 +2330,28 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
 }
 
 function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
-  const [data, setData] = useState<RiskMonitorPageResponse | null>(null);
-  const [loading, setLoading] = useState(true);
+  const initialData = useMemo(
+    () => getInitialPublicData<RiskMonitorPageResponse>(
+      'risk_monitor',
+      (envelope) => (
+        initialDateMatches(envelope.params?.date, date) &&
+        Number(envelope.params?.page || 1) === Math.max(1, page || 1)
+      ),
+    ),
+    [date, page],
+  );
+  const [data, setData] = useState<RiskMonitorPageResponse | null>(() => initialData);
+  const [loading, setLoading] = useState(() => !initialData);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    if (initialData) {
+      setData(initialData);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
     let active = true;
     setLoading(true);
     setError('');
@@ -2295,7 +2382,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
     return () => {
       active = false;
     };
-  }, [date, page]);
+  }, [date, page, initialData]);
 
   const rankingDate = data?.date || date || '今日';
   const safePage = data?.page || page || 1;

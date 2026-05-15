@@ -62,6 +62,61 @@ test('GET /rankings/all includes ranking items and report links in raw HTML', as
   }
 });
 
+test('public data routes embed initial payload for React takeover', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/all?date=2026-03-23&page=1`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    const matched = html.match(/<script id="__GATERANK_INITIAL_DATA__" type="application\/json">([^<]+)<\/script>/);
+    assert.ok(matched);
+
+    const initialData = JSON.parse(matched[1]) as {
+      kind: string;
+      params: { date: string | null; page: number };
+      payload: { items: Array<{ name: string }> };
+    };
+    assert.equal(initialData.kind, 'full_ranking');
+    assert.deepEqual(initialData.params, { date: '2026-03-23', page: 1 });
+    assert.equal(initialData.payload.items[0].name, '星云机场');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('public data routes reuse prerender view within ttl', async () => {
+  let fullRankingCalls = 0;
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: {
+      ...createPublicViewServiceStub(),
+      getFullRankingView: async (): Promise<FullRankingView> => {
+        fullRankingCalls += 1;
+        return fullRankingView;
+      },
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const [first, second] = await Promise.all([
+      fetch(`http://127.0.0.1:${port}/rankings/all?date=2026-03-23&page=1`),
+      fetch(`http://127.0.0.1:${port}/rankings/all?date=2026-03-23&page=1`),
+    ]);
+
+    assert.equal(first.status, 200);
+    assert.equal(second.status, 200);
+    assert.equal(fullRankingCalls, 1);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /rankings/all redirects default date query to clean paginated URL', async () => {
   const app = express();
   app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));

@@ -24,12 +24,17 @@ interface PublicPageDeps {
 
 export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   const router = Router();
+  const pageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
 
   router.get('/', async (req, res) => {
     const siteUrl = getSiteOrigin(req);
     try {
       const requestedDate = parseDateQuery(req.query.date);
-      const view = await deps.publicViewService.getHomePageView(requestedDate || getDateInTimezone());
+      const renderDate = requestedDate || getDateInTimezone();
+      const view = await pageCache.getOrLoad(
+        `home:${renderDate}`,
+        () => deps.publicViewService.getHomePageView(renderDate),
+      );
       res.status(200).type('html').send(renderHomePublicPage(siteUrl, view, requestedDate));
     } catch (error) {
       console.error('[public-page] failed to render home page', { error, requestId: req.requestId || 'unknown' });
@@ -45,10 +50,14 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       if (redirectDefaultDateQuery(req, res, PUBLIC_RANKING_PATH, requestedDate, page)) {
         return;
       }
-      const view = await deps.publicViewService.getFullRankingView(
-        requestedDate || getDateInTimezone(),
-        page,
-        20,
+      const renderDate = requestedDate || getDateInTimezone();
+      const view = await pageCache.getOrLoad(
+        `full-ranking:${renderDate}:${page}:20`,
+        () => deps.publicViewService.getFullRankingView(
+          renderDate,
+          page,
+          20,
+        ),
       );
       res.status(200).type('html').send(renderFullRankingPublicPage(siteUrl, view, requestedDate, page));
     } catch (error) {
@@ -65,10 +74,14 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       if (redirectDefaultDateQuery(req, res, PUBLIC_RISK_MONITOR_PATH, requestedDate, page)) {
         return;
       }
-      const view = await deps.publicViewService.getRiskMonitorView(
-        requestedDate || getDateInTimezone(),
-        page,
-        20,
+      const renderDate = requestedDate || getDateInTimezone();
+      const view = await pageCache.getOrLoad(
+        `risk-monitor:${renderDate}:${page}:20`,
+        () => deps.publicViewService.getRiskMonitorView(
+          renderDate,
+          page,
+          20,
+        ),
       );
       res.status(200).type('html').send(renderRiskMonitorPublicPage(siteUrl, view, requestedDate, page));
     } catch (error) {
@@ -141,6 +154,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
 
 const PUBLIC_RANKING_PATH = '/rankings/all';
 const PUBLIC_RISK_MONITOR_PATH = '/risk-monitor';
+const PUBLIC_PAGE_CACHE_TTL_MS = 30_000;
 
 function redirectDefaultDateQuery(
   req: { query: Record<string, unknown> },
@@ -173,4 +187,34 @@ function parseDateQuery(input: unknown): string | undefined {
 function toPositiveInt(value: unknown, fallback: number): number {
   const num = Number(value ?? fallback);
   return Number.isInteger(num) && num > 0 ? num : fallback;
+}
+
+function createTimedPromiseCache(ttlMs: number): {
+  getOrLoad<T>(key: string, loader: () => Promise<T>): Promise<T>;
+} {
+  const cache = new Map<string, { expiresAt: number; promise: Promise<unknown> }>();
+
+  return {
+    getOrLoad<T>(key: string, loader: () => Promise<T>): Promise<T> {
+      const now = Date.now();
+      const cached = cache.get(key);
+      if (cached && cached.expiresAt > now) {
+        return cached.promise as Promise<T>;
+      }
+
+      const promise = loader().catch((error) => {
+        const current = cache.get(key);
+        if (current?.promise === promise) {
+          cache.delete(key);
+        }
+        throw error;
+      });
+
+      cache.set(key, {
+        expiresAt: now + ttlMs,
+        promise,
+      });
+      return promise;
+    },
+  };
 }
