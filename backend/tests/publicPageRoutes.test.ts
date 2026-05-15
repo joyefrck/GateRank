@@ -33,6 +33,8 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(html, h1Pattern);
       assert.match(html, /<script type="application\/ld\+json">/);
       assert.match(html, /<script type="module" src="\/assets\/index\.js"><\/script>/);
+      assert.match(html, /\.topbar nav a\.active \{ background: #fff1f2; color: #e11d48;/);
+      assert.match(html, /\.topbar nav a\.apply-link \{ background: #f43f5e; color: #fff;/);
     }
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
