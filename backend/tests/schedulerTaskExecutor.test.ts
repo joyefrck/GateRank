@@ -38,14 +38,15 @@ function createSchedulerTaskExecutor(overrides: Partial<ConstructorParameters<ty
   });
 }
 
-test('SchedulerTaskExecutor.runRiskInspection skips down airports', async () => {
+test('SchedulerTaskExecutor.runRiskInspection skips down and unlisted airports', async () => {
   const inspected: number[] = [];
   const executor = createSchedulerTaskExecutor({
     airportRepository: {
       listAll: async () => [
-        { id: 1, status: 'normal' },
+        { id: 1, status: 'normal', is_listed: true },
         { id: 2, status: 'down' },
-        { id: 3, status: 'risk' },
+        { id: 3, status: 'risk', is_listed: true },
+        { id: 4, status: 'normal', is_listed: false },
       ],
     },
     riskCheckService: {

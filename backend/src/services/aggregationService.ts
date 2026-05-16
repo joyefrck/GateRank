@@ -4,7 +4,7 @@ import { computeLatencyStats, getStabilityTier, isStableDay } from '../utils/sta
 
 interface AggregationDeps {
   airportRepository: {
-    listAll(): Promise<Array<{ id: number }>>;
+    listAll(): Promise<Array<{ id: number; status?: string; is_listed?: boolean }>>;
   };
   probeSampleRepository: {
     getProbeSamplesInRange(airportId: number, startDate: string, endDate: string): Promise<ProbeSample[]>;
@@ -31,6 +31,9 @@ export class AggregationService {
     let aggregated = 0;
 
     for (const airport of airports) {
+      if (!isRunnableAirport(airport)) {
+        continue;
+      }
       aggregated += await this.aggregateAirport(airport.id, date);
     }
 
@@ -238,4 +241,8 @@ function calcStreakByTier(
 
 function round2(v: number): number {
   return Math.round(v * 100) / 100;
+}
+
+function isRunnableAirport(airport: { status?: string; is_listed?: boolean }): boolean {
+  return airport.status !== 'down' && airport.is_listed !== false;
 }

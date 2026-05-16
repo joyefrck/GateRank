@@ -182,7 +182,7 @@ def resolve_airports(config: Config) -> list[dict[str, Any]]:
         return list_airports(config, config.airport_status)
 
     if config.airport_id is not None:
-        return [get_json(config, f"/api/v1/admin/airports/{config.airport_id}")]
+        return filter_runnable_airports([get_json(config, f"/api/v1/admin/airports/{config.airport_id}")])
 
     assert config.airport_keyword is not None
     query = urlencode({"keyword": config.airport_keyword, "page_size": 20})
@@ -196,7 +196,7 @@ def resolve_airports(config: Config) -> list[dict[str, Any]]:
             f"airport keyword matched multiple airports: {names}. "
             "Set AIRPORT_ID or refine AIRPORT_KEYWORD.",
         )
-    return [items[0]]
+    return filter_runnable_airports([items[0]])
 
 
 def list_airports(config: Config, status: str | None) -> list[dict[str, Any]]:
@@ -211,12 +211,38 @@ def list_airports(config: Config, status: str | None) -> list[dict[str, Any]]:
             params["status"] = status
         data = get_json(config, f"/api/v1/admin/airports?{urlencode(params)}")
         batch = data.get("items", [])
-        items.extend(item for item in batch if str(item.get("status") or "") != "down")
+        items.extend(filter_runnable_airports(batch))
         total = int(data.get("total", len(items)))
         if len(batch) == 0 or page * config.page_size >= total:
             break
         page += 1
     return items
+
+
+def filter_runnable_airports(airports: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [airport for airport in airports if is_runnable_airport(airport)]
+
+
+def is_runnable_airport(airport: dict[str, Any]) -> bool:
+    if str(airport.get("status") or "") == "down":
+        return False
+    return truthy_airport_flag(airport.get("is_listed"), default=True)
+
+
+def truthy_airport_flag(value: Any, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+    return bool(value)
 
 
 def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) -> dict[str, Any]:

@@ -1926,12 +1926,18 @@ export function createAdminRoutes(deps: AdminDeps): Router {
   router.post('/airports/:id/manual-jobs', async (req, res, next) => {
     try {
       const airportId = toAirportId(req.params.id);
-      const airport = (await deps.airportRepository.getById(airportId)) as { status?: AirportStatus } | null;
+      const airport = (await deps.airportRepository.getById(airportId)) as {
+        status?: AirportStatus;
+        is_listed?: boolean;
+      } | null;
       if (!airport) {
         throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
       }
       if (airport.status === 'down') {
         throw new HttpError(409, 'AIRPORT_DOWN_MANUAL_JOB_DISABLED', '已跑路机场已停止手动测评与风险体检');
+      }
+      if (airport.is_listed === false) {
+        throw new HttpError(409, 'AIRPORT_UNLISTED_MANUAL_JOB_DISABLED', '已下架机场已停止手动测评与风险体检');
       }
       const payload = req.body ?? {};
       const date = parseDate(payload.date);

@@ -22,7 +22,7 @@ interface LoggerLike {
 
 interface SchedulerTaskExecutorDeps {
   airportRepository: {
-    listAll(): Promise<Array<{ id: number; status?: string }>>;
+    listAll(): Promise<Array<{ id: number; status?: string; is_listed?: boolean }>>;
   };
   riskCheckService: {
     inspectAirportForDate(airportId: number, date: string): Promise<{ domain_ok: boolean; ssl_days_left: number | null }>;
@@ -238,7 +238,7 @@ export class SchedulerTaskExecutor {
     try {
       const airports = await this.deps.airportRepository.listAll();
       const filtered = airports.filter((airport) => {
-        if (airport.status === 'down') {
+        if (!isRunnableAirport(airport)) {
           return false;
         }
         return this.airportStatus ? airport.status === this.airportStatus : true;
@@ -382,6 +382,10 @@ function defaultSleep(ms: number): Promise<void> {
   return new Promise((resolve) => {
     setTimeout(resolve, ms);
   });
+}
+
+function isRunnableAirport(airport: { status?: string; is_listed?: boolean }): boolean {
+  return airport.status !== 'down' && airport.is_listed !== false;
 }
 
 function maxNumber(value: string | undefined, fallback: number): number {

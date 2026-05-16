@@ -47,7 +47,7 @@ export class RecomputeService {
     const scoredRows: Array<{ airport: Airport; metrics: DailyMetrics; score: ScoreBreakdown }> = [];
 
     for (const airport of airports) {
-      if (airport.status === 'down') {
+      if (!isRunnableAirport(airport)) {
         continue;
       }
       const m = metricsMap.get(airport.id);
@@ -114,7 +114,7 @@ export class RecomputeService {
       throw new Error(`airport ${airportId} not found`);
     }
 
-    if (airport.status === 'down') {
+    if (!isRunnableAirport(airport)) {
       await this.rebuildRankingsForDate(date);
       return { recomputed: 0 };
     }
@@ -129,7 +129,7 @@ export class RecomputeService {
     const scoredAirportIds = new Set(allMetrics.map((row) => row.airport_id));
     const priceMedian = computeMedian(
       allAirports
-        .filter((item) => scoredAirportIds.has(item.id))
+        .filter((item) => isRunnableAirport(item) && scoredAirportIds.has(item.id))
         .map((item) => item.plan_price_month),
     );
     const tags = generateAirportTags({
@@ -154,7 +154,7 @@ export class RecomputeService {
     const scoreMap = new Map(scores.map((item) => [item.airport_id, item]));
     const rows: RankedAirportInput[] = [];
     for (const airport of airports) {
-      if (airport.status === 'down') {
+      if (!isRunnableAirport(airport)) {
         continue;
       }
       const metricsRow = metricsMap.get(airport.id);
@@ -206,4 +206,8 @@ function preserveManualTotalScore(score: ScoreBreakdown, scoreTrend: AirportScor
   if (typeof manualTotalScore === 'number' && Number.isFinite(manualTotalScore)) {
     score.details.manual_total_score = manualTotalScore;
   }
+}
+
+function isRunnableAirport(airport: Pick<Airport, 'status' | 'is_listed'>): boolean {
+  return airport.status !== 'down' && airport.is_listed !== false;
 }

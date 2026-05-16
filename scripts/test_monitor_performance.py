@@ -12,6 +12,8 @@ from scripts.monitor_performance import (
     build_config,
     build_run_payload,
     check_nodes_availability,
+    collect_airport_results,
+    list_airports,
     nodes_from_snapshot,
     normalize_subscription_text,
     parse_node_line,
@@ -45,6 +47,7 @@ class MonitorPerformanceTests(unittest.TestCase):
             latency_sample_interval_seconds=0,
             speed_timeout=1,
             speed_connections=1,
+            performance_concurrency=4,
             page_size=100,
             source="test-performance",
             test_url_latency="https://www.google.com/generate_204",
@@ -177,6 +180,54 @@ class MonitorPerformanceTests(unittest.TestCase):
 
         self.assertEqual(config.latency_attempts, 6)
         self.assertEqual(config.latency_sample_interval_seconds, 3)
+        self.assertEqual(config.performance_concurrency, 4)
+
+    def test_list_airports_filters_down_and_unlisted_airports(self) -> None:
+        config = self.make_config()
+        with patch("scripts.monitor_performance.get_json", return_value={
+            "total": 4,
+            "items": [
+                {"id": 1, "name": "Listed", "status": "normal", "is_listed": True},
+                {"id": 2, "name": "Unlisted", "status": "normal", "is_listed": False},
+                {"id": 3, "name": "Down", "status": "down", "is_listed": True},
+                {"id": 4, "name": "Legacy", "status": "risk"},
+            ],
+        }):
+            airports = list_airports(config, None)
+
+        self.assertEqual([airport["id"] for airport in airports], [1, 4])
+
+    def test_collect_airport_results_uses_distinct_proxy_ports_and_keeps_going_after_failure(self) -> None:
+        config = self.make_config()
+        config.performance_concurrency = 2
+        airports = [
+            {"id": 1, "name": "A"},
+            {"id": 2, "name": "B"},
+            {"id": 3, "name": "C"},
+        ]
+        ports: list[int] = []
+        results: list[dict[str, object]] = []
+        failures: list[dict[str, object]] = []
+
+        def fake_run_for_airport(worker_config, airport, _sampled_at):
+            ports.append(worker_config.proxy_port)
+            if airport["id"] == 2:
+                raise RuntimeError("subscription blocked")
+            return {
+                "payload": {"airport_id": airport["id"]},
+                "summary": {"airport_id": airport["id"], "status": "success"},
+            }
+
+        with (
+            patch("scripts.monitor_performance.run_for_airport", side_effect=fake_run_for_airport),
+            patch("scripts.monitor_performance.post_performance_run", return_value={"run_id": 9}),
+        ):
+            submitted_any = collect_airport_results(config, airports, "2026-05-16T00:10:00+08:00", results, failures)
+
+        self.assertEqual(submitted_any, True)
+        self.assertEqual(sorted(ports), [7890, 7891, 7892])
+        self.assertEqual(sorted(item["airport_id"] for item in results), [1, 3])
+        self.assertEqual(failures, [{"airport_id": 2, "airport_name": "B", "error": "subscription blocked"}])
 
     def test_build_run_payload_preserves_latency_sample_timestamps(self) -> None:
         payload = build_run_payload(

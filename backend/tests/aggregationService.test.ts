@@ -87,7 +87,10 @@ test('aggregateForDate converts samples to daily metrics', async () => {
 
   const service = new AggregationService({
     airportRepository: {
-      listAll: async () => [{ id: 1 }],
+      listAll: async () => [
+        { id: 1, status: 'normal', is_listed: true },
+        { id: 2, status: 'normal', is_listed: false },
+      ],
     },
     probeSampleRepository: {
       getProbeSamplesInRange: async () => samples,

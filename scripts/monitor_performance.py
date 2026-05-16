@@ -22,7 +22,8 @@ import sys
 import tempfile
 import threading
 import time
-from dataclasses import dataclass
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from statistics import median
 from typing import Any
@@ -44,6 +45,7 @@ DEFAULT_LATENCY_ATTEMPTS = 6
 DEFAULT_LATENCY_SAMPLE_INTERVAL_SECONDS = 3
 DEFAULT_SPEED_TIMEOUT = 20
 DEFAULT_SPEED_CONNECTIONS = 4
+DEFAULT_PERFORMANCE_CONCURRENCY = 4
 DEFAULT_SOURCE = "cron-performance"
 DEFAULT_TEST_URL_LATENCY = "https://www.google.com/generate_204"
 DEFAULT_TEST_URL_SPEED = "https://speed.cloudflare.com/__down?bytes=5000000"
@@ -73,6 +75,7 @@ class Config:
     latency_sample_interval_seconds: float
     speed_timeout: int
     speed_connections: int
+    performance_concurrency: int
     page_size: int
     source: str
     test_url_latency: str
@@ -139,23 +142,7 @@ def main() -> int:
         airports = resolve_airports(config)
         results: list[dict[str, Any]] = []
         failures: list[dict[str, Any]] = []
-        submitted_any = False
-
-        for airport in airports:
-            try:
-                result = run_for_airport(config, airport, sampled_at)
-                submit_result = post_performance_run(config, result["payload"])
-                result["run_id"] = submit_result.get("run_id")
-                results.append(result["summary"])
-                submitted_any = True
-            except Exception as exc:
-                failures.append(
-                    {
-                        "airport_id": airport.get("id"),
-                        "airport_name": airport.get("name"),
-                        "error": str(exc),
-                    }
-                )
+        submitted_any = collect_airport_results(config, airports, sampled_at, results, failures)
 
         aggregate_result = None
         recompute_result = None
@@ -219,6 +206,11 @@ def build_config() -> Config:
         type=int,
         default=int(os.getenv("SPEED_CONNECTIONS", str(DEFAULT_SPEED_CONNECTIONS))),
     )
+    parser.add_argument(
+        "--performance-concurrency",
+        type=int,
+        default=int(os.getenv("PERFORMANCE_CONCURRENCY", str(DEFAULT_PERFORMANCE_CONCURRENCY))),
+    )
     parser.add_argument("--page-size", type=int, default=int(os.getenv("PAGE_SIZE", "100")))
     parser.add_argument("--source", default=os.getenv("SOURCE", DEFAULT_SOURCE))
     parser.add_argument(
@@ -258,6 +250,7 @@ def build_config() -> Config:
         latency_sample_interval_seconds=max(0, args.latency_sample_interval_seconds),
         speed_timeout=max(1, args.speed_timeout),
         speed_connections=max(1, args.speed_connections),
+        performance_concurrency=max(1, args.performance_concurrency),
         page_size=max(1, args.page_size),
         source=args.source,
         test_url_latency=args.test_url_latency,
@@ -283,7 +276,7 @@ def resolve_airports(config: Config) -> list[dict[str, Any]]:
         return list_airports(config, config.airport_status)
 
     if config.airport_id is not None:
-        return [get_json(config, f"/api/v1/admin/airports/{config.airport_id}")]
+        return filter_runnable_airports([get_json(config, f"/api/v1/admin/airports/{config.airport_id}")])
 
     assert config.airport_keyword is not None
     query = urlencode({"keyword": config.airport_keyword, "page_size": 20})
@@ -297,7 +290,7 @@ def resolve_airports(config: Config) -> list[dict[str, Any]]:
             f"airport keyword matched multiple airports: {names}. "
             "Set AIRPORT_ID or refine AIRPORT_KEYWORD.",
         )
-    return [items[0]]
+    return filter_runnable_airports([items[0]])
 
 
 def list_airports(config: Config, status: str | None) -> list[dict[str, Any]]:
@@ -309,12 +302,80 @@ def list_airports(config: Config, status: str | None) -> list[dict[str, Any]]:
             params["status"] = status
         data = get_json(config, f"/api/v1/admin/airports?{urlencode(params)}")
         batch = data.get("items", [])
-        items.extend(item for item in batch if str(item.get("status") or "") != "down")
+        items.extend(filter_runnable_airports(batch))
         total = int(data.get("total", len(items)))
         if len(batch) == 0 or page * config.page_size >= total:
             break
         page += 1
     return items
+
+
+def filter_runnable_airports(airports: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [airport for airport in airports if is_runnable_airport(airport)]
+
+
+def is_runnable_airport(airport: dict[str, Any]) -> bool:
+    if str(airport.get("status") or "") == "down":
+        return False
+    return truthy_airport_flag(airport.get("is_listed"), default=True)
+
+
+def truthy_airport_flag(value: Any, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+    return bool(value)
+
+
+def collect_airport_results(
+    config: Config,
+    airports: list[dict[str, Any]],
+    sampled_at: str,
+    results: list[dict[str, Any]],
+    failures: list[dict[str, Any]],
+) -> bool:
+    if not airports:
+        return False
+
+    max_workers = min(config.performance_concurrency, len(airports))
+    submitted_any = False
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {
+            executor.submit(collect_one_airport, config, airport, sampled_at, index): airport
+            for index, airport in enumerate(airports)
+        }
+        for future in as_completed(futures):
+            airport = futures[future]
+            try:
+                summary = future.result()
+                results.append(summary)
+                submitted_any = True
+            except Exception as exc:
+                failures.append(
+                    {
+                        "airport_id": airport.get("id"),
+                        "airport_name": airport.get("name"),
+                        "error": str(exc),
+                    }
+                )
+    return submitted_any
+
+
+def collect_one_airport(config: Config, airport: dict[str, Any], sampled_at: str, worker_index: int) -> dict[str, Any]:
+    worker_config = replace(config, proxy_port=config.proxy_port + worker_index)
+    result = run_for_airport(worker_config, airport, sampled_at)
+    submit_result = post_performance_run(config, result["payload"])
+    result["run_id"] = submit_result.get("run_id")
+    return result["summary"]
 
 
 def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) -> dict[str, Any]:

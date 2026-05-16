@@ -3,7 +3,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from scripts.monitor_stability import build_config, collect_latency_samples
+from scripts.monitor_stability import build_config, collect_latency_samples, list_airports
 
 
 class MonitorStabilityTests(unittest.TestCase):
@@ -56,6 +56,30 @@ class MonitorStabilityTests(unittest.TestCase):
             ],
         )
         self.assertEqual(sleeps, [3, 3, 3, 3, 3])
+
+    def test_list_airports_filters_down_and_unlisted_airports(self) -> None:
+        config = build_test_config()
+        with patch("scripts.monitor_stability.get_json", return_value={
+            "total": 4,
+            "items": [
+                {"id": 1, "name": "Listed", "status": "normal", "is_listed": True},
+                {"id": 2, "name": "Unlisted", "status": "normal", "is_listed": False},
+                {"id": 3, "name": "Down", "status": "down", "is_listed": True},
+                {"id": 4, "name": "Legacy", "status": "risk"},
+            ],
+        }):
+            airports = list_airports(config, None)
+
+        self.assertEqual([airport["id"] for airport in airports], [1, 4])
+
+
+def build_test_config():
+    env = {
+        "ADMIN_API_KEY": "test-key",
+        "AIRPORT_ID": "1",
+    }
+    with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", ["monitor_stability.py"]):
+        return build_config()
 
 
 if __name__ == "__main__":

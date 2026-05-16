@@ -1116,6 +1116,62 @@ test('POST /airports/:id/manual-jobs rejects down airports', async () => {
   }
 });
 
+test('POST /airports/:id/manual-jobs rejects unlisted airports', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: {
+        ...stubAirportRepository(),
+        getById: async () => ({
+          ...(await stubAirportRepository().getById()),
+          status: 'normal',
+          is_listed: false,
+        }),
+      },
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/manual-jobs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'performance', date: '2026-03-30' }),
+    });
+    assert.equal(response.status, 409);
+    const data = (await response.json()) as { code: string; message: string };
+    assert.equal(data.code, 'AIRPORT_UNLISTED_MANUAL_JOB_DISABLED');
+    assert.match(data.message, /已下架机场/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /scheduler/tasks/:taskKey/restart returns updated task view', async () => {
   const app = express();
   app.use(express.json());
