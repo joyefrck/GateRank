@@ -29,6 +29,7 @@ type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
 type AirportApplicationReviewStatus = 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
 type AirportApplicationPaymentStatus = 'unpaid' | 'paid';
 type AirportApplicationDetailTab = 'basic' | 'review';
+type AirportEditTab = 'basic' | 'review' | 'account';
 type ProbeSampleType = 'latency' | 'download' | 'availability';
 type ProbeScope = 'stability' | 'performance';
 type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
@@ -593,6 +594,7 @@ interface SmtpSettingsView {
 
 type SmtpTemplateKey =
   | 'applicant_credentials'
+  | 'applicant_password_reset'
   | 'application_approved'
   | 'application_reply'
   | 'low_balance_warning'
@@ -607,6 +609,7 @@ interface SmtpTemplateItem {
 
 interface SmtpTemplateMap {
   applicant_credentials: SmtpTemplateItem;
+  applicant_password_reset: SmtpTemplateItem;
   application_approved: SmtpTemplateItem;
   application_reply: SmtpTemplateItem;
   low_balance_warning: SmtpTemplateItem;
@@ -829,6 +832,7 @@ const AIRPORT_BILLING_PAGE_SIZE = 20;
 const APPLICATIONS_PAGE_SIZE = 20;
 const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = [
   'applicant_credentials',
+  'applicant_password_reset',
   'application_approved',
   'application_reply',
   'low_balance_warning',
@@ -923,6 +927,20 @@ const SMTP_TEMPLATE_SCENARIOS: Record<
       airport_name: '大象网络',
       portal_email: 'owner@example.com',
       initial_password: 'Passw0rd!',
+      portal_login_url: 'https://gaterank.example.com/portal',
+      applicant_email: 'owner@example.com',
+      site_name: 'GateRank',
+    },
+  },
+  applicant_password_reset: {
+    title: '申请人密码重置邮件',
+    trigger: '管理员在机场管理后台重置申请人登录密码后发送。',
+    description: '用于告知申请人后台登录邮箱、新密码和登录地址。',
+    variables: ['{{airport_name}}', '{{portal_email}}', '{{new_password}}', '{{portal_login_url}}', '{{applicant_email}}', '{{site_name}}'],
+    sampleValues: {
+      airport_name: '大象网络',
+      portal_email: 'owner@example.com',
+      new_password: 'NewPassw0rd!',
       portal_login_url: 'https://gaterank.example.com/portal',
       applicant_email: 'owner@example.com',
       site_name: 'GateRank',
@@ -4093,6 +4111,19 @@ function getDefaultSmtpTemplates(): SmtpTemplateMap {
         '首次登录后请立即修改密码，然后完成支付并等待审批。',
       ].join('\n'),
     },
+    applicant_password_reset: {
+      enabled: true,
+      subject: 'GateRank 申请人后台密码已重置 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 的申请人后台登录密码已由管理员重置。',
+        '',
+        '登录邮箱：{{portal_email}}',
+        '新密码：{{new_password}}',
+        '登录地址：{{portal_login_url}}',
+        '',
+        '请使用新密码登录，并在登录后立即修改密码。',
+      ].join('\n'),
+    },
     application_approved: {
       enabled: true,
       subject: 'GateRank 审批通过通知 - {{airport_name}}',
@@ -5447,6 +5478,8 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<'' | AirportStatus>('');
   const [editing, setEditing] = useState<AirportFormState | null>(null);
+  const [airportEditTab, setAirportEditTab] = useState<AirportEditTab>('basic');
+  const [slugEditing, setSlugEditing] = useState(false);
   const [manualTagInput, setManualTagInput] = useState('');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -5455,6 +5488,9 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
   const [balanceSaving, setBalanceSaving] = useState(false);
   const [balanceError, setBalanceError] = useState('');
   const [balanceMessage, setBalanceMessage] = useState('');
+  const [passwordResetSaving, setPasswordResetSaving] = useState(false);
+  const [passwordResetError, setPasswordResetError] = useState('');
+  const [passwordResetMessage, setPasswordResetMessage] = useState('');
   const [billingAirport, setBillingAirport] = useState<Airport | null>(null);
   const [billingTab, setBillingTab] = useState<BillingDetailTab>('recharge');
   const [rechargeRecords, setRechargeRecords] = useState<PaginatedResponse<RechargeOrderRecord>>({
@@ -5502,11 +5538,15 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
   }, []);
 
   useEffect(() => {
+    setAirportEditTab('basic');
+    setSlugEditing(false);
     setManualTagInput(editing ? formatTagInput(editing.manual_tags) : '');
     setBalanceAmount('');
     setBalanceDescription('');
     setBalanceError('');
     setBalanceMessage('');
+    setPasswordResetError('');
+    setPasswordResetMessage('');
   }, [editing?.id ?? (editing ? 'new' : 'none')]);
 
   const saveAirport = async () => {
@@ -5602,6 +5642,34 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       setBalanceError(err instanceof Error ? err.message : '添加余额失败');
     } finally {
       setBalanceSaving(false);
+    }
+  };
+
+  const resetApplicantLoginPassword = async () => {
+    if (!editing?.id) return;
+    const targetEmail = editing.applicant_email.trim();
+    const confirmed = window.confirm([
+      '确认重置该申请人的登录密码？',
+      '',
+      `发送邮箱：${targetEmail || '当前未填写邮箱'}`,
+      '',
+      '确认后系统会生成新密码并发送到该邮箱，用户下次登录后需要立即修改密码。',
+    ].join('\n'));
+    if (!confirmed) return;
+
+    setPasswordResetSaving(true);
+    setPasswordResetError('');
+    setPasswordResetMessage('');
+    try {
+      const data = (await apiFetch(`/api/v1/admin/airports/${editing.id}/applicant-password-reset`, {
+        method: 'POST',
+      })) as { to_email?: string };
+      const toEmail = data.to_email ? `（${data.to_email}）` : '';
+      setPasswordResetMessage(`新密码已发送到申请人登录邮箱${toEmail}`);
+    } catch (err) {
+      setPasswordResetError(err instanceof Error ? err.message : '重置用户登录密码失败');
+    } finally {
+      setPasswordResetSaving(false);
     }
   };
 
@@ -5986,10 +6054,35 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-6 overscroll-contain">
+              <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-1">
+                <button
+                  type="button"
+                  className={`rounded-xl px-4 py-2 text-sm font-medium transition ${airportEditTab === 'basic' ? 'bg-white text-neutral-950 shadow-sm' : 'text-neutral-600 hover:text-neutral-950'}`}
+                  onClick={() => setAirportEditTab('basic')}
+                >
+                  基础信息
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-xl px-4 py-2 text-sm font-medium transition ${airportEditTab === 'review' ? 'bg-white text-neutral-950 shadow-sm' : 'text-neutral-600 hover:text-neutral-950'}`}
+                  onClick={() => setAirportEditTab('review')}
+                >
+                  审核信息
+                </button>
+                <button
+                  type="button"
+                  className={`rounded-xl px-4 py-2 text-sm font-medium transition ${airportEditTab === 'account' ? 'bg-white text-neutral-950 shadow-sm' : 'text-neutral-600 hover:text-neutral-950'}`}
+                  onClick={() => setAirportEditTab('account')}
+                >
+                  账户管理
+                </button>
+              </div>
+
+              {airportEditTab === 'basic' && (
               <section className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">基础信息</div>
-                  <p className="mt-1 text-sm text-neutral-500">先把识别信息填完整，再补上价格、状态与是否支持试用。</p>
+                  <p className="mt-1 text-sm text-neutral-500">维护机场名称、价格、试用支持和官网订阅信息。</p>
                 </div>
 
                 <FormField label="机场名称" hint="用于管理列表、数据台标题与榜单识别。">
@@ -5998,15 +6091,6 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                     placeholder="例如：大象网络"
                     value={editing.name}
                     onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                  />
-                </FormField>
-
-                <FormField label="SEO URL Slug" hint="用于 /airports/slug 稳定报告地址；留空时后端按官网或名称自动生成。">
-                  <input
-                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                    placeholder="例如：daxiang-network"
-                    value={editing.slug}
-                    onChange={(e) => setEditing({ ...editing, slug: e.target.value })}
                   />
                 </FormField>
 
@@ -6022,29 +6106,6 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                   />
                 </FormField>
 
-                <FormField label="运行状态" hint="控制榜单与管理列表的状态展示。">
-                  <select
-                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                    value={editing.status}
-                    onChange={(e) => setEditing({ ...editing, status: e.target.value as AirportStatus })}
-                  >
-                    <option value="normal">正常</option>
-                    <option value="risk">风险</option>
-                    <option value="down">跑路</option>
-                  </select>
-                </FormField>
-
-                <FormField label="上架状态" hint="控制是否出现在所有公开页面；下架后仅管理后台可见。">
-                  <select
-                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                    value={editing.is_listed ? 'listed' : 'unlisted'}
-                    onChange={(e) => setEditing({ ...editing, is_listed: e.target.value === 'listed' })}
-                  >
-                    <option value="listed">上架</option>
-                    <option value="unlisted">下架</option>
-                  </select>
-                </FormField>
-
                 <div className="rounded-2xl border border-neutral-300 bg-white px-4 py-4">
                   <div className="text-sm font-medium text-neutral-900">试用支持</div>
                   <p className="mt-1 text-sm text-neutral-500">用于新手友好类标签判断，也方便运营快速筛选。</p>
@@ -6058,20 +6119,13 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                     支持试用
                   </label>
                 </div>
-
-                <FormField label="人工标签" hint="多个标签用逗号、顿号、空格或换行分隔。系统自动标签会单独计算，这里只维护人工标签。">
-                  <textarea
-                    className="min-h-[96px] w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                    placeholder="例如：老牌机场, 流媒体友好, 备用线路多"
-                    value={manualTagInput}
-                    onChange={(e) => setManualTagInput(e.target.value)}
-                  />
-                </FormField>
               </section>
+              )}
 
+              {airportEditTab === 'review' && (
               <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
                 <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">联系与审核信息</div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">审核信息</div>
                   <p className="mt-1 text-sm text-neutral-500">这些字段与入驻申请保持一致，正式机场创建后也可在这里维护。</p>
                 </div>
 
@@ -6133,8 +6187,71 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                   />
                 </FormField>
               </section>
+              )}
 
-              {editing.id && (
+              {airportEditTab === 'account' && (
+                <>
+                <section className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">账户配置</div>
+                    <p className="mt-1 text-sm text-neutral-500">管理公开地址、运营状态、上架控制和人工标签。</p>
+                  </div>
+
+                  <FormField label="SEO URL Slug" hint="用于 /airports/slug 稳定报告地址；留空时后端按官网或名称自动生成。">
+                    <div className="flex flex-col gap-3 sm:flex-row">
+                      <input
+                        className={`w-full rounded-2xl border px-4 py-3 text-sm outline-none transition ${slugEditing
+                          ? 'border-neutral-300 bg-white focus:border-neutral-900'
+                          : 'cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-500'}`}
+                        placeholder="例如：daxiang-network"
+                        value={editing.slug}
+                        disabled={!slugEditing}
+                        onChange={(e) => setEditing({ ...editing, slug: e.target.value })}
+                      />
+                      <button
+                        type="button"
+                        className="rounded-2xl border border-neutral-300 px-4 py-3 text-sm font-medium text-neutral-700 hover:border-neutral-900 hover:text-neutral-900 sm:w-24"
+                        onClick={() => setSlugEditing(!slugEditing)}
+                      >
+                        {slugEditing ? '锁定' : '编辑'}
+                      </button>
+                    </div>
+                  </FormField>
+
+                  <FormField label="运行状态" hint="控制榜单与管理列表的状态展示。">
+                    <select
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      value={editing.status}
+                      onChange={(e) => setEditing({ ...editing, status: e.target.value as AirportStatus })}
+                    >
+                      <option value="normal">正常</option>
+                      <option value="risk">风险</option>
+                      <option value="down">跑路</option>
+                    </select>
+                  </FormField>
+
+                  <FormField label="上架状态" hint="控制是否出现在所有公开页面；下架后仅管理后台可见。">
+                    <select
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      value={editing.is_listed ? 'listed' : 'unlisted'}
+                      onChange={(e) => setEditing({ ...editing, is_listed: e.target.value === 'listed' })}
+                    >
+                      <option value="listed">上架</option>
+                      <option value="unlisted">下架</option>
+                    </select>
+                  </FormField>
+
+                  <FormField label="人工标签" hint="多个标签用逗号、顿号、空格或换行分隔。系统自动标签会单独计算，这里只维护人工标签。">
+                    <textarea
+                      className="min-h-[96px] w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      placeholder="例如：老牌机场, 流媒体友好, 备用线路多"
+                      value={manualTagInput}
+                      onChange={(e) => setManualTagInput(e.target.value)}
+                    />
+                  </FormField>
+                </section>
+
+                {editing.id ? (
                 <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">余额管理</div>
@@ -6177,9 +6294,40 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                       {balanceSaving ? '添加中...' : '添加余额'}
                     </button>
                   </div>
+                  <div className="border-t border-neutral-200 pt-4">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0 sm:max-w-[calc(100%-220px)]">
+                        <div className="text-sm font-medium text-neutral-900">申请人登录密码</div>
+                        <p className="mt-1 text-sm text-neutral-500">
+                          生成新密码并发送到申请人登录邮箱
+                          {editing.applicant_email.trim() ? `：${editing.applicant_email.trim()}` : '。当前未填写邮箱'}
+                          ，申请人下次登录后需要立即修改密码。
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className="shrink-0 whitespace-nowrap rounded-2xl border border-rose-300 px-4 py-2.5 text-sm font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[188px]"
+                        disabled={passwordResetSaving}
+                        onClick={() => void resetApplicantLoginPassword()}
+                      >
+                        {passwordResetSaving ? '重置中...' : '重置用户登录密码'}
+                      </button>
+                    </div>
+                    {passwordResetError && <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{passwordResetError}</div>}
+                    {passwordResetMessage && <div className="mt-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{passwordResetMessage}</div>}
+                  </div>
                 </section>
+                ) : (
+                <section className="rounded-2xl border border-neutral-200 bg-white p-5">
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    保存机场后才能管理余额和申请人登录密码。
+                  </div>
+                </section>
+                )}
+                </>
               )}
 
+              {airportEditTab === 'basic' && (
               <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">官网配置</div>
@@ -6237,6 +6385,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                   />
                 </FormField>
               </section>
+              )}
 
               {formError && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{formError}</div>}
             </div>

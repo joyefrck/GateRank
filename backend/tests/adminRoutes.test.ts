@@ -735,6 +735,237 @@ test('POST /airports/:id/wallet/adjustments validates amount and missing wallet'
   }
 });
 
+test('POST /airports/:id/applicant-password-reset updates password, emails applicant, and audits without secrets', async () => {
+  const passwordUpdates: Array<{ id: number; passwordHash: string; mustChangePassword: boolean }> = [];
+  const sentMessages: Array<{
+    to: string;
+    airportName: string;
+    portalEmail: string;
+    newPassword: string;
+    portalLoginUrl: string;
+  }> = [];
+  const auditLogs: Array<{ action: string; payload: unknown }> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantAccountRepository: {
+        getByAirportId: async (airportId) => airportId === 1
+          ? {
+            id: 22,
+            application_id: 7,
+            email: 'owner@example.com',
+            password_hash: 'old-hash',
+            must_change_password: false,
+          }
+          : null,
+        updatePassword: async (id, passwordHash, mustChangePassword) => {
+          passwordUpdates.push({ id, passwordHash, mustChangePassword });
+          return true;
+        },
+      },
+      mailService: {
+        sendTestMail: async () => undefined,
+        sendApplicationApprovedEmail: async () => undefined,
+        sendApplicantPasswordResetEmail: async (input) => {
+          sentMessages.push(input);
+        },
+      },
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, _actor, _requestId, payload) => {
+          auditLogs.push({ action, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/applicant-password-reset`, {
+      method: 'POST',
+      headers: { 'x-admin-actor': 'tester' },
+    });
+    const data = (await response.json()) as {
+      ok: boolean;
+      airport_id: number;
+      applicant_account_id: number;
+      application_id: number;
+      to_email: string;
+    };
+
+    assert.equal(response.status, 200);
+    assert.equal(data.ok, true);
+    assert.equal(data.to_email, 'owner@example.com');
+    assert.equal(passwordUpdates.length, 1);
+    assert.equal(passwordUpdates[0]?.id, 22);
+    assert.notEqual(passwordUpdates[0]?.passwordHash, 'old-hash');
+    assert.equal(passwordUpdates[0]?.mustChangePassword, true);
+    assert.equal(sentMessages.length, 1);
+    assert.equal(sentMessages[0]?.to, 'owner@example.com');
+    assert.equal(sentMessages[0]?.portalEmail, 'owner@example.com');
+    assert.equal(sentMessages[0]?.airportName, 'Airport');
+    assert.ok(sentMessages[0]?.newPassword);
+    assert.match(sentMessages[0]?.portalLoginUrl || '', /\/portal$/);
+    assert.equal(auditLogs.length, 1);
+    assert.equal(auditLogs[0]?.action, 'reset_airport_applicant_password');
+    assert.deepEqual(auditLogs[0]?.payload, {
+      airport_id: 1,
+      applicant_account_id: 22,
+      application_id: 7,
+      to_email: 'owner@example.com',
+    });
+    assert.equal(JSON.stringify(auditLogs[0]?.payload).includes(String(sentMessages[0]?.newPassword)), false);
+    assert.equal(JSON.stringify(auditLogs[0]?.payload).includes('old-hash'), false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airports/:id/applicant-password-reset rejects airports without applicant account', async () => {
+  let passwordUpdateCalls = 0;
+  let mailCalls = 0;
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantAccountRepository: {
+        getByAirportId: async () => null,
+        updatePassword: async () => {
+          passwordUpdateCalls += 1;
+          return true;
+        },
+      },
+      mailService: {
+        sendTestMail: async () => undefined,
+        sendApplicationApprovedEmail: async () => undefined,
+        sendApplicantPasswordResetEmail: async () => {
+          mailCalls += 1;
+        },
+      },
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/applicant-password-reset`, {
+      method: 'POST',
+    });
+    const data = (await response.json()) as { code: string };
+
+    assert.equal(response.status, 409);
+    assert.equal(data.code, 'AIRPORT_APPLICANT_ACCOUNT_NOT_FOUND');
+    assert.equal(passwordUpdateCalls, 0);
+    assert.equal(mailCalls, 0);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airports/:id/applicant-password-reset rolls back password when SMTP send fails', async () => {
+  const passwordUpdates: Array<{ id: number; passwordHash: string; mustChangePassword: boolean }> = [];
+  const auditLogs: unknown[] = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantAccountRepository: {
+        getByAirportId: async () => ({
+          id: 22,
+          application_id: 7,
+          email: 'owner@example.com',
+          password_hash: 'old-hash',
+          must_change_password: false,
+        }),
+        updatePassword: async (id, passwordHash, mustChangePassword) => {
+          passwordUpdates.push({ id, passwordHash, mustChangePassword });
+          return true;
+        },
+      },
+      mailService: {
+        sendTestMail: async () => undefined,
+        sendApplicationApprovedEmail: async () => undefined,
+        sendApplicantPasswordResetEmail: async () => {
+          throw new SmtpSendError('smtp failed', 502);
+        },
+      },
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (_action, _actor, _requestId, payload) => {
+          auditLogs.push(payload);
+        },
+      },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/applicant-password-reset`, {
+      method: 'POST',
+    });
+    const data = (await response.json()) as { code: string; message: string };
+
+    assert.equal(response.status, 502);
+    assert.equal(data.code, 'AIRPORT_APPLICANT_PASSWORD_RESET_EMAIL_FAILED');
+    assert.match(data.message, /smtp failed/);
+    assert.equal(passwordUpdates.length, 2);
+    assert.notEqual(passwordUpdates[0]?.passwordHash, 'old-hash');
+    assert.equal(passwordUpdates[0]?.mustChangePassword, true);
+    assert.deepEqual(passwordUpdates[1], {
+      id: 22,
+      passwordHash: 'old-hash',
+      mustChangePassword: false,
+    });
+    assert.equal(auditLogs.length, 0);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /airports/:id/recharge-orders returns paginated recharge records', async () => {
   const calls: Array<{ airportId: number; page?: number; pageSize?: number }> = [];
   const app = express();

@@ -305,6 +305,7 @@ export async function createApp() {
       airportApplicationRepository,
       applicationPaymentOrderRepository,
       applicantBillingRepository,
+      applicantAccountRepository,
       probeSampleRepository,
       performanceRunRepository,
       subscriptionNodeSnapshotRepository,

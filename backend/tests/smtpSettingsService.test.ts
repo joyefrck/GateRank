@@ -17,6 +17,9 @@ test('SmtpSettingsService returns default view', async () => {
   assert.equal(view.from_name, 'GateRank');
   assert.equal(view.templates.applicant_credentials.enabled, true);
   assert.match(view.templates.applicant_credentials.subject, /账号已开通/);
+  assert.equal(view.templates.applicant_password_reset.enabled, true);
+  assert.match(view.templates.applicant_password_reset.subject, /密码已重置/);
+  assert.match(view.templates.applicant_password_reset.body, /\{\{new_password\}\}/);
   assert.match(view.templates.application_approved.subject, /审批通过通知/);
   assert.match(view.templates.application_reply.subject, /入驻申请回复/);
   assert.match(view.templates.application_reply.body, /本邮箱仅用于系统发信，无法接收回复/);
@@ -72,6 +75,8 @@ test('SmtpSettingsService saves and masks password', async () => {
   assert.equal(view.templates.applicant_credentials.subject, '欢迎入驻 - {{airport_name}}');
   assert.equal(view.templates.applicant_credentials.body, '账号：{{portal_email}}');
   assert.equal(view.templates.applicant_credentials.enabled, true);
+  assert.match(view.templates.applicant_password_reset.subject, /密码已重置/);
+  assert.match(view.templates.applicant_password_reset.body, /\{\{new_password\}\}/);
   assert.match(view.templates.application_approved.subject, /审批通过通知/);
   assert.match(view.templates.application_reply.subject, /入驻申请回复/);
   assert.equal(view.templates.low_balance_warning.enabled, true);

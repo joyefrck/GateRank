@@ -172,6 +172,33 @@ export class ApplicantAccountRepository {
     return rows[0] ? toApplicantAccount(rows[0]) : null;
   }
 
+  async getByAirportId(airportId: number): Promise<ApplicantAccount | null> {
+    const [rows] = await this.pool.query<ApplicantAccountRow[]>(
+      `SELECT
+         account.id,
+         account.application_id,
+         account.email,
+         account.password_hash,
+         account.must_change_password,
+         DATE_FORMAT(account.last_login_at, '%Y-%m-%d %H:%i:%s') AS last_login_at,
+         account.x_user_id,
+         account.x_username,
+         account.x_display_name,
+         DATE_FORMAT(account.x_bound_at, '%Y-%m-%d %H:%i:%s') AS x_bound_at,
+         DATE_FORMAT(account.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+         DATE_FORMAT(account.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+       FROM airport_applications AS application
+       JOIN applicant_accounts AS account
+         ON account.application_id = application.id
+       WHERE application.approved_airport_id = ?
+       ORDER BY application.id DESC
+       LIMIT 1`,
+      [airportId],
+    );
+
+    return rows[0] ? toApplicantAccount(rows[0]) : null;
+  }
+
   async updatePassword(id: number, passwordHash: string, mustChangePassword: boolean): Promise<boolean> {
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE applicant_accounts

@@ -31,6 +31,7 @@ import type {
   WalletTransactionView,
 } from '../repositories/applicantBillingRepository';
 import type { AccessTokenScope } from '../utils/accessToken';
+import { createRandomPassword, hashPassword } from '../utils/password';
 import type {
   AirportApplicationReviewStatus,
   AirportApplicationPaymentStatus,
@@ -175,6 +176,16 @@ interface AdminDeps {
       reference_id: string;
     }): Promise<unknown | null>;
   };
+  applicantAccountRepository?: {
+    getByAirportId?(airportId: number): Promise<{
+      id: number;
+      application_id: number;
+      email: string;
+      password_hash: string;
+      must_change_password: boolean;
+    } | null>;
+    updatePassword?(id: number, passwordHash: string, mustChangePassword: boolean): Promise<boolean>;
+  };
   probeSampleRepository: {
     insertProbeSample(input: ProbeSampleInput): Promise<number>;
     insertPacketLossSample(input: ProbeSampleInput): Promise<number>;
@@ -289,6 +300,13 @@ interface AdminDeps {
   mailService?: {
     sendTestMail(input: SmtpSettingsInput & { test_to: string }): Promise<void>;
     sendApplicationApprovedEmail(input: { to: string; airportName: string }): Promise<void>;
+    sendApplicantPasswordResetEmail?(input: {
+      to: string;
+      airportName: string;
+      portalEmail: string;
+      newPassword: string;
+      portalLoginUrl: string;
+    }): Promise<void>;
     sendApplicationReplyEmail?(input: {
       to: string;
       airportName: string;
@@ -1479,6 +1497,80 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       });
       res.json({ airport_id: airportId, wallet });
     } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/airports/:id/applicant-password-reset', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const airport = await deps.airportRepository.getById(airportId);
+      if (!airport) {
+        throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
+      }
+
+      const accountRepository = getApplicantAccountRepository(deps);
+      const account = await accountRepository.getByAirportId(airportId);
+      if (!account) {
+        throw new HttpError(409, 'AIRPORT_APPLICANT_ACCOUNT_NOT_FOUND', '该机场未绑定申请人登录账号，无法重置密码');
+      }
+
+      const mailService = getMailService(deps);
+      if (!mailService.sendApplicantPasswordResetEmail) {
+        throw new Error('mailService.sendApplicantPasswordResetEmail is not configured');
+      }
+
+      const previousPasswordHash = account.password_hash;
+      const previousMustChangePassword = account.must_change_password;
+      const newPassword = createRandomPassword();
+      const newPasswordHash = await hashPassword(newPassword);
+      const updated = await accountRepository.updatePassword(account.id, newPasswordHash, true);
+      if (!updated) {
+        throw new HttpError(409, 'AIRPORT_APPLICANT_PASSWORD_NOT_UPDATED', '申请人登录密码重置失败');
+      }
+
+      try {
+        await mailService.sendApplicantPasswordResetEmail({
+          to: account.email,
+          airportName: getAirportNameForMail(airport, airportId),
+          portalEmail: account.email,
+          newPassword,
+          portalLoginUrl: buildPortalLoginUrl(req),
+        });
+      } catch (error) {
+        try {
+          await accountRepository.updatePassword(account.id, previousPasswordHash, previousMustChangePassword);
+        } catch (rollbackError) {
+          console.error('[admin] failed to rollback applicant password reset', {
+            airportId,
+            applicantAccountId: account.id,
+            applicationId: account.application_id,
+            requestId: req.requestId,
+            error: rollbackError,
+          });
+        }
+        throw error;
+      }
+
+      await deps.auditRepository.log('reset_airport_applicant_password', actorFromReq(req), req.requestId, {
+        airport_id: airportId,
+        applicant_account_id: account.id,
+        application_id: account.application_id,
+        to_email: account.email,
+      });
+
+      res.json({
+        ok: true,
+        airport_id: airportId,
+        applicant_account_id: account.id,
+        application_id: account.application_id,
+        to_email: account.email,
+      });
+    } catch (error) {
+      if (error instanceof SmtpSendError) {
+        next(new HttpError(error.status, 'AIRPORT_APPLICANT_PASSWORD_RESET_EMAIL_FAILED', error.message));
+        return;
+      }
       next(error);
     }
   });
@@ -3055,6 +3147,23 @@ function getMailService(deps: AdminDeps) {
     throw new Error('mailService is not configured');
   }
   return deps.mailService;
+}
+
+function getApplicantAccountRepository(deps: AdminDeps): Required<NonNullable<AdminDeps['applicantAccountRepository']>> {
+  if (!deps.applicantAccountRepository?.getByAirportId || !deps.applicantAccountRepository.updatePassword) {
+    throw new Error('applicantAccountRepository password reset methods are not configured');
+  }
+  return deps.applicantAccountRepository as Required<NonNullable<AdminDeps['applicantAccountRepository']>>;
+}
+
+function getAirportNameForMail(airport: unknown, airportId: number): string {
+  if (airport && typeof airport === 'object' && 'name' in airport) {
+    const name = String((airport as { name?: unknown }).name || '').trim();
+    if (name) {
+      return name;
+    }
+  }
+  return `机场 #${airportId}`;
 }
 
 function getAccessTokenService(deps: AdminDeps) {

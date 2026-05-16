@@ -74,6 +74,32 @@ export class MailService {
     });
   }
 
+  async sendApplicantPasswordResetEmail(input: {
+    to: string;
+    airportName: string;
+    portalEmail: string;
+    newPassword: string;
+    portalLoginUrl: string;
+  }): Promise<void> {
+    const config = await this.requireConfigured();
+    const rendered = renderConfiguredTemplate(config, 'applicant_password_reset', {
+      airport_name: input.airportName,
+      applicant_email: input.to,
+      portal_email: input.portalEmail,
+      new_password: input.newPassword,
+      portal_login_url: input.portalLoginUrl,
+      site_name: 'GateRank',
+    });
+    if (!rendered) {
+      throw new HttpError(409, 'SMTP_TEMPLATE_DISABLED', '申请人密码重置邮件模板未启用');
+    }
+    await this.sendWithConfig(config, {
+      to: input.to,
+      subject: rendered.subject,
+      text: rendered.body,
+    });
+  }
+
   async sendApplicationApprovedEmail(input: {
     to: string;
     airportName: string;

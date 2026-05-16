@@ -16,6 +16,7 @@ export interface SmtpSettingsInput {
 
 export type SmtpTemplateKey =
   | 'applicant_credentials'
+  | 'applicant_password_reset'
   | 'application_approved'
   | 'application_reply'
   | 'low_balance_warning'
@@ -30,6 +31,7 @@ export interface SmtpTemplateConfigItem {
 
 export interface SmtpTemplateConfig {
   applicant_credentials: SmtpTemplateConfigItem;
+  applicant_password_reset: SmtpTemplateConfigItem;
   application_approved: SmtpTemplateConfigItem;
   application_reply: SmtpTemplateConfigItem;
   low_balance_warning: SmtpTemplateConfigItem;
@@ -246,6 +248,19 @@ function getDefaultTemplates(): SmtpTemplateConfig {
         '首次登录后请立即修改密码，然后完成支付并等待审批。',
       ].join('\n'),
     },
+    applicant_password_reset: {
+      enabled: true,
+      subject: 'GateRank 申请人后台密码已重置 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 的申请人后台登录密码已由管理员重置。',
+        '',
+        '登录邮箱：{{portal_email}}',
+        '新密码：{{new_password}}',
+        '登录地址：{{portal_login_url}}',
+        '',
+        '请使用新密码登录，并在登录后立即修改密码。',
+      ].join('\n'),
+    },
     application_approved: {
       enabled: true,
       subject: 'GateRank 审批通过通知 - {{airport_name}}',
@@ -304,6 +319,10 @@ function normalizeTemplates(
     applicant_credentials: normalizeTemplateItem(
       record.applicant_credentials,
       fallback.applicant_credentials || defaults.applicant_credentials,
+    ),
+    applicant_password_reset: normalizeTemplateItem(
+      record.applicant_password_reset,
+      fallback.applicant_password_reset || defaults.applicant_password_reset,
     ),
     application_approved: normalizeTemplateItem(
       record.application_approved,

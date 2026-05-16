@@ -13,6 +13,12 @@ function createTemplates(
       body: '您好，{{airport_name}}。',
       ...overrides.applicant_credentials,
     },
+    applicant_password_reset: {
+      enabled: true,
+      subject: '密码重置 - {{airport_name}}',
+      body: '邮箱：{{portal_email}}，新密码：{{new_password}}，地址：{{portal_login_url}}',
+      ...overrides.applicant_password_reset,
+    },
     application_approved: {
       enabled: true,
       subject: '审批通过 - {{airport_name}}',
@@ -131,6 +137,102 @@ test('MailService renders application approved template variables', async () => 
   assert.equal(sent.length, 1);
   assert.equal(sent[0]?.subject, '审批通过 - 大象网络');
   assert.match(String(sent[0]?.text || ''), /大象网络 审批已通过/);
+});
+
+test('MailService renders applicant password reset template variables', async () => {
+  const sent: Array<Record<string, unknown>> = [];
+  const service = new MailService({
+    smtpSettingsService: {
+      getConfig: async () => ({
+        enabled: true,
+        host: 'smtp.example.com',
+        port: 465,
+        secure: true,
+        username: 'mailer',
+        password: 'secret',
+        from_name: 'GateRank',
+        from_email: 'noreply@example.com',
+        reply_to: '',
+        templates: createTemplates({
+          applicant_password_reset: {
+            subject: '密码重置 - {{airport_name}}',
+            body: [
+              '申请邮箱：{{applicant_email}}',
+              '登录邮箱：{{portal_email}}',
+              '新密码：{{new_password}}',
+              '后台：{{portal_login_url}}',
+            ].join('\n'),
+          },
+        }),
+      }),
+    },
+    transportFactory: (() => ({
+      sendMail: async (payload: Record<string, unknown>) => {
+        sent.push(payload);
+      },
+    })) as never,
+  });
+
+  await service.sendApplicantPasswordResetEmail({
+    to: 'user@example.com',
+    airportName: '大象网络',
+    portalEmail: 'login@example.com',
+    newPassword: 'NewPassw0rd!',
+    portalLoginUrl: 'https://gaterank.example.com/portal',
+  });
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]?.subject, '密码重置 - 大象网络');
+  assert.match(String(sent[0]?.text || ''), /申请邮箱：user@example\.com/);
+  assert.match(String(sent[0]?.text || ''), /登录邮箱：login@example\.com/);
+  assert.match(String(sent[0]?.text || ''), /新密码：NewPassw0rd!/);
+  assert.match(String(sent[0]?.text || ''), /后台：https:\/\/gaterank\.example\.com\/portal/);
+});
+
+test('MailService rejects disabled applicant password reset template', async () => {
+  const sent: Array<Record<string, unknown>> = [];
+  const service = new MailService({
+    smtpSettingsService: {
+      getConfig: async () => ({
+        enabled: true,
+        host: 'smtp.example.com',
+        port: 465,
+        secure: true,
+        username: 'mailer',
+        password: 'secret',
+        from_name: 'GateRank',
+        from_email: 'noreply@example.com',
+        reply_to: '',
+        templates: createTemplates({
+          applicant_password_reset: {
+            enabled: false,
+          },
+        }),
+      }),
+    },
+    transportFactory: (() => ({
+      sendMail: async (payload: Record<string, unknown>) => {
+        sent.push(payload);
+      },
+    })) as never,
+  });
+
+  await assert.rejects(
+    () =>
+      service.sendApplicantPasswordResetEmail({
+        to: 'user@example.com',
+        airportName: '大象网络',
+        portalEmail: 'user@example.com',
+        newPassword: 'NewPassw0rd!',
+        portalLoginUrl: 'https://gaterank.example.com/portal',
+      }),
+    (error: unknown) => {
+      assert.equal((error as { status?: number }).status, 409);
+      assert.equal((error as { code?: string }).code, 'SMTP_TEMPLATE_DISABLED');
+      return true;
+    },
+  );
+  assert.equal(sent.length, 0);
 });
 
 test('MailService renders application reply template variables', async () => {
