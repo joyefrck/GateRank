@@ -3938,7 +3938,7 @@ function PortalPage() {
 
   const goToPasswordChange = () => {
     setIsPasswordRequiredModalOpen(false);
-    setPortalTab('overview');
+    setPortalTab('account_settings');
     window.setTimeout(() => {
       document.getElementById('portal-password-change-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 0);
@@ -4409,6 +4409,7 @@ function PortalPage() {
         </PortalSectionCard>
 
         <PortalSectionCard
+          id="portal-password-change-section"
           title="修改密码"
           description="输入当前密码和新密码。保存后当前登录状态会退出，请重新登录。"
         >
@@ -4894,6 +4895,9 @@ function getPortalPaymentMethods(view: PortalViewResponse): PaymentChannel[] {
 }
 
 function getPortalListingStatus(wallet: PortalWalletView): { label: string; tone: 'green' | 'amber' } {
+  if (wallet.airport_is_listed === true) {
+    return { label: '正常', tone: 'green' };
+  }
   if (wallet.airport_is_listed === false) {
     return { label: '已下架', tone: 'amber' };
   }

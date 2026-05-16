@@ -93,6 +93,24 @@ test('ApplicantBillingRepository.backfillLegacyAirportWallets uses internal lega
   assert.doesNotMatch(calls[1]!, /a\.applicant_email/);
 });
 
+test('ApplicantBillingRepository.clearAutoUnlistedByAirportId clears stale auto-unlisted marker', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new ApplicantBillingRepository({
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  } as never);
+
+  const affectedRows = await repository.clearAutoUnlistedByAirportId(83);
+
+  assert.equal(affectedRows, 1);
+  assert.equal(calls.length, 1);
+  assert.match(calls[0]!.sql, /SET auto_unlisted_at = NULL/);
+  assert.match(calls[0]!.sql, /WHERE airport_id = \?/);
+  assert.deepEqual(calls[0]!.params, [83]);
+});
+
 test('ApplicantBillingRepository.getWalletByAccountId exposes bound airport listing state', async () => {
   const calls: Array<{ sql: string; params?: unknown[] }> = [];
   const repository = new ApplicantBillingRepository({

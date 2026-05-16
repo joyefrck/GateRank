@@ -175,6 +175,7 @@ interface AdminDeps {
       description: string;
       reference_id: string;
     }): Promise<unknown | null>;
+    clearAutoUnlistedByAirportId?(airportId: number): Promise<number>;
   };
   applicantAccountRepository?: {
     getByAirportId?(airportId: number): Promise<{
@@ -1404,6 +1405,9 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       if (!updated) {
         throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found or no changes`);
       }
+      if (patch.is_listed === true && deps.applicantBillingRepository?.clearAutoUnlistedByAirportId) {
+        await deps.applicantBillingRepository.clearAutoUnlistedByAirportId(airportId);
+      }
 
       await deps.auditRepository.log('update_airport', actorFromReq(req), req.requestId, {
         airport_id: airportId,
@@ -1543,7 +1547,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         await mailService.sendApplicantPasswordResetEmail({
           to: toEmail,
           airportName: getAirportNameForMail(airport, airportId),
-          portalEmail: toEmail,
+          portalEmail: account.email,
           newPassword,
           portalLoginUrl: buildPortalLoginUrl(req),
         });

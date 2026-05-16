@@ -817,7 +817,7 @@ test('POST /airports/:id/applicant-password-reset prefers airport contact email 
     assert.equal(passwordUpdates[0]?.mustChangePassword, true);
     assert.equal(sentMessages.length, 1);
     assert.equal(sentMessages[0]?.to, 'ops@example.com');
-    assert.equal(sentMessages[0]?.portalEmail, 'ops@example.com');
+    assert.equal(sentMessages[0]?.portalEmail, 'owner@example.com');
     assert.equal(sentMessages[0]?.airportName, 'Airport');
     assert.ok(sentMessages[0]?.newPassword);
     assert.match(sentMessages[0]?.portalLoginUrl || '', /\/portal$/);
@@ -4683,6 +4683,7 @@ test('POST /system-settings/publish-tokens/:id/revoke updates status and writes 
 test('PATCH /airports persists extended airport fields', async () => {
   const created: Array<Record<string, unknown>> = [];
   const updated: Array<Record<string, unknown>> = [];
+  const clearedAutoUnlistedAirportIds: number[] = [];
   const app = express();
   app.use(express.json());
   app.use(
@@ -4699,6 +4700,13 @@ test('PATCH /airports persists extended airport fields', async () => {
         },
       },
       airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantBillingRepository: {
+        linkAirportByApplicationId: async () => undefined,
+        clearAutoUnlistedByAirportId: async (airportId) => {
+          clearedAutoUnlistedAirportIds.push(airportId);
+          return 1;
+        },
+      },
       probeSampleRepository: {
         insertProbeSample: async () => 1,
         insertPacketLossSample: async () => 1,
@@ -4760,6 +4768,18 @@ test('PATCH /airports persists extended airport fields', async () => {
     assert.equal(updated[0].id, 9);
     assert.equal(updated[0].airport_intro, 'updated intro');
     assert.equal(updated[0].founded_on, '2025-02-01');
+    assert.deepEqual(clearedAutoUnlistedAirportIds, []);
+
+    const listResponse = await fetch(`http://127.0.0.1:${port}/airports/9`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ is_listed: true }),
+    });
+    assert.equal(listResponse.status, 200);
+    assert.equal(updated.length, 2);
+    assert.equal(updated[1].id, 9);
+    assert.equal(updated[1].is_listed, true);
+    assert.deepEqual(clearedAutoUnlistedAirportIds, [9]);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

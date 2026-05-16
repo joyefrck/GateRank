@@ -445,6 +445,17 @@ export class ApplicantBillingRepository {
     );
   }
 
+  async clearAutoUnlistedByAirportId(airportId: number): Promise<number> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE applicant_wallets
+          SET auto_unlisted_at = NULL
+        WHERE airport_id = ?
+          AND auto_unlisted_at IS NOT NULL`,
+      [airportId],
+    );
+    return result.affectedRows;
+  }
+
   async listWalletsByAirportIds(airportIds: number[]): Promise<Map<number, ApplicantWalletView>> {
     const ids = [...new Set(airportIds.filter((id) => Number.isInteger(id) && id > 0))];
     if (ids.length === 0) {
