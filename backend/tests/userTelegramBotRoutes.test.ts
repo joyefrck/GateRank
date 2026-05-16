@@ -40,6 +40,7 @@ function createDeps(overrides: Record<string, unknown> = {}) {
         bound_at: '2026-05-16T10:00:00+08:00',
         updated_at: '2026-05-16T10:00:00+08:00',
       }),
+      unbindApplicantAccount: async () => true,
     },
     applicantAccountRepository: {
       getById: async () => ({
@@ -194,6 +195,79 @@ test('user telegram webhook replies balance for bound user', async () => {
   assert.equal(telegramCalls[0]!.url, 'https://api.telegram.org/bot123456:abcdefghi/sendMessage');
   assert.match(String(telegramCalls[0]!.body.text), /账户余额：¥120\.00/);
   assert.match(String(telegramCalls[0]!.body.text), /点击单价：¥0\.60 \/ 次/);
+});
+
+test('user telegram webhook replies localized help for unknown text', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps(), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '你好',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const text = String(telegramCalls[0]!.body.text);
+  assert.match(text, /\/balance - 查看账户余额、点击单价和上架状态/);
+  assert.match(text, /\/transactions - 查看最近 5 条扣费流水/);
+  assert.match(text, /\/clicks - 查看最近 5 条访问记录/);
+  assert.match(text, /\/recharge - 创建充值支付链接/);
+  assert.match(text, /\/unbind - 解绑当前 Telegram 账号/);
+});
+
+test('user telegram webhook unbinds current telegram account', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const unboundApplicantIds: number[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps({
+      applicantTelegramBindingRepository: {
+        ...createDeps().applicantTelegramBindingRepository,
+        unbindApplicantAccount: async (applicantAccountId: number) => {
+          unboundApplicantIds.push(applicantAccountId);
+          return true;
+        },
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '/unbind',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(unboundApplicantIds, [1]);
+  assert.match(String(telegramCalls[0]!.body.text), /已解绑当前 Telegram 账号/);
 });
 
 test('user telegram webhook creates recharge order from callback', async () => {

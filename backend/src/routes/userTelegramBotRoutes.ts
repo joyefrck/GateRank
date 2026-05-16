@@ -26,6 +26,7 @@ interface UserTelegramBotDeps {
       telegram_last_name?: string | null;
     }): Promise<ApplicantTelegramBinding | null>;
     getByTelegramUserId(telegramUserId: string): Promise<ApplicantTelegramBinding | null>;
+    unbindApplicantAccount(applicantAccountId: number): Promise<boolean>;
   };
   applicantAccountRepository: {
     getById(id: number): Promise<ApplicantAccount | null>;
@@ -151,7 +152,7 @@ async function handleMessage(
       config,
       chatId,
       binding
-        ? '绑定成功。可发送 /balance 查看余额，/transactions 查看扣费流水，/clicks 查看访问记录，/recharge 创建充值支付链接。'
+        ? `绑定成功。\n\n${buildHelpMessage()}`
         : '绑定链接无效或已过期，请回到 GateRank 申请人后台重新生成绑定链接。',
     );
     return;
@@ -178,8 +179,12 @@ async function handleMessage(
     await sendRechargeOptions(deps, config, chatId);
     return;
   }
+  if (text.startsWith('/unbind')) {
+    await unbindTelegramAccount(deps, config, chatId, context.account.id);
+    return;
+  }
 
-  await sendTelegramMessage(config, chatId, '可用命令：/balance、/transactions、/clicks、/recharge');
+  await sendTelegramMessage(config, chatId, buildHelpMessage());
 }
 
 async function handleCallbackQuery(
@@ -230,6 +235,33 @@ async function requireBoundContext(
     return null;
   }
   return { binding, account };
+}
+
+async function unbindTelegramAccount(
+  deps: UserTelegramBotDeps,
+  config: UserTelegramBotConfig,
+  chatId: string,
+  applicantAccountId: number,
+): Promise<void> {
+  const removed = await deps.applicantTelegramBindingRepository.unbindApplicantAccount(applicantAccountId);
+  await sendTelegramMessage(
+    config,
+    chatId,
+    removed
+      ? '已解绑当前 Telegram 账号。\n如需重新绑定，请回到 GateRank 申请人后台生成新的绑定链接。'
+      : '当前 Telegram 账号没有可解绑的 GateRank 绑定记录。',
+  );
+}
+
+function buildHelpMessage(): string {
+  return [
+    '可用命令：',
+    '/balance - 查看账户余额、点击单价和上架状态',
+    '/transactions - 查看最近 5 条扣费流水',
+    '/clicks - 查看最近 5 条访问记录',
+    '/recharge - 创建充值支付链接',
+    '/unbind - 解绑当前 Telegram 账号',
+  ].join('\n');
 }
 
 async function sendBalanceMessage(

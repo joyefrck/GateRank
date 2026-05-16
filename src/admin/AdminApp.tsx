@@ -3181,6 +3181,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
   const [success, setSuccess] = useState('');
   const [settings, setSettings] = useState<UserTelegramBotSettingsView | null>(null);
   const [clearBotToken, setClearBotToken] = useState(false);
+  const [botTokenTouched, setBotTokenTouched] = useState(false);
   const [form, setForm] = useState<UserTelegramBotSettingsFormState>({
     enabled: false,
     bot_token: '',
@@ -3199,6 +3200,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
       webhook_secret: '',
     });
     setClearBotToken(false);
+    setBotTokenTouched(false);
   };
 
   const fetchSettings = async () => {
@@ -3226,7 +3228,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
     };
     if (clearBotToken) {
       payload.bot_token = '';
-    } else if (form.bot_token.trim()) {
+    } else if (botTokenTouched && form.bot_token.trim()) {
       payload.bot_token = form.bot_token.trim();
     }
     if (form.webhook_secret.trim()) {
@@ -3312,10 +3314,13 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
                 <input
                   className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
                   type="password"
+                  name="gaterank-user-bot-token"
+                  autoComplete="new-password"
                   placeholder={settings?.has_bot_token ? '已配置，留空则不修改' : '输入新的 Bot Token'}
                   value={form.bot_token}
                   onChange={(e) => {
                     setClearBotToken(false);
+                    setBotTokenTouched(true);
                     setForm({ ...form, bot_token: e.target.value });
                   }}
                 />
@@ -3327,6 +3332,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
                       checked={clearBotToken}
                       onChange={(e) => {
                         setClearBotToken(e.target.checked);
+                        setBotTokenTouched(true);
                         if (e.target.checked) setForm({ ...form, bot_token: '' });
                       }}
                     />

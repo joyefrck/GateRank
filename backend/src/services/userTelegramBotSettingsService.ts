@@ -103,13 +103,7 @@ export class UserTelegramBotSettingsService {
       if (!webhookUrl) {
         throw new HttpError(409, 'USER_TELEGRAM_WEBHOOK_NOT_CONFIGURED', '请填写公网 HTTPS API 域名，例如 https://www.gaterank.cn');
       }
-      await this.systemSettingRepository.upsert(USER_TELEGRAM_BOT_SETTING_KEY, {
-        ...nextConfig,
-        webhook_last_synced_at: null,
-        webhook_last_error: null,
-      }, updatedBy);
       try {
-        await this.verifyWebhookEndpoint(webhookUrl);
         await this.setWebhook(nextConfig, webhookUrl);
       } catch (error) {
         await this.recordWebhookError(nextConfig, error, updatedBy);
@@ -140,7 +134,6 @@ export class UserTelegramBotSettingsService {
       throw new HttpError(409, 'USER_TELEGRAM_WEBHOOK_NOT_CONFIGURED', '请先填写 Webhook Origin 和 Secret');
     }
     try {
-      await this.verifyWebhookEndpoint(webhookUrl);
       await this.setWebhook(config, webhookUrl);
       await this.systemSettingRepository?.upsert(USER_TELEGRAM_BOT_SETTING_KEY, {
         ...config,
@@ -167,29 +160,9 @@ export class UserTelegramBotSettingsService {
     const raw = await safeReadJson(response);
     if (!response.ok || raw?.ok !== true) {
       throw new HttpError(
-        response.ok ? 400 : 502,
+        400,
         'USER_TELEGRAM_WEBHOOK_SYNC_FAILED',
         String(raw?.description || `Telegram setWebhook failed: HTTP ${response.status}`),
-      );
-    }
-  }
-
-  private async verifyWebhookEndpoint(webhookUrl: string): Promise<void> {
-    const response = await this.fetchImpl(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        update_id: Date.now(),
-        gaterank_probe: true,
-      }),
-      signal: AbortSignal.timeout(DEFAULT_USER_TELEGRAM_TIMEOUT_MS),
-    });
-    const raw = await safeReadJson(response);
-    if (!response.ok || raw?.ok !== true) {
-      throw new HttpError(
-        response.ok ? 400 : 502,
-        'USER_TELEGRAM_WEBHOOK_ENDPOINT_UNREACHABLE',
-        String(raw?.message || raw?.description || `Webhook URL 探测失败: HTTP ${response.status}`),
       );
     }
   }
@@ -270,7 +243,7 @@ export class UserTelegramBotSettingsService {
     const raw = await safeReadJson(response) as TelegramGetMeResponse | null;
     if (!response.ok || raw?.ok !== true || !raw.result?.is_bot || !raw.result.username) {
       throw new HttpError(
-        response.ok ? 400 : 502,
+        400,
         'USER_TELEGRAM_BOT_VALIDATE_FAILED',
         String(raw?.description || `Telegram getMe failed: HTTP ${response.status}`),
       );
