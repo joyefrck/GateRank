@@ -16,6 +16,11 @@ import type {
   WalletTransactionView,
 } from '../repositories/applicantBillingRepository';
 import { sendBillingMailNotificationsSafely, type BillingMailService } from '../services/billingMailNotificationService';
+import {
+  sendUserTelegramBotBillingNotificationsSafely,
+  sendUserTelegramBotRechargeWelcomeSafely,
+  type UserTelegramBotBillingNotificationService,
+} from '../services/userTelegramBotMessageService';
 import { verifyPassword, hashPassword } from '../utils/password';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
@@ -174,6 +179,7 @@ interface PortalDeps {
     notifyPaymentReceived(input: PaymentReceivedNotificationInput): Promise<void>;
   };
   mailService?: BillingMailService;
+  userTelegramBotMessageService?: UserTelegramBotBillingNotificationService;
 }
 
 export function createPortalRoutes(deps: PortalDeps): Router {
@@ -691,7 +697,12 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       }),
     );
     await sendBillingMailNotificationsSafely(deps.mailService, creditResult.notification_events);
+    await sendUserTelegramBotBillingNotificationsSafely(
+      deps.userTelegramBotMessageService,
+      creditResult.notification_events,
+    );
     if (creditResult.credited) {
+      await sendRechargeWelcomeForOrder(deps, order.applicant_account_id, Number(order.amount));
       await notifyPaymentReceivedSafely(deps, {
         paymentType: 'wallet_recharge_paid',
         applicantAccountId: order.applicant_account_id,
@@ -767,7 +778,12 @@ async function syncRechargeOrder(deps: PortalDeps, order: RechargeOrderView): Pr
     }),
   );
   await sendBillingMailNotificationsSafely(deps.mailService, creditResult.notification_events);
+  await sendUserTelegramBotBillingNotificationsSafely(
+    deps.userTelegramBotMessageService,
+    creditResult.notification_events,
+  );
   if (creditResult.credited) {
+    await sendRechargeWelcomeForOrder(deps, order.applicant_account_id, Number(order.amount));
     await notifyPaymentReceivedSafely(deps, {
       paymentType: 'wallet_recharge_paid',
       applicantAccountId: order.applicant_account_id,
@@ -794,6 +810,31 @@ function normalizeRechargeCreditResult(value: boolean | RechargeCreditResult): R
       ? value.notification_events as BillingMailNotificationEvent[]
       : [],
   };
+}
+
+async function sendRechargeWelcomeForOrder(
+  deps: PortalDeps,
+  applicantAccountId: number,
+  amount: number,
+): Promise<void> {
+  if (!deps.userTelegramBotMessageService) {
+    return;
+  }
+  const account = await deps.applicantAccountRepository.getById(applicantAccountId);
+  if (!account) {
+    return;
+  }
+  const [application, wallet] = await Promise.all([
+    deps.airportApplicationRepository.getById(account.application_id),
+    deps.applicantBillingRepository.getWalletByAccountId(applicantAccountId),
+  ]);
+  await sendUserTelegramBotRechargeWelcomeSafely(deps.userTelegramBotMessageService, {
+    applicantAccountId,
+    airportName: String(application?.name || '-'),
+    applicantEmail: account.email,
+    rechargeAmount: amount,
+    balance: Number(wallet?.balance || 0),
+  });
 }
 
 async function queryGatewayOrder(

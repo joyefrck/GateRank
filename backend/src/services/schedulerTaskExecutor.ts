@@ -11,6 +11,10 @@ import type { SchedulerTaskKey } from '../types/domain';
 import { signAdminToken } from '../utils/token';
 import type { BillingMailNotificationEvent } from '../repositories/applicantBillingRepository';
 import { sendBillingMailNotificationsSafely, type BillingMailService } from './billingMailNotificationService';
+import {
+  sendUserTelegramBotBillingNotificationsSafely,
+  type UserTelegramBotBillingNotificationService,
+} from './userTelegramBotMessageService';
 
 const execFileAsync = promisify(execFile);
 
@@ -47,6 +51,7 @@ interface SchedulerTaskExecutorDeps {
     getConfig(): Promise<{ click_charge_amount: number }>;
   };
   mailService?: BillingMailService;
+  userTelegramBotMessageService?: UserTelegramBotBillingNotificationService;
   logger?: LoggerLike;
   sleep?: (ms: number) => Promise<void>;
   execFileAsync?: (
@@ -175,6 +180,11 @@ export class SchedulerTaskExecutor {
       Number(config.click_charge_amount),
     );
     await sendBillingMailNotificationsSafely(this.deps.mailService, result.notification_events, this.logger);
+    await sendUserTelegramBotBillingNotificationsSafely(
+      this.deps.userTelegramBotMessageService,
+      result.notification_events,
+      this.logger,
+    );
     const message = `欠费上架同步完成：检查 ${result.checked}，恢复上架 ${result.restored}，欠费下架 ${result.unlisted}，未变化 ${result.unchanged}，跳过 ${result.skipped}`;
     return {
       status: 'succeeded',

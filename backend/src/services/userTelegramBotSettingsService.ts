@@ -10,6 +10,25 @@ export interface UserTelegramBotSettingsInput {
   webhook_origin?: string;
   webhook_secret?: string;
   request_origin?: string;
+  templates?: Partial<Record<UserTelegramBotTemplateKey, Partial<UserTelegramBotTemplateConfigItem>>>;
+}
+
+export type UserTelegramBotTemplateKey =
+  | 'low_balance_warning'
+  | 'airport_auto_unlisted'
+  | 'airport_online'
+  | 'recharge_welcome';
+
+export interface UserTelegramBotTemplateConfigItem {
+  enabled: boolean;
+  body: string;
+}
+
+export interface UserTelegramBotTemplateConfig {
+  low_balance_warning: UserTelegramBotTemplateConfigItem;
+  airport_auto_unlisted: UserTelegramBotTemplateConfigItem;
+  airport_online: UserTelegramBotTemplateConfigItem;
+  recharge_welcome: UserTelegramBotTemplateConfigItem;
 }
 
 export interface UserTelegramBotSettingsView {
@@ -26,6 +45,7 @@ export interface UserTelegramBotSettingsView {
   webhook_origin_source: string | null;
   webhook_last_synced_at: string | null;
   webhook_last_error: string | null;
+  templates: UserTelegramBotTemplateConfig;
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -40,6 +60,7 @@ export interface UserTelegramBotConfig {
   webhook_origin_source?: string | null;
   webhook_last_synced_at?: string | null;
   webhook_last_error?: string | null;
+  templates: UserTelegramBotTemplateConfig;
 }
 
 interface UserTelegramBotSettingsServiceOptions {
@@ -205,6 +226,7 @@ export class UserTelegramBotSettingsService {
       webhook_origin_source: base.webhook_origin_source || null,
       webhook_last_synced_at: base.webhook_last_synced_at || null,
       webhook_last_error: base.webhook_last_error || null,
+      templates: normalizeTemplates(input.templates, base.templates),
     };
   }
 
@@ -344,6 +366,7 @@ function toAdminView(config: UserTelegramBotConfig, record: SystemSettingRecord 
     webhook_origin_source: config.webhook_origin_source || null,
     webhook_last_synced_at: config.webhook_last_synced_at || null,
     webhook_last_error: config.webhook_last_error || null,
+    templates: config.templates,
     updated_at: record?.updated_at || null,
     updated_by: record?.updated_by || null,
   };
@@ -360,6 +383,7 @@ function getDefaultConfig(): UserTelegramBotConfig {
     webhook_origin_source: null,
     webhook_last_synced_at: null,
     webhook_last_error: null,
+    templates: getDefaultTemplates(),
   };
 }
 
@@ -377,6 +401,83 @@ function normalizeConfig(value: unknown): UserTelegramBotConfig {
     webhook_origin_source: stringOrNull(record.webhook_origin_source),
     webhook_last_synced_at: stringOrNull(record.webhook_last_synced_at),
     webhook_last_error: stringOrNull(record.webhook_last_error),
+    templates: normalizeTemplates(record.templates),
+  };
+}
+
+function getDefaultTemplates(): UserTelegramBotTemplateConfig {
+  return {
+    low_balance_warning: {
+      enabled: true,
+      body: [
+        '余额提醒：{{airport_name}} 当前账户余额为 ¥{{current_balance}}，已低于 {{threshold_amount}} 元。',
+        '',
+        '为避免影响 GateRank 展示和跳转服务，建议及时充值。',
+      ].join('\n'),
+    },
+    airport_auto_unlisted: {
+      enabled: true,
+      body: [
+        '下线提醒：{{airport_name}} 因账户余额不足，已暂时从 GateRank 下线。',
+        '',
+        '当前余额：¥{{current_balance}}。充值后余额足够时，系统会自动恢复上线。',
+      ].join('\n'),
+    },
+    airport_online: {
+      enabled: true,
+      body: [
+        '上线通知：{{airport_name}} 已恢复上线。',
+        '',
+        '当前余额：¥{{current_balance}}，可以继续在 GateRank 正常展示并接收跳转访问。',
+      ].join('\n'),
+    },
+    recharge_welcome: {
+      enabled: true,
+      body: [
+        '充值成功，欢迎继续使用 GateRank 👏',
+        '',
+        '机场：{{airport_name}}',
+        '本次充值：¥{{recharge_amount}}',
+        '当前余额：¥{{current_balance}}',
+      ].join('\n'),
+    },
+  };
+}
+
+function normalizeTemplates(
+  value: unknown,
+  fallback: UserTelegramBotTemplateConfig = getDefaultTemplates(),
+): UserTelegramBotTemplateConfig {
+  const record = toObject(value);
+  const defaults = getDefaultTemplates();
+  return {
+    low_balance_warning: normalizeTemplateItem(
+      record.low_balance_warning,
+      fallback.low_balance_warning || defaults.low_balance_warning,
+    ),
+    airport_auto_unlisted: normalizeTemplateItem(
+      record.airport_auto_unlisted,
+      fallback.airport_auto_unlisted || defaults.airport_auto_unlisted,
+    ),
+    airport_online: normalizeTemplateItem(
+      record.airport_online,
+      fallback.airport_online || defaults.airport_online,
+    ),
+    recharge_welcome: normalizeTemplateItem(
+      record.recharge_welcome,
+      fallback.recharge_welcome || defaults.recharge_welcome,
+    ),
+  };
+}
+
+function normalizeTemplateItem(
+  value: unknown,
+  fallback: UserTelegramBotTemplateConfigItem,
+): UserTelegramBotTemplateConfigItem {
+  const record = toObject(value);
+  return {
+    enabled: boolOrDefault(record.enabled, fallback.enabled),
+    body: stringOrEmpty(record.body) || fallback.body,
   };
 }
 
@@ -468,6 +569,16 @@ function stringOrEmpty(value: unknown): string {
 function stringOrNull(value: unknown): string | null {
   const text = stringOrEmpty(value);
   return text || null;
+}
+
+function toObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : {};
+}
+
+function boolOrDefault(value: unknown, fallback: boolean): boolean {
+  return value === undefined ? fallback : Boolean(value);
 }
 
 async function safeReadJson(response: Response): Promise<Record<string, unknown> | null> {

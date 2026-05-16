@@ -58,6 +58,7 @@ import { SmtpSettingsService } from './services/smtpSettingsService';
 import { AdminSchedulerService } from './services/adminSchedulerService';
 import { SchedulerTaskExecutor } from './services/schedulerTaskExecutor';
 import { TelegramNotificationService } from './services/telegramNotificationService';
+import { UserTelegramBotMessageService } from './services/userTelegramBotMessageService';
 import { UserTelegramBotSettingsService } from './services/userTelegramBotSettingsService';
 import { XOAuthSettingsService } from './services/xOAuthSettingsService';
 import { getNewsUploadRootDir } from './utils/newsStorage';
@@ -132,11 +133,19 @@ export async function createApp() {
   const mailService = new MailService({
     smtpSettingsService,
   });
+  const userTelegramBotSettingsService = new UserTelegramBotSettingsService({
+    systemSettingRepository,
+  });
+  const userTelegramBotMessageService = new UserTelegramBotMessageService({
+    userTelegramBotSettingsService,
+    applicantTelegramBindingRepository,
+  });
   const schedulerTaskExecutor = new SchedulerTaskExecutor({
     airportRepository,
     aggregationService,
     applicantBillingRepository,
     mailService,
+    userTelegramBotMessageService,
     marketingSettingsService,
     recomputeService,
     riskCheckService,
@@ -175,9 +184,6 @@ export async function createApp() {
     systemSettingRepository,
   });
   const xOAuthSettingsService = new XOAuthSettingsService({
-    systemSettingRepository,
-  });
-  const userTelegramBotSettingsService = new UserTelegramBotSettingsService({
     systemSettingRepository,
   });
   const accessTokenService = new AccessTokenService({
@@ -253,6 +259,7 @@ export async function createApp() {
       paymentGatewayService,
       applicationNotificationService,
       mailService,
+      userTelegramBotMessageService,
     }),
   );
 
@@ -277,6 +284,7 @@ export async function createApp() {
       applicantBillingRepository,
       marketingSettingsService,
       mailService,
+      userTelegramBotMessageService,
     }),
   );
   app.use(

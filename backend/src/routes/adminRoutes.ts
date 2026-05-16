@@ -20,6 +20,7 @@ import type { PaymentGatewaySettingsInput } from '../services/paymentGatewaySett
 import type { SmtpSettingsInput, SmtpTemplateKey } from '../services/smtpSettingsService';
 import {
   DEFAULT_USER_TELEGRAM_API_BASE,
+  type UserTelegramBotTemplateKey,
   type UserTelegramBotSettingsInput,
 } from '../services/userTelegramBotSettingsService';
 import type { XOAuthSettingsInput } from '../services/xOAuthSettingsService';
@@ -2402,7 +2403,31 @@ function parseUserTelegramBotSettingsPayload(
         : String(payload.api_base || DEFAULT_USER_TELEGRAM_API_BASE).trim(),
     webhook_origin: payload.webhook_origin === undefined ? undefined : String(payload.webhook_origin ?? '').trim(),
     webhook_secret: payload.webhook_secret === undefined ? undefined : String(payload.webhook_secret ?? '').trim(),
+    templates:
+      payload.templates === undefined
+        ? undefined
+        : parseUserTelegramBotTemplatePayload(payload.templates),
   };
+}
+
+function parseUserTelegramBotTemplatePayload(
+  value: unknown,
+): NonNullable<UserTelegramBotSettingsInput['templates']> {
+  const payload = toPlainObject(value, 'templates');
+  const templates: NonNullable<UserTelegramBotSettingsInput['templates']> = {};
+
+  for (const key of USER_TELEGRAM_BOT_TEMPLATE_KEYS) {
+    if (payload[key] === undefined) {
+      continue;
+    }
+    const item = toPlainObject(payload[key], `templates.${key}`);
+    templates[key] = {
+      enabled: item.enabled === undefined ? undefined : optionalBoolean(item.enabled),
+      body: item.body === undefined ? undefined : String(item.body ?? '').trim(),
+    };
+  }
+
+  return templates;
 }
 
 function parseMediaLibrarySettingsPayload(
@@ -2552,6 +2577,13 @@ const SMTP_TEMPLATE_KEYS: SmtpTemplateKey[] = [
   'low_balance_warning',
   'airport_auto_unlisted',
   'airport_online',
+];
+
+const USER_TELEGRAM_BOT_TEMPLATE_KEYS: UserTelegramBotTemplateKey[] = [
+  'low_balance_warning',
+  'airport_auto_unlisted',
+  'airport_online',
+  'recharge_welcome',
 ];
 
 function toSmtpTemplateKey(value: unknown): SmtpTemplateKey {

@@ -346,8 +346,27 @@ interface UserTelegramBotSettingsView {
   webhook_origin_source: string | null;
   webhook_last_synced_at: string | null;
   webhook_last_error: string | null;
+  templates: UserTelegramBotTemplateMap;
   updated_at: string | null;
   updated_by: string | null;
+}
+
+type UserTelegramBotTemplateKey =
+  | 'low_balance_warning'
+  | 'airport_auto_unlisted'
+  | 'airport_online'
+  | 'recharge_welcome';
+
+interface UserTelegramBotTemplateItem {
+  enabled: boolean;
+  body: string;
+}
+
+interface UserTelegramBotTemplateMap {
+  low_balance_warning: UserTelegramBotTemplateItem;
+  airport_auto_unlisted: UserTelegramBotTemplateItem;
+  airport_online: UserTelegramBotTemplateItem;
+  recharge_welcome: UserTelegramBotTemplateItem;
 }
 
 interface UserTelegramBotSettingsFormState {
@@ -356,6 +375,7 @@ interface UserTelegramBotSettingsFormState {
   api_base: string;
   webhook_origin: string;
   webhook_secret: string;
+  templates: UserTelegramBotTemplateMap;
 }
 
 type SystemSettingsTab = 'notifications' | 'user_telegram_bot' | 'payment_gateway' | 'smtp' | 'x_oauth' | 'media_libraries' | 'publish_tokens';
@@ -809,6 +829,75 @@ const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = [
   'airport_auto_unlisted',
   'airport_online',
 ];
+const USER_TELEGRAM_BOT_TEMPLATE_ORDER: UserTelegramBotTemplateKey[] = [
+  'low_balance_warning',
+  'airport_auto_unlisted',
+  'airport_online',
+  'recharge_welcome',
+];
+const USER_TELEGRAM_BOT_TEMPLATE_SCENARIOS: Record<
+  UserTelegramBotTemplateKey,
+  {
+    title: string;
+    trigger: string;
+    description: string;
+    variables: string[];
+    sampleValues: Record<string, string>;
+  }
+> = {
+  low_balance_warning: {
+    title: '用户余额不足30元',
+    trigger: '自动扣费或欠费同步发现余额低于 30 元且本轮尚未提醒时发送。',
+    description: '用于提醒已绑定 Telegram 的申请人余额偏低。',
+    variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
+    sampleValues: {
+      airport_name: '大象网络',
+      applicant_email: 'owner@example.com',
+      current_balance: '18.50',
+      threshold_amount: '30.00',
+      site_name: 'GateRank',
+    },
+  },
+  airport_auto_unlisted: {
+    title: '机场被下线',
+    trigger: '机场因余额不足被系统自动下线后发送。',
+    description: '用于告知申请人机场已暂时停止展示和跳转。',
+    variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
+    sampleValues: {
+      airport_name: '大象网络',
+      applicant_email: 'owner@example.com',
+      current_balance: '0.40',
+      threshold_amount: '30.00',
+      site_name: 'GateRank',
+    },
+  },
+  airport_online: {
+    title: '机场被上线',
+    trigger: '机场余额足够并由系统自动恢复上线时发送。',
+    description: '用于通知申请人机场已经恢复展示和跳转。',
+    variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
+    sampleValues: {
+      airport_name: '大象网络',
+      applicant_email: 'owner@example.com',
+      current_balance: '120.00',
+      threshold_amount: '30.00',
+      site_name: 'GateRank',
+    },
+  },
+  recharge_welcome: {
+    title: '充值后欢迎👏',
+    trigger: '申请人余额充值成功入账后发送。',
+    description: '用于确认充值成功，并提示当前余额。',
+    variables: ['{{airport_name}}', '{{applicant_email}}', '{{recharge_amount}}', '{{current_balance}}', '{{site_name}}'],
+    sampleValues: {
+      airport_name: '大象网络',
+      applicant_email: 'owner@example.com',
+      recharge_amount: '100.00',
+      current_balance: '120.00',
+      site_name: 'GateRank',
+    },
+  },
+};
 const SMTP_TEMPLATE_SCENARIOS: Record<
   SmtpTemplateKey,
   {
@@ -3182,12 +3271,15 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
   const [settings, setSettings] = useState<UserTelegramBotSettingsView | null>(null);
   const [clearBotToken, setClearBotToken] = useState(false);
   const [botTokenTouched, setBotTokenTouched] = useState(false);
+  const [templateEditorKey, setTemplateEditorKey] = useState<UserTelegramBotTemplateKey | null>(null);
+  const [templateDraft, setTemplateDraft] = useState<UserTelegramBotTemplateItem>({ enabled: true, body: '' });
   const [form, setForm] = useState<UserTelegramBotSettingsFormState>({
     enabled: false,
     bot_token: '',
     api_base: 'https://api.telegram.org',
     webhook_origin: '',
     webhook_secret: '',
+    templates: getDefaultUserTelegramBotTemplates(),
   });
 
   const applyView = (view: UserTelegramBotSettingsView) => {
@@ -3198,6 +3290,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
       api_base: view.api_base || 'https://api.telegram.org',
       webhook_origin: view.webhook_origin || '',
       webhook_secret: '',
+      templates: cloneUserTelegramBotTemplates(view.templates),
     });
     setClearBotToken(false);
     setBotTokenTouched(false);
@@ -3225,6 +3318,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
       enabled: form.enabled,
       api_base: form.api_base.trim() || 'https://api.telegram.org',
       webhook_origin: form.webhook_origin.trim(),
+      templates: cloneUserTelegramBotTemplates(form.templates),
     };
     if (clearBotToken) {
       payload.bot_token = '';
@@ -3273,6 +3367,64 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
       setSyncing(false);
     }
   };
+
+  const openTemplateEditor = (key: UserTelegramBotTemplateKey) => {
+    setTemplateEditorKey(key);
+    setTemplateDraft({ ...form.templates[key] });
+  };
+
+  const closeTemplateEditor = () => {
+    setTemplateEditorKey(null);
+    setTemplateDraft({ enabled: true, body: '' });
+  };
+
+  useEffect(() => {
+    if (!templateEditorKey) {
+      return;
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeTemplateEditor();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [templateEditorKey]);
+
+  const applyTemplateDraft = () => {
+    if (!templateEditorKey) {
+      return;
+    }
+    setForm({
+      ...form,
+      templates: {
+        ...form.templates,
+        [templateEditorKey]: {
+          enabled: form.templates[templateEditorKey].enabled,
+          body: templateDraft.body.trim(),
+        },
+      },
+    });
+    closeTemplateEditor();
+  };
+
+  const toggleTemplateEnabled = (key: UserTelegramBotTemplateKey, enabled: boolean) => {
+    setForm({
+      ...form,
+      templates: {
+        ...form.templates,
+        [key]: {
+          ...form.templates[key],
+          enabled,
+        },
+      },
+    });
+  };
+
+  const activeScenario = templateEditorKey ? USER_TELEGRAM_BOT_TEMPLATE_SCENARIOS[templateEditorKey] : null;
+  const templatePreview = templateEditorKey && activeScenario
+    ? renderTextTemplatePreview(templateDraft.body, activeScenario.sampleValues)
+    : null;
 
   return (
     <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
@@ -3370,6 +3522,156 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
               />
             </FormField>
           </div>
+
+          <section className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">自动消息配置</div>
+              <p className="mt-1 text-sm text-neutral-500">
+                以下场景会向已绑定 Telegram 的申请人自动发送 Bot 消息。开关和正文修改后需要点击下方“保存配置”才会正式生效。
+              </p>
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white">
+              <div className="grid grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.5fr)_100px_92px] gap-3 border-b border-neutral-200 bg-neutral-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.14em] text-neutral-500">
+                <div>消息</div>
+                <div>正文摘要</div>
+                <div>开关</div>
+                <div className="text-right">设置</div>
+              </div>
+              <div className="divide-y divide-neutral-100">
+                {USER_TELEGRAM_BOT_TEMPLATE_ORDER.map((key) => {
+                  const scenario = USER_TELEGRAM_BOT_TEMPLATE_SCENARIOS[key];
+                  const template = form.templates[key];
+                  return (
+                    <div key={key} className="grid grid-cols-[minmax(180px,1.1fr)_minmax(220px,1.5fr)_100px_92px] items-center gap-3 px-4 py-3">
+                      <div>
+                        <div className="text-sm font-semibold text-neutral-900">{scenario.title}</div>
+                        <div className="mt-1 truncate text-xs text-neutral-500" title={scenario.trigger}>{scenario.trigger}</div>
+                      </div>
+                      <div className="min-w-0 text-sm text-neutral-700">
+                        <div className="truncate text-xs text-neutral-500" title={summarizeTemplateBody(template.body)}>
+                          {summarizeTemplateBody(template.body)}
+                        </div>
+                      </div>
+                      <label className="inline-flex items-center gap-2 text-sm font-medium text-neutral-700">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-neutral-300"
+                          checked={template.enabled}
+                          onChange={(e) => toggleTemplateEnabled(key, e.target.checked)}
+                        />
+                        {template.enabled ? '开启' : '关闭'}
+                      </label>
+                      <div className="text-right">
+                        <button
+                          type="button"
+                          className="rounded-xl border border-neutral-300 px-3 py-2 text-sm font-medium hover:bg-neutral-50"
+                          onClick={() => openTemplateEditor(key)}
+                        >
+                          设置
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </section>
+
+          {templateEditorKey && activeScenario && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={closeTemplateEditor}>
+              <div
+                className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+                role="dialog"
+                aria-modal="true"
+                aria-labelledby="user-telegram-bot-template-editor-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="flex items-start justify-between gap-4 border-b border-neutral-200 pb-4">
+                  <div>
+                    <h3 id="user-telegram-bot-template-editor-title" className="text-xl font-bold tracking-tight">{activeScenario.title}</h3>
+                    <p className="mt-1 text-sm text-neutral-500">{activeScenario.trigger}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-full border border-neutral-200 p-2 text-neutral-500 hover:bg-neutral-50 hover:text-neutral-900"
+                    aria-label="关闭 Bot 消息设置"
+                    onClick={closeTemplateEditor}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <section className="mt-5 rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">消息正文</div>
+                    <p className="mt-1 text-sm text-neutral-500">支持纯文本和变量替换，变量会在发送时注入真实内容。</p>
+                  </div>
+                  <FormField label="Bot 消息正文" hint="纯文本模板，换行会按原样保留。">
+                    <textarea
+                      className="min-h-[220px] w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      value={templateDraft.body}
+                      onChange={(e) => setTemplateDraft({ ...templateDraft, body: e.target.value })}
+                    />
+                  </FormField>
+                </section>
+
+                <section className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-[1.1fr_0.9fr]">
+                  <div className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">可用变量</div>
+                      <p className="mt-1 text-sm text-neutral-500">{activeScenario.description}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      {activeScenario.variables.map((variable) => (
+                        <span
+                          key={variable}
+                          className="inline-flex items-center rounded-full border border-neutral-200 bg-neutral-50 px-3 py-1 text-xs font-medium text-neutral-700"
+                        >
+                          {variable}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-4">
+                      <div className="text-sm font-medium text-neutral-900">示例变量值</div>
+                      <div className="mt-3 grid gap-2">
+                        {Object.entries(activeScenario.sampleValues).map(([key, value]) => (
+                          <div key={key} className="flex items-start justify-between gap-4 text-sm">
+                            <code className="rounded bg-white px-2 py-1 text-xs">{`{{${key}}}`}</code>
+                            <span className="text-right text-neutral-600 break-all">{value}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">预览效果</div>
+                      <p className="mt-1 text-sm text-neutral-500">以下预览使用示例变量渲染，仅用于确认模板内容。</p>
+                    </div>
+                    <ReadField label="预览消息" value={templatePreview || '-'} />
+                  </div>
+                </section>
+
+                <div className="mt-5 flex items-center justify-end gap-3 border-t border-neutral-200 pt-4">
+                  <button
+                    type="button"
+                    className="rounded-2xl border border-neutral-300 px-4 py-2.5 text-sm font-medium hover:bg-neutral-50"
+                    onClick={closeTemplateEditor}
+                  >
+                    取消
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-2xl bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white"
+                    onClick={applyTemplateDraft}
+                  >
+                    应用消息修改
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
           {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 break-all">{success}</div>}
@@ -3825,6 +4127,58 @@ function getDefaultSmtpTemplates(): SmtpTemplateMap {
   };
 }
 
+function getDefaultUserTelegramBotTemplates(): UserTelegramBotTemplateMap {
+  return {
+    low_balance_warning: {
+      enabled: true,
+      body: [
+        '余额提醒：{{airport_name}} 当前账户余额为 ¥{{current_balance}}，已低于 {{threshold_amount}} 元。',
+        '',
+        '为避免影响 GateRank 展示和跳转服务，建议及时充值。',
+      ].join('\n'),
+    },
+    airport_auto_unlisted: {
+      enabled: true,
+      body: [
+        '下线提醒：{{airport_name}} 因账户余额不足，已暂时从 GateRank 下线。',
+        '',
+        '当前余额：¥{{current_balance}}。充值后余额足够时，系统会自动恢复上线。',
+      ].join('\n'),
+    },
+    airport_online: {
+      enabled: true,
+      body: [
+        '上线通知：{{airport_name}} 已恢复上线。',
+        '',
+        '当前余额：¥{{current_balance}}，可以继续在 GateRank 正常展示并接收跳转访问。',
+      ].join('\n'),
+    },
+    recharge_welcome: {
+      enabled: true,
+      body: [
+        '充值成功，欢迎继续使用 GateRank 👏',
+        '',
+        '机场：{{airport_name}}',
+        '本次充值：¥{{recharge_amount}}',
+        '当前余额：¥{{current_balance}}',
+      ].join('\n'),
+    },
+  };
+}
+
+function cloneUserTelegramBotTemplates(
+  templates?: UserTelegramBotTemplateMap | null,
+): UserTelegramBotTemplateMap {
+  const defaults = getDefaultUserTelegramBotTemplates();
+  return USER_TELEGRAM_BOT_TEMPLATE_ORDER.reduce((acc, key) => {
+    acc[key] = {
+      enabled: templates?.[key]?.enabled ?? defaults[key].enabled,
+      body: templates?.[key]?.body || defaults[key].body,
+    };
+    return acc;
+  }, {} as UserTelegramBotTemplateMap);
+}
+
 function cloneSmtpTemplates(templates?: SmtpTemplateMap | null): SmtpTemplateMap {
   const defaults = getDefaultSmtpTemplates();
   return SMTP_TEMPLATE_ORDER.reduce((next, key) => {
@@ -3844,6 +4198,10 @@ function renderSmtpTemplatePreview(template: SmtpTemplateItem, values: Record<st
     subject: render(template.subject),
     body: render(template.body),
   };
+}
+
+function renderTextTemplatePreview(template: string, values: Record<string, string>): string {
+  return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_match, key) => values[key] ?? '');
 }
 
 function summarizeTemplateBody(body: string): string {

@@ -13,6 +13,7 @@ export type BillingMailNotificationType = 'low_balance_warning' | 'airport_auto_
 export interface BillingMailNotificationEvent {
   type: BillingMailNotificationType;
   to: string;
+  applicantAccountId?: number | null;
   airportName: string;
   balance: number;
   thresholdAmount: number;
@@ -155,6 +156,7 @@ interface AirportOwnerRow extends RowDataPacket {
 
 interface ListingSyncRow extends RowDataPacket {
   wallet_id: number;
+  applicant_account_id: number | null;
   airport_id: number | null;
   airport_name: string | null;
   applicant_email: string | null;
@@ -554,6 +556,7 @@ export class ApplicantBillingRepository {
       await connection.beginTransaction();
       const [rows] = await connection.query<ListingSyncRow[]>(
         `SELECT w.id AS wallet_id,
+                w.applicant_account_id,
                 w.airport_id,
                 a.name AS airport_name,
                 aa.email AS applicant_email,
@@ -1379,6 +1382,7 @@ function pushBillingNotificationEvent(
   events: BillingMailNotificationEvent[],
   type: BillingMailNotificationType,
   source: {
+    applicant_account_id?: number | null;
     applicant_email?: string | null;
     airport_name?: string | null;
     balance?: number | null;
@@ -1390,13 +1394,17 @@ function pushBillingNotificationEvent(
   if (!to || !airportName) {
     return;
   }
-  events.push({
+  const event: BillingMailNotificationEvent = {
     type,
     to,
     airportName,
     balance,
     thresholdAmount: LOW_BALANCE_WARNING_THRESHOLD,
-  });
+  };
+  if (source.applicant_account_id != null) {
+    event.applicantAccountId = Number(source.applicant_account_id);
+  }
+  events.push(event);
 }
 
 function toRechargeOrder(row: RechargeOrderRow): RechargeOrderView {

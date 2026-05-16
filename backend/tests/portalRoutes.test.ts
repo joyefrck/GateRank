@@ -9,6 +9,15 @@ import type { PaymentReceivedNotificationInput } from '../src/services/telegramN
 import { hashPassword } from '../src/utils/password';
 import { signApplicantToken } from '../src/utils/token';
 
+function createMockUserTelegramBotTemplates() {
+  return {
+    low_balance_warning: { enabled: true, body: 'low balance' },
+    airport_auto_unlisted: { enabled: true, body: 'offline' },
+    airport_online: { enabled: true, body: 'online' },
+    recharge_welcome: { enabled: true, body: 'welcome' },
+  };
+}
+
 function createMockBillingRepository(overrides: Record<string, unknown> = {}) {
   return {
     ensureWalletForAccount: async () => ({
@@ -288,6 +297,7 @@ test('POST /portal/telegram-bind/start creates Telegram deep link for reviewed a
           webhook_origin: 'https://example.com',
           webhook_secret: 'secret-token',
           webhook_last_synced_at: '2026-05-16T10:00:00.000Z',
+          templates: createMockUserTelegramBotTemplates(),
         }),
       },
       paymentGatewaySettingsService: {
@@ -376,6 +386,7 @@ test('POST /portal/telegram-bind/start requires webhook-ready user bot config', 
           webhook_origin: '',
           webhook_secret: 'secret-token',
           webhook_last_synced_at: '2026-05-16T10:00:00.000Z',
+          templates: createMockUserTelegramBotTemplates(),
         }),
       },
       paymentGatewaySettingsService: {
