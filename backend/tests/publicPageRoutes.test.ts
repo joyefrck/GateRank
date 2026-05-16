@@ -17,19 +17,23 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
 
     const checks = [
       ['/', /<h1>机场榜：机场 VPN 推荐与可靠性榜单<\/h1>/, /机场 VPN 推荐、科学上网机场测评与可靠性榜单/],
-      ['/rankings/all', /<h1>全量机场榜单<\/h1>/, /全量机场榜单 \| 全部已上线机场评分排名/],
+      ['/rankings/all', /<h1>机场排行榜：全量机场 VPN 评分排名<\/h1>/, /全量机场榜单 \| 全部已上线机场评分排名/],
       ['/methodology', /<h1>机场测评方法：评分规则、测速标准与风险扣分<\/h1>/, /机场测评方法/],
       ['/apply', /<h1>申请入驻 GateRank 机场测试<\/h1>/, /申请入驻测试/],
-      ['/risk-monitor', /<h1>高风险机场监测列表<\/h1>/, /跑路监测 \| 已跑路与风险观察机场列表/],
+      ['/risk-monitor', /<h1>跑路机场监测：高风险机场名单与机场跑路预警<\/h1>/, /跑路监测 \| 已跑路与风险观察机场列表/],
     ] as const;
 
     for (const [path, h1Pattern, titlePattern] of checks) {
       const response = await fetch(`${baseUrl}${path}`, { headers: { host: `127.0.0.1:${port}` } });
       assert.equal(response.status, 200, path);
       assert.match(response.headers.get('content-type') || '', /text\/html/);
+      assert.equal(
+        response.headers.get('cache-control'),
+        'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+      );
       const html = await response.text();
       assert.match(html, titlePattern);
-      assert.match(html, /<meta name="description" content="[^"]+"/);
+      assert.ok(extractMetaDescription(html));
       assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\//);
       assert.match(html, h1Pattern);
       assert.match(html, /<script type="application\/ld\+json">/);
@@ -37,6 +41,33 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(html, /\.topbar nav a\.active \{ background: #fff1f2; color: #e11d48;/);
       assert.match(html, /\.topbar nav a\.apply-link \{ background: #111111; color: #fff;/);
       assert.match(html, /\.topbar nav a\.apply-link\.active \{ background: #111111; color: #fff;/);
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('core SEO descriptions include expanded search context', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const checks = [
+      ['/methodology', /机场 VPN 评分规则/, /数据采样/],
+      ['/apply', /官网地址/, /自动测速接入/],
+      ['/risk-monitor', /跑路机场监测页/, /高风险机场 VPN 服务/],
+    ] as const;
+
+    for (const [path, firstPattern, secondPattern] of checks) {
+      const response = await fetch(`http://127.0.0.1:${port}${path}`);
+      assert.equal(response.status, 200);
+      const description = extractMetaDescription(await response.text());
+      assert.ok(description.length >= 80, `${path} description too short: ${description.length}`);
+      assert.ok(description.length <= 150, `${path} description too long: ${description.length}`);
+      assert.match(description, firstPattern);
+      assert.match(description, secondPattern);
     }
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -144,10 +175,28 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     const port = (server.address() as AddressInfo).port;
     const okResponse = await fetch(`http://127.0.0.1:${port}/airports/nebula`);
     assert.equal(okResponse.status, 200);
+    assert.match(okResponse.headers.get('content-type') || '', /text\/html; charset=utf-8/);
+    assert.equal(
+      okResponse.headers.get('cache-control'),
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+    );
     const okHtml = await okResponse.text();
     assert.match(okHtml, /<h1>星云机场 测评报告<\/h1>/);
+    assert.match(okHtml, /星云机场 机场基础信息/);
+    assert.match(okHtml, /官网入口/);
+    assert.match(okHtml, /公开分数/);
+    assert.match(okHtml, /榜单位置/);
     assert.match(okHtml, /评分拆解/);
     assert.match(okHtml, /30 天可用率/);
+    assert.match(okHtml, /30 天趋势摘要/);
+    assert.match(okHtml, /常见问题/);
+    assert.match(okHtml, /星云机场怎么样/);
+    assert.match(okHtml, /星云机场测评怎么看/);
+    assert.match(okHtml, /星云机场官网是什么/);
+    assert.match(okHtml, /星云机场跑路风险高吗/);
+    assert.match(okHtml, /<script type="application\/ld\+json">/);
+    assert.match(okHtml, /"@type":"FAQPage"/);
+    assert.match(okHtml, /"@type":"ItemList"/);
     assert.match(okHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/airports\/nebula"/);
 
     const legacyResponse = await fetch(`http://127.0.0.1:${port}/reports/7?date=2026-03-23`, {
@@ -191,6 +240,12 @@ function createPublicViewServiceStub() {
     getReportView: async (airportId: number): Promise<ReportView | null> => (airportId === 7 ? reportView : null),
     getReportViewBySlug: async (slug: string): Promise<ReportView | null> => (slug === 'nebula' ? reportView : null),
   };
+}
+
+function extractMetaDescription(html: string): string {
+  const matched = html.match(/<meta name="description" content="([^"]+)"/);
+  assert.ok(matched, 'meta description missing');
+  return matched[1];
 }
 
 const homeView: HomePageView = {
@@ -335,9 +390,21 @@ const reportView: ReportView = {
     history_incidents: 0,
   },
   trends: {
-    score_30d: [],
-    uptime_30d: [],
-    latency_30d: [],
-    download_30d: [],
+    score_30d: [
+      { date: '2026-03-22', value: 97.4 },
+      { date: '2026-03-23', value: 98.6 },
+    ],
+    uptime_30d: [
+      { date: '2026-03-22', value: 99.8 },
+      { date: '2026-03-23', value: 99.9 },
+    ],
+    latency_30d: [
+      { date: '2026-03-22', value: 92 },
+      { date: '2026-03-23', value: 88 },
+    ],
+    download_30d: [
+      { date: '2026-03-22', value: 300 },
+      { date: '2026-03-23', value: 320 },
+    ],
   },
 };

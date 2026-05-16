@@ -352,11 +352,15 @@ curl -sS -I --connect-timeout 5 http://127.0.0.1:18088/ | head -5
 curl -sS --connect-timeout 5 http://127.0.0.1:18787/api/v1/pages/home | head -c 220
 curl -sS -I --connect-timeout 5 https://gate-rank.com/ | head -8
 curl -sS --connect-timeout 10 https://gate-rank.com/api/v1/pages/home | head -c 220
+curl -sSI --connect-timeout 5 https://gate-rank.com/airports/elphantroute | head -12
+curl -sS --connect-timeout 10 https://gate-rank.com/airports/elphantroute | grep -E '大象网络|<h1>|canonical|application/ld\+json|公开分数|榜单位置|跑路风险'
+curl -sS --connect-timeout 10 https://gate-rank.com/sitemap.xml | grep '/airports/elphantroute'
 ```
 
-News 模块上线要求：
+公开页面上线要求：
 
-- `gaterank-web` 需要把 `/news`、`/uploads`、`/sitemap.xml` 代理到 `gaterank-api`
+- `gaterank-web` 需要把 `/news`、`/uploads`、`/sitemap.xml`、`/reports/`、`/airports/` 代理到 `gaterank-api`
+- `/airports/<slug>` 必须返回后端 prerender HTML，原始响应里应直接包含机场名称、H1、canonical、JSON-LD、评分、榜单位置和 FAQ
 - `gaterank-api` 需要挂载新闻图片持久化目录，当前使用 Docker volume `gaterank_news_uploads`
 - `gaterank-api` 需要在环境变量里配置 `NEWS_UPLOAD_ROOT_DIR`，并指向上面的持久化挂载路径
 - 如启用第三方封面图库，需要先在管理后台的“系统设置 -> 图库设置”中配置 Pexels API Key

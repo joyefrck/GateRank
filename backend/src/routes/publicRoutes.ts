@@ -9,6 +9,7 @@ import type {
 } from '../types/domain';
 import { hashPassword, createRandomPassword } from '../utils/password';
 import { buildMarketingEventRecord } from '../utils/marketing';
+import { PUBLIC_PAGE_CACHE_TTL_MS, setPublicCacheHeaders } from '../utils/publicCache';
 import { buildPortalLoginUrl } from '../utils/siteUrl';
 import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { AirportApplicationReviewStatus, AirportStatus } from '../types/domain';
@@ -111,8 +112,6 @@ const MARKETING_PLACEMENTS: MarketingPlacement[] = [
   'report_header',
 ];
 const MARKETING_TARGET_KINDS: MarketingTargetKind[] = ['website', 'subscription_url'];
-const PUBLIC_PAGE_CACHE_TTL_MS = 30_000;
-
 export function createPublicRoutes(deps: PublicDeps): Router {
   const router = Router();
   const pageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
@@ -254,6 +253,7 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         `home:${date}`,
         () => deps.publicViewService.getHomePageView(date),
       );
+      setPublicCacheHeaders(res);
       res.json(data);
     } catch (error) {
       next(error);
@@ -269,6 +269,7 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         `full-ranking:${date}:${page}:${pageSize}`,
         () => deps.publicViewService.getFullRankingView(date, page, pageSize),
       );
+      setPublicCacheHeaders(res);
       res.json(data);
     } catch (error) {
       next(error);
@@ -284,6 +285,7 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         `risk-monitor:${date}:${page}:${pageSize}`,
         () => deps.publicViewService.getRiskMonitorView(date, page, pageSize),
       );
+      setPublicCacheHeaders(res);
       res.json(data);
     } catch (error) {
       next(error);
@@ -373,6 +375,7 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         );
       }
 
+      setPublicCacheHeaders(res);
       res.json(data);
     } catch (error) {
       next(error);

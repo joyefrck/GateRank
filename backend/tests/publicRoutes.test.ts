@@ -572,6 +572,10 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
     const port = (server.address() as AddressInfo).port;
     const response = await fetch(`http://127.0.0.1:${port}/pages/full-ranking?date=2026-03-23&page=2`);
     assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get('cache-control'),
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+    );
     const data = (await response.json()) as {
       page: number;
       page_size: number;

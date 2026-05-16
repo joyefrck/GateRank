@@ -36,7 +36,7 @@ export const PUBLISH_TOKEN_DOCS_LAST_UPDATED = '2026-03-29T00:00:00+08:00';
 
 export const PUBLISH_TOKEN_DOCS_META = {
   title: `发布令牌接入说明 | ${PUBLIC_SITE_BRAND_NAME}`,
-  description: `${PUBLIC_SITE_BRAND_NAME} 发布令牌接入说明，包含 Bearer 鉴权、文章创建、封面上传、草稿与发布模式定义。`,
+  description: `${PUBLIC_SITE_BRAND_NAME} 发布令牌接入文档面向自动发稿与内容系统，说明 Bearer 鉴权、文章创建、封面上传、草稿模式、直接发布、错误码和权限范围，方便安全接入 GateRank News API。`,
   keywords: '机场榜GateRank,GateRank,发布令牌,API,文档,新闻发布,Bearer Token',
   shortTitle: `${PUBLIC_SITE_BRAND_NAME} 发布令牌接入说明`,
   heroEyebrow: 'Publish Token Docs',

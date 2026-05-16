@@ -50,6 +50,7 @@ import {
   buildFullRankingSeo,
   buildHomeSeo,
   buildReportSeo,
+  buildReportStructuredData,
   buildRiskMonitorSeo,
   formatAirportStatusLabel,
 } from '../shared/publicSeo';
@@ -2145,8 +2146,8 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
       <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-10">
         <ListPageHero
           eyebrow="全量榜单"
-          title="全部已上线机场"
-          subtitle="按公开展示分数降序排列"
+          title="机场排行榜：全量机场 VPN 评分排名"
+          subtitle=""
           description="这里汇总所有已上线机场，并统一提供官网入口、运行状态、标签、成立日期、月付价格、试用支持、公开分数与测评报告入口。风险机场会保留显著标识，方便用户和 AI 检索系统快速判断。"
           stats={[
             { label: '收录机场', value: formatNumber(data?.total || 0) },
@@ -2456,8 +2457,8 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
       <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-10">
         <ListPageHero
           eyebrow="跑路监测"
-          title="高风险机场监测列表"
-          subtitle="已跑路置顶，风险观察同步纳入"
+          title="跑路机场监测：高风险机场名单与机场跑路预警"
+          subtitle=""
           description="本页只展示两类对象：管理员后台已确认跑路的机场，以及标签命中“风险观察”的机场。已跑路机场会从每日测评、自动调度与手动任务中全部排除，仅保留风险留档展示。"
           tone="alert"
           stats={[
@@ -2736,49 +2737,56 @@ function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airp
     ];
   }, [data]);
 
-  const reportSeo = buildReportSeo(data ? {
+  const reportSeo = useMemo(() => buildReportSeo(data ? {
     airportName: data.airport.name,
     score: data.summary_card.score,
     statusLabel: formatAirportStatus(data.airport.status),
-  } : undefined);
+  } : undefined), [data]);
   const reportTitle = reportSeo.title;
   const reportDescription = reportSeo.description;
+  const reportCanonicalPath = data ? buildAirportReportPath(data.airport.slug) : airportSlug ? buildAirportReportPath(airportSlug) : buildReportHref(airportId || 0, date);
   const reportStructuredData = useMemo(
-    () => ([
-      {
-        '@context': 'https://schema.org',
-        '@type': 'WebPage',
-        name: reportTitle,
-        description: reportDescription,
-        url: buildAbsoluteUrl(data ? buildAirportReportPath(data.airport.slug) : airportSlug ? buildAirportReportPath(airportSlug) : buildReportHref(airportId || 0, date)),
-      },
-      {
-        '@context': 'https://schema.org',
-        '@type': 'BreadcrumbList',
-        itemListElement: [
-          {
-            '@type': 'ListItem',
-            position: 1,
-            name: '今日推荐',
-            item: buildAbsoluteUrl(buildHomeHref()),
-          },
-          {
-            '@type': 'ListItem',
-            position: 2,
-            name: data?.airport.name || (airportSlug ? `机场 ${airportSlug}` : `机场 ${airportId}`),
-            item: buildAbsoluteUrl(data ? buildAirportReportPath(data.airport.slug) : airportSlug ? buildAirportReportPath(airportSlug) : buildReportHref(airportId || 0, date)),
-          },
-        ],
-      },
-    ]),
-    [airportId, airportSlug, data, date, reportDescription, reportTitle],
+    () => {
+      if (data) {
+        const siteUrl = buildAbsoluteUrl('/').replace(/\/+$/, '');
+        return buildReportStructuredData(siteUrl, reportCanonicalPath, reportSeo, data);
+      }
+      return [
+        {
+          '@context': 'https://schema.org',
+          '@type': 'WebPage',
+          name: reportTitle,
+          description: reportDescription,
+          url: buildAbsoluteUrl(reportCanonicalPath),
+        },
+        {
+          '@context': 'https://schema.org',
+          '@type': 'BreadcrumbList',
+          itemListElement: [
+            {
+              '@type': 'ListItem',
+              position: 1,
+              name: '今日推荐',
+              item: buildAbsoluteUrl(buildHomeHref()),
+            },
+            {
+              '@type': 'ListItem',
+              position: 2,
+              name: airportSlug ? `机场 ${airportSlug}` : `机场 ${airportId}`,
+              item: buildAbsoluteUrl(reportCanonicalPath),
+            },
+          ],
+        },
+      ];
+    },
+    [airportId, airportSlug, data, reportCanonicalPath, reportDescription, reportSeo, reportTitle],
   );
 
   usePageSeo({
     title: reportTitle,
     description: reportDescription,
     keywords: reportSeo.keywords,
-    canonicalPath: data ? buildAirportReportPath(data.airport.slug) : airportSlug ? buildAirportReportPath(airportSlug) : buildReportHref(airportId || 0, date),
+    canonicalPath: reportCanonicalPath,
     structuredData: reportStructuredData,
   });
 

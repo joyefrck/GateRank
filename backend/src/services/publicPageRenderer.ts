@@ -15,7 +15,9 @@ import {
   buildHomeSeo,
   buildQuery,
   buildAirportReportPath,
+  buildReportFaqItems,
   buildReportSeo,
+  buildReportStructuredData,
   buildRiskMonitorSeo,
   formatAirportStatusLabel,
   formatMetric,
@@ -135,7 +137,7 @@ export function renderFullRankingPublicPage(
       <main class="page-main">
         <section class="hero hero-dark">
           <div class="eyebrow">全量榜单</div>
-          <h1>全量机场榜单</h1>
+          <h1>机场排行榜：全量机场 VPN 评分排名</h1>
           <p>全部已上线机场按公开展示分数降序排列，原始 HTML 直接包含排名、分数、状态、官网和测评报告入口。</p>
           <div class="metric-grid">
             ${renderMetric('收录机场', formatNumber(view.total))}
@@ -188,7 +190,7 @@ export function renderRiskMonitorPublicPage(
       <main class="page-main">
         <section class="hero hero-risk">
           <div class="eyebrow">跑路监测</div>
-          <h1>高风险机场监测列表</h1>
+          <h1>跑路机场监测：高风险机场名单与机场跑路预警</h1>
           <p>本页聚合管理员确认跑路与命中风险观察标签的机场，原始 HTML 直接暴露风险原因、状态和报告入口。</p>
           <div class="metric-grid">
             ${renderMetric('风险对象', formatNumber(view.total))}
@@ -210,25 +212,14 @@ export function renderReportPublicPage(siteUrl: string, view: ReportView, reques
     statusLabel: formatAirportStatusLabel(view.airport.status),
   });
   const canonicalPath = buildAirportReportPath(view.airport.slug);
+  const faqItems = buildReportFaqItems(view);
 
   return renderPublicDocument({
     siteUrl,
     canonicalPath,
     seo,
     active: 'rankings',
-    jsonLd: [
-      {
-        '@context': 'https://schema.org',
-        '@type': 'WebPage',
-        name: seo.title,
-        description: seo.description,
-        url: `${siteUrl}${canonicalPath}`,
-      },
-      buildBreadcrumbJsonLd(siteUrl, [
-        ['今日推荐', '/'],
-        [view.airport.name, canonicalPath],
-      ]),
-    ],
+    jsonLd: buildReportStructuredData(siteUrl, canonicalPath, seo, view),
     body: `
       <main class="page-main">
         <section class="hero">
@@ -243,6 +234,7 @@ export function renderReportPublicPage(siteUrl: string, view: ReportView, reques
           </div>
         </section>
         ${renderReportSummary(view)}
+        ${renderReportFaq(faqItems)}
       </main>
     `,
   });
@@ -506,12 +498,23 @@ function renderRiskTable(items: RiskMonitorItem[]): string {
 function renderReportSummary(view: ReportView): string {
   return `
     <section class="content-card">
+      <h2>${escapeHtml(view.airport.name)} 机场基础信息</h2>
+      <p>${escapeHtml(view.summary_card.conclusion)}</p>
+      <div class="card-grid">
+        ${renderLinkedInfoCard('官网入口', view.airport.website, view.airport.website)}
+        ${renderInfoCard('当前状态', formatAirportStatusLabel(view.airport.status))}
+        ${renderInfoCard('报告日期', view.date)}
+        ${renderInfoCard('健康记录', `${view.metrics.healthy_days_streak} 天`)}
+      </div>
+    </section>
+    <section class="content-card">
       <h2>榜单位置</h2>
       <div class="card-grid">
         ${renderInfoCard('今日推荐', formatRank(view.ranking.today_pick_rank))}
         ${renderInfoCard('长期稳定', formatRank(view.ranking.most_stable_rank))}
         ${renderInfoCard('性价比', formatRank(view.ranking.best_value_rank))}
         ${renderInfoCard('新入榜', formatRank(view.ranking.new_entries_rank))}
+        ${renderInfoCard('风险预警', formatRank(view.ranking.risk_alerts_rank))}
       </div>
     </section>
     <section class="content-card">
@@ -534,6 +537,15 @@ function renderReportSummary(view: ReportView): string {
         ${renderInfoCard('丢包率', `${formatMetric(view.metrics.packet_loss_percent)}%`)}
       </div>
     </section>
+    <section class="content-card">
+      <h2>30 天趋势摘要</h2>
+      <div class="card-grid">
+        ${renderInfoCard('评分趋势', buildTrendSummary(view.trends.score_30d, '分'))}
+        ${renderInfoCard('可用率趋势', buildTrendSummary(view.trends.uptime_30d, '%'))}
+        ${renderInfoCard('延迟趋势', buildTrendSummary(view.trends.latency_30d, ' ms'))}
+        ${renderInfoCard('下载趋势', buildTrendSummary(view.trends.download_30d, ' Mbps'))}
+      </div>
+    </section>
   `;
 }
 
@@ -544,6 +556,40 @@ function renderInfoCard(title: string, body: string): string {
       <p>${escapeHtml(body)}</p>
     </article>
   `;
+}
+
+function renderLinkedInfoCard(title: string, body: string, href: string): string {
+  return `
+    <article class="mini-card">
+      <h3>${escapeHtml(title)}</h3>
+      <p><a href="${escapeAttribute(href)}" rel="nofollow noreferrer">${escapeHtml(body)}</a></p>
+    </article>
+  `;
+}
+
+function renderReportFaq(items: Array<{ question: string; answer: string }>): string {
+  return `
+    <section class="content-card">
+      <h2>常见问题</h2>
+      <div class="card-grid">
+        ${items.map((item) => `
+          <article class="mini-card">
+            <h3>${escapeHtml(item.question)}</h3>
+            <p>${escapeHtml(item.answer)}</p>
+          </article>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function buildTrendSummary(points: Array<{ date: string; value: number }>, suffix: string): string {
+  if (points.length === 0) {
+    return '暂无 30 天趋势数据';
+  }
+  const first = points[0];
+  const latest = points[points.length - 1];
+  return `${first.date} 为 ${formatMetric(first.value)}${suffix}，${latest.date} 为 ${formatMetric(latest.value)}${suffix}，共 ${points.length} 个数据点。`;
 }
 
 function renderMetric(label: string, value: string): string {

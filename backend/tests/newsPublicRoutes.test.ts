@@ -148,6 +148,11 @@ test('GET /publish-token-docs returns server-rendered HTML with crawlable doc co
     });
     assert.equal(response.status, 200);
     const html = await response.text();
+    const description = extractMetaDescription(html);
+    assert.ok(description.length >= 80, `publish token docs description too short: ${description.length}`);
+    assert.ok(description.length <= 150, `publish token docs description too long: ${description.length}`);
+    assert.match(description, /自动发稿与内容系统/);
+    assert.match(description, /GateRank News API/);
     assert.match(html, /<h1>机场榜GateRank 发布令牌接入说明<\/h1>/);
     assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/publish-token-docs"/);
     assert.match(html, /<link rel="alternate" type="text\/markdown" href="http:\/\/127\.0\.0\.1:\d+\/publish-token-docs\.md"/);
@@ -167,6 +172,12 @@ test('GET /publish-token-docs returns server-rendered HTML with crawlable doc co
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });
+
+function extractMetaDescription(html: string): string {
+  const matched = html.match(/<meta name="description" content="([^"]+)"/);
+  assert.ok(matched, 'meta description missing');
+  return matched[1];
+}
 
 test('GET /publish-token-docs.md returns markdown source', async () => {
   const app = express();
@@ -341,6 +352,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
       } as never,
       publicViewService: {
         getFullRankingView: async () => ({
+          date: '2026-03-23',
           items: [
             { report_url: '/airports/nebula' },
             { report_url: null },
@@ -360,13 +372,21 @@ test('GET /sitemap.xml includes published news urls', async () => {
       },
     });
     assert.equal(response.status, 200);
+    assert.equal(
+      response.headers.get('cache-control'),
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+    );
     const xml = await response.text();
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/risk-monitor<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/methodology<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/apply<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/publish-token-docs<\/loc>/);
-    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/risk-monitor<\/loc>/);
-    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/airports\/nebula<\/loc>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/airports\/nebula<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<lastmod>2026-03-29T00:00:00\+08:00<\/lastmod>/);
-    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>/);
-    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news<\/loc>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>\n    <lastmod>2026-03-28T18:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news<\/loc>\n    <lastmod>2026-03-28T18:00:00\+08:00<\/lastmod>/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

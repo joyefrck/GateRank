@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../types/domain';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { getDateInTimezone } from '../utils/time';
+import { PUBLIC_PAGE_CACHE_TTL_MS, setPublicCacheHeaders } from '../utils/publicCache';
 import {
   renderApplyPublicPage,
   renderFullRankingPublicPage,
@@ -35,6 +36,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         `home:${renderDate}`,
         () => deps.publicViewService.getHomePageView(renderDate),
       );
+      setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderHomePublicPage(siteUrl, view, requestedDate));
     } catch (error) {
       console.error('[public-page] failed to render home page', { error, requestId: req.requestId || 'unknown' });
@@ -59,6 +61,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
           20,
         ),
       );
+      setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderFullRankingPublicPage(siteUrl, view, requestedDate, page));
     } catch (error) {
       console.error('[public-page] failed to render full ranking page', { error, requestId: req.requestId || 'unknown' });
@@ -83,6 +86,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
           20,
         ),
       );
+      setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderRiskMonitorPublicPage(siteUrl, view, requestedDate, page));
     } catch (error) {
       console.error('[public-page] failed to render risk monitor page', { error, requestId: req.requestId || 'unknown' });
@@ -97,11 +101,13 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
 
   router.get('/methodology', (_req, res) => {
     const siteUrl = getSiteOrigin(_req);
+    setPublicCacheHeaders(res);
     res.status(200).type('html').send(renderMethodologyPublicPage(siteUrl));
   });
 
   router.get('/apply', (_req, res) => {
     const siteUrl = getSiteOrigin(_req);
+    setPublicCacheHeaders(res);
     res.status(200).type('html').send(renderApplyPublicPage(siteUrl));
   });
 
@@ -118,6 +124,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         return;
       }
 
+      setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderReportPublicPage(siteUrl, view, requestedDate));
     } catch (error) {
       console.error('[public-page] failed to render airport report page', { error, requestId: req.requestId || 'unknown' });
@@ -141,6 +148,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         return;
       }
 
+      setPublicCacheHeaders(res);
       res.redirect(301, `/airports/${encodeURIComponent(view.airport.slug)}`);
       return;
     } catch (error) {
@@ -154,8 +162,6 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
 
 const PUBLIC_RANKING_PATH = '/rankings/all';
 const PUBLIC_RISK_MONITOR_PATH = '/risk-monitor';
-const PUBLIC_PAGE_CACHE_TTL_MS = 30_000;
-
 function redirectDefaultDateQuery(
   req: { query: Record<string, unknown> },
   res: { redirect(status: number, path: string): void },

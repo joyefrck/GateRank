@@ -6,6 +6,51 @@ export interface PublicSeoText {
   keywords: string;
 }
 
+export interface PublicReportSeoView {
+  date: string;
+  airport: {
+    name: string;
+    slug: string;
+    website: string;
+    status: string;
+  };
+  summary_card: {
+    score: number;
+    conclusion: string;
+  };
+  ranking: {
+    today_pick_rank: number | null;
+    most_stable_rank: number | null;
+    best_value_rank: number | null;
+    new_entries_rank: number | null;
+    risk_alerts_rank: number | null;
+  };
+  score_breakdown: {
+    s: number;
+    p: number;
+    c: number;
+    r: number;
+    final_score: number;
+    risk_penalty: number;
+  };
+  metrics: {
+    uptime_percent_30d: number;
+    median_latency_ms: number;
+    median_download_mbps: number;
+    packet_loss_percent: number;
+    stable_days_streak: number;
+    healthy_days_streak: number;
+    stability_tier: string;
+    recent_complaints_count: number;
+    history_incidents: number;
+  };
+}
+
+export interface PublicReportFaqItem {
+  question: string;
+  answer: string;
+}
+
 export const PUBLIC_SEO_PATHS = {
   home: '/',
   fullRanking: '/rankings/all',
@@ -13,6 +58,8 @@ export const PUBLIC_SEO_PATHS = {
   apply: '/apply',
   riskMonitor: '/risk-monitor',
 } as const;
+
+export const PUBLIC_SEO_STATIC_LASTMOD = '2026-05-17T00:00:00+08:00';
 
 export const PUBLIC_FRONTEND_ASSETS = {
   script: '/assets/index.js?v=20260515-ranking-url-clean',
@@ -56,8 +103,8 @@ export function buildRiskMonitorSeo(input?: {
     title: `跑路监测 | 已跑路与风险观察机场列表 | ${PUBLIC_SITE_BRAND_NAME}`,
     description:
       input && typeof input.total === 'number'
-        ? `${input.dateLabel || '今日'} 跑路监测当前收录 ${formatCount(input.total)} 个机场，覆盖管理员确认跑路与命中风险观察标签的对象，默认将已跑路机场置顶展示。`
-        : `${PUBLIC_SITE_BRAND_NAME} 跑路监测页汇总管理员确认跑路与命中风险观察标签的机场，帮助用户快速识别高风险对象。`,
+        ? `${input.dateLabel || '今日'} ${PUBLIC_SITE_BRAND_NAME} 跑路机场监测页收录 ${formatCount(input.total)} 个已确认跑路、风险观察与异常波动机场，结合评分变化、官网状态、测速数据和风险标签，帮助用户避开高风险机场 VPN 服务。`
+        : `${PUBLIC_SITE_BRAND_NAME} 跑路机场监测页汇总已确认跑路、风险观察与异常波动机场，结合评分变化、官网状态、测速数据与风险标签，帮助用户避开高风险机场 VPN 服务。`,
     keywords: '机场榜GateRank,跑路监测,风险观察,机场风险,高风险机场,已跑路机场,GateRank',
   };
 }
@@ -67,27 +114,102 @@ export function buildReportSeo(input?: {
   score?: number;
   statusLabel?: string;
 }): PublicSeoText {
+  const airportKeywords = input?.airportName
+    ? `${input.airportName}怎么样,${input.airportName}测评,${input.airportName}跑路,${input.airportName}官网,${input.airportName}机场测评,`
+    : '';
   return {
     title: input?.airportName
       ? `${input.airportName} 测评报告 | ${PUBLIC_SITE_BRAND_NAME}`
       : `机场测评报告 | ${PUBLIC_SITE_BRAND_NAME}`,
     description:
       input?.airportName && typeof input.score === 'number' && input.statusLabel
-        ? `${input.airportName} 当前公开分数 ${formatMetric(input.score)}，状态为${input.statusLabel}。报告包含榜单位置、评分拆解、关键指标与 30 天趋势。`
+        ? `${input.airportName} 当前公开分数 ${formatMetric(input.score)}，状态为${input.statusLabel}。报告包含榜单位置、评分拆解、关键指标、官网入口、跑路风险记录与 30 天趋势。`
         : `${PUBLIC_SITE_BRAND_NAME} 测评报告页展示单个机场的榜单位置、评分拆解、关键指标与 30 天趋势。`,
-    keywords: '机场榜GateRank,机场测评报告,机场评分,机场趋势,机场榜,GateRank',
+    keywords: `${airportKeywords}机场榜GateRank,机场测评报告,机场评分,机场趋势,机场榜,机场推荐,机场官网,跑路风险,GateRank`,
   };
+}
+
+export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqItem[] {
+  const airportName = view.airport.name;
+  const statusLabel = formatAirportStatusLabel(view.airport.status);
+  const riskAnswer = buildReportRiskAnswer(view);
+
+  return [
+    {
+      question: `${airportName}怎么样？`,
+      answer: `${airportName} 当前公开分数 ${formatMetric(view.summary_card.score)}，状态为${statusLabel}。GateRank 当前报告结论为：${view.summary_card.conclusion}`,
+    },
+    {
+      question: `${airportName}测评怎么看？`,
+      answer: `${airportName} 测评主要看榜单位置、稳定性 S=${formatMetric(view.score_breakdown.s)}、性能 P=${formatMetric(view.score_breakdown.p)}、价格 C=${formatMetric(view.score_breakdown.c)}、风险 R=${formatMetric(view.score_breakdown.r)}，以及 30 天可用率 ${formatMetric(view.metrics.uptime_percent_30d)}%、中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms、下载速率 ${formatMetric(view.metrics.median_download_mbps)} Mbps。`,
+    },
+    {
+      question: `${airportName}官网是什么？`,
+      answer: `${airportName} 在 GateRank 当前记录中的官网入口为 ${view.airport.website}。访问前建议同时查看本页的状态、风险惩罚、投诉记录和历史异常。`,
+    },
+    {
+      question: `${airportName}跑路风险高吗？`,
+      answer: riskAnswer,
+    },
+  ];
+}
+
+export function buildReportStructuredData(
+  siteUrl: string,
+  canonicalPath: string,
+  seo: PublicSeoText,
+  view: PublicReportSeoView,
+): Array<Record<string, unknown>> {
+  const canonicalUrl = `${siteUrl}${canonicalPath}`;
+  return [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: seo.title,
+      description: seo.description,
+      url: canonicalUrl,
+      about: {
+        '@type': 'Thing',
+        name: view.airport.name,
+        url: view.airport.website,
+        additionalProperty: [
+          buildPropertyValue('公开分数', formatMetric(view.summary_card.score)),
+          buildPropertyValue('状态', formatAirportStatusLabel(view.airport.status)),
+          buildPropertyValue('数据日期', view.date),
+          buildPropertyValue('30天可用率', `${formatMetric(view.metrics.uptime_percent_30d)}%`),
+          buildPropertyValue('风险惩罚', formatMetric(view.score_breakdown.risk_penalty)),
+        ],
+      },
+    },
+    buildBreadcrumbJsonLd(siteUrl, [
+      ['今日推荐', '/'],
+      [view.airport.name, canonicalPath],
+    ]),
+    buildReportRankingItemList(siteUrl, view),
+    {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: buildReportFaqItems(view).map((item) => ({
+        '@type': 'Question',
+        name: item.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: item.answer,
+        },
+      })),
+    },
+  ];
 }
 
 export const METHODOLOGY_SEO: PublicSeoText = {
   title: `测评方法 | 机场评分规则、权重与风险扣分说明 | ${PUBLIC_SITE_BRAND_NAME}`,
-  description: `${PUBLIC_SITE_BRAND_NAME} 测评方法页公开解释机场评分规则，拆解稳定性、性能、价格、风险四个维度，以及时间衰减、风险扣分与最终分数如何计算。`,
+  description: `${PUBLIC_SITE_BRAND_NAME} 测评方法页公开解释机场 VPN 评分规则，拆解稳定性、性能、价格、风险四个维度，以及时间衰减、风险扣分、数据采样和最终分数如何影响机场推荐与排名。`,
   keywords: '机场榜GateRank,机场测评方法,机场测速标准,机场评分规则,机场推荐依据,VPN机场测评,机场榜,GateRank',
 };
 
 export const APPLY_SEO: PublicSeoText = {
   title: `申请入驻测试 | ${PUBLIC_SITE_BRAND_NAME}`,
-  description: `${PUBLIC_SITE_BRAND_NAME} 申请入驻测试页用于提交机场基础信息、测试资料与联系方式，供后台审核与后续联系使用。`,
+  description: `${PUBLIC_SITE_BRAND_NAME} 申请入驻测试页用于提交机场基础信息、官网地址、测试账号、订阅资料与联系方式，供后台完成资料审核、支付确认、自动测速接入、流程管理和后续运营沟通。`,
   keywords: '机场榜GateRank,申请入驻测试,机场申请,机场收录,机场测试资料,GateRank',
 };
 
@@ -159,6 +281,68 @@ export function formatAirportStatusLabel(status: string): string {
 
 export function formatMetric(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function buildReportRiskAnswer(view: PublicReportSeoView): string {
+  const airportName = view.airport.name;
+  const statusLabel = formatAirportStatusLabel(view.airport.status);
+  const riskPenalty = formatMetric(view.score_breakdown.risk_penalty);
+  const complaintCount = view.metrics.recent_complaints_count;
+  const historyIncidents = view.metrics.history_incidents;
+
+  if (view.airport.status === 'down') {
+    return `${airportName} 当前状态为${statusLabel}，GateRank 已将其纳入高风险记录。当前风险惩罚为 ${riskPenalty}，近期投诉 ${complaintCount} 条，历史异常 ${historyIncidents} 次。`;
+  }
+  if (view.airport.status === 'risk') {
+    return `${airportName} 当前状态为${statusLabel}，需要结合风险惩罚、近期投诉和历史异常判断。当前风险惩罚为 ${riskPenalty}，近期投诉 ${complaintCount} 条，历史异常 ${historyIncidents} 次。`;
+  }
+  return `${airportName} 当前状态为${statusLabel}，未被标记为跑路。当前风险惩罚为 ${riskPenalty}，近期投诉 ${complaintCount} 条，历史异常 ${historyIncidents} 次；这只是当前监测结果，不代表未来没有风险。`;
+}
+
+function buildPropertyValue(name: string, value: string): Record<string, string> {
+  return {
+    '@type': 'PropertyValue',
+    name,
+    value,
+  };
+}
+
+function buildBreadcrumbJsonLd(siteUrl: string, items: Array<[string, string]>): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map(([name, path], index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name,
+      item: `${siteUrl}${path}`,
+    })),
+  };
+}
+
+function buildReportRankingItemList(siteUrl: string, view: PublicReportSeoView): Record<string, unknown> {
+  const rankingPairs: Array<[string, number | null]> = [
+    ['今日推荐', view.ranking.today_pick_rank],
+    ['长期稳定', view.ranking.most_stable_rank],
+    ['性价比', view.ranking.best_value_rank],
+    ['新入榜', view.ranking.new_entries_rank],
+    ['风险预警', view.ranking.risk_alerts_rank],
+  ];
+  const rankingItems = rankingPairs.filter((item): item is [string, number] => typeof item[1] === 'number');
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `${view.airport.name} 榜单位置`,
+    numberOfItems: rankingItems.length,
+    itemListElement: rankingItems.map(([name, rank], index) => ({
+      '@type': 'ListItem',
+      position: rank,
+      name,
+      item: `${siteUrl}${buildAirportReportPath(view.airport.slug)}`,
+      additionalType: index === 0 ? 'today_pick' : undefined,
+    })),
+  };
 }
 
 function formatCount(value: number): string {

@@ -5,13 +5,16 @@ import { renderNewsArticlePage, renderNewsIndexPage } from '../services/newsPage
 import { renderPublishTokenDocsPage, renderPublishTokenDocsRawMarkdown } from '../services/publishTokenDocsPageRenderer';
 import type { NewsPublicService } from '../services/newsPublicService';
 import { buildServerPageViewRecord } from '../utils/marketing';
+import { setPublicCacheHeaders } from '../utils/publicCache';
 import { getDateInTimezone } from '../utils/time';
 import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from '../../../shared/publishTokenDocs';
+import { PUBLIC_SEO_STATIC_LASTMOD } from '../../../shared/publicSeo';
 
 interface NewsPublicDeps {
   newsPublicService: NewsPublicService;
   publicViewService?: {
     getFullRankingView(date: string, page: number, pageSize: number): Promise<{
+      date?: string;
       items: Array<{ report_url?: string | null }>;
     }>;
   };
@@ -102,7 +105,8 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
   router.get('/sitemap.xml', async (req, res) => {
     const siteUrl = getSiteUrl(req);
     const items = await deps.newsPublicService.getSitemapItems();
-    const reportUrls = await getReportSitemapUrls(deps);
+    const reportEntries = await getReportSitemapEntries(deps);
+    const dataLastmod = reportEntries[0]?.lastmod || formatSitemapLastmodDate(getDateInTimezone());
     const urls = [
       '/',
       '/rankings/all',
@@ -111,31 +115,59 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       '/risk-monitor',
       '/publish-token-docs',
       '/news',
-      ...reportUrls,
+      ...reportEntries.map((entry) => entry.path),
       ...items.map((item) => `/news/${item.slug}`),
     ];
-    const xml = buildSitemapXml(siteUrl, urls, items, {
+    const staticLastmodByPath = {
+      '/': dataLastmod,
+      '/rankings/all': dataLastmod,
+      '/risk-monitor': dataLastmod,
+      '/methodology': PUBLIC_SEO_STATIC_LASTMOD,
+      '/apply': PUBLIC_SEO_STATIC_LASTMOD,
       '/publish-token-docs': PUBLISH_TOKEN_DOCS_LAST_UPDATED,
-    });
+      '/news': getNewsIndexLastmod(items),
+      ...Object.fromEntries(reportEntries.map((entry) => [entry.path, entry.lastmod])),
+    };
+    const xml = buildSitemapXml(siteUrl, urls, items, staticLastmodByPath);
+    setPublicCacheHeaders(res);
     res.type('application/xml').send(xml);
   });
 
   return router;
 }
 
-async function getReportSitemapUrls(deps: NewsPublicDeps): Promise<string[]> {
+async function getReportSitemapEntries(deps: NewsPublicDeps): Promise<Array<{ path: string; lastmod: string }>> {
   if (!deps.publicViewService) {
     return [];
   }
   try {
     const view = await deps.publicViewService.getFullRankingView(getDateInTimezone(), 1, 100);
+    const lastmod = formatSitemapLastmodDate(view.date || getDateInTimezone());
     return view.items
       .map((item) => item.report_url || '')
-      .filter((url) => url.startsWith('/airports/'));
+      .filter((url) => url.startsWith('/airports/'))
+      .map((path) => ({ path, lastmod }));
   } catch (error) {
     console.error('[sitemap] failed to load report urls', { error });
     return [];
   }
+}
+
+function getNewsIndexLastmod(items: NewsArticleListItem[]): string {
+  const latest = items
+    .map((item) => item.published_at)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
+  return latest ? formatSitemapLastmodDateTime(latest) : PUBLIC_SEO_STATIC_LASTMOD;
+}
+
+function formatSitemapLastmodDate(date: string): string {
+  return `${date}T00:00:00+08:00`;
+}
+
+function formatSitemapLastmodDateTime(dateTime: string): string {
+  return dateTime.includes('T') ? dateTime : `${dateTime.replace(' ', 'T')}+08:00`;
 }
 
 function getSiteUrl(req: Request): string {
