@@ -61,7 +61,7 @@ import {
   computeUptimeScore,
   isStableDay,
 } from '../utils/stability';
-import { buildPortalLoginUrl } from '../utils/siteUrl';
+import { buildPortalLoginUrl, getSiteOrigin } from '../utils/siteUrl';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
 
 interface AdminDeps {
@@ -256,7 +256,7 @@ interface AdminDeps {
   userTelegramBotSettingsService?: {
     getAdminSettings(): Promise<unknown>;
     updateAdminSettings(input: UserTelegramBotSettingsInput, updatedBy: string): Promise<unknown>;
-    syncWebhook(): Promise<unknown>;
+    syncWebhook(updatedBy?: string): Promise<unknown>;
   };
   mediaLibrarySettingsService?: {
     getAdminSettings(): Promise<unknown>;
@@ -637,7 +637,10 @@ export function createAdminRoutes(deps: AdminDeps): Router {
 
   router.patch('/system-settings/user-telegram-bot', async (req, res, next) => {
     try {
-      const input = parseUserTelegramBotSettingsPayload((req.body ?? {}) as Record<string, unknown>);
+      const input = {
+        ...parseUserTelegramBotSettingsPayload((req.body ?? {}) as Record<string, unknown>),
+        request_origin: getSiteOrigin(req),
+      };
       const result = await getUserTelegramBotSettingsService(deps).updateAdminSettings(
         input,
         actorFromReq(req),
@@ -656,7 +659,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
 
   router.post('/system-settings/user-telegram-bot/sync-webhook', async (req, res, next) => {
     try {
-      const result = await getUserTelegramBotSettingsService(deps).syncWebhook();
+      const result = await getUserTelegramBotSettingsService(deps).syncWebhook(actorFromReq(req));
       await deps.auditRepository.log(
         'sync_system_setting_user_telegram_bot_webhook',
         actorFromReq(req),

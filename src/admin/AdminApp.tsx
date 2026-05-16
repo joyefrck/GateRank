@@ -342,6 +342,10 @@ interface UserTelegramBotSettingsView {
   has_webhook_secret: boolean;
   webhook_secret_masked: string | null;
   webhook_url: string | null;
+  webhook_ready: boolean;
+  webhook_origin_source: string | null;
+  webhook_last_synced_at: string | null;
+  webhook_last_error: string | null;
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -3241,7 +3245,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
         body: JSON.stringify(buildPayload()),
       })) as UserTelegramBotSettingsView;
       applyView(data);
-      setSuccess('用户服务 Bot 配置已保存');
+      setSuccess(data.webhook_ready ? `用户服务 Bot 配置已保存，Webhook 已同步：${data.webhook_url || '-'}` : '用户服务 Bot 草稿已保存');
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
     } finally {
@@ -3262,6 +3266,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
       await fetchSettings();
     } catch (err) {
       setError(err instanceof Error ? err.message : '同步失败');
+      await fetchSettings();
     } finally {
       setSyncing(false);
     }
@@ -3283,7 +3288,11 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
             <ReadField label="Bot Username" value={settings?.bot_username ? `@${settings.bot_username}` : '-'} />
             <ReadField label="Token" value={settings?.has_bot_token ? `已配置 (${settings.bot_token_masked || '-'})` : '未配置'} />
             <ReadField label="Webhook Secret" value={settings?.has_webhook_secret ? `已配置 (${settings.webhook_secret_masked || '-'})` : '未配置'} />
+            <ReadField label="Webhook 状态" value={settings?.webhook_ready ? '已同步，可绑定' : form.enabled ? '未就绪' : '未启用'} />
             <ReadField label="Webhook URL" value={settings?.webhook_url || '-'} />
+            <ReadField label="Origin 来源" value={formatWebhookOriginSource(settings?.webhook_origin_source)} />
+            <ReadField label="最近同步" value={formatDateTimeInBeijing(settings?.webhook_last_synced_at)} />
+            <ReadField label="最近错误" value={settings?.webhook_last_error || '-'} />
             <ReadField label="最近更新" value={formatDateTimeInBeijing(settings?.updated_at)} />
           </div>
 
@@ -3336,7 +3345,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
               />
             </FormField>
 
-            <FormField label="Webhook Origin" hint="公网 API 域名，例如 https://www.gaterank.cn。">
+            <FormField label="公网 API 域名" hint="用于自动生成 Webhook URL；留空时会尝试从支付回调、环境变量或当前请求推导。启用时必须是公网 HTTPS。">
               <input
                 className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
                 value={form.webhook_origin}
@@ -3361,7 +3370,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
 
           <div className="flex items-center justify-end gap-3">
             <button className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50" disabled={syncing || !settings?.enabled} onClick={() => void syncWebhook()}>
-              {syncing ? '同步中...' : '同步 Webhook'}
+              {syncing ? '同步中...' : '重新同步/修复 Webhook'}
             </button>
             <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
               {saving ? '保存中...' : '保存配置'}
@@ -3371,6 +3380,19 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
       )}
     </section>
   );
+}
+
+function formatWebhookOriginSource(source: string | null | undefined): string {
+  if (!source) return '-';
+  const labels: Record<string, string> = {
+    manual: '手动填写',
+    payment_gateway: '支付回调配置',
+    PAYMENT_NOTIFY_ORIGIN: 'PAYMENT_NOTIFY_ORIGIN',
+    API_BASE: 'API_BASE',
+    VITE_SITE_URL: 'VITE_SITE_URL',
+    request_origin: '当前请求地址',
+  };
+  return labels[source] || source;
 }
 
 function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {

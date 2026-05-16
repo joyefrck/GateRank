@@ -287,6 +287,7 @@ test('POST /portal/telegram-bind/start creates Telegram deep link for reviewed a
           api_base: 'https://api.telegram.org',
           webhook_origin: 'https://example.com',
           webhook_secret: 'secret-token',
+          webhook_last_synced_at: '2026-05-16T10:00:00.000Z',
         }),
       },
       paymentGatewaySettingsService: {
@@ -314,6 +315,93 @@ test('POST /portal/telegram-bind/start creates Telegram deep link for reviewed a
     const data = (await response.json()) as { binding_url: string; expires_at: string };
     assert.equal(data.binding_url, 'https://t.me/gaterank_user_bot?start=bind-token');
     assert.equal(data.expires_at, '2026-05-16T10:10:00.000Z');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/telegram-bind/start requires webhook-ready user bot config', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount(),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({
+          id: 7,
+          name: 'Cloud Airport',
+          website: 'https://example.com',
+          websites: ['https://example.com'],
+          review_status: 'reviewed',
+          payment_status: 'paid',
+          payment_amount: 456,
+          applicant_email: 'user@example.com',
+          applicant_telegram: '@cloud',
+          founded_on: '2025-01-01',
+          airport_intro: 'intro',
+          created_at: '2026-04-18 10:00:00',
+        }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      applicantTelegramBindingRepository: {
+        createBindToken: async () => {
+          throw new Error('not used');
+        },
+        getByApplicantAccountId: async () => null,
+        unbindApplicantAccount: async () => false,
+      },
+      userTelegramBotSettingsService: {
+        getConfig: async () => ({
+          enabled: true,
+          bot_token: '123456:abcdefghi',
+          bot_username: 'gaterank_user_bot',
+          api_base: 'https://api.telegram.org',
+          webhook_origin: '',
+          webhook_secret: 'secret-token',
+          webhook_last_synced_at: '2026-05-16T10:00:00.000Z',
+        }),
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({}),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/telegram-bind/start`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(response.status, 409);
+    const data = (await response.json()) as { message: string };
+    assert.match(data.message, /Webhook/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

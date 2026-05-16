@@ -28,7 +28,10 @@ import {
   type PaymentGatewayChannel,
 } from '../services/paymentGatewayService';
 import type { PaymentReceivedNotificationInput } from '../services/telegramNotificationService';
-import type { UserTelegramBotConfig } from '../services/userTelegramBotSettingsService';
+import {
+  isUserTelegramBotConfigReady,
+  type UserTelegramBotConfig,
+} from '../services/userTelegramBotSettingsService';
 
 interface PortalDeps {
   applicantAccountRepository: {
@@ -255,8 +258,8 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         throw new HttpError(409, 'TELEGRAM_BIND_REVIEW_REQUIRED', '申请审核通过后才能绑定 Telegram Bot');
       }
       const config = await requireUserTelegramBotSettingsService(deps).getConfig();
-      if (!config.enabled || !config.bot_username) {
-        throw new HttpError(409, 'USER_TELEGRAM_BOT_NOT_CONFIGURED', '用户服务 Bot 尚未配置');
+      if (!isUserTelegramBotConfigReady(config)) {
+        throw new HttpError(409, 'USER_TELEGRAM_BOT_NOT_CONFIGURED', '用户服务 Bot 尚未完成 Webhook 配置');
       }
       const bindToken = await requireApplicantTelegramBindingRepository(deps).createBindToken(account.id);
       res.status(201).json({
@@ -878,7 +881,7 @@ async function buildTelegramBotView(deps: PortalDeps, applicantAccountId: number
     deps.applicantTelegramBindingRepository?.getByApplicantAccountId?.(applicantAccountId) ?? Promise.resolve(null),
   ]);
   return {
-    configured: Boolean(config?.enabled && config.bot_username),
+    configured: Boolean(config && isUserTelegramBotConfigReady(config)),
     enabled: Boolean(config?.enabled),
     bot_username: config?.bot_username || null,
     binding: binding
