@@ -23,6 +23,7 @@ export interface ApplicantWalletView {
   applicant_account_id: number;
   application_id: number;
   airport_id: number | null;
+  airport_is_listed?: boolean | null;
   balance: number;
   auto_unlisted_at: string | null;
   low_balance_notified_at?: string | null;
@@ -94,6 +95,7 @@ interface WalletRow extends RowDataPacket {
   applicant_account_id: number;
   application_id: number;
   airport_id: number | null;
+  airport_is_listed?: number | null;
   balance: number;
   auto_unlisted_at: string | null;
   created_at: string;
@@ -790,13 +792,15 @@ export class ApplicantBillingRepository {
 
   async getWalletByAccountId(applicantAccountId: number): Promise<ApplicantWalletView | null> {
     const [rows] = await this.pool.query<WalletRow[]>(
-      `SELECT id, applicant_account_id, application_id, airport_id, balance,
-              DATE_FORMAT(auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
-              DATE_FORMAT(low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at,
-              DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
-              DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
-         FROM applicant_wallets
-        WHERE applicant_account_id = ?
+      `SELECT w.id, w.applicant_account_id, w.application_id, w.airport_id, w.balance,
+              a.is_listed AS airport_is_listed,
+              DATE_FORMAT(w.auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
+              DATE_FORMAT(w.low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at,
+              DATE_FORMAT(w.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+              DATE_FORMAT(w.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
+         FROM applicant_wallets w
+         LEFT JOIN airports a ON a.id = w.airport_id
+        WHERE w.applicant_account_id = ?
         LIMIT 1`,
       [applicantAccountId],
     );
@@ -1362,6 +1366,7 @@ function toWallet(row: WalletRow): ApplicantWalletView {
     applicant_account_id: Number(row.applicant_account_id),
     application_id: Number(row.application_id),
     airport_id: row.airport_id == null ? null : Number(row.airport_id),
+    airport_is_listed: row.airport_is_listed == null ? null : Boolean(row.airport_is_listed),
     balance: Number(row.balance),
     auto_unlisted_at: row.auto_unlisted_at ? sqlDateTimeToTimezoneIso(row.auto_unlisted_at) : null,
     low_balance_notified_at: row.low_balance_notified_at ? sqlDateTimeToTimezoneIso(row.low_balance_notified_at) : null,

@@ -335,6 +335,7 @@ interface PortalWalletView {
   applicant_account_id: number;
   application_id: number;
   airport_id: number | null;
+  airport_is_listed?: boolean | null;
   balance: number;
   auto_unlisted_at: string | null;
   created_at: string;
@@ -1175,9 +1176,9 @@ function PortalMetricTile({
   };
 
   return (
-    <div className={`flex min-h-[122px] flex-col justify-between rounded-[24px] border px-5 py-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] ${toneMap[tone]}`}>
+    <div className={`flex min-h-[122px] min-w-0 flex-col justify-between rounded-[24px] border px-5 py-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)] ${toneMap[tone]}`}>
       <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">{label}</div>
-      <div className="mt-4 text-lg font-black tracking-tight text-slate-950">{value}</div>
+      <div className="mt-4 break-all text-lg font-black leading-snug tracking-tight text-slate-950">{value}</div>
     </div>
   );
 }
@@ -3016,7 +3017,7 @@ function ApplicationPage() {
 
             <div className="mt-8 flex flex-wrap gap-4">
               <a
-                className="inline-flex min-h-14 items-center gap-3 rounded-[1.4rem] bg-neutral-900 px-7 py-3 text-base font-black text-white"
+                className="portal-login-primary-link inline-flex min-h-14 items-center justify-center gap-3 rounded-[1.4rem] bg-neutral-900 px-7 py-3 text-base font-black text-white shadow-[0_14px_32px_rgba(17,17,17,0.18)] transition hover:bg-neutral-800"
                 href={successPayload.portal_login_url}
                 target="_blank"
                 rel="noreferrer"
@@ -4569,6 +4570,7 @@ function PortalPage() {
       return renderAccountSettingsSection(view);
     }
 
+    const listingStatus = getPortalListingStatus(view.wallet);
     const accountOverviewSection = (
       <PortalSectionCard
         title="账户概览"
@@ -4583,7 +4585,7 @@ function PortalPage() {
           <PortalInfoCard eyebrow="Airport" title="机场名称" value={view.application.name} tone="blue" />
           <PortalInfoCard eyebrow="Balance" title="账户余额" value={`¥${formatMetric(view.wallet.balance)}`} tone={view.wallet.balance >= view.click_price ? 'green' : 'amber'} />
           <PortalInfoCard eyebrow="Click Price" title="点击单价" value={`¥${formatMetric(view.click_price)} / 次`} tone="blue" />
-          <PortalInfoCard eyebrow="Listing" title="上架状态" value={view.wallet.auto_unlisted_at ? '欠费下架' : '正常'} tone={view.wallet.auto_unlisted_at ? 'amber' : 'green'} />
+          <PortalInfoCard eyebrow="Listing" title="上架状态" value={listingStatus.label} tone={listingStatus.tone} />
         </div>
         {view.admin_telegram_username && (
           <div className="mt-5 flex flex-col gap-3 border-t border-slate-100 pt-5 md:flex-row md:items-center md:justify-between">
@@ -4758,6 +4760,16 @@ function formatPortalPaymentStatus(status: PortalApplicationView['payment_status
 
 function getPortalPaymentMethods(view: PortalViewResponse): PaymentChannel[] {
   return Array.isArray(view.payment_methods) ? view.payment_methods : ['alipay', 'wxpay'];
+}
+
+function getPortalListingStatus(wallet: PortalWalletView): { label: string; tone: 'green' | 'amber' } {
+  if (wallet.airport_is_listed === false) {
+    return { label: '已下架', tone: 'amber' };
+  }
+  if (wallet.auto_unlisted_at) {
+    return { label: '欠费下架', tone: 'amber' };
+  }
+  return { label: '正常', tone: 'green' };
 }
 
 function formatPaymentChannelLabel(channel: PaymentChannel): string {

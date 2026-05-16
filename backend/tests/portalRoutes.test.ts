@@ -16,6 +16,7 @@ function createMockBillingRepository(overrides: Record<string, unknown> = {}) {
       applicant_account_id: 1,
       application_id: 7,
       airport_id: null,
+      airport_is_listed: null,
       balance: 0,
       auto_unlisted_at: null,
       created_at: '2026-04-18T10:00:00+08:00',
@@ -26,6 +27,7 @@ function createMockBillingRepository(overrides: Record<string, unknown> = {}) {
       applicant_account_id: 1,
       application_id: 7,
       airport_id: null,
+      airport_is_listed: null,
       balance: 0,
       auto_unlisted_at: null,
       created_at: '2026-04-18T10:00:00+08:00',
@@ -136,6 +138,94 @@ test('GET /portal/me returns marketing billing fees', async () => {
     assert.equal(data.payment_fee_amount, 456);
     assert.equal(data.click_price, 2.5);
     assert.equal(data.admin_telegram_username, 'gaterank_admin');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /portal/me returns current airport listing state', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount(),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({
+          id: 7,
+          name: 'Cloud Airport',
+          website: 'https://example.com',
+          websites: ['https://example.com'],
+          review_status: 'reviewed',
+          payment_status: 'paid',
+          payment_amount: 456,
+          applicant_email: 'user@example.com',
+          applicant_telegram: '@cloud',
+          founded_on: '2025-01-01',
+          airport_intro: 'intro',
+          created_at: '2026-04-18 10:00:00',
+        }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository({
+        ensureWalletForAccount: async () => ({
+          id: 1,
+          applicant_account_id: 1,
+          application_id: 7,
+          airport_id: 83,
+          airport_is_listed: false,
+          balance: 20,
+          auto_unlisted_at: null,
+          created_at: '2026-04-18T10:00:00+08:00',
+          updated_at: '2026-04-18T10:00:00+08:00',
+        }),
+      }),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({}),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      wallet: {
+        airport_id: number | null;
+        airport_is_listed: boolean | null;
+        auto_unlisted_at: string | null;
+      };
+    };
+    assert.equal(data.wallet.airport_id, 83);
+    assert.equal(data.wallet.airport_is_listed, false);
+    assert.equal(data.wallet.auto_unlisted_at, null);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

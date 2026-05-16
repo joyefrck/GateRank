@@ -93,6 +93,34 @@ test('ApplicantBillingRepository.backfillLegacyAirportWallets uses internal lega
   assert.doesNotMatch(calls[1]!, /a\.applicant_email/);
 });
 
+test('ApplicantBillingRepository.getWalletByAccountId exposes bound airport listing state', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new ApplicantBillingRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [[{
+        id: 1,
+        applicant_account_id: 2,
+        application_id: 3,
+        airport_id: 83,
+        airport_is_listed: 0,
+        balance: 20,
+        auto_unlisted_at: null,
+        low_balance_notified_at: null,
+        created_at: '2026-05-16 10:00:00',
+        updated_at: '2026-05-16 10:00:00',
+      }]];
+    },
+  } as never);
+
+  const wallet = await repository.getWalletByAccountId(2);
+
+  assert.equal(wallet?.airport_id, 83);
+  assert.equal(wallet?.airport_is_listed, false);
+  assert.match(calls[0]!.sql, /LEFT JOIN airports a ON a\.id = w\.airport_id/);
+  assert.deepEqual(calls[0]!.params, [2]);
+});
+
 test('ApplicantBillingRepository.addWalletBalanceAdjustment creates internal wallet before adjustment when missing', async () => {
   const calls: Array<{ kind: 'query' | 'execute' | 'begin' | 'commit' | 'rollback' | 'release'; sql?: string; params?: unknown[] }> = [];
   let walletLookupCount = 0;
