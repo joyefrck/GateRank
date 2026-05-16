@@ -52,6 +52,7 @@ interface Airport {
   has_trial: boolean;
   subscription_url?: string | null;
   applicant_email?: string | null;
+  applicant_account_email?: string | null;
   applicant_telegram?: string | null;
   founded_on?: string | null;
   airport_intro?: string | null;
@@ -83,6 +84,8 @@ interface AirportFormState {
   has_trial: boolean;
   subscription_url: string;
   applicant_email: string;
+  applicant_password_reset_email: string;
+  applicant_account_email: string;
   applicant_telegram: string;
   founded_on: string;
   airport_intro: string;
@@ -1063,6 +1066,10 @@ async function safeJson(response: Response): Promise<unknown> {
   } catch {
     return null;
   }
+}
+
+function getApplicantPasswordResetTargetEmail(airport: AirportFormState): string {
+  return airport.applicant_password_reset_email.trim() || airport.applicant_account_email.trim();
 }
 
 export default function AdminApp() {
@@ -5647,11 +5654,15 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
 
   const resetApplicantLoginPassword = async () => {
     if (!editing?.id) return;
-    const targetEmail = editing.applicant_email.trim();
+    const targetEmail = getApplicantPasswordResetTargetEmail(editing);
+    if (!targetEmail) {
+      setPasswordResetError('未配置可接收重置密码邮件的邮箱');
+      return;
+    }
     const confirmed = window.confirm([
       '确认重置该申请人的登录密码？',
       '',
-      `发送邮箱：${targetEmail || '当前未填写邮箱'}`,
+      `发送邮箱：${targetEmail}`,
       '',
       '确认后系统会生成新密码并发送到该邮箱，用户下次登录后需要立即修改密码。',
     ].join('\n'));
@@ -6299,15 +6310,15 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                       <div className="min-w-0 sm:max-w-[calc(100%-220px)]">
                         <div className="text-sm font-medium text-neutral-900">申请人登录密码</div>
                         <p className="mt-1 text-sm text-neutral-500">
-                          生成新密码并发送到申请人登录邮箱
-                          {editing.applicant_email.trim() ? `：${editing.applicant_email.trim()}` : '。当前未填写邮箱'}
-                          ，申请人下次登录后需要立即修改密码。
+                          {getApplicantPasswordResetTargetEmail(editing)
+                            ? `生成新密码并发送到申请人登录邮箱：${getApplicantPasswordResetTargetEmail(editing)}，申请人下次登录后需要立即修改密码。`
+                            : '未配置可接收重置密码邮件的邮箱。'}
                         </p>
                       </div>
                       <button
                         type="button"
                         className="shrink-0 whitespace-nowrap rounded-2xl border border-rose-300 px-4 py-2.5 text-sm font-medium text-rose-700 disabled:cursor-not-allowed disabled:opacity-50 sm:min-w-[188px]"
-                        disabled={passwordResetSaving}
+                        disabled={passwordResetSaving || !getApplicantPasswordResetTargetEmail(editing)}
                         onClick={() => void resetApplicantLoginPassword()}
                       >
                         {passwordResetSaving ? '重置中...' : '重置用户登录密码'}
@@ -8127,6 +8138,8 @@ function createAirportForm(): AirportFormState {
     has_trial: false,
     subscription_url: '',
     applicant_email: '',
+    applicant_password_reset_email: '',
+    applicant_account_email: '',
     applicant_telegram: '',
     founded_on: '',
     airport_intro: '',
@@ -8150,6 +8163,8 @@ function toAirportForm(airport: Airport): AirportFormState {
     has_trial: airport.has_trial,
     subscription_url: airport.subscription_url || '',
     applicant_email: airport.applicant_email || '',
+    applicant_password_reset_email: airport.applicant_email || '',
+    applicant_account_email: airport.applicant_account_email || '',
     applicant_telegram: airport.applicant_telegram || '',
     founded_on: airport.founded_on || '',
     airport_intro: airport.airport_intro || '',

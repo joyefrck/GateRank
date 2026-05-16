@@ -1520,6 +1520,16 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         throw new Error('mailService.sendApplicantPasswordResetEmail is not configured');
       }
 
+      const toEmail = optionalString((airport as { applicant_email?: string | null }).applicant_email)
+        || optionalString(account.email);
+      if (!toEmail) {
+        throw new HttpError(
+          409,
+          'AIRPORT_APPLICANT_PASSWORD_RESET_EMAIL_NOT_CONFIGURED',
+          '未配置可接收重置密码邮件的邮箱',
+        );
+      }
+
       const previousPasswordHash = account.password_hash;
       const previousMustChangePassword = account.must_change_password;
       const newPassword = createRandomPassword();
@@ -1531,9 +1541,9 @@ export function createAdminRoutes(deps: AdminDeps): Router {
 
       try {
         await mailService.sendApplicantPasswordResetEmail({
-          to: account.email,
+          to: toEmail,
           airportName: getAirportNameForMail(airport, airportId),
-          portalEmail: account.email,
+          portalEmail: toEmail,
           newPassword,
           portalLoginUrl: buildPortalLoginUrl(req),
         });
@@ -1556,7 +1566,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         airport_id: airportId,
         applicant_account_id: account.id,
         application_id: account.application_id,
-        to_email: account.email,
+        to_email: toEmail,
       });
 
       res.json({
@@ -1564,7 +1574,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         airport_id: airportId,
         applicant_account_id: account.id,
         application_id: account.application_id,
-        to_email: account.email,
+        to_email: toEmail,
       });
     } catch (error) {
       if (error instanceof SmtpSendError) {

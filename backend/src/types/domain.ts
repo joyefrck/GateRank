@@ -26,6 +26,7 @@ export interface Airport {
   has_trial: boolean;
   subscription_url?: string | null;
   applicant_email?: string | null;
+  applicant_account_email?: string | null;
   applicant_telegram?: string | null;
   founded_on?: string | null;
   airport_intro?: string | null;

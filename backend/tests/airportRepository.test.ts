@@ -83,6 +83,7 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
           has_trial: 1,
           subscription_url: null,
           applicant_email: 'paid@example.com',
+          applicant_account_email: 'login-paid@example.com',
           applicant_telegram: '@paid',
           founded_on: '2025-01-01',
           airport_intro: 'intro',
@@ -127,9 +128,11 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
   assert.equal(result.total, 2);
   assert.equal(result.items[0]?.application_id, 101);
   assert.equal(result.items[1]?.application_id, null);
+  assert.equal(result.items[0]?.applicant_account_email, 'login-paid@example.com');
   assert.equal(result.items[0]?.paid_application_fee, true);
   assert.equal(result.items[1]?.paid_application_fee, false);
   assert.ok(calls[1]?.sql.includes('application.approved_airport_id = airports.id'));
+  assert.ok(calls[1]?.sql.includes('JOIN applicant_accounts AS account'));
   assert.ok(calls[1]?.sql.includes("paid_application.payment_status = 'paid'"));
   assert.ok(calls[1]?.sql.includes('paid_application.payment_amount > 0'));
 });

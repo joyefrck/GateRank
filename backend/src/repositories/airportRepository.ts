@@ -16,6 +16,7 @@ interface AirportRow extends RowDataPacket {
   has_trial: number;
   subscription_url: string | null;
   applicant_email: string | null;
+  applicant_account_email: string | null;
   applicant_telegram: string | null;
   founded_on: string | null;
   airport_intro: string | null;
@@ -145,6 +146,15 @@ export class AirportRepository {
          has_trial,
          subscription_url,
          applicant_email,
+         (
+           SELECT account.email
+             FROM airport_applications AS application
+             JOIN applicant_accounts AS account
+               ON account.application_id = application.id
+            WHERE application.approved_airport_id = airports.id
+            ORDER BY application.id DESC
+            LIMIT 1
+         ) AS applicant_account_email,
          applicant_telegram,
          founded_on,
          airport_intro,
@@ -214,6 +224,15 @@ export class AirportRepository {
          has_trial,
          subscription_url,
          applicant_email,
+         (
+           SELECT account.email
+             FROM airport_applications AS application
+             JOIN applicant_accounts AS account
+               ON account.application_id = application.id
+            WHERE application.approved_airport_id = airports.id
+            ORDER BY application.id DESC
+            LIMIT 1
+         ) AS applicant_account_email,
          applicant_telegram,
          founded_on,
          airport_intro,
@@ -264,6 +283,15 @@ export class AirportRepository {
          has_trial,
          subscription_url,
          applicant_email,
+         (
+           SELECT account.email
+             FROM airport_applications AS application
+             JOIN applicant_accounts AS account
+               ON account.application_id = application.id
+            WHERE application.approved_airport_id = airports.id
+            ORDER BY application.id DESC
+            LIMIT 1
+         ) AS applicant_account_email,
          applicant_telegram,
          founded_on,
          airport_intro,
@@ -319,6 +347,15 @@ export class AirportRepository {
          has_trial,
          subscription_url,
          applicant_email,
+         (
+           SELECT account.email
+             FROM airport_applications AS application
+             JOIN applicant_accounts AS account
+               ON account.application_id = application.id
+            WHERE application.approved_airport_id = airports.id
+            ORDER BY application.id DESC
+            LIMIT 1
+         ) AS applicant_account_email,
          applicant_telegram,
          founded_on,
          airport_intro,
@@ -374,6 +411,15 @@ export class AirportRepository {
          has_trial,
          subscription_url,
          applicant_email,
+         (
+           SELECT account.email
+             FROM airport_applications AS application
+             JOIN applicant_accounts AS account
+               ON account.application_id = application.id
+            WHERE application.approved_airport_id = airports.id
+            ORDER BY application.id DESC
+            LIMIT 1
+         ) AS applicant_account_email,
          applicant_telegram,
          founded_on,
          airport_intro,
@@ -418,6 +464,7 @@ export class AirportRepository {
          airports.has_trial,
          airports.subscription_url,
          airports.applicant_email,
+         account.email AS applicant_account_email,
          airports.applicant_telegram,
          airports.founded_on,
          airports.airport_intro,
@@ -437,6 +484,8 @@ export class AirportRepository {
          FROM airport_applications AS application
          JOIN airports
            ON airports.id = application.approved_airport_id
+         LEFT JOIN applicant_accounts AS account
+           ON account.application_id = application.id
         WHERE application.review_status = 'reviewed'
           AND application.payment_status = 'paid'
           AND application.approved_airport_id IS NOT NULL
@@ -786,6 +835,7 @@ function toAirportEntity(row: AirportRow): Airport {
     has_trial: !!row.has_trial,
     subscription_url: row.subscription_url,
     applicant_email: row.applicant_email,
+    applicant_account_email: row.applicant_account_email,
     applicant_telegram: row.applicant_telegram,
     founded_on: row.founded_on ? toDateString(row.founded_on) : null,
     airport_intro: row.airport_intro,
