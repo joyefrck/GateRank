@@ -197,6 +197,72 @@ test('user telegram webhook replies balance for bound user', async () => {
   assert.match(String(telegramCalls[0]!.body.text), /点击单价：¥0\.60 \/ 次/);
 });
 
+test('user telegram webhook replies help when bound user sends bare start', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps(), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '/start',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const text = String(telegramCalls[0]!.body.text);
+  assert.match(text, /当前 Telegram 账号已绑定 GateRank 申请人账号/);
+  assert.match(text, /\/balance - 查看账户余额、点击单价和上架状态/);
+  assert.doesNotMatch(text, /生成绑定链接/);
+});
+
+test('user telegram webhook asks unbound user to generate link on bare start', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps({
+      applicantTelegramBindingRepository: {
+        ...createDeps().applicantTelegramBindingRepository,
+        getByTelegramUserId: async () => null,
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '/start',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.match(String(telegramCalls[0]!.body.text), /请先在 GateRank 申请人后台生成绑定链接/);
+});
+
 test('user telegram webhook replies localized help for unknown text', async () => {
   const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
   const originalFetch = globalThis.fetch;

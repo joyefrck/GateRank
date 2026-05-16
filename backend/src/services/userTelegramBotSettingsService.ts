@@ -105,6 +105,7 @@ export class UserTelegramBotSettingsService {
       }
       try {
         await this.setWebhook(nextConfig, webhookUrl);
+        await this.setBotCommands(nextConfig);
       } catch (error) {
         await this.recordWebhookError(nextConfig, error, updatedBy);
         throw error;
@@ -135,6 +136,7 @@ export class UserTelegramBotSettingsService {
     }
     try {
       await this.setWebhook(config, webhookUrl);
+      await this.setBotCommands(config);
       await this.systemSettingRepository?.upsert(USER_TELEGRAM_BOT_SETTING_KEY, {
         ...config,
         webhook_last_synced_at: new Date().toISOString(),
@@ -163,6 +165,25 @@ export class UserTelegramBotSettingsService {
         400,
         'USER_TELEGRAM_WEBHOOK_SYNC_FAILED',
         String(raw?.description || `Telegram setWebhook failed: HTTP ${response.status}`),
+      );
+    }
+  }
+
+  private async setBotCommands(config: UserTelegramBotConfig): Promise<void> {
+    const response = await this.fetchImpl(`${config.api_base}/bot${config.bot_token}/setMyCommands`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        commands: getUserTelegramBotCommands(),
+      }),
+      signal: AbortSignal.timeout(DEFAULT_USER_TELEGRAM_TIMEOUT_MS),
+    });
+    const raw = await safeReadJson(response);
+    if (!response.ok || raw?.ok !== true) {
+      throw new HttpError(
+        400,
+        'USER_TELEGRAM_COMMANDS_SYNC_FAILED',
+        String(raw?.description || `Telegram setMyCommands failed: HTTP ${response.status}`),
       );
     }
   }
@@ -417,6 +438,17 @@ export function isUserTelegramBotConfigReady(config: UserTelegramBotConfig): boo
     config.webhook_last_synced_at &&
     !config.webhook_last_error,
   );
+}
+
+export function getUserTelegramBotCommands(): Array<{ command: string; description: string }> {
+  return [
+    { command: 'start', description: '查看绑定状态和可用命令' },
+    { command: 'balance', description: '查看账户余额、点击单价和上架状态' },
+    { command: 'transactions', description: '查看最近 5 条扣费流水' },
+    { command: 'clicks', description: '查看最近 5 条访问记录' },
+    { command: 'recharge', description: '创建充值支付链接' },
+    { command: 'unbind', description: '解绑当前 Telegram 账号' },
+  ];
 }
 
 function maskSecret(value: string): string | null {

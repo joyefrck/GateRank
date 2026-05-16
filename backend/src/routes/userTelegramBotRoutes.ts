@@ -138,7 +138,14 @@ async function handleMessage(
   if (text.startsWith('/start')) {
     const token = text.split(/\s+/)[1] || '';
     if (!token) {
-      await sendTelegramMessage(config, chatId, '请先在 GateRank 申请人后台生成绑定链接，再从链接打开此 Bot。');
+      const binding = await deps.applicantTelegramBindingRepository.getByTelegramUserId(from.userId);
+      await sendTelegramMessage(
+        config,
+        chatId,
+        binding
+          ? `当前 Telegram 账号已绑定 GateRank 申请人账号。\n\n${buildHelpMessage()}`
+          : '请先在 GateRank 申请人后台生成绑定链接，再从链接打开此 Bot。',
+      );
       return;
     }
     const binding = await deps.applicantTelegramBindingRepository.consumeBindToken(token, {

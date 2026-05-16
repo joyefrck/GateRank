@@ -49,6 +49,15 @@ test('UserTelegramBotSettingsService validates bot token and masks secrets', asy
   assert.equal(view.webhook_origin_source, 'manual');
   assert.equal(calls[0]!.url, 'https://api.telegram.org/bot123456:abcdefghi/getMe');
   assert.equal(calls[1]!.url, 'https://api.telegram.org/bot123456:abcdefghi/setWebhook');
+  assert.equal(calls[2]!.url, 'https://api.telegram.org/bot123456:abcdefghi/setMyCommands');
+  assert.deepEqual(JSON.parse(String(calls[2]!.init?.body || '{}')).commands, [
+    { command: 'start', description: '查看绑定状态和可用命令' },
+    { command: 'balance', description: '查看账户余额、点击单价和上架状态' },
+    { command: 'transactions', description: '查看最近 5 条扣费流水' },
+    { command: 'clicks', description: '查看最近 5 条访问记录' },
+    { command: 'recharge', description: '创建充值支付链接' },
+    { command: 'unbind', description: '解绑当前 Telegram 账号' },
+  ]);
 });
 
 test('UserTelegramBotSettingsService syncWebhook posts Telegram webhook URL', async () => {
@@ -86,6 +95,15 @@ test('UserTelegramBotSettingsService syncWebhook posts Telegram webhook URL', as
     url: 'https://example.com/api/v1/telegram/user-bot/webhook/secret-token',
     allowed_updates: ['message', 'callback_query'],
   });
+  assert.equal(calls[1]!.url, 'https://api.telegram.org/bot123456:abcdefghi/setMyCommands');
+  assert.deepEqual((calls[1]!.body as { commands: unknown }).commands, [
+    { command: 'start', description: '查看绑定状态和可用命令' },
+    { command: 'balance', description: '查看账户余额、点击单价和上架状态' },
+    { command: 'transactions', description: '查看最近 5 条扣费流水' },
+    { command: 'clicks', description: '查看最近 5 条访问记录' },
+    { command: 'recharge', description: '创建充值支付链接' },
+    { command: 'unbind', description: '解绑当前 Telegram 账号' },
+  ]);
 });
 
 test('UserTelegramBotSettingsService rejects enabled save without public webhook origin and does not save', async () => {
@@ -194,6 +212,7 @@ test('UserTelegramBotSettingsService infers webhook origin from payment gateway 
   assert.equal(view.webhook_ready, true);
   assert.equal(calls[1]!.url, 'https://api.telegram.org/bot123456:abcdefghi/setWebhook');
   assert.match((calls[1]!.body as { url: string }).url, /^https:\/\/pay\.gaterank\.test\/api\/v1\/telegram\/user-bot\/webhook\//);
+  assert.equal(calls[2]!.url, 'https://api.telegram.org/bot123456:abcdefghi/setMyCommands');
 });
 
 test('UserTelegramBotSettingsService rejects localhost webhook origin', async () => {
