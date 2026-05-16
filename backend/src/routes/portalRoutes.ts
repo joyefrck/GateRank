@@ -4,6 +4,7 @@ import { APPLICATION_FEE_AMOUNT, CLICK_CHARGE_AMOUNT, RECHARGE_AMOUNTS } from '.
 import { HttpError } from '../middleware/errorHandler';
 import { portalAuth } from '../middleware/portalAuth';
 import type { ApplicantAccount } from '../repositories/applicantAccountRepository';
+import type { ApplicantTelegramBinding } from '../repositories/applicantTelegramBindingRepository';
 import type { ApplicationPaymentOrder } from '../repositories/applicationPaymentOrderRepository';
 import type {
   ApplicantClickView,
@@ -27,6 +28,7 @@ import {
   type PaymentGatewayChannel,
 } from '../services/paymentGatewayService';
 import type { PaymentReceivedNotificationInput } from '../services/telegramNotificationService';
+import type { UserTelegramBotConfig } from '../services/userTelegramBotSettingsService';
 
 interface PortalDeps {
   applicantAccountRepository: {
@@ -144,6 +146,14 @@ interface PortalDeps {
     unbind(applicantAccountId: number): Promise<void>;
     getReturnOrigin?(): Promise<string | null>;
   };
+  applicantTelegramBindingRepository?: {
+    createBindToken(applicantAccountId: number): Promise<{ token: string; expires_at: string }>;
+    getByApplicantAccountId(applicantAccountId: number): Promise<ApplicantTelegramBinding | null>;
+    unbindApplicantAccount(applicantAccountId: number): Promise<boolean>;
+  };
+  userTelegramBotSettingsService?: {
+    getConfig(): Promise<UserTelegramBotConfig>;
+  };
   paymentGatewaySettingsService: {
     getConfig(): Promise<unknown>;
   };
@@ -230,6 +240,38 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     try {
       const session = requireApplicantSession(req);
       await requireApplicantXOAuthService(deps).unbind(session.applicant_id);
+      res.json(await buildPortalView(deps, session.applicant_id));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/telegram-bind/start', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      const application = await requireApplication(deps, account.application_id);
+      if (application.review_status !== 'reviewed') {
+        throw new HttpError(409, 'TELEGRAM_BIND_REVIEW_REQUIRED', '申请审核通过后才能绑定 Telegram Bot');
+      }
+      const config = await requireUserTelegramBotSettingsService(deps).getConfig();
+      if (!config.enabled || !config.bot_username) {
+        throw new HttpError(409, 'USER_TELEGRAM_BOT_NOT_CONFIGURED', '用户服务 Bot 尚未配置');
+      }
+      const bindToken = await requireApplicantTelegramBindingRepository(deps).createBindToken(account.id);
+      res.status(201).json({
+        binding_url: `https://t.me/${config.bot_username}?start=${encodeURIComponent(bindToken.token)}`,
+        expires_at: bindToken.expires_at,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/telegram-bind/unbind', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      await requireApplicantTelegramBindingRepository(deps).unbindApplicantAccount(session.applicant_id);
       res.json(await buildPortalView(deps, session.applicant_id));
     } catch (error) {
       next(error);
@@ -784,11 +826,12 @@ function normalizeGatewayPaidAt(value: string | null): string {
 async function buildPortalView(deps: PortalDeps, applicantId: number) {
   const account = await requireApplicantAccount(deps, applicantId);
   const application = await requireApplication(deps, account.application_id);
-  const [latestPaymentOrder, marketingConfig, wallet, paymentMethods] = await Promise.all([
+  const [latestPaymentOrder, marketingConfig, wallet, paymentMethods, telegramBot] = await Promise.all([
     deps.applicationPaymentOrderRepository.getLatestByApplicationId(application.id),
     getMarketingBillingConfig(deps),
     deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id),
     getAvailablePaymentMethods(deps),
+    buildTelegramBotView(deps, account.id),
   ]);
 
   return {
@@ -813,6 +856,41 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
     admin_telegram_username: marketingConfig.admin_telegram_username,
     recharge_amounts: RECHARGE_AMOUNTS,
     wallet,
+    telegram_bot: telegramBot,
+  };
+}
+
+async function buildTelegramBotView(deps: PortalDeps, applicantAccountId: number): Promise<{
+  configured: boolean;
+  enabled: boolean;
+  bot_username: string | null;
+  binding: null | {
+    telegram_user_id: string;
+    telegram_chat_id: string;
+    telegram_username: string | null;
+    telegram_first_name: string | null;
+    telegram_last_name: string | null;
+    bound_at: string;
+  };
+}> {
+  const [config, binding] = await Promise.all([
+    deps.userTelegramBotSettingsService?.getConfig?.() ?? Promise.resolve(null),
+    deps.applicantTelegramBindingRepository?.getByApplicantAccountId?.(applicantAccountId) ?? Promise.resolve(null),
+  ]);
+  return {
+    configured: Boolean(config?.enabled && config.bot_username),
+    enabled: Boolean(config?.enabled),
+    bot_username: config?.bot_username || null,
+    binding: binding
+      ? {
+          telegram_user_id: binding.telegram_user_id,
+          telegram_chat_id: binding.telegram_chat_id,
+          telegram_username: binding.telegram_username,
+          telegram_first_name: binding.telegram_first_name,
+          telegram_last_name: binding.telegram_last_name,
+          bound_at: binding.bound_at,
+        }
+      : null,
   };
 }
 
@@ -866,6 +944,24 @@ function requireApplicantXOAuthService(deps: PortalDeps): NonNullable<PortalDeps
     throw new HttpError(503, 'X_OAUTH_NOT_CONFIGURED', 'X 登录尚未配置，请联系管理员');
   }
   return deps.applicantXOAuthService;
+}
+
+function requireApplicantTelegramBindingRepository(
+  deps: PortalDeps,
+): NonNullable<PortalDeps['applicantTelegramBindingRepository']> {
+  if (!deps.applicantTelegramBindingRepository) {
+    throw new HttpError(503, 'USER_TELEGRAM_BINDING_NOT_CONFIGURED', 'Telegram 绑定服务尚未配置');
+  }
+  return deps.applicantTelegramBindingRepository;
+}
+
+function requireUserTelegramBotSettingsService(
+  deps: PortalDeps,
+): NonNullable<PortalDeps['userTelegramBotSettingsService']> {
+  if (!deps.userTelegramBotSettingsService) {
+    throw new HttpError(503, 'USER_TELEGRAM_BOT_NOT_CONFIGURED', '用户服务 Bot 尚未配置');
+  }
+  return deps.userTelegramBotSettingsService;
 }
 
 async function requireApplication(deps: PortalDeps, applicationId: number) {

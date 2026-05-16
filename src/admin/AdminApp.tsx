@@ -332,7 +332,29 @@ interface TelegramSettingsFormState {
   };
 }
 
-type SystemSettingsTab = 'notifications' | 'payment_gateway' | 'smtp' | 'x_oauth' | 'media_libraries' | 'publish_tokens';
+interface UserTelegramBotSettingsView {
+  enabled: boolean;
+  has_bot_token: boolean;
+  bot_token_masked: string | null;
+  bot_username: string | null;
+  api_base: string;
+  webhook_origin: string;
+  has_webhook_secret: boolean;
+  webhook_secret_masked: string | null;
+  webhook_url: string | null;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+interface UserTelegramBotSettingsFormState {
+  enabled: boolean;
+  bot_token: string;
+  api_base: string;
+  webhook_origin: string;
+  webhook_secret: string;
+}
+
+type SystemSettingsTab = 'notifications' | 'user_telegram_bot' | 'payment_gateway' | 'smtp' | 'x_oauth' | 'media_libraries' | 'publish_tokens';
 type PaymentGatewaySubTab = 'epay' | 'usdt';
 
 type MarketingGranularity = 'hour' | 'day' | 'week' | 'month';
@@ -2688,6 +2710,8 @@ function SystemSettingsPage() {
           <p className="mt-1 text-sm text-neutral-500">
             {activeTab === 'notifications'
               ? '通知设置支持 Telegram 直发和 Webhook 转发，保存后立即生效。'
+              : activeTab === 'user_telegram_bot'
+                ? '用户服务 Bot 用于申请人绑定 Telegram 后查询余额、流水、访问记录和创建充值链接。'
               : activeTab === 'payment_gateway'
                 ? '支付配置用于申请人后台下单和支付回调验签，商户号和密钥保存后立即生效。'
                 : activeTab === 'smtp'
@@ -2704,12 +2728,18 @@ function SystemSettingsPage() {
         </button>
       </div>
 
-      <div className="inline-flex rounded-2xl border border-neutral-200 bg-white p-1">
+      <div className="inline-flex flex-wrap rounded-2xl border border-neutral-200 bg-white p-1">
         <button
           className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'notifications' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
           onClick={() => setActiveTab('notifications')}
         >
           通知设置
+        </button>
+        <button
+          className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'user_telegram_bot' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
+          onClick={() => setActiveTab('user_telegram_bot')}
+        >
+          用户Bot
         </button>
         <button
           className={`rounded-xl px-4 py-2 text-sm font-medium ${activeTab === 'payment_gateway' ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:bg-neutral-100'}`}
@@ -2745,6 +2775,8 @@ function SystemSettingsPage() {
 
       {activeTab === 'notifications'
         ? <NotificationSettingsTab refreshTick={refreshTick} />
+        : activeTab === 'user_telegram_bot'
+          ? <UserTelegramBotSettingsTab refreshTick={refreshTick} />
         : activeTab === 'payment_gateway'
           ? <PaymentGatewaySettingsTab refreshTick={refreshTick} />
           : activeTab === 'smtp'
@@ -3126,6 +3158,210 @@ function NotificationSettingsTab({ refreshTick }: { refreshTick: number }) {
           <div className="flex items-center justify-end gap-3">
             <button className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50" disabled={testing} onClick={() => void sendTest()}>
               {testing ? '发送中...' : form.delivery_mode === 'telegram_chat' ? '发送 Telegram 测试消息' : '发送 Webhook 测试请求'}
+            </button>
+            <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
+              {saving ? '保存中...' : '保存配置'}
+            </button>
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
+  const [settings, setSettings] = useState<UserTelegramBotSettingsView | null>(null);
+  const [clearBotToken, setClearBotToken] = useState(false);
+  const [form, setForm] = useState<UserTelegramBotSettingsFormState>({
+    enabled: false,
+    bot_token: '',
+    api_base: 'https://api.telegram.org',
+    webhook_origin: '',
+    webhook_secret: '',
+  });
+
+  const applyView = (view: UserTelegramBotSettingsView) => {
+    setSettings(view);
+    setForm({
+      enabled: view.enabled,
+      bot_token: '',
+      api_base: view.api_base || 'https://api.telegram.org',
+      webhook_origin: view.webhook_origin || '',
+      webhook_secret: '',
+    });
+    setClearBotToken(false);
+  };
+
+  const fetchSettings = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/user-telegram-bot')) as UserTelegramBotSettingsView;
+      applyView(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载设置失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void fetchSettings();
+  }, [refreshTick]);
+
+  const buildPayload = () => {
+    const payload: Record<string, unknown> = {
+      enabled: form.enabled,
+      api_base: form.api_base.trim() || 'https://api.telegram.org',
+      webhook_origin: form.webhook_origin.trim(),
+    };
+    if (clearBotToken) {
+      payload.bot_token = '';
+    } else if (form.bot_token.trim()) {
+      payload.bot_token = form.bot_token.trim();
+    }
+    if (form.webhook_secret.trim()) {
+      payload.webhook_secret = form.webhook_secret.trim();
+    }
+    return payload;
+  };
+
+  const save = async () => {
+    setSaving(true);
+    setError('');
+    setSuccess('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/user-telegram-bot', {
+        method: 'PATCH',
+        body: JSON.stringify(buildPayload()),
+      })) as UserTelegramBotSettingsView;
+      applyView(data);
+      setSuccess('用户服务 Bot 配置已保存');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const syncWebhook = async () => {
+    setSyncing(true);
+    setError('');
+    setSuccess('');
+    try {
+      const data = (await apiFetch('/api/v1/admin/system-settings/user-telegram-bot/sync-webhook', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      })) as { webhook_url: string };
+      setSuccess(`Webhook 已同步：${data.webhook_url}`);
+      await fetchSettings();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '同步失败');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">用户服务 Bot</div>
+        <p className="mt-1 text-sm text-neutral-500">用于申请人绑定 Telegram 后查询余额、扣费流水、访问记录和创建充值支付链接。</p>
+      </div>
+
+      {loading && <div className="text-sm text-neutral-500">加载中...</div>}
+
+      {!loading && (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ReadField label="启用状态" value={form.enabled ? '已启用' : '未启用'} />
+            <ReadField label="Bot Username" value={settings?.bot_username ? `@${settings.bot_username}` : '-'} />
+            <ReadField label="Token" value={settings?.has_bot_token ? `已配置 (${settings.bot_token_masked || '-'})` : '未配置'} />
+            <ReadField label="Webhook Secret" value={settings?.has_webhook_secret ? `已配置 (${settings.webhook_secret_masked || '-'})` : '未配置'} />
+            <ReadField label="Webhook URL" value={settings?.webhook_url || '-'} />
+            <ReadField label="最近更新" value={formatDateTimeInBeijing(settings?.updated_at)} />
+          </div>
+
+          <label className="inline-flex items-center gap-3 text-sm font-medium">
+            <input
+              type="checkbox"
+              className="h-4 w-4 rounded border-neutral-300"
+              checked={form.enabled}
+              onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+            />
+            启用用户服务 Bot
+          </label>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField label="Bot Token" hint={settings?.has_bot_token ? '已配置，留空则不修改。保存时会调用 getMe 校验。' : '输入面向用户服务的 Bot Token。'}>
+              <div className="space-y-2">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                  type="password"
+                  placeholder={settings?.has_bot_token ? '已配置，留空则不修改' : '输入新的 Bot Token'}
+                  value={form.bot_token}
+                  onChange={(e) => {
+                    setClearBotToken(false);
+                    setForm({ ...form, bot_token: e.target.value });
+                  }}
+                />
+                {settings?.has_bot_token && (
+                  <label className="inline-flex items-center gap-2 text-xs text-neutral-500">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-neutral-300"
+                      checked={clearBotToken}
+                      onChange={(e) => {
+                        setClearBotToken(e.target.checked);
+                        if (e.target.checked) setForm({ ...form, bot_token: '' });
+                      }}
+                    />
+                    清空已保存 Token
+                  </label>
+                )}
+              </div>
+            </FormField>
+
+            <FormField label="API Base" hint="默认使用官方 Telegram API 地址。">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.api_base}
+                onChange={(e) => setForm({ ...form, api_base: e.target.value })}
+                placeholder="https://api.telegram.org"
+              />
+            </FormField>
+
+            <FormField label="Webhook Origin" hint="公网 API 域名，例如 https://www.gaterank.cn。">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                value={form.webhook_origin}
+                onChange={(e) => setForm({ ...form, webhook_origin: e.target.value })}
+                placeholder="https://www.gaterank.cn"
+              />
+            </FormField>
+
+            <FormField label="Webhook Secret" hint="留空则继续使用已保存 Secret；首次保存会自动生成。">
+              <input
+                className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                type="password"
+                value={form.webhook_secret}
+                onChange={(e) => setForm({ ...form, webhook_secret: e.target.value })}
+                placeholder={settings?.has_webhook_secret ? '已配置，留空则不修改' : '留空自动生成'}
+              />
+            </FormField>
+          </div>
+
+          {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+          {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 break-all">{success}</div>}
+
+          <div className="flex items-center justify-end gap-3">
+            <button className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50" disabled={syncing || !settings?.enabled} onClick={() => void syncWebhook()}>
+              {syncing ? '同步中...' : '同步 Webhook'}
             </button>
             <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
               {saving ? '保存中...' : '保存配置'}

@@ -342,6 +342,20 @@ interface PortalWalletView {
   updated_at: string;
 }
 
+interface PortalTelegramBotView {
+  configured: boolean;
+  enabled: boolean;
+  bot_username: string | null;
+  binding: null | {
+    telegram_user_id: string;
+    telegram_chat_id: string;
+    telegram_username: string | null;
+    telegram_first_name: string | null;
+    telegram_last_name: string | null;
+    bound_at: string;
+  };
+}
+
 interface PortalRechargeOrderView {
   id: number;
   applicant_account_id?: number;
@@ -412,6 +426,7 @@ interface PortalViewResponse {
   admin_telegram_username: string | null;
   recharge_amounts: number[];
   wallet: PortalWalletView;
+  telegram_bot: PortalTelegramBotView;
 }
 
 interface PortalPaginatedResponse<T> {
@@ -3333,6 +3348,7 @@ function PortalPage() {
   const [newPassword, setNewPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   const [xOAuthAction, setXOAuthAction] = useState<'' | 'login' | 'bind' | 'unbind'>('');
+  const [telegramBindAction, setTelegramBindAction] = useState<'' | 'bind' | 'unbind'>('');
   const [creatingChannel, setCreatingChannel] = useState<'' | PaymentChannel>('');
   const [creatingRecharge, setCreatingRecharge] = useState('');
   const [cancelingRechargeOrder, setCancelingRechargeOrder] = useState('');
@@ -3496,6 +3512,7 @@ function PortalPage() {
     setCurrentPassword('');
     setNewPassword('');
     setXOAuthAction('');
+    setTelegramBindAction('');
     setError('');
     if (!options?.keepSuccess) {
       setSuccess('');
@@ -3611,6 +3628,42 @@ function PortalPage() {
       setError(err instanceof Error ? err.message : '解除 X 绑定失败');
     } finally {
       setXOAuthAction('');
+    }
+  };
+
+  const startTelegramBind = async () => {
+    setTelegramBindAction('bind');
+    setError('');
+    setSuccess('');
+    try {
+      const data = await portalApiRequest<{ binding_url: string; expires_at: string }>('/api/v1/portal/telegram-bind/start', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      window.open(data.binding_url, '_blank', 'noopener,noreferrer');
+      setSuccess('Telegram 绑定链接已打开，请在 10 分钟内点击 Bot 的开始按钮完成绑定。');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '生成 Telegram 绑定链接失败');
+    } finally {
+      setTelegramBindAction('');
+    }
+  };
+
+  const unbindTelegram = async () => {
+    setTelegramBindAction('unbind');
+    setError('');
+    setSuccess('');
+    try {
+      const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/telegram-bind/unbind', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      setView(data);
+      setSuccess('Telegram Bot 绑定已解除。');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '解除 Telegram 绑定失败');
+    } finally {
+      setTelegramBindAction('');
     }
   };
 
@@ -4259,6 +4312,75 @@ function PortalPage() {
     );
   };
 
+  const renderTelegramBotSection = (portalView: PortalViewResponse) => {
+    const bot = portalView.telegram_bot;
+    const bindingLabel = bot.binding
+      ? bot.binding.telegram_username
+        ? `@${bot.binding.telegram_username}`
+        : bot.binding.telegram_first_name || bot.binding.telegram_user_id
+      : '未绑定';
+    const canBind = portalView.application.review_status === 'reviewed';
+
+    return (
+      <PortalSectionCard
+        title="绑定 Telegram Bot"
+        description="绑定后可以在 Telegram 查询余额、扣费流水、访问记录，并创建充值支付链接。"
+        aside={bot.binding ? (
+          <div className="rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Bound</div>
+        ) : (
+          <div className="rounded-full border border-amber-100 bg-amber-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-700">Not Bound</div>
+        )}
+      >
+        <div className="flex flex-col gap-4 rounded-[24px] border border-slate-200 bg-slate-50/80 px-5 py-5 md:flex-row md:items-center md:justify-between">
+          <div>
+            <div className="text-sm font-black text-slate-950">
+              {!bot.configured
+                ? '管理员尚未配置用户服务 Bot'
+                : bot.binding
+                  ? bindingLabel
+                  : bot.bot_username
+                    ? `@${bot.bot_username}`
+                    : '用户服务 Bot'}
+            </div>
+            <div className="mt-2 text-sm leading-6 text-slate-600">
+              {!bot.configured
+                ? '配置完成后，这里会显示绑定入口。'
+                : !canBind
+                  ? '申请审核通过后才能绑定用户服务 Bot。'
+                  : bot.binding
+                    ? `绑定时间：${formatDateTimeLabel(bot.binding.bound_at)}`
+                    : '点击绑定会打开 Telegram，一次性链接 10 分钟内有效。'}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            {bot.configured && canBind && (
+              <button
+                type="button"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-sky-600 px-5 py-2.5 text-sm font-black text-white hover:bg-sky-700 disabled:opacity-50"
+                onClick={() => void startTelegramBind()}
+                disabled={Boolean(telegramBindAction)}
+              >
+                <Send className="h-4 w-4" />
+                {telegramBindAction === 'bind' ? '生成中...' : bot.binding ? '重新绑定' : '绑定 Telegram'}
+              </button>
+            )}
+            {bot.binding && (
+              <button
+                type="button"
+                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-rose-200 bg-white px-5 py-2.5 text-sm font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                onClick={() => void unbindTelegram()}
+                disabled={Boolean(telegramBindAction)}
+              >
+                <Unlink className="h-4 w-4" />
+                {telegramBindAction === 'unbind' ? '处理中...' : '解除绑定'}
+              </button>
+            )}
+          </div>
+        </div>
+      </PortalSectionCard>
+    );
+  };
+
   const renderAccountSettingsSection = (portalView: PortalViewResponse) => {
     const boundXLabel = portalView.account.x?.username
       ? `@${portalView.account.x.username}`
@@ -4315,6 +4437,8 @@ function PortalPage() {
             </button>
           </form>
         </PortalSectionCard>
+
+        {renderTelegramBotSection(portalView)}
 
         <PortalSectionCard
           title="绑定 X 登录"
@@ -4614,7 +4738,10 @@ function PortalPage() {
     return (
       <div className="space-y-6">
         {isApplicationApproved ? (
-          accountOverviewSection
+          <>
+            {accountOverviewSection}
+            {renderTelegramBotSection(view)}
+          </>
         ) : (
           <>
             {renderOnboardingGuide(view)}

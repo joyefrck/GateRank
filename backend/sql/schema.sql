@@ -115,6 +115,35 @@ CREATE TABLE IF NOT EXISTS applicant_x_oauth_flows (
   INDEX idx_applicant_x_oauth_account_created (applicant_account_id, created_at DESC)
 );
 
+CREATE TABLE IF NOT EXISTS applicant_telegram_bind_tokens (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  applicant_account_id BIGINT UNSIGNED NOT NULL,
+  token_hash CHAR(64) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  consumed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_applicant_telegram_bind_tokens_hash (token_hash),
+  INDEX idx_applicant_telegram_bind_tokens_account_created (applicant_account_id, created_at DESC),
+  INDEX idx_applicant_telegram_bind_tokens_expires (expires_at)
+);
+
+CREATE TABLE IF NOT EXISTS applicant_telegram_bindings (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  applicant_account_id BIGINT UNSIGNED NOT NULL,
+  telegram_user_id VARCHAR(64) NOT NULL,
+  telegram_chat_id VARCHAR(64) NOT NULL,
+  telegram_username VARCHAR(255) NULL,
+  telegram_first_name VARCHAR(255) NULL,
+  telegram_last_name VARCHAR(255) NULL,
+  bound_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_applicant_telegram_bindings_account (applicant_account_id),
+  UNIQUE KEY uk_applicant_telegram_bindings_user (telegram_user_id),
+  INDEX idx_applicant_telegram_bindings_chat (telegram_chat_id)
+);
+
 CREATE TABLE IF NOT EXISTS applicant_wallets (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   applicant_account_id BIGINT UNSIGNED NOT NULL,

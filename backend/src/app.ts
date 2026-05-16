@@ -5,6 +5,7 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestContext } from './middleware/requestContext';
 import { AccessTokenRepository } from './repositories/accessTokenRepository';
 import { ApplicantAccountRepository } from './repositories/applicantAccountRepository';
+import { ApplicantTelegramBindingRepository } from './repositories/applicantTelegramBindingRepository';
 import { ApplicantXOAuthFlowRepository } from './repositories/applicantXOAuthFlowRepository';
 import { AirportRepository } from './repositories/airportRepository';
 import { AirportApplicationRepository } from './repositories/airportApplicationRepository';
@@ -33,6 +34,7 @@ import { createPublishRoutes } from './routes/publishRoutes';
 import { createPublicPageRoutes } from './routes/publicPageRoutes';
 import { createNewsPublicRoutes } from './routes/newsPublicRoutes';
 import { createPublicRoutes } from './routes/publicRoutes';
+import { createUserTelegramBotRoutes } from './routes/userTelegramBotRoutes';
 import { AccessTokenService } from './services/accessTokenService';
 import { AdminAuthService } from './services/adminAuthService';
 import { ApplicantPortalAuthService } from './services/applicantPortalAuthService';
@@ -56,6 +58,7 @@ import { SmtpSettingsService } from './services/smtpSettingsService';
 import { AdminSchedulerService } from './services/adminSchedulerService';
 import { SchedulerTaskExecutor } from './services/schedulerTaskExecutor';
 import { TelegramNotificationService } from './services/telegramNotificationService';
+import { UserTelegramBotSettingsService } from './services/userTelegramBotSettingsService';
 import { XOAuthSettingsService } from './services/xOAuthSettingsService';
 import { getNewsUploadRootDir } from './utils/newsStorage';
 
@@ -69,6 +72,8 @@ export async function createApp() {
   await applicantAccountRepository.ensureSchema();
   const applicantXOAuthFlowRepository = new ApplicantXOAuthFlowRepository(pool);
   await applicantXOAuthFlowRepository.ensureSchema();
+  const applicantTelegramBindingRepository = new ApplicantTelegramBindingRepository(pool);
+  await applicantTelegramBindingRepository.ensureSchema();
   const applicationPaymentOrderRepository = new ApplicationPaymentOrderRepository(pool);
   await applicationPaymentOrderRepository.ensureSchema();
   const applicantBillingRepository = new ApplicantBillingRepository(pool);
@@ -172,6 +177,9 @@ export async function createApp() {
   const xOAuthSettingsService = new XOAuthSettingsService({
     systemSettingRepository,
   });
+  const userTelegramBotSettingsService = new UserTelegramBotSettingsService({
+    systemSettingRepository,
+  });
   const accessTokenService = new AccessTokenService({
     accessTokenRepository,
   });
@@ -238,11 +246,27 @@ export async function createApp() {
       applicantBillingRepository,
       applicantPortalAuthService,
       applicantXOAuthService,
+      applicantTelegramBindingRepository,
+      userTelegramBotSettingsService,
       paymentGatewaySettingsService,
       marketingSettingsService,
       paymentGatewayService,
       applicationNotificationService,
       mailService,
+    }),
+  );
+
+  app.use(
+    '/api/v1',
+    createUserTelegramBotRoutes({
+      userTelegramBotSettingsService,
+      applicantTelegramBindingRepository,
+      applicantAccountRepository,
+      airportApplicationRepository,
+      applicantBillingRepository,
+      paymentGatewaySettingsService,
+      paymentGatewayService,
+      marketingSettingsService,
     }),
   );
 
@@ -286,6 +310,7 @@ export async function createApp() {
       auditRepository,
       publicViewService,
       telegramNotificationService: applicationNotificationService,
+      userTelegramBotSettingsService,
       mediaLibrarySettingsService,
       paymentGatewaySettingsService,
       marketingSettingsService,

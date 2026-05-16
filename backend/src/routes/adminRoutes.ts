@@ -18,6 +18,10 @@ import type { MarketingSettingsInput } from '../services/marketingSettingsServic
 import { SmtpSendError } from '../services/mailService';
 import type { PaymentGatewaySettingsInput } from '../services/paymentGatewaySettingsService';
 import type { SmtpSettingsInput, SmtpTemplateKey } from '../services/smtpSettingsService';
+import {
+  DEFAULT_USER_TELEGRAM_API_BASE,
+  type UserTelegramBotSettingsInput,
+} from '../services/userTelegramBotSettingsService';
 import type { XOAuthSettingsInput } from '../services/xOAuthSettingsService';
 import type { SchedulerDailyStat } from '../repositories/schedulerRunRepository';
 import type {
@@ -248,6 +252,11 @@ interface AdminDeps {
     getAdminSettings(): Promise<unknown>;
     updateAdminSettings(input: TelegramNotificationSettingsInput, updatedBy: string): Promise<unknown>;
     sendTestMessage(input: TelegramNotificationSettingsInput): Promise<void>;
+  };
+  userTelegramBotSettingsService?: {
+    getAdminSettings(): Promise<unknown>;
+    updateAdminSettings(input: UserTelegramBotSettingsInput, updatedBy: string): Promise<unknown>;
+    syncWebhook(): Promise<unknown>;
   };
   mediaLibrarySettingsService?: {
     getAdminSettings(): Promise<unknown>;
@@ -614,6 +623,48 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         next(new HttpError(error.status, 'TELEGRAM_TEST_FAILED', error.message));
         return;
       }
+      next(error);
+    }
+  });
+
+  router.get('/system-settings/user-telegram-bot', async (_req, res, next) => {
+    try {
+      res.json(await getUserTelegramBotSettingsService(deps).getAdminSettings());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/system-settings/user-telegram-bot', async (req, res, next) => {
+    try {
+      const input = parseUserTelegramBotSettingsPayload((req.body ?? {}) as Record<string, unknown>);
+      const result = await getUserTelegramBotSettingsService(deps).updateAdminSettings(
+        input,
+        actorFromReq(req),
+      );
+      await deps.auditRepository.log(
+        'update_system_setting_user_telegram_bot',
+        actorFromReq(req),
+        req.requestId,
+        { ...input, bot_token: input.bot_token ? '***' : undefined },
+      );
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/system-settings/user-telegram-bot/sync-webhook', async (req, res, next) => {
+    try {
+      const result = await getUserTelegramBotSettingsService(deps).syncWebhook();
+      await deps.auditRepository.log(
+        'sync_system_setting_user_telegram_bot_webhook',
+        actorFromReq(req),
+        req.requestId,
+        result,
+      );
+      res.json(result);
+    } catch (error) {
       next(error);
     }
   });
@@ -2089,6 +2140,15 @@ function getTelegramNotificationService(deps: AdminDeps): NonNullable<AdminDeps[
   return deps.telegramNotificationService;
 }
 
+function getUserTelegramBotSettingsService(
+  deps: AdminDeps,
+): NonNullable<AdminDeps['userTelegramBotSettingsService']> {
+  if (!deps.userTelegramBotSettingsService) {
+    throw new Error('userTelegramBotSettingsService is not configured');
+  }
+  return deps.userTelegramBotSettingsService;
+}
+
 function getSchedulerService(deps: AdminDeps): NonNullable<AdminDeps['schedulerService']> {
   if (!deps.schedulerService) {
     throw new Error('schedulerService is not configured');
@@ -2318,6 +2378,21 @@ function parseTelegramSettingsPayload(
     delivery_mode: deliveryMode,
     telegram_chat: telegramChat,
     webhook,
+  };
+}
+
+function parseUserTelegramBotSettingsPayload(
+  payload: Record<string, unknown>,
+): UserTelegramBotSettingsInput {
+  return {
+    enabled: optionalBoolean(payload.enabled),
+    bot_token: payload.bot_token === undefined ? undefined : String(payload.bot_token ?? '').trim(),
+    api_base:
+      payload.api_base === undefined
+        ? undefined
+        : String(payload.api_base || DEFAULT_USER_TELEGRAM_API_BASE).trim(),
+    webhook_origin: payload.webhook_origin === undefined ? undefined : String(payload.webhook_origin ?? '').trim(),
+    webhook_secret: payload.webhook_secret === undefined ? undefined : String(payload.webhook_secret ?? '').trim(),
   };
 }
 
