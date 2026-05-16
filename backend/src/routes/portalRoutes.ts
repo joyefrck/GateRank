@@ -326,6 +326,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       if (application.payment_status === 'paid' || application.review_status !== 'awaiting_payment') {
         throw new HttpError(409, 'PAYMENT_NOT_REQUIRED', '当前申请无需再次支付');
       }
+      await requirePaymentChannelAvailable(deps, channel);
 
       const marketingConfig = await getMarketingBillingConfig(deps);
       const amount = Number(marketingConfig.application_fee_amount);
@@ -404,10 +405,11 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       if (application.payment_status !== 'paid') {
         throw new HttpError(409, 'APPLICATION_PAYMENT_REQUIRED', '请先支付入驻费，支付完成后再充值余额');
       }
-      await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id);
       const payload = toPlainObject(req.body ?? {}, 'body');
       const channel = toPaymentChannel(payload.channel);
       const amount = toRechargeAmount(payload.amount);
+      await requirePaymentChannelAvailable(deps, channel);
+      await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id);
       const outTradeNo = `grr_${account.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
       const apiOrigin = await getPaymentNotifyOrigin(deps, req);
       const siteOrigin = getSiteOrigin(req);
@@ -1145,8 +1147,10 @@ async function getAvailablePaymentMethods(deps: PortalDeps): Promise<PaymentGate
   const config = await deps.paymentGatewaySettingsService.getConfig();
   const record = toLooseObject(config);
   const methods: PaymentGatewayChannel[] = [];
+  const epay = toLooseObject(record.epay);
   if (
     Boolean(record.enabled) &&
+    Boolean(epay.enabled) &&
     String(record.pid || '').trim() &&
     String(record.private_key || '').trim() &&
     String(record.platform_public_key || '').trim()
@@ -1166,6 +1170,16 @@ async function getAvailablePaymentMethods(deps: PortalDeps): Promise<PaymentGate
   }
 
   return methods;
+}
+
+async function requirePaymentChannelAvailable(
+  deps: PortalDeps,
+  channel: PaymentGatewayChannel,
+): Promise<void> {
+  const methods = await getAvailablePaymentMethods(deps);
+  if (!methods.includes(channel)) {
+    throw new HttpError(409, 'PAYMENT_METHOD_NOT_ENABLED', '该支付方式未启用或配置不完整');
+  }
 }
 
 function toPaymentChannel(value: unknown): PaymentGatewayChannel {

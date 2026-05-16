@@ -3393,6 +3393,9 @@ test('PATCH /system-settings/payment-gateway accepts notify origin', async () =>
               application_payment: 'https://gate-rank.com/api/v1/portal/payment-notify',
               recharge: 'https://gate-rank.com/api/v1/portal/recharge-notify',
             },
+            epay: {
+              enabled: Boolean((input as { epay?: { enabled?: boolean } }).epay?.enabled),
+            },
             usdt: {
               enabled: true,
               gateway_url: 'https://www.443ds443.com',
@@ -3416,6 +3419,9 @@ test('PATCH /system-settings/payment-gateway accepts notify origin', async () =>
       headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
       body: JSON.stringify({
         enabled: true,
+        epay: {
+          enabled: true,
+        },
         pid: '1000',
         notify_origin: 'https://gate-rank.com/',
         usdt: {
@@ -3427,6 +3433,7 @@ test('PATCH /system-settings/payment-gateway accepts notify origin', async () =>
     });
     assert.equal(response.status, 200);
     assert.equal(updates.length, 1);
+    assert.deepEqual(updates[0].epay, { enabled: true });
     assert.equal(updates[0].notify_origin, 'https://gate-rank.com/');
     assert.equal(updates[0].updatedBy, 'tester');
     assert.equal(audits.length, 1);

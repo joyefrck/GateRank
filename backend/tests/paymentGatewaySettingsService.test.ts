@@ -22,10 +22,11 @@ test('PaymentGatewaySettingsService returns default view', async () => {
 
   const view = await service.getAdminSettings();
   assert.equal(view.enabled, false);
+  assert.equal(view.epay.enabled, false);
   assert.equal(view.has_private_key, false);
 });
 
-test('PaymentGatewaySettingsService saves and masks keys', async () => {
+test('PaymentGatewaySettingsService saves epay switch and masks keys', async () => {
   let storedValue: unknown = null;
   const service = new PaymentGatewaySettingsService({
     systemSettingRepository: {
@@ -46,17 +47,26 @@ test('PaymentGatewaySettingsService saves and masks keys', async () => {
 
   const view = await service.updateAdminSettings({
     enabled: true,
+    epay: { enabled: true },
     pid: '10086',
     private_key: privatePem,
     platform_public_key: publicPem,
   }, 'admin');
 
   assert.equal(view.enabled, true);
+  assert.equal(view.epay.enabled, true);
   assert.equal(view.pid, '10086');
   assert.equal(view.has_private_key, true);
   assert.ok(view.private_key_masked);
   assert.equal(view.usdt.enabled, false);
   assert.equal('payment_type' in view.usdt, false);
+
+  const disabled = await service.updateAdminSettings({
+    epay: { enabled: false },
+  }, 'admin');
+
+  assert.equal(disabled.epay.enabled, false);
+  assert.equal((await service.getConfig()).epay.enabled, false);
 });
 
 test('PaymentGatewaySettingsService saves masks preserves and clears USDT secret', async () => {
@@ -165,6 +175,55 @@ test('PaymentGatewaySettingsService normalizes legacy USDT gateway endpoint to b
 
   const view = await service.getAdminSettings();
   assert.equal(view.usdt.gateway_url, 'https://pay.example.com');
+});
+
+test('PaymentGatewaySettingsService keeps legacy epay enabled when RSA config is complete', async () => {
+  const service = new PaymentGatewaySettingsService({
+    systemSettingRepository: {
+      getByKey: async () => ({
+        setting_key: 'payment_gateway',
+        value_json: {
+          enabled: true,
+          pid: '28615',
+          private_key: privateRaw,
+          platform_public_key: publicRaw,
+        },
+        updated_by: 'admin',
+        created_at: '2026-04-18 10:00:00',
+        updated_at: '2026-04-18 10:00:00',
+      }),
+      upsert: async () => undefined,
+    },
+  });
+
+  const view = await service.getAdminSettings();
+  assert.equal(view.epay.enabled, true);
+  assert.equal((await service.getConfig()).epay.enabled, true);
+});
+
+test('PaymentGatewaySettingsService rejects incomplete enabled epay config', async () => {
+  const service = new PaymentGatewaySettingsService({
+    systemSettingRepository: {
+      getByKey: async () => null,
+      upsert: async () => undefined,
+    },
+  });
+
+  await assert.rejects(
+    () => service.updateAdminSettings({
+      enabled: true,
+      epay: { enabled: true },
+      pid: '28615',
+      private_key: '',
+      platform_public_key: publicRaw,
+    }, 'admin'),
+    (error: unknown) => {
+      const next = error as { code?: string; message?: string };
+      assert.equal(next.code, 'PAYMENT_GATEWAY_PRIVATE_KEY_REQUIRED');
+      assert.match(String(next.message || ''), /商户私钥/);
+      return true;
+    },
+  );
 });
 
 test('PaymentGatewaySettingsService rejects incomplete enabled USDT config', async () => {

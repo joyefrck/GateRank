@@ -530,6 +530,9 @@ interface PaymentGatewaySettingsView {
     application_payment: string;
     recharge: string;
   } | null;
+  epay: {
+    enabled: boolean;
+  };
   usdt: {
     enabled: boolean;
     gateway_url: string;
@@ -547,6 +550,9 @@ interface PaymentGatewaySettingsFormState {
   private_key: string;
   platform_public_key: string;
   notify_origin: string;
+  epay: {
+    enabled: boolean;
+  };
   usdt: {
     enabled: boolean;
     gateway_url: string;
@@ -3718,6 +3724,9 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
     private_key: '',
     platform_public_key: '',
     notify_origin: '',
+    epay: {
+      enabled: false,
+    },
     usdt: {
       enabled: false,
       gateway_url: '',
@@ -3734,6 +3743,9 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
       private_key: '',
       platform_public_key: view.platform_public_key || '',
       notify_origin: view.notify_origin || '',
+      epay: {
+        enabled: Boolean(view.epay?.enabled),
+      },
       usdt: {
         enabled: Boolean(view.usdt?.enabled),
         gateway_url: view.usdt?.gateway_url || '',
@@ -3772,6 +3784,9 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
         pid: form.pid.trim(),
         platform_public_key: form.platform_public_key.trim(),
         notify_origin: form.notify_origin.trim(),
+        epay: {
+          enabled: form.epay.enabled,
+        },
         usdt: {
           enabled: form.usdt.enabled,
           gateway_url: form.usdt.gateway_url.trim(),
@@ -3805,7 +3820,7 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
   const hasUsdtSecretValue = Boolean(form.usdt.secret_key.trim()) || Boolean(settings?.usdt?.has_secret_key && !clearUsdtSecretKey);
   const epayConfigComplete = Boolean(form.pid.trim() && hasPrivateKeyValue && form.platform_public_key.trim());
   const usdtConfigComplete = Boolean(form.usdt.gateway_url.trim() && form.usdt.merchant_id.trim() && hasUsdtSecretValue);
-  const epayStatus = !form.enabled ? '总开关关闭' : epayConfigComplete ? '已配置' : '缺配置';
+  const epayStatus = !form.enabled ? '总开关关闭' : !form.epay.enabled ? '未启用' : epayConfigComplete ? '已启用' : '缺配置';
   const usdtStatus = !form.enabled ? '总开关关闭' : !form.usdt.enabled ? '未启用' : usdtConfigComplete ? '已启用' : '缺配置';
 
   return (
@@ -3876,7 +3891,7 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
                   <span className="block text-sm font-semibold">普通 epay</span>
                   <span className="mt-0.5 block truncate text-xs text-neutral-500">支付宝 / 微信 RSA 网关</span>
                 </span>
-                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${epayConfigComplete && form.enabled ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-600'}`}>
+                <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${form.enabled && form.epay.enabled && epayConfigComplete ? 'bg-emerald-50 text-emerald-700' : 'bg-neutral-100 text-neutral-600'}`}>
                   {epayStatus}
                 </span>
               </button>
@@ -3897,9 +3912,20 @@ function PaymentGatewaySettingsTab({ refreshTick }: { refreshTick: number }) {
 
             {activePaymentSubTab === 'epay' ? (
               <div className="space-y-5 p-4">
-                <div>
-                  <div className="text-sm font-bold text-neutral-900">普通 epay 支付</div>
-                  <p className="mt-1 text-sm text-neutral-500">用于支付宝、微信等普通 epay 通道。启用普通 epay 需要商户号、商户私钥和平台公钥完整。</p>
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div>
+                    <div className="text-sm font-bold text-neutral-900">普通 epay 支付</div>
+                    <p className="mt-1 text-sm text-neutral-500">用于支付宝、微信等普通 epay 通道。启用普通 epay 需要商户号、商户私钥和平台公钥完整。</p>
+                  </div>
+                  <label className="inline-flex w-fit items-center gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm font-medium sm:whitespace-nowrap">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 rounded border-neutral-300"
+                      checked={form.epay.enabled}
+                      onChange={(e) => setForm({ ...form, epay: { ...form.epay, enabled: e.target.checked } })}
+                    />
+                    启用普通 epay 支付
+                  </label>
                 </div>
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                   <ReadField label="商户号 PID" value={valueOrDash(settings?.pid)} />

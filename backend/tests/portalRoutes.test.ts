@@ -112,7 +112,19 @@ test('GET /portal/me returns marketing billing fees', async () => {
         },
       },
       paymentGatewaySettingsService: {
-        getConfig: async () => ({}),
+        getConfig: async () => ({
+          enabled: true,
+          pid: '28615',
+          private_key: 'private-key',
+          platform_public_key: 'public-key',
+          epay: { enabled: true },
+          usdt: {
+            enabled: false,
+            gateway_url: '',
+            merchant_id: '',
+            secret_key: '',
+          },
+        }),
       },
       marketingSettingsService: {
         getConfig: async () => ({
@@ -141,12 +153,101 @@ test('GET /portal/me returns marketing billing fees', async () => {
     assert.equal(response.status, 200);
     const data = (await response.json()) as {
       payment_fee_amount: number;
+      payment_methods: string[];
       click_price: number;
       admin_telegram_username: string | null;
     };
     assert.equal(data.payment_fee_amount, 456);
+    assert.deepEqual(data.payment_methods, ['alipay', 'wxpay']);
     assert.equal(data.click_price, 2.5);
     assert.equal(data.admin_telegram_username, 'gaterank_admin');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /portal/me hides epay methods when epay switch is disabled', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount(),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({
+          id: 7,
+          name: 'Cloud Airport',
+          website: 'https://example.com',
+          websites: ['https://example.com'],
+          review_status: 'awaiting_payment',
+          payment_status: 'unpaid',
+          payment_amount: null,
+          applicant_email: 'user@example.com',
+          applicant_telegram: '@cloud',
+          founded_on: '2025-01-01',
+          airport_intro: 'intro',
+          created_at: '2026-04-18 10:00:00',
+        }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({
+          enabled: true,
+          pid: '28615',
+          private_key: 'private-key',
+          platform_public_key: 'public-key',
+          epay: { enabled: false },
+          usdt: {
+            enabled: true,
+            gateway_url: 'https://pay-usdt.example.com',
+            merchant_id: '1000',
+            secret_key: 'secret',
+          },
+        }),
+      },
+      marketingSettingsService: {
+        getConfig: async () => ({
+          application_fee_amount: 456,
+          click_charge_amount: 2.5,
+          admin_telegram_username: null,
+        }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = (await response.json()) as { payment_methods: string[] };
+    assert.equal(response.status, 200);
+    assert.deepEqual(data.payment_methods, ['usdt']);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -787,7 +888,19 @@ test('POST /portal/payment-orders creates payment order from configured amount',
         },
       },
       paymentGatewaySettingsService: {
-        getConfig: async () => ({}),
+        getConfig: async () => ({
+          enabled: true,
+          pid: '28615',
+          private_key: 'private-key',
+          platform_public_key: 'public-key',
+          epay: { enabled: true },
+          usdt: {
+            enabled: false,
+            gateway_url: '',
+            merchant_id: '',
+            secret_key: '',
+          },
+        }),
       },
       marketingSettingsService: {
         getConfig: async () => ({ application_fee_amount: 1888, click_charge_amount: 2.5 }),
@@ -834,6 +947,113 @@ test('POST /portal/payment-orders creates payment order from configured amount',
     } else {
       process.env.API_BASE = previousApiBase;
     }
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/payment-orders rejects alipay when epay switch is disabled', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const createdOrders: Array<Record<string, unknown>> = [];
+  let expireCalls = 0;
+  let gatewayCreateCalls = 0;
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount({ application_id: 7 }),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({
+          id: 7,
+          name: 'Cloud Airport',
+          website: 'https://example.com',
+          review_status: 'awaiting_payment',
+          payment_status: 'unpaid',
+          payment_amount: null,
+          applicant_email: 'user@example.com',
+          applicant_telegram: '@cloud',
+          founded_on: '2025-01-01',
+          airport_intro: 'intro',
+          created_at: '2026-04-18 10:00:00',
+        }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async (input) => {
+          createdOrders.push(input as Record<string, unknown>);
+          return 1;
+        },
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => {
+          expireCalls += 1;
+          return 0;
+        },
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({
+          enabled: true,
+          pid: '28615',
+          private_key: 'private-key',
+          platform_public_key: 'public-key',
+          epay: { enabled: false },
+          usdt: {
+            enabled: true,
+            gateway_url: 'https://pay-usdt.example.com',
+            merchant_id: '1000',
+            secret_key: 'secret',
+          },
+        }),
+      },
+      marketingSettingsService: {
+        getConfig: async () => ({ application_fee_amount: 1888, click_charge_amount: 2.5 }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          gatewayCreateCalls += 1;
+          return {
+            trade_no: 'trade_1',
+            pay_type: 'jump',
+            pay_info: 'https://pay.example.com/jump',
+          };
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/payment-orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ channel: 'alipay' }),
+    });
+    const body = await response.json() as { code: string; message: string };
+
+    assert.equal(response.status, 409);
+    assert.equal(body.code, 'PAYMENT_METHOD_NOT_ENABLED');
+    assert.match(body.message, /支付方式/);
+    assert.equal(expireCalls, 0);
+    assert.equal(createdOrders.length, 0);
+    assert.equal(gatewayCreateCalls, 0);
+  } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });

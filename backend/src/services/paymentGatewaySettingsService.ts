@@ -5,11 +5,16 @@ import { formatDateTimeInTimezoneIso } from '../utils/time';
 
 export interface PaymentGatewaySettingsInput {
   enabled?: boolean;
+  epay?: PaymentGatewayEpaySettingsInput;
   pid?: string;
   private_key?: string;
   platform_public_key?: string;
   notify_origin?: string;
   usdt?: PaymentGatewayUsdtSettingsInput;
+}
+
+export interface PaymentGatewayEpaySettingsInput {
+  enabled?: boolean;
 }
 
 export interface PaymentGatewayUsdtSettingsInput {
@@ -30,6 +35,7 @@ export interface PaymentGatewaySettingsView {
     application_payment: string;
     recharge: string;
   } | null;
+  epay: PaymentGatewayEpaySettingsView;
   usdt: PaymentGatewayUsdtSettingsView;
   updated_at: string | null;
   updated_by: string | null;
@@ -41,7 +47,16 @@ export interface PaymentGatewayConfig {
   private_key: string;
   platform_public_key: string;
   notify_origin: string;
+  epay: PaymentGatewayEpayConfig;
   usdt: PaymentGatewayUsdtConfig;
+}
+
+export interface PaymentGatewayEpaySettingsView {
+  enabled: boolean;
+}
+
+export interface PaymentGatewayEpayConfig {
+  enabled: boolean;
 }
 
 export interface PaymentGatewayUsdtSettingsView {
@@ -87,6 +102,9 @@ export class PaymentGatewaySettingsService {
       platform_public_key: effective.platform_public_key,
       notify_origin: effective.notify_origin,
       notify_urls: buildNotifyUrls(effective.notify_origin),
+      epay: {
+        enabled: effective.epay.enabled,
+      },
       usdt: {
         enabled: effective.usdt.enabled,
         gateway_url: effective.usdt.gateway_url,
@@ -140,6 +158,7 @@ export class PaymentGatewaySettingsService {
         input.notify_origin === undefined
           ? base.notify_origin
           : normalizeOriginUrl(String(input.notify_origin || '').trim()),
+      epay: resolveEpayConfig(base.epay, input.epay),
       usdt: resolveUsdtConfig(base.usdt, input.usdt),
     };
   }
@@ -171,7 +190,14 @@ function getDefaultConfig(): PaymentGatewayConfig {
     private_key: '',
     platform_public_key: '',
     notify_origin: '',
+    epay: getDefaultEpayConfig(),
     usdt: getDefaultUsdtConfig(),
+  };
+}
+
+function getDefaultEpayConfig(): PaymentGatewayEpayConfig {
+  return {
+    enabled: false,
   };
 }
 
@@ -186,13 +212,38 @@ function getDefaultUsdtConfig(): PaymentGatewayUsdtConfig {
 
 function normalizeConfig(value: unknown): PaymentGatewayConfig {
   const record = toObject(value);
+  const enabled = Boolean(record.enabled);
+  const pid = stringOrEmpty(record.pid);
+  const privateKey = stringOrEmpty(record.private_key);
+  const platformPublicKey = stringOrEmpty(record.platform_public_key);
+  return {
+    enabled,
+    pid,
+    private_key: privateKey,
+    platform_public_key: platformPublicKey,
+    notify_origin: normalizeOriginUrl(stringOrEmpty(record.notify_origin)),
+    epay: normalizeEpayConfig(record.epay, { enabled, pid, privateKey, platformPublicKey }),
+    usdt: normalizeUsdtConfig(record.usdt),
+  };
+}
+
+function normalizeEpayConfig(
+  value: unknown,
+  legacy: { enabled: boolean; pid: string; privateKey: string; platformPublicKey: string },
+): PaymentGatewayEpayConfig {
+  if (value === undefined) {
+    return {
+      enabled: Boolean(
+        legacy.enabled &&
+        legacy.pid &&
+        legacy.privateKey &&
+        legacy.platformPublicKey
+      ),
+    };
+  }
+  const record = toObject(value);
   return {
     enabled: Boolean(record.enabled),
-    pid: stringOrEmpty(record.pid),
-    private_key: stringOrEmpty(record.private_key),
-    platform_public_key: stringOrEmpty(record.platform_public_key),
-    notify_origin: normalizeOriginUrl(stringOrEmpty(record.notify_origin)),
-    usdt: normalizeUsdtConfig(record.usdt),
   };
 }
 
@@ -203,6 +254,18 @@ function normalizeUsdtConfig(value: unknown): PaymentGatewayUsdtConfig {
     gateway_url: normalizeGatewayUrl(stringOrEmpty(record.gateway_url)),
     merchant_id: stringOrEmpty(record.merchant_id),
     secret_key: stringOrEmpty(record.secret_key),
+  };
+}
+
+function resolveEpayConfig(
+  base: PaymentGatewayEpayConfig,
+  input: PaymentGatewayEpaySettingsInput | undefined,
+): PaymentGatewayEpayConfig {
+  if (input === undefined) {
+    return base;
+  }
+  return {
+    enabled: input.enabled === undefined ? base.enabled : Boolean(input.enabled),
   };
 }
 
@@ -322,7 +385,7 @@ function validatePaymentGatewayConfig(
   validateNotifyOrigin(config.notify_origin, input.notify_origin);
   validateUsdtConfig(config.usdt, input.usdt);
 
-  const shouldRequireRsaConfig = config.enabled && !config.usdt.enabled;
+  const shouldRequireRsaConfig = config.enabled && config.epay.enabled;
 
   if (shouldRequireRsaConfig && !config.pid) {
     throw new HttpError(400, 'PAYMENT_GATEWAY_PID_REQUIRED', '启用支付前必须填写商户号 PID');

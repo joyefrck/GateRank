@@ -2448,6 +2448,10 @@ function parsePaymentGatewaySettingsPayload(
 ): PaymentGatewaySettingsInput {
   return {
     enabled: optionalBoolean(payload.enabled),
+    epay:
+      payload.epay === undefined
+        ? undefined
+        : parsePaymentGatewayEpaySettingsPayload(payload.epay),
     pid: payload.pid === undefined ? undefined : String(payload.pid ?? '').trim(),
     private_key:
       payload.private_key === undefined ? undefined : String(payload.private_key ?? '').trim(),
@@ -2461,6 +2465,13 @@ function parsePaymentGatewaySettingsPayload(
       payload.usdt === undefined
         ? undefined
         : parsePaymentGatewayUsdtSettingsPayload(payload.usdt),
+  };
+}
+
+function parsePaymentGatewayEpaySettingsPayload(payload: unknown) {
+  const record = toPlainObject(payload, 'epay');
+  return {
+    enabled: optionalBoolean(record.enabled),
   };
 }
 

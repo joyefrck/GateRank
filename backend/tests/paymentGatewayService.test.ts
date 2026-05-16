@@ -21,6 +21,9 @@ const paymentGatewayConfig = {
   platform_public_key: publicKey.export({ type: 'spki', format: 'pem' }).toString(),
   notify_origin: '',
   application_fee_amount: 1000,
+  epay: {
+    enabled: true,
+  },
   usdt: {
     enabled: false,
     gateway_url: '',
@@ -35,6 +38,9 @@ const usdtGatewayConfig = {
   private_key: '',
   platform_public_key: '',
   notify_origin: '',
+  epay: {
+    enabled: false,
+  },
   usdt: {
     enabled: true,
     gateway_url: 'https://pay-usdt.example.com/',
@@ -216,6 +222,44 @@ test('PaymentGatewayService accepts raw base64 RSA keys from the gateway console
   assert.equal(result.trade_no, '202604180001');
   assert.equal(result.pay_type, 'alipay');
   assert.equal(result.pay_info, 'https://pay.example.com/jump');
+});
+
+test('PaymentGatewayService rejects epay orders when epay switch is disabled', async () => {
+  let gatewayCalls = 0;
+  const service = new PaymentGatewayService({
+    paymentGatewaySettingsService: {
+      getConfig: async () => ({
+        ...usdtGatewayConfig,
+        pid: paymentGatewayConfig.pid,
+        private_key: paymentGatewayConfig.private_key,
+        platform_public_key: paymentGatewayConfig.platform_public_key,
+        epay: { enabled: false },
+      }),
+    },
+    fetchImpl: (async () => {
+      gatewayCalls += 1;
+      return new Response('{}', { status: 200 });
+    }) as typeof fetch,
+  });
+
+  await assert.rejects(
+    () => service.createOrder({
+      out_trade_no: 'gr_1_test',
+      channel: 'alipay',
+      name: 'GateRank test',
+      money: 1000,
+      notify_url: 'http://localhost:8787/api/v1/portal/payment-notify',
+      return_url: 'http://localhost:3000/portal',
+      clientip: '127.0.0.1',
+    }),
+    (error: unknown) => {
+      const next = error as { code?: string; message?: string };
+      assert.equal(next.code, 'PAYMENT_EPAY_NOT_ENABLED');
+      assert.match(String(next.message || ''), /普通 epay/);
+      return true;
+    },
+  );
+  assert.equal(gatewayCalls, 0);
 });
 
 test('PaymentGatewayService queries an order and verifies the RSA response', async () => {

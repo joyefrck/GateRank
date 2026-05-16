@@ -70,9 +70,7 @@ export class PaymentGatewayService {
     if (input.channel === 'usdt') {
       return this.createUsdtOrder(input, config);
     }
-    if (!config.pid || !config.private_key || !config.platform_public_key) {
-      throw new HttpError(409, 'PAYMENT_NOT_CONFIGURED', '支付配置不完整');
-    }
+    this.assertEpayConfigured(config);
     try {
       const requestParams: Record<string, string> = {
         pid: config.pid,
@@ -160,9 +158,7 @@ export class PaymentGatewayService {
     if (channel === 'usdt') {
       throw new HttpError(503, 'PAYMENT_GATEWAY_QUERY_NOT_SUPPORTED', 'USDT 支付暂不支持主动查单，请等待支付网关异步回调');
     }
-    if (!config.pid || !config.private_key || !config.platform_public_key) {
-      throw new HttpError(409, 'PAYMENT_NOT_CONFIGURED', '支付配置不完整');
-    }
+    this.assertEpayConfigured(config);
     try {
       const requestParams: Record<string, string> = {
         pid: config.pid,
@@ -349,14 +345,28 @@ export class PaymentGatewayService {
     }
   }
 
+  private assertEpayConfigured(config: PaymentGatewayConfig): void {
+    if (!config.epay?.enabled) {
+      throw new HttpError(409, 'PAYMENT_EPAY_NOT_ENABLED', '普通 epay 支付未启用');
+    }
+    if (!config.pid || !config.private_key || !config.platform_public_key) {
+      throw new HttpError(409, 'PAYMENT_NOT_CONFIGURED', '普通 epay 支付配置不完整');
+    }
+  }
+
   private async requireConfigured() {
     const config = await this.paymentGatewaySettingsService.getConfig();
     if (!config.enabled) {
       throw new HttpError(409, 'PAYMENT_NOT_ENABLED', '支付功能未启用');
     }
-    const hasRsaConfig = config.pid && config.private_key && config.platform_public_key;
+    const epayEnabled = Boolean(config.epay?.enabled);
+    const usdtEnabled = Boolean(config.usdt?.enabled);
+    if (!epayEnabled && !usdtEnabled) {
+      throw new HttpError(409, 'PAYMENT_METHOD_NOT_ENABLED', '支付方式未启用');
+    }
+    const hasRsaConfig = epayEnabled && config.pid && config.private_key && config.platform_public_key;
     const hasUsdtConfig =
-      config.usdt?.enabled && config.usdt.gateway_url && config.usdt.merchant_id && config.usdt.secret_key;
+      usdtEnabled && config.usdt.gateway_url && config.usdt.merchant_id && config.usdt.secret_key;
     if (!hasRsaConfig && !hasUsdtConfig) {
       throw new HttpError(409, 'PAYMENT_NOT_CONFIGURED', '支付配置不完整');
     }
