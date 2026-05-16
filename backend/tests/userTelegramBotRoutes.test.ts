@@ -116,6 +116,7 @@ function createDeps(overrides: Record<string, unknown> = {}) {
           occurred_at: '2026-05-16T10:00:00+08:00',
         }],
       }),
+      countClicksForDate: async () => 3,
     },
     paymentGatewaySettingsService: {
       getConfig: async () => ({
@@ -226,6 +227,7 @@ test('user telegram webhook replies help when bound user sends bare start', asyn
   const text = String(telegramCalls[0]!.body.text);
   assert.match(text, /当前 Telegram 账号已绑定 GateRank 申请人账号/);
   assert.match(text, /\/balance - 查看账户余额、点击单价和上架状态/);
+  assert.match(text, /\/today - 查看今日访问量/);
   assert.doesNotMatch(text, /生成绑定链接/);
 });
 
@@ -263,6 +265,84 @@ test('user telegram webhook asks unbound user to generate link on bare start', a
   assert.match(String(telegramCalls[0]!.body.text), /请先在 GateRank 申请人后台生成绑定链接/);
 });
 
+test('user telegram webhook replies today visit count for bound user', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const countInputs: Array<{ applicantAccountId: number; eventDate: string }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps({
+      applicantBillingRepository: {
+        ...createDeps().applicantBillingRepository,
+        countClicksForDate: async (applicantAccountId: number, eventDate: string) => {
+          countInputs.push({ applicantAccountId, eventDate });
+          return 8;
+        },
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '/today',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(countInputs.length, 1);
+  assert.equal(countInputs[0]!.applicantAccountId, 1);
+  assert.match(countInputs[0]!.eventDate, /^\d{4}-\d{2}-\d{2}$/);
+  const text = String(telegramCalls[0]!.body.text);
+  assert.match(text, /今日访问量：8 次/);
+  assert.match(text, /统计日期：\d{4}-\d{2}-\d{2}/);
+  assert.match(text, /口径：当前绑定账号名下的访问记录/);
+});
+
+test('user telegram webhook asks unbound user to bind before today visit count', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps({
+      applicantTelegramBindingRepository: {
+        ...createDeps().applicantTelegramBindingRepository,
+        getByTelegramUserId: async () => null,
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '/today',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.match(String(telegramCalls[0]!.body.text), /此 Telegram 账号尚未绑定 GateRank 申请人账号/);
+});
+
 test('user telegram webhook replies localized help for unknown text', async () => {
   const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
   const originalFetch = globalThis.fetch;
@@ -293,6 +373,7 @@ test('user telegram webhook replies localized help for unknown text', async () =
   assert.match(text, /\/balance - 查看账户余额、点击单价和上架状态/);
   assert.match(text, /\/transactions - 查看最近 5 条扣费流水/);
   assert.match(text, /\/clicks - 查看最近 5 条访问记录/);
+  assert.match(text, /\/today - 查看今日访问量/);
   assert.match(text, /\/recharge - 创建充值支付链接/);
   assert.match(text, /\/unbind - 解绑当前 Telegram 账号/);
 });

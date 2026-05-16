@@ -1125,6 +1125,17 @@ export class ApplicantBillingRepository {
     };
   }
 
+  async countClicksForDate(applicantAccountId: number, eventDate: string): Promise<number> {
+    const [rows] = await this.pool.query<Array<RowDataPacket & { total: number }>>(
+      `SELECT COUNT(*) AS total
+         FROM outbound_click_records
+        WHERE applicant_account_id = ?
+          AND event_date = ?`,
+      [applicantAccountId, eventDate],
+    );
+    return Number(rows[0]?.total || 0);
+  }
+
   async processOutboundClick(input: ProcessOutboundClickInput): Promise<ProcessOutboundClickResult> {
     const clickChargeAmount = normalizeClickChargeAmount(input.click_charge_amount);
     const connection = await this.pool.getConnection();

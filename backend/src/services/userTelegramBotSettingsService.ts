@@ -547,6 +547,7 @@ export function getUserTelegramBotCommands(): Array<{ command: string; descripti
     { command: 'balance', description: '查看账户余额、点击单价和上架状态' },
     { command: 'transactions', description: '查看最近 5 条扣费流水' },
     { command: 'clicks', description: '查看最近 5 条访问记录' },
+    { command: 'today', description: '查看今日访问量' },
     { command: 'recharge', description: '创建充值支付链接' },
     { command: 'unbind', description: '解绑当前 Telegram 账号' },
   ];

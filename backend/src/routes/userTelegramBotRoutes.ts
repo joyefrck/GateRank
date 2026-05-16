@@ -14,6 +14,7 @@ import type { ApplicantTelegramBinding } from '../repositories/applicantTelegram
 import type { PaymentGatewayChannel, PaymentGatewayService } from '../services/paymentGatewayService';
 import type { UserTelegramBotConfig, UserTelegramBotSettingsService } from '../services/userTelegramBotSettingsService';
 import { getSiteOrigin } from '../utils/siteUrl';
+import { getDateInTimezone } from '../utils/time';
 
 interface UserTelegramBotDeps {
   userTelegramBotSettingsService: Pick<UserTelegramBotSettingsService, 'getConfig'>;
@@ -48,6 +49,7 @@ interface UserTelegramBotDeps {
     getRechargeOrderByOutTradeNo(outTradeNo: string): Promise<RechargeOrderView | null>;
     listTransactions(applicantAccountId: number, page?: number, pageSize?: number): Promise<PaginatedBillingRecords<WalletTransactionView>>;
     listClicks(applicantAccountId: number, page?: number, pageSize?: number): Promise<PaginatedBillingRecords<ApplicantClickView>>;
+    countClicksForDate(applicantAccountId: number, eventDate: string): Promise<number>;
   };
   paymentGatewaySettingsService: {
     getConfig(): Promise<unknown>;
@@ -182,6 +184,10 @@ async function handleMessage(
     await sendClicksMessage(deps, config, chatId, context.account.id);
     return;
   }
+  if (text.startsWith('/today')) {
+    await sendTodayClicksMessage(deps, config, chatId, context.account.id);
+    return;
+  }
   if (text.startsWith('/recharge')) {
     await sendRechargeOptions(deps, config, chatId);
     return;
@@ -266,6 +272,7 @@ function buildHelpMessage(): string {
     '/balance - 查看账户余额、点击单价和上架状态',
     '/transactions - 查看最近 5 条扣费流水',
     '/clicks - 查看最近 5 条访问记录',
+    '/today - 查看今日访问量',
     '/recharge - 创建充值支付链接',
     '/unbind - 解绑当前 Telegram 账号',
   ].join('\n');
@@ -335,6 +342,25 @@ async function sendClicksMessage(
     ['最近访问记录：', ...result.items.map((item) => (
       `${formatDate(item.occurred_at)} ${item.airport_name || `#${item.airport_id}`} ${formatClickStatus(item.billing_status)} ¥${formatMoney(item.billed_amount)}`
     ))].join('\n'),
+  );
+}
+
+async function sendTodayClicksMessage(
+  deps: UserTelegramBotDeps,
+  config: UserTelegramBotConfig,
+  chatId: string,
+  applicantAccountId: number,
+): Promise<void> {
+  const eventDate = getDateInTimezone('Asia/Shanghai');
+  const total = await deps.applicantBillingRepository.countClicksForDate(applicantAccountId, eventDate);
+  await sendTelegramMessage(
+    config,
+    chatId,
+    [
+      `今日访问量：${total} 次`,
+      `统计日期：${eventDate}`,
+      '口径：当前绑定账号名下的访问记录',
+    ].join('\n'),
   );
 }
 

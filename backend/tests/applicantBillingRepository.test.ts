@@ -121,6 +121,25 @@ test('ApplicantBillingRepository.getWalletByAccountId exposes bound airport list
   assert.deepEqual(calls[0]!.params, [2]);
 });
 
+test('ApplicantBillingRepository.countClicksForDate counts applicant clicks for one event date', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new ApplicantBillingRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [[{ total: 3 }]];
+    },
+  } as never);
+
+  const total = await repository.countClicksForDate(2, '2026-05-16');
+
+  assert.equal(total, 3);
+  assert.match(calls[0]!.sql, /FROM outbound_click_records/);
+  assert.match(calls[0]!.sql, /applicant_account_id = \?/);
+  assert.match(calls[0]!.sql, /event_date = \?/);
+  assert.doesNotMatch(calls[0]!.sql, /billing_status/);
+  assert.deepEqual(calls[0]!.params, [2, '2026-05-16']);
+});
+
 test('ApplicantBillingRepository.addWalletBalanceAdjustment creates internal wallet before adjustment when missing', async () => {
   const calls: Array<{ kind: 'query' | 'execute' | 'begin' | 'commit' | 'rollback' | 'release'; sql?: string; params?: unknown[] }> = [];
   let walletLookupCount = 0;
