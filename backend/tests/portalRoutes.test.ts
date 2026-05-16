@@ -874,7 +874,7 @@ test('POST /portal/recharge-orders creates USDT recharge order', async () => {
         updatePassword: async () => true,
       },
       airportApplicationRepository: {
-        getById: async () => ({ id: 7, name: 'Cloud Airport' }),
+        getById: async () => ({ id: 7, name: 'Cloud Airport', payment_status: 'paid' }),
         markPaid: async () => true,
       },
       applicationPaymentOrderRepository: {
@@ -952,6 +952,98 @@ test('POST /portal/recharge-orders creates USDT recharge order', async () => {
     assert.equal(rechargeOrders[0].channel, 'usdt');
     assert.equal(gatewayOrders[0].channel, 'usdt');
     assert.equal(gatewayOrders[0].notify_url, 'https://notify.gaterank.test/api/v1/portal/recharge-notify');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/recharge-orders requires paid application fee before recharge', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  let gatewayCreateCalls = 0;
+  let rechargeCreateCalls = 0;
+  let walletEnsureCalls = 0;
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount({ id: 1, application_id: 7 }),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({ id: 7, name: 'Cloud Airport', payment_status: 'unpaid' }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository({
+        ensureWalletForAccount: async () => {
+          walletEnsureCalls += 1;
+          return {
+            id: 1,
+            applicant_account_id: 1,
+            application_id: 7,
+            airport_id: null,
+            balance: 0,
+            auto_unlisted_at: null,
+            created_at: '2026-04-18T10:00:00+08:00',
+            updated_at: '2026-04-18T10:00:00+08:00',
+          };
+        },
+        createRechargeOrder: async () => {
+          rechargeCreateCalls += 1;
+          return 1;
+        },
+      }),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({}),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          gatewayCreateCalls += 1;
+          return {
+            trade_no: '',
+            pay_type: 'usdt',
+            pay_info: 'https://pay-usdt.example.com/pay/grr_1_usdt',
+          };
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/recharge-orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ amount: 300, channel: 'usdt' }),
+    });
+    const body = await response.json() as { code: string; message: string };
+
+    assert.equal(response.status, 409);
+    assert.equal(body.code, 'APPLICATION_PAYMENT_REQUIRED');
+    assert.equal(body.message, '请先支付入驻费，支付完成后再充值余额');
+    assert.equal(gatewayCreateCalls, 0);
+    assert.equal(rechargeCreateCalls, 0);
+    assert.equal(walletEnsureCalls, 0);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

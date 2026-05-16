@@ -349,6 +349,10 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       if (account.must_change_password) {
         throw new HttpError(409, 'PASSWORD_CHANGE_REQUIRED', '首次登录后必须先修改密码');
       }
+      const application = await requireApplication(deps, account.application_id);
+      if (application.payment_status !== 'paid') {
+        throw new HttpError(409, 'APPLICATION_PAYMENT_REQUIRED', '请先支付入驻费，支付完成后再充值余额');
+      }
       await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id);
       const payload = toPlainObject(req.body ?? {}, 'body');
       const channel = toPaymentChannel(payload.channel);

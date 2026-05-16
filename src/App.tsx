@@ -450,6 +450,8 @@ const sectionOrder: HomeSectionKey[] = [
 ];
 
 const PORTAL_TOKEN_KEY = 'gaterank_portal_token';
+const PORTAL_APPLICATION_PAYMENT_SECTION_ID = 'portal-application-payment-section';
+const APPLICATION_PAYMENT_REQUIRED_MESSAGE = '请先支付入驻费，支付完成后再充值余额。';
 type PortalTabKey = 'overview' | 'billing_guide' | 'recharge' | 'clicks' | 'transactions' | 'profile' | 'account_settings';
 const portalNavItems: Array<{ key: PortalTabKey; label: string }> = [
   { key: 'overview', label: '账户概览' },
@@ -1096,11 +1098,13 @@ function StatusPill({ label, value }: { label: string; value: string | number | 
 }
 
 function PortalSectionCard({
+  id,
   title,
   description,
   aside,
   children,
 }: {
+  id?: string;
   title: string;
   description: string;
   aside?: React.ReactNode;
@@ -1108,6 +1112,7 @@ function PortalSectionCard({
 }) {
   return (
     <motion.section
+      id={id}
       initial={{ opacity: 0, y: 18 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35, ease: 'easeOut' }}
@@ -3681,6 +3686,9 @@ function PortalPage() {
   };
 
   const createRechargeOrder = async (amount: number, channel: PaymentChannel) => {
+    if (redirectToApplicationPaymentIfRequired()) {
+      return;
+    }
     if (view?.account.must_change_password) {
       setIsPasswordRequiredModalOpen(true);
       return;
@@ -3744,6 +3752,9 @@ function PortalPage() {
   };
 
   const continueRechargePayment = (order: PortalRechargeOrderView) => {
+    if (redirectToApplicationPaymentIfRequired()) {
+      return;
+    }
     const payInfo = order.pay_info || '';
     setError('');
     setSuccess('');
@@ -3838,11 +3849,33 @@ function PortalPage() {
   };
 
   const switchPortalTab = (tab: PortalTabKey) => {
+    if (tab === 'recharge' && redirectToApplicationPaymentIfRequired()) {
+      return;
+    }
     if (tab === 'recharge' && view?.account.must_change_password) {
       setIsPasswordRequiredModalOpen(true);
       return;
     }
     setPortalTab(tab);
+  };
+
+  const scrollToApplicationPaymentSection = () => {
+    window.setTimeout(() => {
+      document
+        .getElementById(PORTAL_APPLICATION_PAYMENT_SECTION_ID)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 0);
+  };
+
+  const redirectToApplicationPaymentIfRequired = () => {
+    if (view?.application.payment_status === 'paid') {
+      return false;
+    }
+    setError(APPLICATION_PAYMENT_REQUIRED_MESSAGE);
+    setSuccess('');
+    setPortalTab('overview');
+    scrollToApplicationPaymentSection();
+    return true;
   };
 
   const goToPasswordChange = () => {
@@ -4450,6 +4483,7 @@ function PortalPage() {
     } else if (view.application.review_status === 'awaiting_payment' && view.application.payment_status !== 'paid') {
       stageSection = (
         <PortalSectionCard
+          id={PORTAL_APPLICATION_PAYMENT_SECTION_ID}
           title="支付入驻费用"
           description="支付完成并通过网关回调后，申请会自动进入后台待审批列表。你也可以先继续补充资料，再发起支付。"
         >

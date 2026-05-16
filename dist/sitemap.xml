@@ -14,6 +14,9 @@
     <loc>http://localhost:3000/apply</loc>
   </url>
   <url>
+    <loc>http://localhost:3000/risk-monitor</loc>
+  </url>
+  <url>
     <loc>http://localhost:3000/publish-token-docs</loc>
   </url>
 </urlset>
