@@ -28,6 +28,7 @@ type AirportStatus = 'normal' | 'risk' | 'down';
 type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
 type AirportApplicationReviewStatus = 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
 type AirportApplicationPaymentStatus = 'unpaid' | 'paid';
+type AirportApplicationDetailTab = 'basic' | 'review';
 type ProbeSampleType = 'latency' | 'download' | 'availability';
 type ProbeScope = 'stability' | 'performance';
 type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
@@ -251,8 +252,19 @@ interface AirportApplication {
   admin_note?: string | null;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
+  email_replies?: AirportApplicationEmailReply[];
   created_at: string;
   updated_at: string;
+}
+
+interface AirportApplicationEmailReply {
+  id: number;
+  application_id: number;
+  to_email: string;
+  reply_body: string;
+  sent_by: string;
+  sent_at: string;
+  created_at: string;
 }
 
 interface ProbeSample {
@@ -530,6 +542,7 @@ interface SmtpSettingsView {
 type SmtpTemplateKey =
   | 'applicant_credentials'
   | 'application_approved'
+  | 'application_reply'
   | 'low_balance_warning'
   | 'airport_auto_unlisted'
   | 'airport_online';
@@ -543,6 +556,7 @@ interface SmtpTemplateItem {
 interface SmtpTemplateMap {
   applicant_credentials: SmtpTemplateItem;
   application_approved: SmtpTemplateItem;
+  application_reply: SmtpTemplateItem;
   low_balance_warning: SmtpTemplateItem;
   airport_auto_unlisted: SmtpTemplateItem;
   airport_online: SmtpTemplateItem;
@@ -764,6 +778,7 @@ const APPLICATIONS_PAGE_SIZE = 20;
 const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = [
   'applicant_credentials',
   'application_approved',
+  'application_reply',
   'low_balance_warning',
   'airport_auto_unlisted',
   'airport_online',
@@ -800,6 +815,29 @@ const SMTP_TEMPLATE_SCENARIOS: Record<
     sampleValues: {
       airport_name: '大象网络',
       applicant_email: 'owner@example.com',
+      site_name: 'GateRank',
+    },
+  },
+  application_reply: {
+    title: '入驻申请回复邮件',
+    trigger: '管理员在入驻申请详情中发送邮件回复后触发。',
+    description: '用于在待支付或待审核阶段向申请人发送独立沟通回复。',
+    variables: [
+      '{{airport_name}}',
+      '{{applicant_email}}',
+      '{{reply_body}}',
+      '{{admin_telegram_username}}',
+      '{{admin_telegram_url}}',
+      '{{portal_login_url}}',
+      '{{site_name}}',
+    ],
+    sampleValues: {
+      airport_name: '大象网络',
+      applicant_email: 'owner@example.com',
+      reply_body: '请补充可用于测试的订阅链接和临时测试账号，我们会继续审核。',
+      admin_telegram_username: '@gaterank_admin',
+      admin_telegram_url: 'https://t.me/gaterank_admin',
+      portal_login_url: 'https://gaterank.example.com/portal',
       site_name: 'GateRank',
     },
   },
@@ -3472,6 +3510,21 @@ function getDefaultSmtpTemplates(): SmtpTemplateMap {
         '后续如需补充资料，请联系管理员。',
       ].join('\n'),
     },
+    application_reply: {
+      enabled: true,
+      subject: 'GateRank 入驻申请回复 - {{airport_name}}',
+      body: [
+        '您好，{{airport_name}} 的 GateRank 入驻申请有新的回复。',
+        '',
+        '{{reply_body}}',
+        '',
+        '本邮箱仅用于系统发信，无法接收回复。',
+        '如需继续沟通，请通过 Telegram 联系管理员：{{admin_telegram_username}}',
+        'Telegram 链接：{{admin_telegram_url}}',
+        '',
+        '申请人管理后台：{{portal_login_url}}',
+      ].join('\n'),
+    },
     low_balance_warning: {
       enabled: true,
       subject: 'GateRank 余额提醒 - {{airport_name}}',
@@ -5570,12 +5623,15 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
   const [paymentStatus, setPaymentStatus] = useState<'' | AirportApplicationPaymentStatus>('');
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [selected, setSelected] = useState<AirportApplication | null>(null);
+  const [detailTab, setDetailTab] = useState<AirportApplicationDetailTab>('basic');
   const [detailLoading, setDetailLoading] = useState(false);
   const [detailError, setDetailError] = useState('');
   const [detailSuccess, setDetailSuccess] = useState('');
   const [reviewAction, setReviewAction] = useState<'reviewed' | 'rejected'>('reviewed');
   const [reviewNote, setReviewNote] = useState('');
   const [reviewSaving, setReviewSaving] = useState(false);
+  const [replyDraft, setReplyDraft] = useState('');
+  const [replySending, setReplySending] = useState(false);
   const [markPaidSaving, setMarkPaidSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [adminNoteEditing, setAdminNoteEditing] = useState<AirportApplication | null>(null);
@@ -5611,12 +5667,14 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
 
   const openDetail = async (id: number) => {
     setSelectedId(id);
+    setDetailTab('basic');
     setDetailLoading(true);
     setDetailError('');
     setDetailSuccess('');
     setSelected(null);
     setReviewNote('');
     setReviewAction('reviewed');
+    setReplyDraft('');
     try {
       const data = (await apiFetch(`/api/v1/admin/airport-applications/${id}`)) as AirportApplication;
       setSelected(data);
@@ -5627,6 +5685,14 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
     } finally {
       setDetailLoading(false);
     }
+  };
+
+  const closeDetail = () => {
+    setSelectedId(null);
+    setSelected(null);
+    setDetailError('');
+    setDetailSuccess('');
+    setReplyDraft('');
   };
 
   const submitReview = async () => {
@@ -5652,6 +5718,38 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
       setDetailError(err instanceof Error ? err.message : '审核失败');
     } finally {
       setReviewSaving(false);
+    }
+  };
+
+  const sendApplicationReply = async () => {
+    if (!selectedId || !selected) return;
+    if (!['awaiting_payment', 'pending'].includes(selected.review_status)) {
+      setDetailError('只有待支付或待审核的申请可以发送邮件回复');
+      return;
+    }
+    const nextReply = replyDraft.trim();
+    if (!nextReply) {
+      setDetailError('请先填写邮件回复内容');
+      return;
+    }
+
+    setReplySending(true);
+    setDetailError('');
+    setDetailSuccess('');
+    try {
+      const data = (await apiFetch(`/api/v1/admin/airport-applications/${selectedId}/replies`, {
+        method: 'POST',
+        body: JSON.stringify({
+          reply_body: nextReply,
+        }),
+      })) as AirportApplication;
+      setSelected(data);
+      setReplyDraft('');
+      setDetailSuccess('邮件回复已发送');
+    } catch (err) {
+      setDetailError(err instanceof Error ? err.message : '邮件回复发送失败');
+    } finally {
+      setReplySending(false);
     }
   };
 
@@ -5760,9 +5858,13 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
 
   const isReviewLocked = selected?.review_status !== 'pending';
   const canMarkPaid = selected?.review_status === 'awaiting_payment' && selected.payment_status !== 'paid';
+  const canSendReply = selected?.review_status === 'awaiting_payment' || selected?.review_status === 'pending';
   const reviewLockMessage = selected?.review_status === 'awaiting_payment'
     ? '该申请当前处于待支付状态。可先改为已支付，系统会自动推进到待审核。'
     : '该申请已处理，审核结果不能再次修改。';
+  const replyLockMessage = selected && !canSendReply
+    ? '只有待支付或待审核状态可以发送邮件回复。'
+    : '';
 
   return (
     <div className="space-y-4">
@@ -5920,12 +6022,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
               <button
                 type="button"
                 className="w-10 h-10 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-900"
-                onClick={() => {
-                  setSelectedId(null);
-                  setSelected(null);
-                  setDetailError('');
-                  setDetailSuccess('');
-                }}
+                onClick={closeDetail}
               >
                 <X size={16} />
               </button>
@@ -5938,6 +6035,25 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
 
               {selected && (
                 <>
+                  <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-1">
+                    <button
+                      type="button"
+                      className={`rounded-xl px-4 py-2 text-sm font-medium transition ${detailTab === 'basic' ? 'bg-white text-neutral-950 shadow-sm' : 'text-neutral-600 hover:text-neutral-950'}`}
+                      onClick={() => setDetailTab('basic')}
+                    >
+                      基础信息
+                    </button>
+                    <button
+                      type="button"
+                      className={`rounded-xl px-4 py-2 text-sm font-medium transition ${detailTab === 'review' ? 'bg-white text-neutral-950 shadow-sm' : 'text-neutral-600 hover:text-neutral-950'}`}
+                      onClick={() => setDetailTab('review')}
+                    >
+                      审核相关信息
+                    </button>
+                  </div>
+
+                  {detailTab === 'basic' && (
+                    <>
                   <section className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">基础信息</div>
@@ -5972,7 +6088,11 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                     <ReadField label="后台内部备注" value={valueOrDash(selected.admin_note)} />
                     <ReadField label="机场基本介绍" value={selected.airport_intro} />
                   </section>
+                    </>
+                  )}
 
+                  {detailTab === 'review' && (
+                    <>
                   <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
                     <div>
                       <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">审核处理</div>
@@ -6033,16 +6153,71 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
                         </button>
                       </div>
                     )}
-                    <FormField label="审核备注" hint="可选，适合记录核验结果或补充说明。">
-                      <textarea
-                        className="min-h-28 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                        value={reviewNote}
-                        disabled={isReviewLocked}
+                      <FormField label="审核备注" hint="可选，适合记录核验结果或补充说明。">
+                        <textarea
+                          className="min-h-28 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                          value={reviewNote}
+                          disabled={isReviewLocked}
                         onChange={(e) => setReviewNote(e.target.value)}
                         placeholder="可选备注"
+                        />
+                      </FormField>
+                    </section>
+
+                  <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">邮件回复</div>
+                      <p className="mt-1 text-sm text-neutral-500">独立发送给申请邮箱，发送成功后记录不可编辑。</p>
+                    </div>
+                    {!canSendReply && (
+                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                        {replyLockMessage}
+                      </div>
+                    )}
+                    <div className="space-y-3">
+                      <div className="text-sm font-semibold text-neutral-700">回复历史</div>
+                      {(selected.email_replies || []).length > 0 ? (
+                        <div className="space-y-3">
+                          {(selected.email_replies || []).map((reply) => (
+                            <div key={reply.id} className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+                              <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-neutral-500">
+                                <span>发送给 {reply.to_email}</span>
+                                <span>{valueOrDash(reply.sent_at)} / {valueOrDash(reply.sent_by)}</span>
+                              </div>
+                              <div className="mt-3 whitespace-pre-wrap break-words text-sm leading-6 text-neutral-900">
+                                {reply.reply_body}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-6 text-center text-sm text-neutral-500">
+                          暂无邮件回复记录
+                        </div>
+                      )}
+                    </div>
+                    <FormField label="新增邮件回复" hint="只在待支付或待审核时可发送。">
+                      <textarea
+                        className="min-h-28 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900 disabled:bg-neutral-100 disabled:text-neutral-500"
+                        value={replyDraft}
+                        disabled={!canSendReply || replySending}
+                        onChange={(e) => setReplyDraft(e.target.value)}
+                        placeholder="填写要发送给申请人的回复内容"
                       />
                     </FormField>
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        className="rounded-2xl bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
+                        disabled={!canSendReply || replySending || !replyDraft.trim()}
+                        onClick={() => void sendApplicationReply()}
+                      >
+                        {replySending ? '发送中...' : '发送邮件回复'}
+                      </button>
+                    </div>
                   </section>
+                      </>
+                    )}
                 </>
               )}
             </div>
@@ -6050,22 +6225,19 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
             <div className="border-t border-neutral-200 px-6 py-5 flex items-center justify-end gap-3 bg-white">
               <button
                 className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium"
-                onClick={() => {
-                  setSelectedId(null);
-                  setSelected(null);
-                  setDetailError('');
-                  setDetailSuccess('');
-                }}
+                onClick={closeDetail}
               >
                 关闭
               </button>
-              <button
-                className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50"
-                disabled={reviewSaving || markPaidSaving || !selected || isReviewLocked}
-                onClick={() => void submitReview()}
-              >
-                {reviewSaving ? '提交中...' : selected?.review_status === 'awaiting_payment' ? '待支付' : isReviewLocked ? '已处理' : '保存审核结果'}
-              </button>
+              {detailTab === 'review' && (
+                <button
+                  className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50"
+                  disabled={reviewSaving || markPaidSaving || replySending || !selected || isReviewLocked}
+                  onClick={() => void submitReview()}
+                >
+                  {reviewSaving ? '提交中...' : selected?.review_status === 'awaiting_payment' ? '待支付' : isReviewLocked ? '已处理' : '保存审核结果'}
+                </button>
+              )}
             </div>
           </div>
         </div>

@@ -57,6 +57,7 @@ import {
   computeUptimeScore,
   isStableDay,
 } from '../utils/stability';
+import { buildPortalLoginUrl } from '../utils/siteUrl';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
 
 interface AdminDeps {
@@ -130,6 +131,13 @@ interface AdminDeps {
       },
     ): Promise<boolean>;
     updateAdminNote?(id: number, adminNote: string | null): Promise<boolean>;
+    createEmailReply?(input: {
+      application_id: number;
+      to_email: string;
+      reply_body: string;
+      sent_by: string;
+      sent_at: string;
+    }): Promise<number>;
     markPaid?(id: number, paymentAmount: number, paidAt: string): Promise<boolean>;
     deleteUnpaid(id: number): Promise<boolean>;
   };
@@ -253,7 +261,11 @@ interface AdminDeps {
   marketingSettingsService?: {
     getAdminSettings(): Promise<unknown>;
     updateAdminSettings(input: MarketingSettingsInput, updatedBy: string): Promise<unknown>;
-    getConfig(): Promise<{ application_fee_amount: number; click_charge_amount: number }>;
+    getConfig(): Promise<{
+      application_fee_amount: number;
+      click_charge_amount: number;
+      admin_telegram_username?: string | null;
+    }>;
   };
   smtpSettingsService?: {
     getAdminSettings(): Promise<unknown>;
@@ -267,6 +279,14 @@ interface AdminDeps {
   mailService?: {
     sendTestMail(input: SmtpSettingsInput & { test_to: string }): Promise<void>;
     sendApplicationApprovedEmail(input: { to: string; airportName: string }): Promise<void>;
+    sendApplicationReplyEmail?(input: {
+      to: string;
+      airportName: string;
+      replyBody: string;
+      adminTelegramUsername: string;
+      adminTelegramUrl: string;
+      portalLoginUrl: string;
+    }): Promise<void>;
     sendLowBalanceWarningEmail?(input: { to: string; airportName: string; balance: number; thresholdAmount: number }): Promise<void>;
     sendAirportAutoUnlistedEmail?(input: { to: string; airportName: string; balance: number; thresholdAmount: number }): Promise<void>;
     sendAirportOnlineEmail?(input: { to: string; airportName: string; balance: number; thresholdAmount: number }): Promise<void>;
@@ -909,6 +929,80 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const updatedApplication = await deps.airportApplicationRepository.getById(applicationId);
       res.json(updatedApplication);
     } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/airport-applications/:id/replies', async (req, res, next) => {
+    try {
+      const applicationId = toPositiveInt(req.params.id, 0);
+      if (applicationId <= 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'application id must be positive integer');
+      }
+      if (!deps.airportApplicationRepository.createEmailReply) {
+        throw new Error('airportApplicationRepository.createEmailReply is not configured');
+      }
+
+      const application = await deps.airportApplicationRepository.getById(applicationId);
+      if (!application) {
+        throw new HttpError(404, 'AIRPORT_APPLICATION_NOT_FOUND', `application ${applicationId} not found`);
+      }
+      const currentApplication = application as {
+        name: string;
+        applicant_email?: string | null;
+        payment_status?: AirportApplicationPaymentStatus;
+        review_status?: AirportApplicationReviewStatus;
+      };
+      if (!['awaiting_payment', 'pending'].includes(String(currentApplication.review_status || ''))) {
+        throw new HttpError(409, 'AIRPORT_APPLICATION_REPLY_NOT_ALLOWED', '只有待支付或待审核的申请可以发送邮件回复');
+      }
+      const toEmail = optionalString(currentApplication.applicant_email);
+      if (!toEmail) {
+        throw new HttpError(409, 'AIRPORT_APPLICATION_REPLY_EMAIL_MISSING', '申请人邮箱为空，无法发送邮件回复');
+      }
+
+      const payload = (req.body ?? {}) as Record<string, unknown>;
+      const replyBody = optionalString(payload.reply_body);
+      if (!replyBody) {
+        throw new HttpError(400, 'BAD_REQUEST', 'reply_body is required');
+      }
+      const mailService = getMailService(deps);
+      if (!mailService.sendApplicationReplyEmail) {
+        throw new Error('mailService.sendApplicationReplyEmail is not configured');
+      }
+      const contactInfo = await getApplicationReplyContactInfo(deps, req);
+
+      await mailService.sendApplicationReplyEmail({
+        to: toEmail,
+        airportName: currentApplication.name,
+        replyBody,
+        adminTelegramUsername: contactInfo.adminTelegramUsername,
+        adminTelegramUrl: contactInfo.adminTelegramUrl,
+        portalLoginUrl: contactInfo.portalLoginUrl,
+      });
+
+      const sentAt = formatSqlDateTimeInTimezone(new Date(), 'Asia/Shanghai');
+      const replyId = await deps.airportApplicationRepository.createEmailReply({
+        application_id: applicationId,
+        to_email: toEmail,
+        reply_body: replyBody,
+        sent_by: actorFromReq(req),
+        sent_at: sentAt,
+      });
+      await deps.auditRepository.log('send_airport_application_reply', actorFromReq(req), req.requestId, {
+        application_id: applicationId,
+        reply_id: replyId,
+        to_email: toEmail,
+        sent_at: sentAt,
+      });
+
+      const updatedApplication = await deps.airportApplicationRepository.getById(applicationId);
+      res.status(201).json(updatedApplication);
+    } catch (error) {
+      if (error instanceof SmtpSendError) {
+        next(new HttpError(error.status, 'APPLICATION_REPLY_EMAIL_FAILED', error.message));
+        return;
+      }
       next(error);
     }
   });
@@ -2370,6 +2464,7 @@ function parseSmtpTemplatePayload(
 const SMTP_TEMPLATE_KEYS: SmtpTemplateKey[] = [
   'applicant_credentials',
   'application_approved',
+  'application_reply',
   'low_balance_warning',
   'airport_auto_unlisted',
   'airport_online',
@@ -2782,6 +2877,29 @@ function getPaymentGatewaySettingsService(deps: AdminDeps) {
     throw new Error('paymentGatewaySettingsService is not configured');
   }
   return deps.paymentGatewaySettingsService;
+}
+
+async function getApplicationReplyContactInfo(
+  deps: AdminDeps,
+  req: {
+    protocol?: string;
+    headers?: Record<string, unknown>;
+    header?(name: string): string | undefined;
+  },
+): Promise<{
+  adminTelegramUsername: string;
+  adminTelegramUrl: string;
+  portalLoginUrl: string;
+}> {
+  const marketingConfig = deps.marketingSettingsService
+    ? await deps.marketingSettingsService.getConfig()
+    : null;
+  const username = String(marketingConfig?.admin_telegram_username || '').trim();
+  return {
+    adminTelegramUsername: username ? `@${username}` : '未配置',
+    adminTelegramUrl: username ? `https://t.me/${username}` : '未配置',
+    portalLoginUrl: buildPortalLoginUrl(req),
+  };
 }
 
 function getMarketingSettingsService(deps: AdminDeps) {

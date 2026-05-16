@@ -19,6 +19,12 @@ function createTemplates(
       body: '您好，{{airport_name}} 审批已通过。',
       ...overrides.application_approved,
     },
+    application_reply: {
+      enabled: true,
+      subject: '申请回复 - {{airport_name}}',
+      body: '回复：{{reply_body}}',
+      ...overrides.application_reply,
+    },
     low_balance_warning: {
       enabled: true,
       subject: '余额提醒 - {{airport_name}}',
@@ -125,6 +131,62 @@ test('MailService renders application approved template variables', async () => 
   assert.equal(sent.length, 1);
   assert.equal(sent[0]?.subject, '审批通过 - 大象网络');
   assert.match(String(sent[0]?.text || ''), /大象网络 审批已通过/);
+});
+
+test('MailService renders application reply template variables', async () => {
+  const sent: Array<Record<string, unknown>> = [];
+  const service = new MailService({
+    smtpSettingsService: {
+      getConfig: async () => ({
+        enabled: true,
+        host: 'smtp.example.com',
+        port: 465,
+        secure: true,
+        username: 'mailer',
+        password: 'secret',
+        from_name: 'GateRank',
+        from_email: 'noreply@example.com',
+        reply_to: '',
+        templates: createTemplates({
+          application_reply: {
+            subject: '申请回复 - {{airport_name}}',
+            body: [
+              '邮箱：{{applicant_email}}',
+              '内容：{{reply_body}}',
+              '本邮箱仅用于系统发信，无法接收回复。',
+              'Telegram：{{admin_telegram_username}}',
+              'Telegram 链接：{{admin_telegram_url}}',
+              '后台：{{portal_login_url}}',
+            ].join('\n'),
+          },
+        }),
+      }),
+    },
+    transportFactory: (() => ({
+      sendMail: async (payload: Record<string, unknown>) => {
+        sent.push(payload);
+      },
+    })) as never,
+  });
+
+  await service.sendApplicationReplyEmail({
+    to: 'user@example.com',
+    airportName: '大象网络',
+    replyBody: '请补充测试账号。',
+    adminTelegramUsername: '@gaterank_admin',
+    adminTelegramUrl: 'https://t.me/gaterank_admin',
+    portalLoginUrl: 'https://gaterank.example.com/portal',
+  });
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]?.subject, '申请回复 - 大象网络');
+  assert.match(String(sent[0]?.text || ''), /邮箱：user@example\.com/);
+  assert.match(String(sent[0]?.text || ''), /内容：请补充测试账号。/);
+  assert.match(String(sent[0]?.text || ''), /本邮箱仅用于系统发信，无法接收回复。/);
+  assert.match(String(sent[0]?.text || ''), /Telegram：@gaterank_admin/);
+  assert.match(String(sent[0]?.text || ''), /Telegram 链接：https:\/\/t\.me\/gaterank_admin/);
+  assert.match(String(sent[0]?.text || ''), /后台：https:\/\/gaterank\.example\.com\/portal/);
+  assert.doesNotMatch(String(sent[0]?.text || ''), /回复本邮件|直接回复本邮件/);
 });
 
 test('MailService skips disabled template without sending', async () => {

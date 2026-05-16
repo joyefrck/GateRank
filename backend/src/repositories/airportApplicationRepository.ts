@@ -1,6 +1,7 @@
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type {
   AirportApplication,
+  AirportApplicationEmailReply,
   AirportApplicationPaymentStatus,
   AirportApplicationReviewStatus,
   AirportStatus,
@@ -34,6 +35,16 @@ interface AirportApplicationRow extends RowDataPacket {
   reviewed_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface AirportApplicationReplyRow extends RowDataPacket {
+  id: number;
+  application_id: number;
+  to_email: string;
+  reply_body: string;
+  sent_by: string;
+  sent_at: string;
+  created_at: string;
 }
 
 export interface CreateAirportApplicationInput {
@@ -75,6 +86,14 @@ export interface UpdateAirportApplicationInput {
   test_password: string;
 }
 
+export interface CreateAirportApplicationReplyInput {
+  application_id: number;
+  to_email: string;
+  reply_body: string;
+  sent_by: string;
+  sent_at: string;
+}
+
 export class AirportApplicationRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -110,6 +129,23 @@ export class AirportApplicationRepository {
         INDEX idx_airport_applications_review_status_created_at (review_status, created_at DESC),
         INDEX idx_airport_applications_name (name),
         INDEX idx_airport_applications_applicant_email (applicant_email)
+      )
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS airport_application_replies (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        application_id BIGINT UNSIGNED NOT NULL,
+        to_email VARCHAR(255) NOT NULL,
+        reply_body TEXT NOT NULL,
+        sent_by VARCHAR(128) NOT NULL,
+        sent_at DATETIME NOT NULL,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        INDEX idx_airport_application_replies_application_sent_at (application_id, sent_at DESC, id DESC),
+        CONSTRAINT fk_airport_application_replies_application
+          FOREIGN KEY (application_id) REFERENCES airport_applications(id)
+          ON DELETE CASCADE
       )
     `);
 
@@ -336,7 +372,51 @@ export class AirportApplicationRepository {
     if (rows.length === 0) {
       return null;
     }
-    return toAirportApplicationEntity(rows[0]);
+    const application = toAirportApplicationEntity(rows[0]);
+    return {
+      ...application,
+      email_replies: await this.listEmailReplies(id),
+    };
+  }
+
+  async listEmailReplies(applicationId: number): Promise<AirportApplicationEmailReply[]> {
+    const [rows] = await this.pool.query<AirportApplicationReplyRow[]>(
+      `SELECT
+         id,
+         application_id,
+         to_email,
+         reply_body,
+         sent_by,
+         sent_at,
+         created_at
+       FROM airport_application_replies
+       WHERE application_id = ?
+       ORDER BY sent_at DESC, id DESC`,
+      [applicationId],
+    );
+
+    return rows.map(toAirportApplicationReplyEntity);
+  }
+
+  async createEmailReply(input: CreateAirportApplicationReplyInput): Promise<number> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `INSERT INTO airport_application_replies (
+        application_id,
+        to_email,
+        reply_body,
+        sent_by,
+        sent_at
+      ) VALUES (?, ?, ?, ?, ?)`,
+      [
+        input.application_id,
+        input.to_email,
+        input.reply_body,
+        input.sent_by,
+        input.sent_at,
+      ],
+    );
+
+    return result.insertId;
   }
 
   async review(id: number, input: ReviewAirportApplicationInput): Promise<boolean> {
@@ -457,6 +537,7 @@ export class AirportApplicationRepository {
       await connection.execute('DELETE FROM applicant_wallets WHERE application_id = ?', [id]);
       await connection.execute('DELETE FROM applicant_accounts WHERE application_id = ?', [id]);
       await connection.execute('DELETE FROM application_payment_orders WHERE application_id = ?', [id]);
+      await connection.execute('DELETE FROM airport_application_replies WHERE application_id = ?', [id]);
       const [result] = await connection.execute<ResultSetHeader>(
         `DELETE FROM airport_applications
           WHERE id = ?
@@ -565,6 +646,18 @@ function toAirportApplicationEntity(row: AirportApplicationRow): AirportApplicat
     reviewed_at: toDateTimeString(row.reviewed_at),
     created_at: toDateTimeString(row.created_at),
     updated_at: toDateTimeString(row.updated_at),
+  };
+}
+
+function toAirportApplicationReplyEntity(row: AirportApplicationReplyRow): AirportApplicationEmailReply {
+  return {
+    id: Number(row.id),
+    application_id: Number(row.application_id),
+    to_email: row.to_email,
+    reply_body: row.reply_body,
+    sent_by: row.sent_by,
+    sent_at: toDateTimeString(row.sent_at),
+    created_at: toDateTimeString(row.created_at),
   };
 }
 

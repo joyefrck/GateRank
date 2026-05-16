@@ -57,6 +57,21 @@ CREATE TABLE IF NOT EXISTS airport_applications (
   INDEX idx_airport_applications_applicant_email (applicant_email)
 );
 
+CREATE TABLE IF NOT EXISTS airport_application_replies (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  application_id BIGINT UNSIGNED NOT NULL,
+  to_email VARCHAR(255) NOT NULL,
+  reply_body TEXT NOT NULL,
+  sent_by VARCHAR(128) NOT NULL,
+  sent_at DATETIME NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_airport_application_replies_application_sent_at (application_id, sent_at DESC, id DESC),
+  CONSTRAINT fk_airport_application_replies_application
+    FOREIGN KEY (application_id) REFERENCES airport_applications(id)
+    ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS applicant_accounts (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   application_id BIGINT UNSIGNED NOT NULL,

@@ -2621,6 +2621,361 @@ test('PATCH /airport-applications/:id/admin-note returns 409 when update fails',
   }
 });
 
+test('POST /airport-applications/:id/replies sends email and saves immutable reply history without reviewing', async () => {
+  const sentEmails: Array<Record<string, unknown>> = [];
+  const savedReplies: Array<Record<string, unknown>> = [];
+  const reviewedCalls: Array<Record<string, unknown>> = [];
+  const auditLogs: Array<{ action: string; payload: unknown }> = [];
+  let currentApplication = {
+    ...(await stubAirportApplicationRepository().getById(7)),
+    payment_status: 'paid',
+    review_status: 'pending',
+    review_note: null as string | null,
+    reviewed_by: null as string | null,
+    reviewed_at: null as string | null,
+    email_replies: [] as Array<Record<string, unknown>>,
+  };
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async () => currentApplication,
+        review: async (id, input) => {
+          reviewedCalls.push({ id, ...input });
+          return true;
+        },
+        createEmailReply: async (input) => {
+          savedReplies.push(input);
+          currentApplication = {
+            ...currentApplication,
+            email_replies: [{
+              id: 91,
+              ...input,
+              created_at: input.sent_at,
+            }],
+          };
+          return 91;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, _actor, _requestId, payload) => {
+          auditLogs.push({ action, payload });
+        },
+      },
+      marketingSettingsService: stubMarketingSettingsService({
+        application_fee_amount: 300,
+        click_charge_amount: 1,
+        admin_telegram_username: 'gaterank_admin',
+      }),
+      publicViewService: stubPublicViewService(),
+      mailService: {
+        sendTestMail: async () => undefined,
+        sendApplicationApprovedEmail: async () => undefined,
+        sendApplicationReplyEmail: async (input) => {
+          sentEmails.push(input);
+        },
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/replies`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-actor': 'tester',
+        Origin: 'https://admin.gaterank.test',
+      },
+      body: JSON.stringify({ reply_body: ' 请补充测试账号 ' }),
+    });
+    assert.equal(response.status, 201);
+    const data = (await response.json()) as {
+      review_status: string;
+      review_note: string | null;
+      reviewed_by: string | null;
+      reviewed_at: string | null;
+      email_replies: Array<{ reply_body: string; sent_by: string }>;
+    };
+    assert.deepEqual(sentEmails, [{
+      to: 'contact@example.com',
+      airportName: 'Cloud Airport',
+      replyBody: '请补充测试账号',
+      adminTelegramUsername: '@gaterank_admin',
+      adminTelegramUrl: 'https://t.me/gaterank_admin',
+      portalLoginUrl: 'https://admin.gaterank.test/portal',
+    }]);
+    assert.equal(savedReplies.length, 1);
+    assert.equal(savedReplies[0]?.reply_body, '请补充测试账号');
+    assert.equal(savedReplies[0]?.sent_by, 'tester');
+    assert.equal(reviewedCalls.length, 0);
+    assert.equal(data.review_status, 'pending');
+    assert.equal(data.review_note, null);
+    assert.equal(data.reviewed_by, null);
+    assert.equal(data.reviewed_at, null);
+    assert.equal(data.email_replies[0]?.reply_body, '请补充测试账号');
+    assert.equal(data.email_replies[0]?.sent_by, 'tester');
+    assert.equal(auditLogs[0]?.action, 'send_airport_application_reply');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airport-applications/:id/replies allows unpaid awaiting payment applications', async () => {
+  const sentEmails: Array<Record<string, unknown>> = [];
+  const savedReplies: Array<Record<string, unknown>> = [];
+  let currentApplication = {
+    ...(await stubAirportApplicationRepository().getById(7)),
+    payment_status: 'unpaid',
+    payment_amount: null,
+    paid_at: null,
+    review_status: 'awaiting_payment',
+    email_replies: [] as Array<Record<string, unknown>>,
+  };
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async () => currentApplication,
+        createEmailReply: async (input) => {
+          savedReplies.push(input);
+          currentApplication = {
+            ...currentApplication,
+            email_replies: [{
+              id: 92,
+              ...input,
+              created_at: input.sent_at,
+            }],
+          };
+          return 92;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      marketingSettingsService: stubMarketingSettingsService(),
+      publicViewService: stubPublicViewService(),
+      mailService: {
+        sendTestMail: async () => undefined,
+        sendApplicationApprovedEmail: async () => undefined,
+        sendApplicationReplyEmail: async (input) => {
+          sentEmails.push(input);
+        },
+      },
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/replies`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-admin-actor': 'tester',
+        Origin: 'https://admin.gaterank.test',
+      },
+      body: JSON.stringify({ reply_body: '请先完成入驻费支付' }),
+    });
+    assert.equal(response.status, 201);
+    const data = (await response.json()) as {
+      payment_status: string;
+      review_status: string;
+      email_replies: Array<{ reply_body: string }>;
+    };
+    assert.equal(data.payment_status, 'unpaid');
+    assert.equal(data.review_status, 'awaiting_payment');
+    assert.deepEqual(sentEmails, [{
+      to: 'contact@example.com',
+      airportName: 'Cloud Airport',
+      replyBody: '请先完成入驻费支付',
+      adminTelegramUsername: '未配置',
+      adminTelegramUrl: '未配置',
+      portalLoginUrl: 'https://admin.gaterank.test/portal',
+    }]);
+    assert.equal(savedReplies.length, 1);
+    assert.equal(data.email_replies[0]?.reply_body, '请先完成入驻费支付');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airport-applications/:id/replies rejects reviewed applications', async () => {
+  const savedReplies: Array<Record<string, unknown>> = [];
+  const sentEmails: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        getById: async (id) => ({
+          ...(await stubAirportApplicationRepository().getById(id)),
+          payment_status: 'paid',
+          review_status: 'reviewed',
+        }),
+        createEmailReply: async (input) => {
+          savedReplies.push(input);
+          return 91;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+      mailService: {
+        sendTestMail: async () => undefined,
+        sendApplicationApprovedEmail: async () => undefined,
+        sendApplicationReplyEmail: async (input) => {
+          sentEmails.push(input);
+        },
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/replies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reply_body: 'reply' }),
+    });
+    const data = (await response.json()) as { code: string };
+    assert.equal(response.status, 409);
+    assert.equal(data.code, 'AIRPORT_APPLICATION_REPLY_NOT_ALLOWED');
+    assert.equal(sentEmails.length, 0);
+    assert.equal(savedReplies.length, 0);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airport-applications/:id/replies does not save history when SMTP send fails', async () => {
+  const savedReplies: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        createEmailReply: async (input) => {
+          savedReplies.push(input);
+          return 91;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+      mailService: {
+        sendTestMail: async () => undefined,
+        sendApplicationApprovedEmail: async () => undefined,
+        sendApplicationReplyEmail: async () => {
+          throw new SmtpSendError('smtp failed', 502);
+        },
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airport-applications/7/replies`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reply_body: 'reply' }),
+    });
+    const data = (await response.json()) as { code: string };
+    assert.equal(response.status, 502);
+    assert.equal(data.code, 'APPLICATION_REPLY_EMAIL_FAILED');
+    assert.equal(savedReplies.length, 0);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('DELETE /airport-applications/:id deletes unpaid applications', async () => {
   const deletedIds: number[] = [];
   const auditLogs: Array<{ action: string; payload: unknown }> = [];
@@ -4612,12 +4967,13 @@ function stubAirportApplicationRepository() {
           payment_status: 'paid',
           payment_amount: 1000,
           paid_at: '2026-03-24 10:05:00',
-          review_status: 'pending',
-          review_note: null,
-          admin_note: null,
-          reviewed_by: null,
-          reviewed_at: null,
-          created_at: '2026-03-24 10:00:00',
+            review_status: 'pending',
+            review_note: null,
+            admin_note: null,
+            reviewed_by: null,
+            reviewed_at: null,
+            email_replies: [],
+            created_at: '2026-03-24 10:00:00',
           updated_at: '2026-03-24 10:00:00',
         },
       ],
@@ -4643,16 +4999,18 @@ function stubAirportApplicationRepository() {
       payment_amount: 1000,
       paid_at: '2026-03-24 10:05:00',
       review_status: 'pending',
-      review_note: null,
-      admin_note: null,
-      reviewed_by: null,
-      reviewed_at: null,
-      created_at: '2026-03-24 10:00:00',
-      updated_at: '2026-03-24 10:00:00',
-    }),
-    review: async () => true,
-    updateAdminNote: async () => true,
-    deleteUnpaid: async () => true,
+        review_note: null,
+        admin_note: null,
+        reviewed_by: null,
+        reviewed_at: null,
+        email_replies: [],
+        created_at: '2026-03-24 10:00:00',
+        updated_at: '2026-03-24 10:00:00',
+      }),
+      review: async () => true,
+      updateAdminNote: async () => true,
+      createEmailReply: async () => 1,
+      deleteUnpaid: async () => true,
   };
 }
 

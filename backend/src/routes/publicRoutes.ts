@@ -9,7 +9,7 @@ import type {
 } from '../types/domain';
 import { hashPassword, createRandomPassword } from '../utils/password';
 import { buildMarketingEventRecord } from '../utils/marketing';
-import { getSiteOrigin } from '../utils/siteUrl';
+import { buildPortalLoginUrl } from '../utils/siteUrl';
 import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { AirportApplicationReviewStatus, AirportStatus } from '../types/domain';
 
@@ -380,13 +380,6 @@ export function createPublicRoutes(deps: PublicDeps): Router {
   });
 
   return router;
-}
-
-function buildPortalLoginUrl(req: {
-  protocol?: string;
-  headers?: Record<string, unknown>;
-}): string {
-  return `${getSiteOrigin(req)}/portal`;
 }
 
 function mustString(value: unknown, fieldName: string): string {

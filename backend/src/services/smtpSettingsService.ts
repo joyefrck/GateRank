@@ -17,6 +17,7 @@ export interface SmtpSettingsInput {
 export type SmtpTemplateKey =
   | 'applicant_credentials'
   | 'application_approved'
+  | 'application_reply'
   | 'low_balance_warning'
   | 'airport_auto_unlisted'
   | 'airport_online';
@@ -30,6 +31,7 @@ export interface SmtpTemplateConfigItem {
 export interface SmtpTemplateConfig {
   applicant_credentials: SmtpTemplateConfigItem;
   application_approved: SmtpTemplateConfigItem;
+  application_reply: SmtpTemplateConfigItem;
   low_balance_warning: SmtpTemplateConfigItem;
   airport_auto_unlisted: SmtpTemplateConfigItem;
   airport_online: SmtpTemplateConfigItem;
@@ -72,6 +74,32 @@ interface SmtpSettingsServiceOptions {
 }
 
 const SMTP_SETTING_KEY = 'smtp_mail';
+const OLD_APPLICATION_REPLY_TEMPLATE: SmtpTemplateConfigItem = {
+  enabled: true,
+  subject: 'GateRank 入驻申请回复 - {{airport_name}}',
+  body: [
+    '您好，{{airport_name}} 的 GateRank 入驻申请有新的回复。',
+    '',
+    '{{reply_body}}',
+    '',
+    '如需继续沟通，请直接回复本邮件或联系 GateRank 管理员。',
+  ].join('\n'),
+};
+const DEFAULT_APPLICATION_REPLY_TEMPLATE: SmtpTemplateConfigItem = {
+  enabled: true,
+  subject: 'GateRank 入驻申请回复 - {{airport_name}}',
+  body: [
+    '您好，{{airport_name}} 的 GateRank 入驻申请有新的回复。',
+    '',
+    '{{reply_body}}',
+    '',
+    '本邮箱仅用于系统发信，无法接收回复。',
+    '如需继续沟通，请通过 Telegram 联系管理员：{{admin_telegram_username}}',
+    'Telegram 链接：{{admin_telegram_url}}',
+    '',
+    '申请人管理后台：{{portal_login_url}}',
+  ].join('\n'),
+};
 
 export class SmtpSettingsService {
   private readonly systemSettingRepository?: SmtpSettingsServiceOptions['systemSettingRepository'];
@@ -227,6 +255,9 @@ function getDefaultTemplates(): SmtpTemplateConfig {
         '后续如需补充资料，请联系管理员。',
       ].join('\n'),
     },
+    application_reply: {
+      ...DEFAULT_APPLICATION_REPLY_TEMPLATE,
+    },
     low_balance_warning: {
       enabled: true,
       subject: 'GateRank 余额提醒 - {{airport_name}}',
@@ -278,6 +309,10 @@ function normalizeTemplates(
       record.application_approved,
       fallback.application_approved || defaults.application_approved,
     ),
+    application_reply: normalizeApplicationReplyTemplateItem(
+      record.application_reply,
+      fallback.application_reply || defaults.application_reply,
+    ),
     low_balance_warning: normalizeTemplateItem(
       record.low_balance_warning,
       fallback.low_balance_warning || defaults.low_balance_warning,
@@ -303,6 +338,24 @@ function normalizeTemplateItem(
     subject: stringOrEmpty(record.subject) || fallback.subject,
     body: stringOrEmpty(record.body) || fallback.body,
   };
+}
+
+function normalizeApplicationReplyTemplateItem(
+  value: unknown,
+  fallback: SmtpTemplateConfigItem,
+): SmtpTemplateConfigItem {
+  const normalized = normalizeTemplateItem(value, fallback);
+  if (
+    normalized.subject === OLD_APPLICATION_REPLY_TEMPLATE.subject
+    && normalized.body === OLD_APPLICATION_REPLY_TEMPLATE.body
+  ) {
+    return {
+      enabled: normalized.enabled,
+      subject: DEFAULT_APPLICATION_REPLY_TEMPLATE.subject,
+      body: DEFAULT_APPLICATION_REPLY_TEMPLATE.body,
+    };
+  }
+  return normalized;
 }
 
 function normalizePort(value: unknown): number {

@@ -64,8 +64,19 @@ export interface AirportApplication {
   admin_note?: string | null;
   reviewed_by?: string | null;
   reviewed_at?: string | null;
+  email_replies?: AirportApplicationEmailReply[];
   created_at: string;
   updated_at: string;
+}
+
+export interface AirportApplicationEmailReply {
+  id: number;
+  application_id: number;
+  to_email: string;
+  reply_body: string;
+  sent_by: string;
+  sent_at: string;
+  created_at: string;
 }
 
 export interface DailyMetrics {

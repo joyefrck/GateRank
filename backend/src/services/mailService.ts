@@ -94,6 +94,34 @@ export class MailService {
     });
   }
 
+  async sendApplicationReplyEmail(input: {
+    to: string;
+    airportName: string;
+    replyBody: string;
+    adminTelegramUsername: string;
+    adminTelegramUrl: string;
+    portalLoginUrl: string;
+  }): Promise<void> {
+    const config = await this.requireConfigured();
+    const rendered = renderConfiguredTemplate(config, 'application_reply', {
+      airport_name: input.airportName,
+      applicant_email: input.to,
+      reply_body: input.replyBody,
+      admin_telegram_username: input.adminTelegramUsername,
+      admin_telegram_url: input.adminTelegramUrl,
+      portal_login_url: input.portalLoginUrl,
+      site_name: 'GateRank',
+    });
+    if (!rendered) {
+      return;
+    }
+    await this.sendWithConfig(config, {
+      to: input.to,
+      subject: rendered.subject,
+      text: rendered.body,
+    });
+  }
+
   async sendLowBalanceWarningEmail(input: {
     to: string;
     airportName: string;

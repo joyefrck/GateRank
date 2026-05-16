@@ -35,6 +35,10 @@ export function getSiteOrigin(req: RequestLike): string {
   return trimTrailingSlash(`${protocol}://${host}`);
 }
 
+export function buildPortalLoginUrl(req: RequestLike): string {
+  return `${getSiteOrigin(req)}/portal`;
+}
+
 function readHeader(req: RequestLike, name: string): string {
   const viaMethod = req.header?.(name);
   if (typeof viaMethod === 'string' && viaMethod.trim()) {
