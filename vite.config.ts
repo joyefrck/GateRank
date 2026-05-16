@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import type { Plugin } from 'vite';
 import {defineConfig, loadEnv} from 'vite';
+import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from './shared/publishTokenDocs';
+import { PUBLIC_SEO_STATIC_LASTMOD } from './shared/publicSeo';
 
 function emitSeoAssets(siteUrl: string): Plugin {
   const normalizedSiteUrl = siteUrl.replace(/\/+$/, '');
@@ -11,27 +13,21 @@ function emitSeoAssets(siteUrl: string): Plugin {
     name: 'emit-seo-assets',
     apply: 'build',
     generateBundle() {
+      const urls = [
+        ['/', PUBLIC_SEO_STATIC_LASTMOD],
+        ['/rankings/all', PUBLIC_SEO_STATIC_LASTMOD],
+        ['/methodology', PUBLIC_SEO_STATIC_LASTMOD],
+        ['/apply', PUBLIC_SEO_STATIC_LASTMOD],
+        ['/risk-monitor', PUBLIC_SEO_STATIC_LASTMOD],
+        ['/publish-token-docs', PUBLISH_TOKEN_DOCS_LAST_UPDATED],
+      ] as const;
       const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <!-- Dynamic news pages are emitted by the backend sitemap route in production -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-  <url>
-    <loc>${normalizedSiteUrl}/</loc>
-  </url>
-  <url>
-    <loc>${normalizedSiteUrl}/rankings/all</loc>
-  </url>
-  <url>
-    <loc>${normalizedSiteUrl}/methodology</loc>
-  </url>
-  <url>
-    <loc>${normalizedSiteUrl}/apply</loc>
-  </url>
-  <url>
-    <loc>${normalizedSiteUrl}/risk-monitor</loc>
-  </url>
-  <url>
-    <loc>${normalizedSiteUrl}/publish-token-docs</loc>
-  </url>
+${urls.map(([pathname, lastmod]) => `  <url>
+    <loc>${normalizedSiteUrl}${pathname}</loc>
+    <lastmod>${lastmod}</lastmod>
+  </url>`).join('\n')}
 </urlset>
 `;
 

@@ -206,11 +206,7 @@ export function renderRiskMonitorPublicPage(
 }
 
 export function renderReportPublicPage(siteUrl: string, view: ReportView, requestedDate?: string): string {
-  const seo = buildReportSeo({
-    airportName: view.airport.name,
-    score: view.summary_card.score,
-    statusLabel: formatAirportStatusLabel(view.airport.status),
-  });
+  const seo = buildReportSeo(view);
   const canonicalPath = buildAirportReportPath(view.airport.slug);
   const faqItems = buildReportFaqItems(view);
 

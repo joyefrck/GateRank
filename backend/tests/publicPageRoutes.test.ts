@@ -198,6 +198,17 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /"@type":"FAQPage"/);
     assert.match(okHtml, /"@type":"ItemList"/);
     assert.match(okHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/airports\/nebula"/);
+    const description = extractMetaDescription(okHtml);
+    assert.ok(description.length >= 80, `report description too short: ${description.length}`);
+    assert.ok(description.length <= 180, `report description too long: ${description.length}`);
+    assert.match(description, /星云机场/);
+    assert.match(description, /机场测评/);
+    assert.match(description, /分数/);
+    assert.match(description, /状态/);
+    assert.match(description, /风险/);
+    assert.match(description, /官网/);
+    assert.match(description, /30 天趋势/);
+    assert.match(description, /机场 VPN 选择/);
 
     const legacyResponse = await fetch(`http://127.0.0.1:${port}/reports/7?date=2026-03-23`, {
       redirect: 'manual',

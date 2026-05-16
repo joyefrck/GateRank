@@ -213,10 +213,11 @@ function buildSitemapXml(
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
 ${uniqueUrls
   .map((path) => {
-    const lastmod = lastmodByPath.get(path);
+    const lastmod = lastmodByPath.get(path) || PUBLIC_SEO_STATIC_LASTMOD;
     return `  <url>
     <loc>${escapeXml(`${siteUrl}${path}`)}</loc>
-${lastmod ? `    <lastmod>${escapeXml(lastmod)}</lastmod>\n` : ''}  </url>`;
+    <lastmod>${escapeXml(lastmod)}</lastmod>
+  </url>`;
   })
   .join('\n')}
 </urlset>

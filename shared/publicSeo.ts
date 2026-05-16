@@ -44,6 +44,12 @@ export interface PublicReportSeoView {
     recent_complaints_count: number;
     history_incidents: number;
   };
+  trends: {
+    score_30d: Array<{ date: string; value: number }>;
+    uptime_30d: Array<{ date: string; value: number }>;
+    latency_30d: Array<{ date: string; value: number }>;
+    download_30d: Array<{ date: string; value: number }>;
+  };
 }
 
 export interface PublicReportFaqItem {
@@ -109,24 +115,50 @@ export function buildRiskMonitorSeo(input?: {
   };
 }
 
-export function buildReportSeo(input?: {
-  airportName?: string;
-  score?: number;
-  statusLabel?: string;
-}): PublicSeoText {
-  const airportKeywords = input?.airportName
-    ? `${input.airportName}怎么样,${input.airportName}测评,${input.airportName}跑路,${input.airportName}官网,${input.airportName}机场测评,`
+export function buildReportSeo(input?: PublicReportSeoView): PublicSeoText {
+  const airportName = input?.airport.name;
+  const statusLabel = input ? formatAirportStatusLabel(input.airport.status) : undefined;
+  const airportKeywords = airportName
+    ? `${airportName}怎么样,${airportName}测评,${airportName}跑路,${airportName}官网,${airportName}机场测评,`
     : '';
   return {
-    title: input?.airportName
-      ? `${input.airportName} 测评报告 | ${PUBLIC_SITE_BRAND_NAME}`
+    title: airportName
+      ? `${airportName} 测评报告 | ${PUBLIC_SITE_BRAND_NAME}`
       : `机场测评报告 | ${PUBLIC_SITE_BRAND_NAME}`,
     description:
-      input?.airportName && typeof input.score === 'number' && input.statusLabel
-        ? `${input.airportName} 当前公开分数 ${formatMetric(input.score)}，状态为${input.statusLabel}。报告包含榜单位置、评分拆解、关键指标、官网入口、跑路风险记录与 30 天趋势。`
+      input && airportName && typeof input.summary_card.score === 'number' && statusLabel
+        ? buildReportDescription(input, airportName, statusLabel)
         : `${PUBLIC_SITE_BRAND_NAME} 测评报告页展示单个机场的榜单位置、评分拆解、关键指标与 30 天趋势。`,
     keywords: `${airportKeywords}机场榜GateRank,机场测评报告,机场评分,机场趋势,机场榜,机场推荐,机场官网,跑路风险,GateRank`,
   };
+}
+
+function buildReportDescription(view: PublicReportSeoView, airportName: string, statusLabel: string): string {
+  const score = formatMetric(view.summary_card.score);
+  const website = view.airport.website || '未收录';
+  const riskText =
+    view.airport.status === 'down'
+      ? '已标记跑路风险'
+      : view.airport.status === 'risk'
+        ? '存在风险观察'
+        : `风险惩罚 ${formatMetric(view.score_breakdown.risk_penalty)}`;
+  const trendText = buildReportTrendText(view);
+
+  return `${airportName}机场测评：当前分数 ${score}，状态${statusLabel}，官网为 ${website}。报告结合${riskText}、${trendText}和稳定性数据，帮助判断${airportName}是否适合作为机场 VPN 选择。`;
+}
+
+function buildReportTrendText(view: PublicReportSeoView): string {
+  const scoreTrend = view.trends.score_30d;
+  if (scoreTrend.length >= 2) {
+    const first = scoreTrend[0]?.value;
+    const last = scoreTrend[scoreTrend.length - 1]?.value;
+    if (typeof first === 'number' && typeof last === 'number') {
+      const delta = last - first;
+      const direction = delta > 0 ? '上升' : delta < 0 ? '下降' : '持平';
+      return `30 天趋势${direction}`;
+    }
+  }
+  return '30 天趋势';
 }
 
 export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqItem[] {

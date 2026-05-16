@@ -2737,11 +2737,7 @@ function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airp
     ];
   }, [data]);
 
-  const reportSeo = useMemo(() => buildReportSeo(data ? {
-    airportName: data.airport.name,
-    score: data.summary_card.score,
-    statusLabel: formatAirportStatus(data.airport.status),
-  } : undefined), [data]);
+  const reportSeo = useMemo(() => buildReportSeo(data || undefined), [data]);
   const reportTitle = reportSeo.title;
   const reportDescription = reportSeo.description;
   const reportCanonicalPath = data ? buildAirportReportPath(data.airport.slug) : airportSlug ? buildAirportReportPath(airportSlug) : buildReportHref(airportId || 0, date);
