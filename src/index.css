@@ -25,8 +25,24 @@
 }
 
 @layer base {
+  html,
+  body,
+  #root {
+    max-width: 100%;
+    overflow-x: clip;
+    overscroll-behavior-x: none;
+  }
+
   html {
     scrollbar-gutter: stable;
+  }
+
+  @supports not (overflow: clip) {
+    html,
+    body,
+    #root {
+      overflow-x: hidden;
+    }
   }
 
   @supports not (scrollbar-gutter: stable) {

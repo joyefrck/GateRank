@@ -70,6 +70,7 @@ interface Airport {
   score_data_days?: number | null;
   wallet_id?: number | null;
   wallet_balance?: number | null;
+  telegram_bot_bound?: boolean;
   paid_application_fee?: boolean;
 }
 
@@ -1119,8 +1120,8 @@ export default function AdminApp() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-100 text-neutral-900">
-      <header className="sticky top-0 z-30 bg-white border-b border-neutral-200 px-3 md:px-6 h-16 flex items-center justify-between">
+    <div className="min-h-screen min-w-0 overflow-hidden bg-neutral-100 pt-16 text-neutral-900">
+      <header className="fixed inset-x-0 top-0 z-30 flex h-16 items-center justify-between border-b border-neutral-200 bg-white px-3 md:px-6">
         <div className="flex min-w-0 items-center gap-2 md:gap-3 font-bold tracking-tight">
           <button
             type="button"
@@ -1164,7 +1165,7 @@ export default function AdminApp() {
       </header>
 
       {mobileNavOpen && (
-        <div className="fixed inset-0 z-20 md:hidden" onClick={() => setMobileNavOpen(false)}>
+        <div className="fixed inset-0 z-20 overflow-x-hidden md:hidden" onClick={() => setMobileNavOpen(false)}>
           <div className="absolute inset-0 bg-black/20" />
           <nav
             className="absolute left-3 right-3 top-[72px] bg-white rounded-xl border border-neutral-200 p-3 shadow-xl"
@@ -1175,12 +1176,12 @@ export default function AdminApp() {
         </div>
       )}
 
-      <div className="max-w-[1600px] mx-auto p-3 md:p-6 grid grid-cols-1 md:grid-cols-[220px_minmax(0,1fr)] gap-6">
-        <aside className="hidden md:block bg-white rounded-xl border border-neutral-200 p-3 h-fit md:sticky md:top-[88px]">
+      <div className="mx-auto grid h-[calc(100vh-4rem)] max-w-[1600px] min-w-0 grid-cols-1 items-start gap-6 overflow-hidden p-3 md:grid-cols-[220px_minmax(0,1fr)] md:p-6">
+        <aside className="hidden max-h-full self-start overflow-y-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-3 md:block">
           <AdminNavList path={path} onNavigate={navigate} />
         </aside>
 
-        <main className="bg-white rounded-xl border border-neutral-200 p-4 md:p-6">
+        <main className="max-h-full min-w-0 self-start overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-4 md:p-6">
           {path === '/admin/airports' && <AirportsPage onOpenAirport={(id) => navigate(`/admin/airports/${id}/data`)} />}
           {path === '/admin/applications' && <ApplicationsPage onOpenAirports={() => navigate('/admin/airports')} />}
           {path === '/admin/news' && <NewsListPage onCreate={() => navigate('/admin/news/new')} onEdit={(id) => navigate(`/admin/news/${id}`)} />}
@@ -1560,7 +1561,7 @@ function SchedulerPage() {
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+        <div className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200">
           <table className="min-w-full text-sm">
             <thead className="bg-neutral-50 text-neutral-600">
               <tr>
@@ -1609,7 +1610,7 @@ function SchedulerPage() {
           </select>
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+        <div className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200">
           <table className="min-w-full text-sm">
             <thead className="bg-neutral-50 text-neutral-600">
               <tr>
@@ -1992,7 +1993,7 @@ function MarketingPage() {
               Direct / Unknown 表示无 referrer 且无 UTM，可能来自直接访问、隐私浏览器、App 内打开或搜索引擎隐藏 referrer，不能反向归因到 Google。
             </p>
           </div>
-          <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+          <div className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200">
             <table className="min-w-full text-sm">
               <thead className="bg-neutral-50 text-neutral-600">
                 <tr>
@@ -2047,7 +2048,7 @@ function MarketingPage() {
               tone="default"
             />
           </div>
-          <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+          <div className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200">
             <table className="min-w-full text-sm">
               <thead className="bg-neutral-50 text-neutral-600">
                 <tr>
@@ -2133,7 +2134,7 @@ function MarketingPage() {
           </div>
           <div className="text-sm text-neutral-500">页面数：{formatCountValue(pageItems.length)}</div>
         </div>
-        <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+        <div className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200">
           <table className="min-w-full text-sm">
             <thead className="bg-neutral-50 text-neutral-600">
               <tr>
@@ -2177,7 +2178,7 @@ function MarketingPage() {
             <div>每页 {MARKETING_AIRPORTS_PAGE_SIZE} 条</div>
           </div>
         </div>
-        <div className="overflow-x-auto rounded-[26px] border border-neutral-200">
+        <div className="overflow-x-auto overscroll-x-contain rounded-[26px] border border-neutral-200">
           <table className="min-w-full text-sm">
             <thead className="bg-neutral-50 text-neutral-600">
               <tr>
@@ -2242,7 +2243,7 @@ function MarketingPage() {
       </section>
 
       {isAirportDetailOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 p-4 backdrop-blur-md" onClick={closeAirportDetail}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden bg-slate-950/40 p-4 backdrop-blur-md" onClick={closeAirportDetail}>
           <div
             className="relative flex max-h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-[32px] border border-white/80 bg-white/90 shadow-[0_42px_140px_-52px_rgba(15,23,42,0.5)] backdrop-blur-xl"
             onClick={(event) => event.stopPropagation()}
@@ -2267,7 +2268,7 @@ function MarketingPage() {
                 </button>
               </div>
 
-              <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-6 py-6 overscroll-contain">
+              <div className="min-h-0 flex-1 space-y-5 overflow-x-hidden overflow-y-auto overscroll-contain px-6 py-6">
                 {detailError && (
                   <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
                     {detailError}
@@ -2326,7 +2327,7 @@ function MarketingPage() {
                     <section className="grid grid-cols-1 gap-4 xl:grid-cols-2">
                       <div className="rounded-[28px] border border-neutral-200 bg-white/84 p-4 space-y-3 shadow-[0_24px_80px_-56px_rgba(15,23,42,0.22)]">
                         <div className="text-sm font-semibold text-neutral-900">来源位分析</div>
-                        <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+                        <div className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200">
                           <table className="min-w-full text-sm">
                             <thead className="bg-neutral-50 text-neutral-600">
                               <tr>
@@ -2352,7 +2353,7 @@ function MarketingPage() {
 
                       <div className="rounded-[28px] border border-neutral-200 bg-white/84 p-4 space-y-3 shadow-[0_24px_80px_-56px_rgba(15,23,42,0.22)]">
                         <div className="text-sm font-semibold text-neutral-900">目标链接拆分</div>
-                        <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+                        <div className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200">
                           <table className="min-w-full text-sm">
                             <thead className="bg-neutral-50 text-neutral-600">
                               <tr>
@@ -2595,7 +2596,7 @@ function MarketingTrendChart({
         <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-500" />机场曝光</span>
         <span className="inline-flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />外链点击</span>
       </div>
-      <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-neutral-50/70">
+      <div className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200 bg-neutral-50/70">
         <svg
           viewBox={`0 0 ${width} ${height}`}
           className={`${compact ? 'h-[220px]' : 'h-[260px]'} min-w-[640px] w-full`}
@@ -3610,9 +3611,9 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
           </section>
 
           {templateEditorKey && activeScenario && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={closeTemplateEditor}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm" onClick={closeTemplateEditor}>
               <div
-                className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+                className="max-h-[90vh] w-full max-w-5xl overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="user-telegram-bot-template-editor-title"
@@ -4594,9 +4595,9 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
           </section>
 
           {templateEditorKey && activeScenario && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm" onClick={closeTemplateEditor}>
+            <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm" onClick={closeTemplateEditor}>
               <div
-                className="max-h-[90vh] w-full max-w-5xl overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
+                className="max-h-[90vh] w-full max-w-5xl overflow-x-hidden overflow-y-auto rounded-2xl bg-white p-5 shadow-2xl"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby="smtp-template-editor-title"
@@ -5294,11 +5295,11 @@ function PublishTokensSettingsTab({ refreshTick }: { refreshTick: number }) {
 
             <div className="rounded-2xl border border-neutral-300 bg-neutral-50 px-4 py-4 space-y-3">
               <div className="text-sm font-medium text-neutral-900">最短调用示例</div>
-              <pre className="overflow-x-auto rounded-xl bg-neutral-950 px-4 py-3 text-xs leading-6 text-neutral-100">{`curl -X POST '${publishApiBase}/news' \\
+              <pre className="overflow-x-auto overscroll-x-contain rounded-xl bg-neutral-950 px-4 py-3 text-xs leading-6 text-neutral-100">{`curl -X POST '${publishApiBase}/news' \\
   -H 'Authorization: Bearer <publish_token>' \\
   -H 'Content-Type: application/json' \\
   -d '{"title":"新文章","content_markdown":"# Hello","publish_mode":"draft"}'`}</pre>
-              <pre className="overflow-x-auto rounded-xl bg-neutral-950 px-4 py-3 text-xs leading-6 text-neutral-100">{`curl -X POST '${publishApiBase}/news/123/publish' \\
+              <pre className="overflow-x-auto overscroll-x-contain rounded-xl bg-neutral-950 px-4 py-3 text-xs leading-6 text-neutral-100">{`curl -X POST '${publishApiBase}/news/123/publish' \\
   -H 'Authorization: Bearer <publish_token>' \\
   -H 'Content-Type: application/json' \\
   -d '{}'`}</pre>
@@ -5485,6 +5486,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<'' | AirportStatus>('');
+  const [isListed, setIsListed] = useState<'' | 'listed' | 'unlisted'>('');
   const [editing, setEditing] = useState<AirportFormState | null>(null);
   const [airportEditTab, setAirportEditTab] = useState<AirportEditTab>('basic');
   const [slugEditing, setSlugEditing] = useState(false);
@@ -5525,6 +5527,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       query.set('page_size', String(AIRPORTS_PAGE_SIZE));
       if (keyword) query.set('keyword', keyword);
       if (status) query.set('status', status);
+      if (isListed) query.set('is_listed', isListed);
       const data = (await apiFetch(`/api/v1/admin/airports?${query.toString()}`)) as {
         page: number;
         page_size: number;
@@ -5796,8 +5799,8 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
         <div className="relative">
           <Search size={14} className="absolute left-2 top-2.5 text-neutral-400" />
           <input
-            className="border rounded pl-7 pr-3 py-2 text-sm"
-            placeholder="搜索名称 / 官网 / 备用网址"
+            className="w-72 max-w-full border rounded pl-7 pr-3 py-2 text-sm"
+            placeholder="搜索名称 / 官网 / 备用网址 / 申请 ID"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
           />
@@ -5808,26 +5811,28 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
           <option value="risk">风险</option>
           <option value="down">跑路</option>
         </select>
+        <select className="border rounded px-3 py-2 text-sm" value={isListed} onChange={(e) => setIsListed(e.target.value as '' | 'listed' | 'unlisted')}>
+          <option value="">全部上架状态</option>
+          <option value="listed">已上架</option>
+          <option value="unlisted">未上架</option>
+        </select>
         <button className="px-3 py-2 text-sm rounded border" onClick={searchList}>查询</button>
       </div>
 
       {error && <div className="text-sm text-rose-600">{error}</div>}
       {loading ? <div className="text-sm text-neutral-500">加载中...</div> : (
-        <div className="overflow-x-auto rounded border border-neutral-200">
-          <table className="w-full min-w-[1600px] table-fixed text-sm">
+        <div className="overflow-x-auto overscroll-x-contain rounded border border-neutral-200">
+          <table className="w-full min-w-[1200px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
-                <th className="w-[6%] text-left px-4 py-3">申请 ID</th>
-                <th className="w-[11%] text-left px-4 py-3">名称</th>
-                <th className="w-[6%] text-left px-4 py-3">网站</th>
+                <th className="w-[8%] text-left px-4 py-3">申请 ID</th>
+                <th className="w-[16%] text-left px-4 py-3">名称</th>
+                <th className="w-[12%] text-left px-4 py-3">账户余额</th>
+                <th className="w-[10%] text-left px-4 py-3">已绑定 bot</th>
                 <th className="w-[7%] text-left px-4 py-3">状态</th>
-                <th className="w-[7%] text-left px-4 py-3">是否上架</th>
-                <th className="w-[6%] text-left px-4 py-3">月价</th>
+                <th className="w-[8%] text-left px-4 py-3 whitespace-nowrap">是否上架</th>
                 <th className="w-[6%] text-left px-4 py-3">总分</th>
-                <th className="w-[6%] text-left px-4 py-3">试用</th>
-                <th className="w-[7%] text-left px-4 py-3">订阅链接</th>
-                <th className="w-[9%] text-left px-4 py-3">用户余额</th>
-                <th className="w-[19%] text-left px-4 py-3">标签</th>
+                <th className="w-[24%] text-left px-4 py-3">标签</th>
                 <th className="sticky right-0 z-20 w-[10%] text-left px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
                   操作
                 </th>
@@ -5847,17 +5852,6 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                       {it.name}
                     </div>
                   </td>
-                  <td className="px-4 py-3">
-                    <span className="whitespace-nowrap">{hasAirportWebsite(it) ? '有' : '无'}</span>
-                  </td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatAirportStatus(it.status)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{formatAirportListedStatus(it.is_listed)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{it.plan_price_month}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{valueOrDash(it.total_score)}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">{it.has_trial ? '是' : '否'}</td>
-                  <td className="px-4 py-3 whitespace-nowrap">
-                    {it.subscription_url ? '有' : '无'}
-                  </td>
                   <td className="px-4 py-3 whitespace-nowrap">
                     <div className="flex items-center gap-2">
                       <span>{formatMoneyOrDash(it.wallet_balance)}</span>
@@ -5872,6 +5866,10 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                       </button>
                     </div>
                   </td>
+                  <td className="px-4 py-3 whitespace-nowrap">{it.telegram_bot_bound ? '是' : '否'}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatAirportStatus(it.status)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{formatAirportListedStatus(it.is_listed)}</td>
+                  <td className="px-4 py-3 whitespace-nowrap">{valueOrDash(it.total_score)}</td>
                   <td className="px-4 py-3">
                     <TagBadgeGroup tags={it.tags || []} size="sm" />
                   </td>
@@ -5918,8 +5916,8 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       </div>
 
       {billingAirport && (
-        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-5xl max-h-[88vh] rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)]">
             <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
               <div className="space-y-1">
                 <h3 className="text-2xl font-bold tracking-tight">余额明细 - {billingAirport.name}</h3>
@@ -5934,7 +5932,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-4 overscroll-contain">
+            <div className="min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain px-6 py-6">
               <div className="inline-flex rounded-2xl bg-neutral-100 p-1">
                 <button
                   type="button"
@@ -5954,7 +5952,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
 
               {billingError && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{billingError}</div>}
 
-              <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+              <div className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200">
                 {billingTab === 'recharge' ? (
                   <table className="w-full min-w-[900px] text-sm">
                     <thead className="bg-neutral-50">
@@ -6049,8 +6047,8 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       )}
 
       {editing && (
-        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl max-h-[88vh] rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[88vh] w-full max-w-3xl flex-col overflow-hidden rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)]">
             <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
               <div className="space-y-1">
                 <h3 className="text-2xl font-bold tracking-tight">{editing.id ? '编辑机场' : '新增机场'}</h3>
@@ -6065,7 +6063,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-6 overscroll-contain">
+            <div className="min-h-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto overscroll-contain px-6 py-6">
               <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 p-1">
                 <button
                   type="button"
@@ -6728,7 +6726,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
       {loading ? (
         <div className="text-sm text-neutral-500">加载中...</div>
       ) : (
-        <div className="overflow-x-auto rounded border border-neutral-200">
+        <div className="overflow-x-auto overscroll-x-contain rounded border border-neutral-200">
           <table className="w-full min-w-[1500px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
@@ -6819,8 +6817,8 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
       </div>
 
       {selectedId && (
-        <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl max-h-[90vh] rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm">
+          <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)]">
             <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
               <div className="space-y-1">
                 <h3 className="text-2xl font-bold tracking-tight">申请详情</h3>
@@ -6835,7 +6833,7 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
               </button>
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-6 overscroll-contain">
+            <div className="min-h-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto overscroll-contain px-6 py-6">
               {detailLoading && <div className="text-sm text-neutral-500">详情加载中...</div>}
               {detailError && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{detailError}</div>}
               {detailSuccess && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{detailSuccess}</div>}
@@ -7051,8 +7049,8 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
       )}
 
       {adminNoteEditing && (
-        <div className="fixed inset-0 z-[60] bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl rounded-[24px] border border-neutral-200 bg-white shadow-[0_28px_100px_-36px_rgba(0,0,0,0.55)] overflow-hidden">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-2xl overflow-hidden rounded-[24px] border border-neutral-200 bg-white shadow-[0_28px_100px_-36px_rgba(0,0,0,0.55)]">
             <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
               <div>
                 <h3 className="text-xl font-bold tracking-tight">编辑沟通备注</h3>
@@ -8173,10 +8171,6 @@ function toAirportForm(airport: Airport): AirportFormState {
     wallet_id: airport.wallet_id ?? null,
     wallet_balance: airport.wallet_balance ?? null,
   };
-}
-
-function hasAirportWebsite(airport: Airport): boolean {
-  return normalizeUrlList([...(airport.websites || []), airport.website || '']).length > 0;
 }
 
 function parseTagInput(value: string): string[] {

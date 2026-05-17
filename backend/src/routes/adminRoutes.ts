@@ -71,6 +71,7 @@ interface AdminDeps {
     listByQuery(query: {
       keyword?: string;
       status?: AirportStatus;
+      isListed?: boolean;
       page?: number;
       pageSize?: number;
     }): Promise<{ items: unknown[]; total: number }>;
@@ -1244,7 +1245,8 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const pageSize = toPositiveInt(req.query.page_size, 50);
       const keyword = optionalString(req.query.keyword);
       const status = req.query.status ? toStatus(req.query.status) : undefined;
-      const result = await deps.airportRepository.listByQuery({ page, pageSize, keyword, status });
+      const isListed = req.query.is_listed ? toAirportListedFilter(req.query.is_listed) : undefined;
+      const result = await deps.airportRepository.listByQuery({ page, pageSize, keyword, status, isListed });
       const scoreRepository = deps.scoreRepository;
       const airports = result.items as Array<{ id?: number } & Record<string, unknown>>;
       let scoreMap = new Map<number, number>();
@@ -2903,6 +2905,16 @@ function toStatus(value: unknown): AirportStatus {
     return value;
   }
   throw new HttpError(400, 'BAD_REQUEST', 'status must be normal|risk|down');
+}
+
+function toAirportListedFilter(value: unknown): boolean {
+  if (value === 'listed') {
+    return true;
+  }
+  if (value === 'unlisted') {
+    return false;
+  }
+  throw new HttpError(400, 'BAD_REQUEST', 'is_listed must be listed|unlisted');
 }
 
 function toAirportApplicationReviewStatus(value: unknown): AirportApplicationReviewStatus {

@@ -18,6 +18,7 @@ interface AirportRow extends RowDataPacket {
   applicant_email: string | null;
   applicant_account_email: string | null;
   applicant_telegram: string | null;
+  telegram_bot_bound: number;
   founded_on: string | null;
   airport_intro: string | null;
   test_account: string | null;
@@ -179,7 +180,7 @@ export class AirportRepository {
   }
 
   async listByQuery(
-    query: { keyword?: string; status?: AirportStatus; page?: number; pageSize?: number },
+    query: { keyword?: string; status?: AirportStatus; isListed?: boolean; page?: number; pageSize?: number },
   ): Promise<{ items: Airport[]; total: number }> {
     const page = Math.max(1, query.page || 1);
     const pageSize = Math.min(100, Math.max(1, query.pageSize || 20));
@@ -191,10 +192,30 @@ export class AirportRepository {
       where.push('status = ?');
       args.push(query.status);
     }
+    if (typeof query.isListed === 'boolean') {
+      where.push('is_listed = ?');
+      args.push(query.isListed ? 1 : 0);
+    }
     if (query.keyword) {
-      where.push('(name LIKE ? OR website LIKE ? OR websites_json LIKE ?)');
+      const applicationId = parseApplicationIdKeyword(query.keyword);
       const k = `%${query.keyword}%`;
-      args.push(k, k, k);
+      if (applicationId === null) {
+        where.push('(name LIKE ? OR website LIKE ? OR websites_json LIKE ?)');
+        args.push(k, k, k);
+      } else {
+        where.push(`(
+          name LIKE ?
+          OR website LIKE ?
+          OR websites_json LIKE ?
+          OR EXISTS (
+            SELECT 1
+              FROM airport_applications AS keyword_application
+             WHERE keyword_application.approved_airport_id = airports.id
+               AND keyword_application.id = ?
+          )
+        )`);
+        args.push(k, k, k, applicationId);
+      }
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
@@ -230,10 +251,24 @@ export class AirportRepository {
              JOIN applicant_accounts AS account
                ON account.application_id = application.id
             WHERE application.approved_airport_id = airports.id
-            ORDER BY application.id DESC
-            LIMIT 1
+           ORDER BY application.id DESC
+           LIMIT 1
          ) AS applicant_account_email,
          applicant_telegram,
+         EXISTS (
+           SELECT 1
+             FROM applicant_accounts AS bot_account
+             JOIN applicant_telegram_bindings AS bot_binding
+               ON bot_binding.applicant_account_id = bot_account.id
+            WHERE bot_account.application_id = (
+              SELECT bot_application.id
+                FROM airport_applications AS bot_application
+               WHERE bot_application.approved_airport_id = airports.id
+               ORDER BY bot_application.id DESC
+               LIMIT 1
+            )
+            LIMIT 1
+         ) AS telegram_bot_bound,
          founded_on,
          airport_intro,
          test_account,
@@ -837,6 +872,7 @@ function toAirportEntity(row: AirportRow): Airport {
     applicant_email: row.applicant_email,
     applicant_account_email: row.applicant_account_email,
     applicant_telegram: row.applicant_telegram,
+    telegram_bot_bound: Number(row.telegram_bot_bound || 0) > 0,
     founded_on: row.founded_on ? toDateString(row.founded_on) : null,
     airport_intro: row.airport_intro,
     test_account: row.test_account,
@@ -855,6 +891,14 @@ function normalizeWebsiteList(websites?: string[], primaryWebsite?: string): str
     .filter(Boolean);
   const unique = [...new Set(ordered)];
   return unique.length > 0 ? unique : [''];
+}
+
+function parseApplicationIdKeyword(keyword: string): number | null {
+  const trimmed = keyword.trim();
+  const match = trimmed.match(/^#?(\d+)$/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
 function toDateString(value: string): string {

@@ -462,7 +462,13 @@ test('PATCH /scheduler/tasks/:taskKey validates schedule_time', async () => {
 });
 
 test('GET /airports returns list items with latest available total_score', async () => {
-  const capturedQueries: Array<{ page?: number; pageSize?: number; keyword?: string; status?: string }> = [];
+  const capturedQueries: Array<{
+    page?: number;
+    pageSize?: number;
+    keyword?: string;
+    status?: string;
+    isListed?: boolean;
+  }> = [];
   const app = express();
   app.use(express.json());
   app.use(
@@ -486,6 +492,7 @@ test('GET /airports returns list items with latest available total_score', async
                 tags: ['长期稳定', '新手友好'],
                 manual_tags: ['长期稳定'],
                 auto_tags: ['新手友好'],
+                telegram_bot_bound: true,
                 paid_application_fee: true,
                 created_at: '2026-03-20',
               },
@@ -502,6 +509,7 @@ test('GET /airports returns list items with latest available total_score', async
                 tags: ['风险观察'],
                 manual_tags: [],
                 auto_tags: ['风险观察'],
+                telegram_bot_bound: false,
                 paid_application_fee: false,
                 created_at: '2026-03-21',
               },
@@ -557,6 +565,7 @@ test('GET /airports returns list items with latest available total_score', async
         tags: string[];
         wallet_id: number | null;
         wallet_balance: number | null;
+        telegram_bot_bound: boolean;
         paid_application_fee: boolean;
       }>;
       page_size: number;
@@ -573,6 +582,8 @@ test('GET /airports returns list items with latest available total_score', async
     assert.equal(data.items[0]?.wallet_balance, 321.45);
     assert.equal(data.items[1]?.wallet_id, 12);
     assert.equal(data.items[1]?.wallet_balance, 0);
+    assert.equal(data.items[0]?.telegram_bot_bound, true);
+    assert.equal(data.items[1]?.telegram_bot_bound, false);
     assert.equal(data.items[0]?.paid_application_fee, true);
     assert.equal(data.items[1]?.paid_application_fee, false);
 
@@ -583,6 +594,15 @@ test('GET /airports returns list items with latest available total_score', async
     assert.equal(capturedQueries[1]?.pageSize, 25);
     assert.equal(overrideData.page, 3);
     assert.equal(overrideData.page_size, 25);
+
+    const filteredResponse = await fetch(`http://127.0.0.1:${port}/airports?keyword=%23101&is_listed=listed`);
+    assert.equal(filteredResponse.status, 200);
+    assert.equal(capturedQueries[2]?.keyword, '#101');
+    assert.equal(capturedQueries[2]?.isListed, true);
+
+    const unlistedResponse = await fetch(`http://127.0.0.1:${port}/airports?is_listed=unlisted`);
+    assert.equal(unlistedResponse.status, 200);
+    assert.equal(capturedQueries[3]?.isListed, false);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

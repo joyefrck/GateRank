@@ -93,6 +93,7 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
           auto_tags_json: JSON.stringify([]),
           tags_json: JSON.stringify([]),
           application_id: 101,
+          telegram_bot_bound: 1,
           paid_application_fee: 1,
           created_at: '2026-03-24 10:00:00',
         },
@@ -116,6 +117,7 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
           auto_tags_json: JSON.stringify([]),
           tags_json: JSON.stringify([]),
           application_id: null,
+          telegram_bot_bound: 0,
           paid_application_fee: 0,
           created_at: '2026-03-24 10:00:00',
         },
@@ -129,12 +131,41 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
   assert.equal(result.items[0]?.application_id, 101);
   assert.equal(result.items[1]?.application_id, null);
   assert.equal(result.items[0]?.applicant_account_email, 'login-paid@example.com');
+  assert.equal(result.items[0]?.telegram_bot_bound, true);
+  assert.equal(result.items[1]?.telegram_bot_bound, false);
   assert.equal(result.items[0]?.paid_application_fee, true);
   assert.equal(result.items[1]?.paid_application_fee, false);
   assert.ok(calls[1]?.sql.includes('application.approved_airport_id = airports.id'));
   assert.ok(calls[1]?.sql.includes('JOIN applicant_accounts AS account'));
+  assert.ok(calls[1]?.sql.includes('JOIN applicant_telegram_bindings AS bot_binding'));
   assert.ok(calls[1]?.sql.includes("paid_application.payment_status = 'paid'"));
   assert.ok(calls[1]?.sql.includes('paid_application.payment_amount > 0'));
+});
+
+test('AirportRepository.listByQuery supports application id keyword and listed filter', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new AirportRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql.includes('COUNT(*)')) {
+        return [[{ total: 0 }]];
+      }
+      return [[]];
+    },
+  } as never);
+
+  const result = await repository.listByQuery({
+    keyword: '#101',
+    isListed: false,
+    page: 1,
+    pageSize: 20,
+  });
+
+  assert.equal(result.total, 0);
+  assert.ok(calls[0]?.sql.includes('is_listed = ?'));
+  assert.ok(calls[0]?.sql.includes('keyword_application.id = ?'));
+  assert.deepEqual(calls[0]?.params, [0, '%#101%', '%#101%', '%#101%', 101]);
+  assert.deepEqual(calls[1]?.params, [0, '%#101%', '%#101%', '%#101%', 101, 20, 0]);
 });
 
 test('AirportRepository.listLatestApprovedApplicationAirports reads paid reviewed listed airports by latest application time', async () => {

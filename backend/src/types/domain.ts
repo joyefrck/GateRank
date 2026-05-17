@@ -36,6 +36,7 @@ export interface Airport {
   manual_tags?: string[];
   auto_tags?: string[];
   total_score?: number | null;
+  telegram_bot_bound?: boolean;
   paid_application_fee?: boolean;
   created_at: string;
 }
