@@ -197,6 +197,98 @@ test('user telegram webhook replies balance for bound user', async () => {
   assert.equal(telegramCalls[0]!.url, 'https://api.telegram.org/bot123456:abcdefghi/sendMessage');
   assert.match(String(telegramCalls[0]!.body.text), /账户余额：¥120\.00/);
   assert.match(String(telegramCalls[0]!.body.text), /点击单价：¥0\.60 \/ 次/);
+  assert.match(String(telegramCalls[0]!.body.text), /上架状态：正常/);
+});
+
+test('user telegram webhook reports listed airport as normal even with stale auto-unlisted marker', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps({
+      applicantBillingRepository: {
+        ...createDeps().applicantBillingRepository,
+        ensureWalletForAccount: async () => ({
+          id: 1,
+          applicant_account_id: 1,
+          application_id: 7,
+          airport_id: 9,
+          airport_is_listed: true,
+          balance: 9913.4,
+          auto_unlisted_at: '2026-05-16T10:00:00+08:00',
+          created_at: '2026-05-16T10:00:00+08:00',
+          updated_at: '2026-05-16T10:00:00+08:00',
+        }),
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '/balance',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const text = String(telegramCalls[0]!.body.text);
+  assert.match(text, /账户余额：¥9913\.40/);
+  assert.match(text, /上架状态：正常/);
+  assert.doesNotMatch(text, /欠费下架/);
+});
+
+test('user telegram webhook reports explicitly unlisted airport as removed', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps({
+      applicantBillingRepository: {
+        ...createDeps().applicantBillingRepository,
+        ensureWalletForAccount: async () => ({
+          id: 1,
+          applicant_account_id: 1,
+          application_id: 7,
+          airport_id: 9,
+          airport_is_listed: false,
+          balance: 9913.4,
+          auto_unlisted_at: null,
+          created_at: '2026-05-16T10:00:00+08:00',
+          updated_at: '2026-05-16T10:00:00+08:00',
+        }),
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '/balance',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.match(String(telegramCalls[0]!.body.text), /上架状态：已下架/);
 });
 
 test('user telegram webhook replies command menu hint when bound user sends bare start', async () => {

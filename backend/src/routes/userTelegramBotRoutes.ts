@@ -347,9 +347,7 @@ async function sendBalanceMessage(
     deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id),
     getBillingConfig(deps),
   ]);
-  const listingStatus = wallet.airport_is_listed === false || wallet.auto_unlisted_at
-    ? '欠费下架'
-    : '正常';
+  const listingStatus = formatTelegramListingStatus(wallet);
   await sendTelegramMessage(
     config,
     chatId,
@@ -360,6 +358,19 @@ async function sendBalanceMessage(
       `上架状态：${listingStatus}`,
     ].join('\n'),
   );
+}
+
+function formatTelegramListingStatus(wallet: ApplicantWalletView): string {
+  if (wallet.airport_is_listed === true) {
+    return '正常';
+  }
+  if (wallet.airport_is_listed === false) {
+    return '已下架';
+  }
+  if (wallet.auto_unlisted_at) {
+    return '欠费下架';
+  }
+  return '正常';
 }
 
 async function sendTransactionsMessage(
