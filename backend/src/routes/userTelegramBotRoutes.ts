@@ -13,6 +13,7 @@ import type {
 import type { ApplicantTelegramBinding } from '../repositories/applicantTelegramBindingRepository';
 import { TELEGRAM_LOGIN_START_PREFIX } from '../repositories/applicantTelegramLoginFlowRepository';
 import type { PaymentGatewayChannel, PaymentGatewayService } from '../services/paymentGatewayService';
+import { resolveAvailablePaymentMethods } from '../services/paymentMethodAvailability';
 import type { UserTelegramBotConfig, UserTelegramBotSettingsService } from '../services/userTelegramBotSettingsService';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { getDateInTimezone } from '../utils/time';
@@ -294,7 +295,22 @@ async function handleCallbackQuery(
     await sendTelegramMessage(config, chatId, '充值选项无效，请重新发送 /recharge。');
     return;
   }
-  await createTelegramRechargeOrder(deps, config, chatId, context.account, amount, channel, req);
+  try {
+    await createTelegramRechargeOrder(deps, config, chatId, context.account, amount, channel, req);
+  } catch (error) {
+    console.error('[telegram-user-bot] failed to create recharge order', {
+      telegramUserId: from.userId,
+      applicantAccountId: context.account.id,
+      amount,
+      channel,
+      error,
+    });
+    await sendTelegramMessage(
+      config,
+      chatId,
+      `充值订单创建失败：${formatTelegramErrorMessage(error)} 请稍后重试或联系管理员。`,
+    );
+  }
 }
 
 async function requireBoundContext(
@@ -506,12 +522,21 @@ async function createTelegramRechargeOrder(
 
   const order = await deps.applicantBillingRepository.getRechargeOrderByOutTradeNo(outTradeNo);
   const payInfo = order?.pay_info || gatewayOrder.pay_info || '';
+  const hasPaymentUrl = /^https?:\/\//i.test(payInfo);
   await sendTelegramMessage(
     config,
     chatId,
-    /^https?:\/\//i.test(payInfo)
+    hasPaymentUrl
       ? `充值订单已创建：¥${formatMoney(amount)}\n支付渠道：${formatPaymentChannel(channel)}\n支付链接：${payInfo}`
       : `充值订单已创建：¥${formatMoney(amount)}\n支付渠道：${formatPaymentChannel(channel)}\n请回到申请人后台继续支付。`,
+    hasPaymentUrl
+      ? {
+          inline_keyboard: [[{
+            text: `打开 ${formatPaymentChannel(channel)} 支付`,
+            url: payInfo,
+          }]],
+        }
+      : undefined,
   );
 }
 
@@ -525,29 +550,7 @@ async function getBillingConfig(deps: UserTelegramBotDeps): Promise<{ click_char
 
 async function getAvailablePaymentMethods(deps: UserTelegramBotDeps): Promise<PaymentGatewayChannel[]> {
   const config = await deps.paymentGatewaySettingsService.getConfig();
-  const record = config && typeof config === 'object' && !Array.isArray(config) ? config as Record<string, unknown> : {};
-  const methods: PaymentGatewayChannel[] = [];
-  if (
-    Boolean(record.enabled) &&
-    String(record.pid || '').trim() &&
-    String(record.private_key || '').trim() &&
-    String(record.platform_public_key || '').trim()
-  ) {
-    methods.push('alipay', 'wxpay');
-  }
-  const usdt = record.usdt && typeof record.usdt === 'object' && !Array.isArray(record.usdt)
-    ? record.usdt as Record<string, unknown>
-    : {};
-  if (
-    Boolean(record.enabled) &&
-    Boolean(usdt.enabled) &&
-    String(usdt.gateway_url || '').trim() &&
-    String(usdt.merchant_id || '').trim() &&
-    String(usdt.secret_key || '').trim()
-  ) {
-    methods.push('usdt');
-  }
-  return methods;
+  return resolveAvailablePaymentMethods(config);
 }
 
 async function getPaymentNotifyOrigin(deps: UserTelegramBotDeps, req: any): Promise<string> {
@@ -647,6 +650,13 @@ function formatPaymentChannel(channel: PaymentGatewayChannel): string {
   if (channel === 'alipay') return '支付宝';
   if (channel === 'wxpay') return '微信';
   return 'USDT';
+}
+
+function formatTelegramErrorMessage(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  return '支付网关暂时不可用';
 }
 
 function formatTransactionType(type: string): string {

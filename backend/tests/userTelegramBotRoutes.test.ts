@@ -125,6 +125,13 @@ function createDeps(overrides: Record<string, unknown> = {}) {
         pid: 'pid',
         private_key: 'private',
         platform_public_key: 'public',
+        epay: { enabled: true },
+        usdt: {
+          enabled: false,
+          gateway_url: '',
+          merchant_id: '',
+          secret_key: '',
+        },
         notify_origin: 'https://api.example.com',
       }),
     },
@@ -630,6 +637,57 @@ test('user telegram webhook sends recharge inline keyboard from command menu ent
   ]);
 });
 
+test('user telegram webhook sends only USDT recharge options when epay switch is disabled', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps({
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({
+          enabled: true,
+          pid: 'pid',
+          private_key: 'private',
+          platform_public_key: 'public',
+          epay: { enabled: false },
+          usdt: {
+            enabled: true,
+            gateway_url: 'https://pay-usdt.example.com',
+            merchant_id: '1000',
+            secret_key: 'secret',
+          },
+          notify_origin: 'https://api.example.com',
+        }),
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '/recharge',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  const replyMarkup = telegramCalls[0]!.body.reply_markup as {
+    inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
+  };
+  assert.deepEqual(replyMarkup.inline_keyboard[0], [
+    { text: '¥100 USDT', callback_data: 'gr_recharge:100:usdt' },
+  ]);
+});
+
 test('user telegram webhook replies command menu hint for unknown text', async () => {
   const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
   const originalFetch = globalThis.fetch;
@@ -743,4 +801,225 @@ test('user telegram webhook creates recharge order from callback', async () => {
   assert.deepEqual(createdOrders, [{ amount: 100, channel: 'alipay' }]);
   assert.ok(telegramCalls.some((call) => call.url.endsWith('/answerCallbackQuery')));
   assert.ok(telegramCalls.some((call) => String(call.body.text || '').includes('https://pay.example.com/order')));
+});
+
+test('user telegram webhook rejects stale epay recharge callback when epay switch is disabled', async () => {
+  const createdOrders: Array<{ amount: number; channel: string }> = [];
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+
+  try {
+    await withServer(createDeps({
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({
+          enabled: true,
+          pid: 'pid',
+          private_key: 'private',
+          platform_public_key: 'public',
+          epay: { enabled: false },
+          usdt: {
+            enabled: true,
+            gateway_url: 'https://pay-usdt.example.com',
+            merchant_id: '1000',
+            secret_key: 'secret',
+          },
+          notify_origin: 'https://api.example.com',
+        }),
+      },
+      applicantBillingRepository: {
+        ...createDeps().applicantBillingRepository,
+        createRechargeOrder: async (input: { amount: number; channel: string }) => {
+          createdOrders.push({ amount: input.amount, channel: input.channel });
+          return 1;
+        },
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('stale epay callback should not create gateway order');
+        },
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callback_query: {
+            id: 'cb-epay-disabled',
+            data: 'gr_recharge:100:alipay',
+            message: { chat: { id: 84 } },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(createdOrders, []);
+  assert.ok(telegramCalls.some((call) => call.url.endsWith('/answerCallbackQuery')));
+  assert.ok(telegramCalls.some((call) => String(call.body.text || '').includes('当前支付渠道不可用')));
+});
+
+test('user telegram webhook creates USDT recharge order with payment url button', async () => {
+  const createdOrders: Array<{ amount: number; channel: string }> = [];
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+
+  try {
+    await withServer(createDeps({
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({
+          enabled: true,
+          pid: 'pid',
+          private_key: 'private',
+          platform_public_key: 'public',
+          epay: { enabled: false },
+          usdt: {
+            enabled: true,
+            gateway_url: 'https://pay-usdt.example.com',
+            merchant_id: '1000',
+            secret_key: 'secret',
+          },
+          notify_origin: 'https://api.example.com',
+        }),
+      },
+      applicantBillingRepository: {
+        ...createDeps().applicantBillingRepository,
+        createRechargeOrder: async (input: { amount: number; channel: string }) => {
+          createdOrders.push({ amount: input.amount, channel: input.channel });
+          return 1;
+        },
+        getRechargeOrderByOutTradeNo: async (outTradeNo: string) => ({
+          id: 1,
+          applicant_account_id: 1,
+          out_trade_no: outTradeNo,
+          channel: 'usdt',
+          amount: 100,
+          status: 'created',
+          gateway_trade_no: 'gw-usdt-1',
+          pay_type: 'usdt',
+          pay_info: 'https://pay-usdt.example.com/pay/grt_1_usdt',
+          paid_at: null,
+          created_at: '2026-05-16T10:00:00+08:00',
+        }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => ({
+          trade_no: 'gw-usdt-1',
+          pay_type: 'usdt',
+          pay_info: 'https://pay-usdt.example.com/pay/grt_1_usdt',
+        }),
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callback_query: {
+            id: 'cb-usdt',
+            data: 'gr_recharge:100:usdt',
+            message: { chat: { id: 84 } },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(createdOrders, [{ amount: 100, channel: 'usdt' }]);
+  const paymentMessage = telegramCalls.find((call) => String(call.body.text || '').includes('充值订单已创建'));
+  assert.ok(paymentMessage);
+  assert.match(String(paymentMessage!.body.text), /支付渠道：USDT/);
+  assert.match(String(paymentMessage!.body.text), /https:\/\/pay-usdt\.example\.com\/pay\/grt_1_usdt/);
+  assert.deepEqual(paymentMessage!.body.reply_markup, {
+    inline_keyboard: [[{
+      text: '打开 USDT 支付',
+      url: 'https://pay-usdt.example.com/pay/grt_1_usdt',
+    }]],
+  });
+});
+
+test('user telegram webhook sends failure message when USDT gateway order creation fails', async () => {
+  const createdOrders: Array<{ amount: number; channel: string }> = [];
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  const originalConsoleError = console.error;
+  const loggedErrors: unknown[][] = [];
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  console.error = (...args: unknown[]) => {
+    loggedErrors.push(args);
+  };
+
+  try {
+    await withServer(createDeps({
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({
+          enabled: true,
+          pid: 'pid',
+          private_key: 'private',
+          platform_public_key: 'public',
+          epay: { enabled: false },
+          usdt: {
+            enabled: true,
+            gateway_url: 'https://pay-usdt.example.com',
+            merchant_id: '1000',
+            secret_key: 'secret',
+          },
+          notify_origin: 'https://api.example.com',
+        }),
+      },
+      applicantBillingRepository: {
+        ...createDeps().applicantBillingRepository,
+        createRechargeOrder: async (input: { amount: number; channel: string }) => {
+          createdOrders.push({ amount: input.amount, channel: input.channel });
+          return 1;
+        },
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('EPUSDT 下单失败');
+        },
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callback_query: {
+            id: 'cb-usdt-fail',
+            data: 'gr_recharge:100:usdt',
+            message: { chat: { id: 84 } },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+    console.error = originalConsoleError;
+  }
+
+  assert.deepEqual(createdOrders, []);
+  assert.equal(loggedErrors.length, 1);
+  assert.ok(telegramCalls.some((call) => call.url.endsWith('/answerCallbackQuery')));
+  const failureMessage = telegramCalls.find((call) => String(call.body.text || '').includes('充值订单创建失败'));
+  assert.ok(failureMessage);
+  assert.match(String(failureMessage!.body.text), /EPUSDT 下单失败/);
 });

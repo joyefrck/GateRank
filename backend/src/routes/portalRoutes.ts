@@ -39,6 +39,7 @@ import {
   isUserTelegramBotConfigReady,
   type UserTelegramBotConfig,
 } from '../services/userTelegramBotSettingsService';
+import { resolveAvailablePaymentMethods } from '../services/paymentMethodAvailability';
 
 interface PortalDeps {
   applicantAccountRepository: {
@@ -1373,31 +1374,7 @@ function parseWebsiteFields(
 
 async function getAvailablePaymentMethods(deps: PortalDeps): Promise<PaymentGatewayChannel[]> {
   const config = await deps.paymentGatewaySettingsService.getConfig();
-  const record = toLooseObject(config);
-  const methods: PaymentGatewayChannel[] = [];
-  const epay = toLooseObject(record.epay);
-  if (
-    Boolean(record.enabled) &&
-    Boolean(epay.enabled) &&
-    String(record.pid || '').trim() &&
-    String(record.private_key || '').trim() &&
-    String(record.platform_public_key || '').trim()
-  ) {
-    methods.push('alipay', 'wxpay');
-  }
-
-  const usdt = toLooseObject(record.usdt);
-  if (
-    Boolean(record.enabled) &&
-    Boolean(usdt.enabled) &&
-    String(usdt.gateway_url || '').trim() &&
-    String(usdt.merchant_id || '').trim() &&
-    String(usdt.secret_key || '').trim()
-  ) {
-    methods.push('usdt');
-  }
-
-  return methods;
+  return resolveAvailablePaymentMethods(config);
 }
 
 async function requirePaymentChannelAvailable(
