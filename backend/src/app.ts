@@ -5,7 +5,9 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestContext } from './middleware/requestContext';
 import { AccessTokenRepository } from './repositories/accessTokenRepository';
 import { ApplicantAccountRepository } from './repositories/applicantAccountRepository';
+import { ApplicantEmailChangeCodeRepository } from './repositories/applicantEmailChangeCodeRepository';
 import { ApplicantTelegramBindingRepository } from './repositories/applicantTelegramBindingRepository';
+import { ApplicantTelegramLoginFlowRepository } from './repositories/applicantTelegramLoginFlowRepository';
 import { ApplicantXOAuthFlowRepository } from './repositories/applicantXOAuthFlowRepository';
 import { AirportRepository } from './repositories/airportRepository';
 import { AirportApplicationRepository } from './repositories/airportApplicationRepository';
@@ -71,10 +73,14 @@ export async function createApp() {
   await airportApplicationRepository.ensureSchema();
   const applicantAccountRepository = new ApplicantAccountRepository(pool);
   await applicantAccountRepository.ensureSchema();
+  const applicantEmailChangeCodeRepository = new ApplicantEmailChangeCodeRepository(pool);
+  await applicantEmailChangeCodeRepository.ensureSchema();
   const applicantXOAuthFlowRepository = new ApplicantXOAuthFlowRepository(pool);
   await applicantXOAuthFlowRepository.ensureSchema();
   const applicantTelegramBindingRepository = new ApplicantTelegramBindingRepository(pool);
   await applicantTelegramBindingRepository.ensureSchema();
+  const applicantTelegramLoginFlowRepository = new ApplicantTelegramLoginFlowRepository(pool);
+  await applicantTelegramLoginFlowRepository.ensureSchema();
   const applicationPaymentOrderRepository = new ApplicationPaymentOrderRepository(pool);
   await applicationPaymentOrderRepository.ensureSchema();
   const applicantBillingRepository = new ApplicantBillingRepository(pool);
@@ -247,12 +253,14 @@ export async function createApp() {
     '/api/v1',
     createPortalRoutes({
       applicantAccountRepository,
+      applicantEmailChangeCodeRepository,
       airportApplicationRepository,
       applicationPaymentOrderRepository,
       applicantBillingRepository,
       applicantPortalAuthService,
       applicantXOAuthService,
       applicantTelegramBindingRepository,
+      applicantTelegramLoginFlowRepository,
       userTelegramBotSettingsService,
       paymentGatewaySettingsService,
       marketingSettingsService,
@@ -268,6 +276,7 @@ export async function createApp() {
     createUserTelegramBotRoutes({
       userTelegramBotSettingsService,
       applicantTelegramBindingRepository,
+      applicantTelegramLoginFlowRepository,
       applicantAccountRepository,
       airportApplicationRepository,
       applicantBillingRepository,

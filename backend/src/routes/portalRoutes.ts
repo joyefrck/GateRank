@@ -1,10 +1,12 @@
-import { randomUUID } from 'node:crypto';
+import { randomInt, randomUUID } from 'node:crypto';
 import { Router } from 'express';
 import { APPLICATION_FEE_AMOUNT, CLICK_CHARGE_AMOUNT, RECHARGE_AMOUNTS } from '../config/billing';
 import { HttpError } from '../middleware/errorHandler';
 import { portalAuth } from '../middleware/portalAuth';
 import type { ApplicantAccount } from '../repositories/applicantAccountRepository';
+import type { ApplicantEmailChangeCodeRepository } from '../repositories/applicantEmailChangeCodeRepository';
 import type { ApplicantTelegramBinding } from '../repositories/applicantTelegramBindingRepository';
+import type { ApplicantTelegramLoginFlowRepository } from '../repositories/applicantTelegramLoginFlowRepository';
 import type { ApplicationPaymentOrder } from '../repositories/applicationPaymentOrderRepository';
 import type {
   ApplicantClickView,
@@ -45,8 +47,13 @@ interface PortalDeps {
     updatePassword(id: number, passwordHash: string, mustChangePassword: boolean): Promise<boolean>;
     updateEmail?(id: number, email: string): Promise<boolean>;
   };
+  applicantEmailChangeCodeRepository?: Pick<
+    ApplicantEmailChangeCodeRepository,
+    'getCooldownRecord' | 'create' | 'consume'
+  >;
   airportApplicationRepository: {
     getById(id: number): Promise<any>;
+    updateApplicantEmail?(id: number, applicantEmail: string): Promise<boolean>;
     updateApplicantDraft?(
       id: number,
       input: {
@@ -159,6 +166,7 @@ interface PortalDeps {
     getByApplicantAccountId(applicantAccountId: number): Promise<ApplicantTelegramBinding | null>;
     unbindApplicantAccount(applicantAccountId: number): Promise<boolean>;
   };
+  applicantTelegramLoginFlowRepository?: Pick<ApplicantTelegramLoginFlowRepository, 'create' | 'consumeForLogin'>;
   userTelegramBotSettingsService?: {
     getConfig(): Promise<UserTelegramBotConfig>;
   };
@@ -178,7 +186,13 @@ interface PortalDeps {
   applicationNotificationService?: {
     notifyPaymentReceived(input: PaymentReceivedNotificationInput): Promise<void>;
   };
-  mailService?: BillingMailService;
+  mailService?: BillingMailService & {
+    sendApplicantEmailChangeCodeEmail?(input: {
+      to: string;
+      code: string;
+      expiresInMinutes: number;
+    }): Promise<void>;
+  };
   userTelegramBotMessageService?: UserTelegramBotBillingNotificationService;
 }
 
@@ -227,12 +241,125 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
   });
 
+  router.post('/portal/telegram-login/start', async (_req, res, next) => {
+    try {
+      const config = await requireUserTelegramBotSettingsService(deps).getConfig();
+      if (!isUserTelegramBotConfigReady(config) || !config.bot_username) {
+        throw new HttpError(409, 'USER_TELEGRAM_BOT_NOT_CONFIGURED', '用户服务 Bot 尚未完成 Webhook 配置');
+      }
+      const flow = await requireApplicantTelegramLoginFlowRepository(deps).create();
+      res.status(201).json({
+        login_url: `https://t.me/${config.bot_username}?start=${encodeURIComponent(flow.start_token)}`,
+        flow_id: flow.flow_id,
+        poll_token: flow.poll_token,
+        expires_at: flow.expires_at,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/telegram-login/complete', async (req, res, next) => {
+    try {
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const result = await requireApplicantTelegramLoginFlowRepository(deps).consumeForLogin(
+        mustString(payload.flow_id, 'flow_id'),
+        mustString(payload.poll_token, 'poll_token'),
+      );
+      if (!result) {
+        throw new HttpError(401, 'TELEGRAM_LOGIN_CODE_INVALID', 'Telegram 登录凭证无效，请重新登录');
+      }
+      if (result.status !== 'completed') {
+        res.json({
+          status: result.status,
+          error: result.failure_reason || telegramLoginStatusMessage(result.status),
+        });
+        return;
+      }
+      const account = await deps.applicantAccountRepository.getById(result.applicant_account_id);
+      if (!account) {
+        throw new HttpError(401, 'TELEGRAM_ACCOUNT_NOT_BOUND', '该 Telegram 账号尚未绑定申请人后台，请先使用邮箱登录后绑定');
+      }
+      if (!deps.applicantPortalAuthService.createSession) {
+        throw new Error('applicantPortalAuthService.createSession is not configured');
+      }
+      const auth = await deps.applicantPortalAuthService.createSession(account);
+      res.json({
+        token: auth.token,
+        expires_at: auth.expires_at,
+        account: toPortalAccountView(auth.account),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/portal/me', portalAuth, async (req, res, next) => {
     try {
       const session = requireApplicantSession(req);
       res.json(await buildPortalView(deps, session.applicant_id));
     } catch (error) {
       next(error);
+    }
+  });
+
+  router.post('/portal/account/email-code', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const email = mustEmail(payload.email, 'email');
+      await assertApplicantEmailCanBeUsed(deps, account, email);
+
+      const codeRepository = requireApplicantEmailChangeCodeRepository(deps);
+      const cooldownRecord = await codeRepository.getCooldownRecord(account.id, email);
+      if (cooldownRecord) {
+        res.json({
+          ok: true,
+          throttled: true,
+          expires_at: cooldownRecord.expires_at,
+        });
+        return;
+      }
+
+      const code = createEmailVerificationCode();
+      const record = await codeRepository.create(account.id, email, code);
+      await requireApplicantEmailCodeMailService(deps).sendApplicantEmailChangeCodeEmail({
+        to: email,
+        code,
+        expiresInMinutes: 10,
+      });
+      res.status(201).json({
+        ok: true,
+        throttled: false,
+        expires_at: record.expires_at,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/portal/account/email', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const email = mustEmail(payload.email, 'email');
+      const code = mustString(payload.code, 'code');
+      await assertApplicantEmailCanBeUsed(deps, account, email);
+      await consumeApplicantEmailChangeCode(deps, account.id, email, code);
+
+      if (!deps.airportApplicationRepository.updateApplicantEmail) {
+        throw new Error('airportApplicationRepository.updateApplicantEmail is not configured');
+      }
+      if (!deps.applicantAccountRepository.updateEmail) {
+        throw new Error('applicantAccountRepository.updateEmail is not configured');
+      }
+      await deps.airportApplicationRepository.updateApplicantEmail(account.application_id, email);
+      await deps.applicantAccountRepository.updateEmail(account.id, email);
+      res.json(await buildPortalView(deps, session.applicant_id));
+    } catch (error) {
+      next(normalizePortalApplicationMutationError(error));
     }
   });
 
@@ -259,10 +386,6 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     try {
       const session = requireApplicantSession(req);
       const account = await requireApplicantAccount(deps, session.applicant_id);
-      const application = await requireApplication(deps, account.application_id);
-      if (application.review_status !== 'reviewed') {
-        throw new HttpError(409, 'TELEGRAM_BIND_REVIEW_REQUIRED', '申请审核通过后才能绑定 Telegram Bot');
-      }
       const config = await requireUserTelegramBotSettingsService(deps).getConfig();
       if (!isUserTelegramBotConfigReady(config)) {
         throw new HttpError(409, 'USER_TELEGRAM_BOT_NOT_CONFIGURED', '用户服务 Bot 尚未完成 Webhook 配置');
@@ -536,6 +659,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       }
 
       const applicantEmail = mustEmail(payload.applicant_email, 'applicant_email');
+      const emailWillChange = applicantEmail !== account.email;
       if (deps.applicantAccountRepository.getByEmail && applicantEmail !== account.email) {
         const existing = await deps.applicantAccountRepository.getByEmail(applicantEmail);
         if (existing && existing.id !== account.id) {
@@ -545,6 +669,14 @@ export function createPortalRoutes(deps: PortalDeps): Router {
             '该邮箱已有进行中或已通过的申请，请更换其他邮箱',
           );
         }
+      }
+      if (emailWillChange) {
+        await consumeApplicantEmailChangeCode(
+          deps,
+          account.id,
+          applicantEmail,
+          mustString(payload.email_code, 'email_code'),
+        );
       }
 
       const input = {
@@ -567,7 +699,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       }
       await deps.airportApplicationRepository.updateApplicantDraft(application.id, input);
 
-      if (applicantEmail !== account.email) {
+      if (emailWillChange) {
         if (!deps.applicantAccountRepository.updateEmail) {
           throw new Error('applicantAccountRepository.updateEmail is not configured');
         }
@@ -1001,6 +1133,45 @@ function requireApplicantTelegramBindingRepository(
   return deps.applicantTelegramBindingRepository;
 }
 
+function requireApplicantEmailChangeCodeRepository(
+  deps: PortalDeps,
+): NonNullable<PortalDeps['applicantEmailChangeCodeRepository']> {
+  if (!deps.applicantEmailChangeCodeRepository) {
+    throw new Error('applicantEmailChangeCodeRepository is not configured');
+  }
+  return deps.applicantEmailChangeCodeRepository;
+}
+
+function requireApplicantEmailCodeMailService(
+  deps: PortalDeps,
+): NonNullable<PortalDeps['mailService']> & {
+  sendApplicantEmailChangeCodeEmail(input: {
+    to: string;
+    code: string;
+    expiresInMinutes: number;
+  }): Promise<void>;
+} {
+  if (!deps.mailService?.sendApplicantEmailChangeCodeEmail) {
+    throw new Error('mailService.sendApplicantEmailChangeCodeEmail is not configured');
+  }
+  return deps.mailService as NonNullable<PortalDeps['mailService']> & {
+    sendApplicantEmailChangeCodeEmail(input: {
+      to: string;
+      code: string;
+      expiresInMinutes: number;
+    }): Promise<void>;
+  };
+}
+
+function requireApplicantTelegramLoginFlowRepository(
+  deps: PortalDeps,
+): NonNullable<PortalDeps['applicantTelegramLoginFlowRepository']> {
+  if (!deps.applicantTelegramLoginFlowRepository) {
+    throw new HttpError(503, 'USER_TELEGRAM_LOGIN_NOT_CONFIGURED', 'Telegram 登录服务尚未配置');
+  }
+  return deps.applicantTelegramLoginFlowRepository;
+}
+
 function requireUserTelegramBotSettingsService(
   deps: PortalDeps,
 ): NonNullable<PortalDeps['userTelegramBotSettingsService']> {
@@ -1008,6 +1179,63 @@ function requireUserTelegramBotSettingsService(
     throw new HttpError(503, 'USER_TELEGRAM_BOT_NOT_CONFIGURED', '用户服务 Bot 尚未配置');
   }
   return deps.userTelegramBotSettingsService;
+}
+
+async function assertApplicantEmailCanBeUsed(
+  deps: PortalDeps,
+  account: ApplicantAccount,
+  email: string,
+): Promise<void> {
+  if (email === account.email) {
+    throw new HttpError(400, 'APPLICANT_EMAIL_UNCHANGED', '新邮箱不能与当前登录邮箱相同');
+  }
+  if (!deps.applicantAccountRepository.getByEmail) {
+    return;
+  }
+  const existing = await deps.applicantAccountRepository.getByEmail(email);
+  if (existing && existing.id !== account.id) {
+    throw new HttpError(
+      409,
+      'AIRPORT_APPLICATION_EMAIL_CONFLICT',
+      '该邮箱已有进行中或已通过的申请，请更换其他邮箱',
+    );
+  }
+}
+
+async function consumeApplicantEmailChangeCode(
+  deps: PortalDeps,
+  applicantAccountId: number,
+  email: string,
+  code: string,
+): Promise<void> {
+  const result = await requireApplicantEmailChangeCodeRepository(deps).consume(applicantAccountId, email, code);
+  if (result === 'consumed') {
+    return;
+  }
+  if (result === 'expired') {
+    throw new HttpError(400, 'APPLICANT_EMAIL_CODE_EXPIRED', '邮箱验证码已过期，请重新获取');
+  }
+  if (result === 'already_consumed') {
+    throw new HttpError(400, 'APPLICANT_EMAIL_CODE_CONSUMED', '邮箱验证码已使用，请重新获取');
+  }
+  throw new HttpError(400, 'APPLICANT_EMAIL_CODE_INVALID', '邮箱验证码不正确');
+}
+
+function createEmailVerificationCode(): string {
+  return String(randomInt(0, 1_000_000)).padStart(6, '0');
+}
+
+function telegramLoginStatusMessage(status: 'pending' | 'failed' | 'expired' | 'consumed'): string {
+  if (status === 'pending') {
+    return '请在 Telegram 中点击 Bot 的开始按钮完成登录';
+  }
+  if (status === 'expired') {
+    return 'Telegram 登录链接已过期，请重新发起登录';
+  }
+  if (status === 'consumed') {
+    return 'Telegram 登录凭证已使用，请重新登录';
+  }
+  return 'Telegram 登录失败，请重新发起登录';
 }
 
 async function requireApplication(deps: PortalDeps, applicationId: number) {

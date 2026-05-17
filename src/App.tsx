@@ -447,6 +447,26 @@ interface PortalLoginResponse {
   account: PortalAccountView;
 }
 
+interface PortalTelegramLoginStartResponse {
+  login_url: string;
+  flow_id: string;
+  poll_token: string;
+  expires_at: string;
+}
+
+interface PortalEmailCodeResponse {
+  ok: boolean;
+  throttled: boolean;
+  expires_at: string;
+}
+
+type PortalTelegramLoginCompleteResponse =
+  | PortalLoginResponse
+  | {
+      status: 'pending' | 'failed' | 'expired' | 'consumed';
+      error?: string;
+    };
+
 const sectionDisplayConfig: Record<
   HomeSectionKey,
   { icon: typeof Flame; color: string; bgClass: string }
@@ -902,6 +922,10 @@ function cleanPortalOAuthParams(params: URLSearchParams): void {
   window.history.replaceState({}, '', `${window.location.pathname}${query ? `?${query}` : ''}${window.location.hash}`);
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 async function apiFetch<T>(path: string): Promise<T> {
   const response = await fetch(`${getApiBase()}${path}`);
   if (!response.ok) {
@@ -1175,6 +1199,34 @@ function PortalInfoCard({
   );
 }
 
+function PortalLoginEmailCard({
+  email,
+  onChangeClick,
+}: {
+  email: string;
+  onChangeClick: () => void;
+}) {
+  return (
+    <div className="rounded-[24px] border border-sky-100 bg-sky-50/95 px-5 py-5 shadow-[0_10px_30px_rgba(15,23,42,0.05)]">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div className="min-w-0">
+          <div className="text-[11px] font-black uppercase tracking-[0.22em] text-slate-500">Login Email</div>
+          <div className="mt-3 text-sm font-medium text-slate-500">登录邮箱</div>
+          <div className="mt-2 whitespace-nowrap text-[12px] font-black leading-6 text-slate-950 md:text-sm">{email}</div>
+        </div>
+        <button
+          type="button"
+          className="inline-flex min-h-11 shrink-0 cursor-pointer items-center justify-center gap-2 rounded-full border border-sky-200 bg-white px-4 py-2 text-sm font-black text-sky-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:bg-sky-50 hover:shadow-lg hover:shadow-sky-500/25"
+          onClick={onChangeClick}
+        >
+          <Mail className="h-4 w-4" />
+          修改账号
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PortalMetricTile({
   label,
   value,
@@ -1419,25 +1471,41 @@ function PortalCollapsedApplicationSummary({
 function PortalApplicationEditModal({
   open,
   canEdit,
+  currentLoginEmail,
   applicationForm,
   setApplicationForm,
+  applicationEmailCode,
+  setApplicationEmailCode,
+  setApplicationEmailCodeStatus,
+  sendingApplicationEmailCode,
+  applicationEmailCodeStatus,
   savingApplication,
   error,
   onClose,
+  onSendApplicationEmailCode,
   onSubmit,
 }: {
   open: boolean;
   canEdit: boolean;
+  currentLoginEmail: string;
   applicationForm: ApplicationFormState;
   setApplicationForm: React.Dispatch<React.SetStateAction<ApplicationFormState>>;
+  applicationEmailCode: string;
+  setApplicationEmailCode: (value: string) => void;
+  setApplicationEmailCodeStatus: (value: string) => void;
+  sendingApplicationEmailCode: boolean;
+  applicationEmailCodeStatus: string;
   savingApplication: boolean;
   error: string;
   onClose: () => void;
+  onSendApplicationEmailCode: () => void;
   onSubmit: (event: React.FormEvent) => void;
 }) {
   if (!open || !canEdit) {
     return null;
   }
+
+  const isChangingLoginEmail = applicationForm.applicant_email.trim() !== currentLoginEmail.trim();
 
   return (
     <div className="fixed inset-0 z-50 bg-black/45 backdrop-blur-sm flex items-center justify-center p-4">
@@ -1536,7 +1604,11 @@ function PortalApplicationEditModal({
                 className={portalInputClass}
                 type="email"
                 value={applicationForm.applicant_email}
-                onChange={(e) => setApplicationForm((current) => ({ ...current, applicant_email: e.target.value }))}
+                onChange={(e) => {
+                  setApplicationForm((current) => ({ ...current, applicant_email: e.target.value }));
+                  setApplicationEmailCode('');
+                  setApplicationEmailCodeStatus('');
+                }}
                 required
               />
             </PublicFormField>
@@ -1566,6 +1638,43 @@ function PortalApplicationEditModal({
               />
             </PublicFormField>
           </div>
+
+          {isChangingLoginEmail && (
+            <div className="rounded-[24px] border border-sky-100 bg-sky-50/80 px-5 py-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <div className="text-sm font-black text-sky-950">正在修改登录邮箱</div>
+                  <div className="mt-2 text-sm leading-6 text-sky-800">
+                    新邮箱会成为申请人后台登录账号，保存前必须校验新邮箱验证码。
+                  </div>
+                  {applicationEmailCodeStatus && (
+                    <div className="mt-2 text-xs font-bold text-sky-700">{applicationEmailCodeStatus}</div>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-white px-4 py-2 text-sm font-black text-sky-700 shadow-sm disabled:opacity-50"
+                  onClick={onSendApplicationEmailCode}
+                  disabled={sendingApplicationEmailCode}
+                >
+                  <Mail className="h-4 w-4" />
+                  {sendingApplicationEmailCode ? '发送中...' : '发送验证码'}
+                </button>
+              </div>
+              <div className="mt-4">
+                <PublicFormField label="新邮箱验证码">
+                  <input
+                    className={portalInputClass}
+                    inputMode="numeric"
+                    value={applicationEmailCode}
+                    onChange={(e) => setApplicationEmailCode(e.target.value)}
+                    placeholder="6 位验证码"
+                    required={isChangingLoginEmail}
+                  />
+                </PublicFormField>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-3 rounded-2xl border border-neutral-200 bg-white px-4 py-3">
             <input
@@ -1690,8 +1799,131 @@ function PortalPasswordRequiredModal({
   );
 }
 
+function PortalEmailChangeModal({
+  open,
+  currentEmail,
+  newEmail,
+  code,
+  sendingCode,
+  submitting,
+  status,
+  onNewEmailChange,
+  onCodeChange,
+  onSendCode,
+  onClose,
+  onSubmit,
+}: {
+  open: boolean;
+  currentEmail: string;
+  newEmail: string;
+  code: string;
+  sendingCode: boolean;
+  submitting: boolean;
+  status: string;
+  onNewEmailChange: (value: string) => void;
+  onCodeChange: (value: string) => void;
+  onSendCode: () => void;
+  onClose: () => void;
+  onSubmit: (event: React.FormEvent) => void;
+}) {
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-lg rounded-[28px] border border-slate-200 bg-white p-6 shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)]">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700">Login Email</div>
+            <h3 className="mt-3 text-2xl font-black tracking-tight text-slate-950">修改账号</h3>
+            <p className="mt-2 text-sm leading-6 text-slate-600">当前登录邮箱：{currentEmail}</p>
+          </div>
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-900"
+            onClick={onClose}
+            aria-label="关闭"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <form onSubmit={onSubmit} className="mt-6 space-y-5">
+          <PublicFormField label="新登录邮箱">
+            <input
+              className={portalInputClass}
+              type="email"
+              value={newEmail}
+              onChange={(e) => onNewEmailChange(e.target.value)}
+              placeholder="new@example.com"
+              required
+            />
+          </PublicFormField>
+
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
+            <PublicFormField label="邮箱验证码">
+              <input
+                className={portalInputClass}
+                inputMode="numeric"
+                value={code}
+                onChange={(e) => onCodeChange(e.target.value)}
+                placeholder="6 位验证码"
+                required
+              />
+            </PublicFormField>
+            <button
+              type="button"
+              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-black text-sky-700 shadow-sm disabled:opacity-50"
+              onClick={onSendCode}
+              disabled={sendingCode}
+            >
+              <Mail className="h-4 w-4" />
+              {sendingCode ? '发送中...' : '发送验证码'}
+            </button>
+          </div>
+
+          {status && (
+            <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-800">
+              {status}
+            </div>
+          )}
+
+          <div className="flex flex-wrap justify-end gap-3 pt-2">
+            <button
+              type="button"
+              className="inline-flex min-h-12 items-center gap-2 rounded-2xl border border-neutral-300 bg-white px-5 py-3 text-sm font-black tracking-[0.04em] text-neutral-700"
+              onClick={onClose}
+            >
+              取消
+            </button>
+            <button
+              type="submit"
+              className={portalPrimaryButtonClass}
+              disabled={submitting}
+            >
+              {submitting ? '修改中...' : '确认修改'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 const portalInputClass = 'w-full rounded-[20px] border border-slate-200 bg-white/95 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-600 focus:ring-4 focus:ring-cyan-100';
-const portalPrimaryButtonClass = 'inline-flex min-h-12 items-center gap-2 rounded-2xl bg-[linear-gradient(135deg,#0f8db3_0%,#0f766e_100%)] px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white disabled:opacity-50 shadow-[0_14px_32px_rgba(15,118,110,0.18)]';
+const portalPrimaryButtonClass = 'inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-[linear-gradient(135deg,#0f8db3_0%,#0f766e_100%)] px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_32px_rgba(15,118,110,0.18)] transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-700/20 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50';
+const portalActionButtonBaseClass = 'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap font-black shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50';
+const portalBindButtonBaseClass = `${portalActionButtonBaseClass} h-11 w-[132px] rounded-full px-5 py-2.5 text-sm`;
+const portalTelegramBindButtonClass = `${portalBindButtonBaseClass} bg-sky-600 text-white hover:bg-sky-700 hover:shadow-sky-500/25`;
+const portalXBindButtonClass = `${portalBindButtonBaseClass} bg-slate-950 text-white hover:bg-slate-800 hover:shadow-slate-900/25`;
+const portalUnbindButtonClass = `${portalBindButtonBaseClass} border border-rose-200 bg-white text-rose-700 hover:bg-rose-50 hover:shadow-rose-500/10`;
+const portalSidebarRechargeButtonClass = `${portalActionButtonBaseClass} h-9 rounded-full px-3 text-sm text-sky-600 hover:bg-sky-50 hover:text-sky-700 hover:shadow-sky-500/10 focus:outline-none focus:ring-2 focus:ring-sky-200`;
+const portalRechargeChannelButtonBaseClass = `${portalActionButtonBaseClass} h-10 w-full rounded-2xl px-3 text-xs text-white`;
+const portalLoginButtonBaseClass = `${portalActionButtonBaseClass} h-12 rounded-2xl px-5 text-sm uppercase tracking-[0.18em]`;
+const portalLoginSubmitButtonClass = `${portalLoginButtonBaseClass} w-[132px] bg-[linear-gradient(135deg,#0f8db3_0%,#0f766e_100%)] text-white hover:shadow-cyan-700/20`;
+const portalLoginXButtonClass = `${portalLoginButtonBaseClass} w-[160px] border border-slate-200 bg-white text-slate-800 hover:bg-slate-50 hover:shadow-slate-900/10`;
+const portalLoginTelegramButtonClass = `${portalLoginButtonBaseClass} w-[184px] border border-sky-200 bg-sky-50 text-sky-800 hover:bg-sky-100 hover:shadow-sky-500/20`;
 
 function TrendPanel({
   icon: Icon,
@@ -3352,6 +3584,8 @@ function PortalPage() {
   const [newPassword, setNewPassword] = useState('');
   const [changingPassword, setChangingPassword] = useState(false);
   const [xOAuthAction, setXOAuthAction] = useState<'' | 'login' | 'bind' | 'unbind'>('');
+  const [telegramLoginAction, setTelegramLoginAction] = useState(false);
+  const [telegramLoginStatus, setTelegramLoginStatus] = useState('');
   const [telegramBindAction, setTelegramBindAction] = useState<'' | 'bind' | 'unbind'>('');
   const [creatingChannel, setCreatingChannel] = useState<'' | PaymentChannel>('');
   const [creatingRecharge, setCreatingRecharge] = useState('');
@@ -3367,10 +3601,20 @@ function PortalPage() {
     () => createEmptyPortalPage<PortalClickView>(),
   );
   const [applicationForm, setApplicationForm] = useState<ApplicationFormState>(createApplicationForm());
+  const [applicationEmailCode, setApplicationEmailCode] = useState('');
+  const [sendingApplicationEmailCode, setSendingApplicationEmailCode] = useState(false);
+  const [applicationEmailCodeStatus, setApplicationEmailCodeStatus] = useState('');
   const [savingApplication, setSavingApplication] = useState(false);
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
   const [isPasswordRequiredModalOpen, setIsPasswordRequiredModalOpen] = useState(false);
+  const [isEmailChangeModalOpen, setIsEmailChangeModalOpen] = useState(false);
+  const [newLoginEmail, setNewLoginEmail] = useState('');
+  const [emailChangeCode, setEmailChangeCode] = useState('');
+  const [sendingEmailChangeCode, setSendingEmailChangeCode] = useState(false);
+  const [changingEmail, setChangingEmail] = useState(false);
+  const [emailChangeStatus, setEmailChangeStatus] = useState('');
   const passwordChangeRedirectTimerRef = useRef<number | null>(null);
+  const telegramLoginRunRef = useRef(0);
 
   usePageSeo({
     title: `申请人后台 | ${PUBLIC_SITE_BRAND_NAME}`,
@@ -3486,10 +3730,13 @@ function PortalPage() {
 
   useEffect(() => {
     setApplicationForm(createPortalApplicationForm(view?.application));
+    setApplicationEmailCode('');
+    setApplicationEmailCodeStatus('');
   }, [view]);
 
   useEffect(() => {
     return () => {
+      telegramLoginRunRef.current += 1;
       if (passwordChangeRedirectTimerRef.current !== null) {
         window.clearTimeout(passwordChangeRedirectTimerRef.current);
       }
@@ -3504,6 +3751,7 @@ function PortalPage() {
     clearPortalToken();
     setIsApplicationModalOpen(false);
     setIsPasswordRequiredModalOpen(false);
+    setIsEmailChangeModalOpen(false);
     setView(null);
     setRechargeOrders(createEmptyPortalPage<PortalRechargeOrderView>());
     setCancelingRechargeOrder('');
@@ -3516,7 +3764,18 @@ function PortalPage() {
     setCurrentPassword('');
     setNewPassword('');
     setXOAuthAction('');
+    telegramLoginRunRef.current += 1;
+    setTelegramLoginAction(false);
+    setTelegramLoginStatus('');
     setTelegramBindAction('');
+    setApplicationEmailCode('');
+    setApplicationEmailCodeStatus('');
+    setSendingApplicationEmailCode(false);
+    setNewLoginEmail('');
+    setEmailChangeCode('');
+    setEmailChangeStatus('');
+    setSendingEmailChangeCode(false);
+    setChangingEmail(false);
     setError('');
     if (!options?.keepSuccess) {
       setSuccess('');
@@ -3601,6 +3860,64 @@ function PortalPage() {
     }
   };
 
+  const startTelegramLogin = async () => {
+    const runId = telegramLoginRunRef.current + 1;
+    telegramLoginRunRef.current = runId;
+    setTelegramLoginAction(true);
+    setTelegramLoginStatus('正在生成 Telegram 登录链接...');
+    setError('');
+    setSuccess('');
+    try {
+      const flow = await apiRequest<PortalTelegramLoginStartResponse>('/api/v1/portal/telegram-login/start', {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
+      window.open(flow.login_url, '_blank', 'noopener,noreferrer');
+      setTelegramLoginStatus('请在 Telegram 中点击 Bot 的开始按钮，页面会自动完成登录。');
+
+      const expiresAt = new Date(flow.expires_at).getTime();
+      while (Date.now() < expiresAt) {
+        await wait(2000);
+        if (telegramLoginRunRef.current !== runId) {
+          return;
+        }
+
+        const data = await apiRequest<PortalTelegramLoginCompleteResponse>('/api/v1/portal/telegram-login/complete', {
+          method: 'POST',
+          body: JSON.stringify({
+            flow_id: flow.flow_id,
+            poll_token: flow.poll_token,
+          }),
+        });
+        if ('token' in data) {
+          setPortalToken(data.token);
+          setLoginEmail(data.account.email);
+          setSuccess('已通过 Telegram 登录。');
+          setTelegramLoginStatus('');
+          await loadView();
+          return;
+        }
+        if (data.status === 'pending') {
+          setTelegramLoginStatus(data.error || '等待 Telegram 确认中...');
+          continue;
+        }
+        throw new Error(data.error || 'Telegram 登录失败，请重新发起登录');
+      }
+      throw new Error('Telegram 登录链接已过期，请重新发起登录');
+    } catch (err) {
+      if (telegramLoginRunRef.current === runId) {
+        clearPortalToken();
+        setView(null);
+        setError(err instanceof Error ? err.message : 'Telegram 登录失败');
+      }
+    } finally {
+      if (telegramLoginRunRef.current === runId) {
+        setTelegramLoginAction(false);
+        setTelegramLoginStatus('');
+      }
+    }
+  };
+
   const startXBind = async () => {
     setXOAuthAction('bind');
     setError('');
@@ -3668,6 +3985,89 @@ function PortalPage() {
       setError(err instanceof Error ? err.message : '解除 Telegram 绑定失败');
     } finally {
       setTelegramBindAction('');
+    }
+  };
+
+  const sendEmailCodeForAddress = async (
+    email: string,
+    options: {
+      setSending: (value: boolean) => void;
+      setStatus: (value: string) => void;
+    },
+  ) => {
+    const targetEmail = email.trim();
+    if (!targetEmail) {
+      setError('请先填写新邮箱');
+      return;
+    }
+    options.setSending(true);
+    options.setStatus('');
+    setError('');
+    setSuccess('');
+    try {
+      const data = await portalApiRequest<PortalEmailCodeResponse>('/api/v1/portal/account/email-code', {
+        method: 'POST',
+        body: JSON.stringify({ email: targetEmail }),
+      });
+      options.setStatus(data.throttled
+        ? '验证码已发送，请稍后再试；60 秒内不会重复发送。'
+        : '验证码已发送，请查看新邮箱。');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '发送验证码失败');
+    } finally {
+      options.setSending(false);
+    }
+  };
+
+  const sendAccountEmailCode = async () => {
+    await sendEmailCodeForAddress(newLoginEmail, {
+      setSending: setSendingEmailChangeCode,
+      setStatus: setEmailChangeStatus,
+    });
+  };
+
+  const sendApplicationEmailCode = async () => {
+    await sendEmailCodeForAddress(applicationForm.applicant_email, {
+      setSending: setSendingApplicationEmailCode,
+      setStatus: setApplicationEmailCodeStatus,
+    });
+  };
+
+  const submitAccountEmailChange = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const targetEmail = newLoginEmail.trim();
+    if (!targetEmail) {
+      setError('请填写新邮箱');
+      return;
+    }
+    if (!emailChangeCode.trim()) {
+      setError('请填写邮箱验证码');
+      return;
+    }
+
+    setChangingEmail(true);
+    setError('');
+    setSuccess('');
+    try {
+      const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/account/email', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          email: targetEmail,
+          code: emailChangeCode.trim(),
+        }),
+      });
+      setView(data);
+      setLoginEmail(data.account.email);
+      setIsEmailChangeModalOpen(false);
+      setSuccess('登录邮箱已更新，请使用新邮箱重新登录。');
+      passwordChangeRedirectTimerRef.current = window.setTimeout(() => {
+        setLoginEmail(data.account.email);
+        resetPortalSession({ keepSuccess: true });
+      }, 1000);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '修改登录邮箱失败');
+    } finally {
+      setChangingEmail(false);
     }
   };
 
@@ -3856,6 +4256,12 @@ function PortalPage() {
       setError('至少填写一个官网地址');
       return;
     }
+    const targetApplicantEmail = applicationForm.applicant_email.trim();
+    const willChangeLoginEmail = Boolean(view && targetApplicantEmail !== view.account.email);
+    if (willChangeLoginEmail && !applicationEmailCode.trim()) {
+      setError('修改登录邮箱需要填写新邮箱验证码');
+      return;
+    }
 
     setSavingApplication(true);
     setError('');
@@ -3870,18 +4276,27 @@ function PortalPage() {
           plan_price_month: Number(applicationForm.plan_price_month || 0),
           has_trial: applicationForm.has_trial,
           subscription_url: applicationForm.subscription_url.trim(),
-          applicant_email: applicationForm.applicant_email.trim(),
+          applicant_email: targetApplicantEmail,
           applicant_telegram: applicationForm.applicant_telegram.trim(),
           founded_on: applicationForm.founded_on,
           airport_intro: applicationForm.airport_intro.trim(),
           test_account: applicationForm.test_account.trim(),
           test_password: applicationForm.test_password,
+          ...(willChangeLoginEmail ? { email_code: applicationEmailCode.trim() } : {}),
         }),
       });
       setView(data);
       setLoginEmail(data.account.email);
-      setSuccess('申请资料已保存');
+      setSuccess(willChangeLoginEmail ? '申请资料已保存，登录邮箱已更新，请使用新邮箱重新登录。' : '申请资料已保存');
       setIsApplicationModalOpen(false);
+      setApplicationEmailCode('');
+      setApplicationEmailCodeStatus('');
+      if (willChangeLoginEmail) {
+        passwordChangeRedirectTimerRef.current = window.setTimeout(() => {
+          setLoginEmail(data.account.email);
+          resetPortalSession({ keepSuccess: true });
+        }, 1000);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存申请资料失败');
     } finally {
@@ -3895,6 +4310,8 @@ function PortalPage() {
 
   const openApplicationModal = () => {
     setApplicationForm(createPortalApplicationForm(view?.application));
+    setApplicationEmailCode('');
+    setApplicationEmailCodeStatus('');
     setError('');
     setSuccess('');
     setIsApplicationModalOpen(true);
@@ -3902,8 +4319,27 @@ function PortalPage() {
 
   const closeApplicationModal = () => {
     setApplicationForm(createPortalApplicationForm(view?.application));
+    setApplicationEmailCode('');
+    setApplicationEmailCodeStatus('');
     setError('');
     setIsApplicationModalOpen(false);
+  };
+
+  const openEmailChangeModal = () => {
+    setNewLoginEmail('');
+    setEmailChangeCode('');
+    setEmailChangeStatus('');
+    setError('');
+    setSuccess('');
+    setIsEmailChangeModalOpen(true);
+  };
+
+  const closeEmailChangeModal = () => {
+    setNewLoginEmail('');
+    setEmailChangeCode('');
+    setEmailChangeStatus('');
+    setError('');
+    setIsEmailChangeModalOpen(false);
   };
 
   const switchPortalTab = (tab: PortalTabKey) => {
@@ -4118,7 +4554,7 @@ function PortalPage() {
                 <button
                   key={`${amount}-${channel}`}
                   type="button"
-                  className={`rounded-2xl px-3 py-2 text-xs font-black text-white disabled:opacity-50 ${getRechargeButtonClass(channel)}`}
+                  className={getRechargeButtonClass(channel)}
                   disabled={Boolean(creatingRecharge)}
                   onClick={() => void createRechargeOrder(amount, channel)}
                 >
@@ -4323,12 +4759,11 @@ function PortalPage() {
         ? `@${bot.binding.telegram_username}`
         : bot.binding.telegram_first_name || bot.binding.telegram_user_id
       : '未绑定';
-    const canBind = portalView.application.review_status === 'reviewed';
 
     return (
       <PortalSectionCard
         title="绑定 Telegram Bot"
-        description="绑定后可以在 Telegram 查询余额、扣费流水、访问记录，并创建充值支付链接。"
+        description="绑定一次后，可以在 Telegram 接收通知、查询余额和扣费流水，也可以在登录页直接使用 Telegram 登录申请人后台。"
         aside={bot.binding ? (
           <div className="rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">Bound</div>
         ) : (
@@ -4349,29 +4784,27 @@ function PortalPage() {
             <div className="mt-2 text-sm leading-6 text-slate-600">
               {!bot.configured
                 ? '配置完成后，这里会显示绑定入口。'
-                : !canBind
-                  ? '申请审核通过后才能绑定用户服务 Bot。'
-                  : bot.binding
+                : bot.binding
                     ? `绑定时间：${formatDateTimeLabel(bot.binding.bound_at)}`
-                    : '点击绑定会打开 Telegram，一次性链接 10 分钟内有效。'}
+                    : '点击绑定会打开 Telegram，一次性链接 10 分钟内有效；绑定后可直接使用 Telegram 登录。'}
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            {bot.configured && canBind && (
+            {bot.configured && (
               <button
                 type="button"
-                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-sky-600 px-5 py-2.5 text-sm font-black text-white hover:bg-sky-700 disabled:opacity-50"
+                className={portalTelegramBindButtonClass}
                 onClick={() => void startTelegramBind()}
                 disabled={Boolean(telegramBindAction)}
               >
                 <Send className="h-4 w-4" />
-                {telegramBindAction === 'bind' ? '生成中...' : bot.binding ? '重新绑定' : '绑定 Telegram'}
+                {telegramBindAction === 'bind' ? '生成中...' : bot.binding ? '重新绑定' : '绑定电报'}
               </button>
             )}
             {bot.binding && (
               <button
                 type="button"
-                className="inline-flex min-h-11 items-center gap-2 rounded-full border border-rose-200 bg-white px-5 py-2.5 text-sm font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                className={portalUnbindButtonClass}
                 onClick={() => void unbindTelegram()}
                 disabled={Boolean(telegramBindAction)}
               >
@@ -4398,7 +4831,7 @@ function PortalPage() {
           aside={<div className="rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600">Security</div>}
         >
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <PortalInfoCard eyebrow="Login Email" title="登录邮箱" value={portalView.account.email} tone="blue" />
+            <PortalLoginEmailCard email={portalView.account.email} onChangeClick={openEmailChangeModal} />
             <PortalInfoCard
               eyebrow="X Login"
               title="X 登录"
@@ -4468,7 +4901,7 @@ function PortalPage() {
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
-                className="inline-flex min-h-11 items-center gap-2 rounded-full bg-slate-950 px-5 py-2.5 text-sm font-black text-white disabled:opacity-50"
+                className={portalXBindButtonClass}
                 onClick={() => void startXBind()}
                 disabled={Boolean(xOAuthAction)}
               >
@@ -4478,7 +4911,7 @@ function PortalPage() {
               {portalView.account.x && (
                 <button
                   type="button"
-                  className="inline-flex min-h-11 items-center gap-2 rounded-full border border-rose-200 bg-white px-5 py-2.5 text-sm font-black text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+                  className={portalUnbindButtonClass}
                   onClick={() => void unbindX()}
                   disabled={Boolean(xOAuthAction)}
                 >
@@ -4501,10 +4934,10 @@ function PortalPage() {
     if (!view) {
       return (
         <PortalSectionCard
-          title="邮箱登录"
+          title="登录"
           description="使用提交申请时填写的邮箱和系统发放的初始密码登录。首次登录后需要先修改密码。"
         >
-          <form onSubmit={login} className="space-y-5">
+          <form onSubmit={login} className="max-w-3xl space-y-5">
             <PublicFormField label="邮箱">
               <input
                 className={portalInputClass}
@@ -4527,7 +4960,7 @@ function PortalPage() {
                 />
                 <button
                   type="button"
-                  className="absolute right-4 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-200"
+                  className="absolute right-4 top-1/2 inline-flex h-9 w-9 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full text-slate-500 transition hover:bg-slate-100 hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-cyan-200"
                   onClick={() => setIsLoginPasswordVisible((current) => !current)}
                   aria-label={isLoginPasswordVisible ? '隐藏密码' : '显示密码'}
                   title={isLoginPasswordVisible ? '隐藏密码' : '显示密码'}
@@ -4539,7 +4972,7 @@ function PortalPage() {
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-2">
               <button
                 type="submit"
-                className={portalPrimaryButtonClass}
+                className={portalLoginSubmitButtonClass}
                 disabled={loggingIn}
               >
                 <LogIn className="h-4 w-4" />
@@ -4547,14 +4980,28 @@ function PortalPage() {
               </button>
               <button
                 type="button"
-                className="inline-flex min-h-12 items-center gap-2.5 rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-slate-800 shadow-sm transition hover:bg-slate-50 disabled:opacity-50"
+                className={portalLoginXButtonClass}
                 onClick={() => void startXLogin()}
-                disabled={Boolean(xOAuthAction)}
+                disabled={Boolean(xOAuthAction) || telegramLoginAction}
               >
                 <XLogo className="h-4 w-4" />
                 {xOAuthAction === 'login' ? '跳转中...' : '使用 X 登录'}
               </button>
+              <button
+                type="button"
+                className={portalLoginTelegramButtonClass}
+                onClick={() => void startTelegramLogin()}
+                disabled={telegramLoginAction || Boolean(xOAuthAction)}
+              >
+                <Send className="h-4 w-4" />
+                {telegramLoginAction ? '等待确认...' : '使用电报登录'}
+              </button>
             </div>
+            {telegramLoginStatus && (
+              <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm font-semibold leading-6 text-sky-800">
+                {telegramLoginStatus}
+              </div>
+            )}
           </form>
         </PortalSectionCard>
       );
@@ -4577,7 +5024,7 @@ function PortalPage() {
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <PortalInfoCard eyebrow="Login Email" title="登录邮箱" value={view.account.email} tone="blue" />
+                <PortalLoginEmailCard email={view.account.email} onChangeClick={openEmailChangeModal} />
                 <PortalInfoCard eyebrow="Current Stage" title="当前阶段" value="首次改密" tone="amber" />
               </div>
               <PublicFormField label="当前密码">
@@ -4768,7 +5215,7 @@ function PortalPage() {
         />
       </div>
 
-      <div className="relative z-10 mx-auto max-w-6xl px-4 py-8 md:py-12">
+      <div className={`relative z-10 mx-auto px-4 py-8 md:py-12 ${view ? 'max-w-6xl' : 'max-w-4xl'}`}>
         <div className="mb-8 flex items-center justify-between gap-4 flex-wrap">
           <div className="inline-flex items-center gap-2 rounded-full border border-sky-100 bg-white/85 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-cyan-700 shadow-sm">
             {PUBLIC_SITE_BRAND_NAME} Portal
@@ -4803,7 +5250,7 @@ function PortalPage() {
                   </div>
                   <button
                     type="button"
-                    className="inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-sm font-black text-sky-600 transition hover:bg-sky-50 hover:text-sky-700 focus:outline-none focus:ring-2 focus:ring-sky-200"
+                    className={portalSidebarRechargeButtonClass}
                     onClick={() => switchPortalTab('recharge')}
                   >
                     <Banknote className="h-4 w-4" />
@@ -4846,12 +5293,37 @@ function PortalPage() {
       <PortalApplicationEditModal
         open={isApplicationModalOpen}
         canEdit={Boolean(view && view.application.payment_status !== 'paid')}
+        currentLoginEmail={view?.account.email || ''}
         applicationForm={applicationForm}
         setApplicationForm={setApplicationForm}
+        applicationEmailCode={applicationEmailCode}
+        setApplicationEmailCode={setApplicationEmailCode}
+        setApplicationEmailCodeStatus={setApplicationEmailCodeStatus}
+        sendingApplicationEmailCode={sendingApplicationEmailCode}
+        applicationEmailCodeStatus={applicationEmailCodeStatus}
         savingApplication={savingApplication}
         error={error}
         onClose={closeApplicationModal}
+        onSendApplicationEmailCode={() => void sendApplicationEmailCode()}
         onSubmit={saveApplication}
+      />
+      <PortalEmailChangeModal
+        open={isEmailChangeModalOpen}
+        currentEmail={view?.account.email || ''}
+        newEmail={newLoginEmail}
+        code={emailChangeCode}
+        sendingCode={sendingEmailChangeCode}
+        submitting={changingEmail}
+        status={emailChangeStatus}
+        onNewEmailChange={(value) => {
+          setNewLoginEmail(value);
+          setEmailChangeCode('');
+          setEmailChangeStatus('');
+        }}
+        onCodeChange={setEmailChangeCode}
+        onSendCode={() => void sendAccountEmailCode()}
+        onClose={closeEmailChangeModal}
+        onSubmit={submitAccountEmailChange}
       />
       <PortalPasswordRequiredModal
         open={isPasswordRequiredModalOpen}
@@ -4945,12 +5417,12 @@ function getPaymentCardTone(channel: PaymentChannel): 'alipay' | 'wechat' | 'usd
 
 function getRechargeButtonClass(channel: PaymentChannel): string {
   if (channel === 'alipay') {
-    return 'bg-sky-600';
+    return `${portalRechargeChannelButtonBaseClass} bg-sky-600 hover:bg-sky-700 hover:shadow-sky-500/25`;
   }
   if (channel === 'wxpay') {
-    return 'bg-emerald-600';
+    return `${portalRechargeChannelButtonBaseClass} bg-emerald-600 hover:bg-emerald-700 hover:shadow-emerald-500/25`;
   }
-  return 'bg-teal-700';
+  return `${portalRechargeChannelButtonBaseClass} bg-teal-700 hover:bg-teal-800 hover:shadow-teal-500/25`;
 }
 
 function formatRechargeStatus(status: PortalRechargeOrderView['status']): string {

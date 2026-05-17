@@ -92,6 +92,21 @@ CREATE TABLE IF NOT EXISTS applicant_accounts (
   INDEX idx_applicant_accounts_email (email)
 );
 
+CREATE TABLE IF NOT EXISTS applicant_email_change_codes (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  applicant_account_id BIGINT UNSIGNED NOT NULL,
+  email VARCHAR(255) NOT NULL,
+  code_hash CHAR(64) NOT NULL,
+  code_salt VARCHAR(32) NOT NULL,
+  expires_at DATETIME NOT NULL,
+  consumed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_applicant_email_codes_account_email_created (applicant_account_id, email, created_at DESC),
+  INDEX idx_applicant_email_codes_expires (expires_at)
+);
+
 CREATE TABLE IF NOT EXISTS applicant_x_oauth_flows (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   flow_type ENUM('bind', 'login') NOT NULL,
@@ -142,6 +157,28 @@ CREATE TABLE IF NOT EXISTS applicant_telegram_bindings (
   UNIQUE KEY uk_applicant_telegram_bindings_account (applicant_account_id),
   UNIQUE KEY uk_applicant_telegram_bindings_user (telegram_user_id),
   INDEX idx_applicant_telegram_bindings_chat (telegram_chat_id)
+);
+
+CREATE TABLE IF NOT EXISTS applicant_telegram_login_flows (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  flow_id VARCHAR(64) NOT NULL,
+  start_token_hash CHAR(64) NOT NULL,
+  poll_token_hash CHAR(64) NOT NULL,
+  applicant_account_id BIGINT UNSIGNED NULL,
+  telegram_user_id VARCHAR(64) NULL,
+  status ENUM('pending', 'completed', 'failed', 'consumed', 'expired') NOT NULL DEFAULT 'pending',
+  failure_reason VARCHAR(255) NULL,
+  expires_at DATETIME NOT NULL,
+  completed_at DATETIME NULL,
+  consumed_at DATETIME NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uk_applicant_telegram_login_flows_flow_id (flow_id),
+  UNIQUE KEY uk_applicant_telegram_login_flows_start_token (start_token_hash),
+  INDEX idx_applicant_telegram_login_flows_poll (flow_id, poll_token_hash),
+  INDEX idx_applicant_telegram_login_flows_status_expires (status, expires_at),
+  INDEX idx_applicant_telegram_login_flows_account_created (applicant_account_id, created_at DESC)
 );
 
 CREATE TABLE IF NOT EXISTS applicant_wallets (

@@ -11,6 +11,7 @@ import type {
   WalletTransactionView,
 } from '../repositories/applicantBillingRepository';
 import type { ApplicantTelegramBinding } from '../repositories/applicantTelegramBindingRepository';
+import { TELEGRAM_LOGIN_START_PREFIX } from '../repositories/applicantTelegramLoginFlowRepository';
 import type { PaymentGatewayChannel, PaymentGatewayService } from '../services/paymentGatewayService';
 import type { UserTelegramBotConfig, UserTelegramBotSettingsService } from '../services/userTelegramBotSettingsService';
 import { getSiteOrigin } from '../utils/siteUrl';
@@ -28,6 +29,18 @@ interface UserTelegramBotDeps {
     }): Promise<ApplicantTelegramBinding | null>;
     getByTelegramUserId(telegramUserId: string): Promise<ApplicantTelegramBinding | null>;
     unbindApplicantAccount(applicantAccountId: number): Promise<boolean>;
+  };
+  applicantTelegramLoginFlowRepository?: {
+    completeByStartToken(
+      startToken: string,
+      applicantAccountId: number,
+      telegramUserId: string,
+    ): Promise<'completed' | 'expired' | 'invalid'>;
+    failByStartToken(
+      startToken: string,
+      reason: string,
+      telegramUserId?: string | null,
+    ): Promise<'failed' | 'expired' | 'invalid'>;
   };
   applicantAccountRepository: {
     getById(id: number): Promise<ApplicantAccount | null>;
@@ -150,6 +163,10 @@ async function handleMessage(
       );
       return;
     }
+    if (token.startsWith(TELEGRAM_LOGIN_START_PREFIX)) {
+      await handleTelegramLoginStart(deps, config, chatId, from.userId, token);
+      return;
+    }
     const binding = await deps.applicantTelegramBindingRepository.consumeBindToken(token, {
       telegram_user_id: from.userId,
       telegram_chat_id: chatId,
@@ -198,6 +215,55 @@ async function handleMessage(
   }
 
   await sendTelegramMessage(config, chatId, buildHelpMessage());
+}
+
+async function handleTelegramLoginStart(
+  deps: UserTelegramBotDeps,
+  config: UserTelegramBotConfig,
+  chatId: string,
+  telegramUserId: string,
+  token: string,
+): Promise<void> {
+  if (!deps.applicantTelegramLoginFlowRepository) {
+    await sendTelegramMessage(config, chatId, 'Telegram 登录服务尚未配置，请稍后再试。');
+    return;
+  }
+
+  const binding = await deps.applicantTelegramBindingRepository.getByTelegramUserId(telegramUserId);
+  if (!binding) {
+    const reason = '该 Telegram 账号尚未绑定申请人后台，请先使用邮箱登录后绑定 Telegram。';
+    const status = await deps.applicantTelegramLoginFlowRepository.failByStartToken(token, reason, telegramUserId);
+    await sendTelegramMessage(config, chatId, telegramLoginReplyForStatus(status, reason));
+    return;
+  }
+
+  const account = await deps.applicantAccountRepository.getById(binding.applicant_account_id);
+  if (!account) {
+    const reason = '绑定账号已失效，请在 GateRank 申请人后台重新绑定 Telegram。';
+    const status = await deps.applicantTelegramLoginFlowRepository.failByStartToken(token, reason, telegramUserId);
+    await sendTelegramMessage(config, chatId, telegramLoginReplyForStatus(status, reason));
+    return;
+  }
+
+  const status = await deps.applicantTelegramLoginFlowRepository.completeByStartToken(
+    token,
+    account.id,
+    telegramUserId,
+  );
+  await sendTelegramMessage(config, chatId, telegramLoginReplyForStatus(status, 'Telegram 登录已确认，请回到 GateRank 申请人后台继续。'));
+}
+
+function telegramLoginReplyForStatus(
+  status: 'completed' | 'failed' | 'expired' | 'invalid',
+  successOrFailureMessage: string,
+): string {
+  if (status === 'completed' || status === 'failed') {
+    return successOrFailureMessage;
+  }
+  if (status === 'expired') {
+    return 'Telegram 登录链接已过期，请回到 GateRank 申请人后台重新发起登录。';
+  }
+  return 'Telegram 登录链接无效，请回到 GateRank 申请人后台重新发起登录。';
 }
 
 async function handleCallbackQuery(

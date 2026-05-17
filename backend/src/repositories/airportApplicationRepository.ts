@@ -475,6 +475,17 @@ export class AirportApplicationRepository {
     return result.affectedRows > 0;
   }
 
+  async updateApplicantEmail(id: number, applicantEmail: string): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE airport_applications
+          SET applicant_email = ?
+        WHERE id = ?`,
+      [applicantEmail, id],
+    );
+
+    return result.affectedRows > 0;
+  }
+
   async markPaid(id: number, paymentAmount: number, paidAt: string): Promise<boolean> {
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE airport_applications

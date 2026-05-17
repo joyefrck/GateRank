@@ -148,6 +148,26 @@ export class MailService {
     });
   }
 
+  async sendApplicantEmailChangeCodeEmail(input: {
+    to: string;
+    code: string;
+    expiresInMinutes: number;
+  }): Promise<void> {
+    const config = await this.requireConfigured();
+    await this.sendWithConfig(config, {
+      to: input.to,
+      subject: 'GateRank 申请人后台邮箱验证码',
+      text: [
+        '您好，您正在修改 GateRank 申请人后台登录邮箱。',
+        '',
+        `验证码：${input.code}`,
+        `有效期：${input.expiresInMinutes} 分钟`,
+        '',
+        '如果这不是您本人操作，请忽略本邮件。',
+      ].join('\n'),
+    });
+  }
+
   async sendLowBalanceWarningEmail(input: {
     to: string;
     airportName: string;

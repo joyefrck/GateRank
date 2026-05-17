@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import express from 'express';
 import type { NextFunction, Request as ExpressRequest, Response } from 'express';
 import { AddressInfo } from 'node:net';
+import { TELEGRAM_LOGIN_START_PREFIX } from '../src/repositories/applicantTelegramLoginFlowRepository';
 import { createUserTelegramBotRoutes } from '../src/routes/userTelegramBotRoutes';
 
 function createDeps(overrides: Record<string, unknown> = {}) {
@@ -263,6 +264,110 @@ test('user telegram webhook asks unbound user to generate link on bare start', a
   }
 
   assert.match(String(telegramCalls[0]!.body.text), /请先在 GateRank 申请人后台生成绑定链接/);
+});
+
+test('user telegram webhook completes Telegram login start token for bound user', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const completed: Array<{ token: string; applicantAccountId: number; telegramUserId: string }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps({
+      applicantTelegramBindingRepository: {
+        ...createDeps().applicantTelegramBindingRepository,
+        consumeBindToken: async () => {
+          throw new Error('bind token should not be consumed');
+        },
+      },
+      applicantTelegramLoginFlowRepository: {
+        completeByStartToken: async (token: string, applicantAccountId: number, telegramUserId: string) => {
+          completed.push({ token, applicantAccountId, telegramUserId });
+          return 'completed';
+        },
+        failByStartToken: async () => {
+          throw new Error('not used');
+        },
+      },
+    }), async (port) => {
+      const token = `${TELEGRAM_LOGIN_START_PREFIX}flow_token`;
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: `/start ${token}`,
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(completed, [{
+    token: `${TELEGRAM_LOGIN_START_PREFIX}flow_token`,
+    applicantAccountId: 1,
+    telegramUserId: '42',
+  }]);
+  assert.match(String(telegramCalls[0]!.body.text), /Telegram 登录已确认/);
+});
+
+test('user telegram webhook fails Telegram login start token for unbound user', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const failed: Array<{ token: string; reason: string; telegramUserId: string | null | undefined }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps({
+      applicantTelegramBindingRepository: {
+        ...createDeps().applicantTelegramBindingRepository,
+        getByTelegramUserId: async () => null,
+        consumeBindToken: async () => {
+          throw new Error('bind token should not be consumed');
+        },
+      },
+      applicantTelegramLoginFlowRepository: {
+        completeByStartToken: async () => {
+          throw new Error('not used');
+        },
+        failByStartToken: async (token: string, reason: string, telegramUserId?: string | null) => {
+          failed.push({ token, reason, telegramUserId });
+          return 'failed';
+        },
+      },
+    }), async (port) => {
+      const token = `${TELEGRAM_LOGIN_START_PREFIX}flow_token`;
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: `/start ${token}`,
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.equal(failed.length, 1);
+  assert.equal(failed[0]!.token, `${TELEGRAM_LOGIN_START_PREFIX}flow_token`);
+  assert.equal(failed[0]!.telegramUserId, '42');
+  assert.match(failed[0]!.reason, /尚未绑定申请人后台/);
+  assert.match(String(telegramCalls[0]!.body.text), /尚未绑定申请人后台/);
 });
 
 test('user telegram webhook replies today visit count for bound user', async () => {

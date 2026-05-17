@@ -189,6 +189,43 @@ test('MailService renders applicant password reset template variables', async ()
   assert.match(String(sent[0]?.text || ''), /后台：https:\/\/gaterank\.example\.com\/portal/);
 });
 
+test('MailService sends applicant email change verification code with fixed content', async () => {
+  const sent: Array<Record<string, unknown>> = [];
+  const service = new MailService({
+    smtpSettingsService: {
+      getConfig: async () => ({
+        enabled: true,
+        host: 'smtp.example.com',
+        port: 465,
+        secure: true,
+        username: 'mailer',
+        password: 'secret',
+        from_name: 'GateRank',
+        from_email: 'noreply@example.com',
+        reply_to: '',
+        templates: createTemplates(),
+      }),
+    },
+    transportFactory: (() => ({
+      sendMail: async (payload: Record<string, unknown>) => {
+        sent.push(payload);
+      },
+    })) as never,
+  });
+
+  await service.sendApplicantEmailChangeCodeEmail({
+    to: 'new@example.com',
+    code: '123456',
+    expiresInMinutes: 10,
+  });
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]?.to, 'new@example.com');
+  assert.equal(sent[0]?.subject, 'GateRank 申请人后台邮箱验证码');
+  assert.match(String(sent[0]?.text || ''), /验证码：123456/);
+  assert.match(String(sent[0]?.text || ''), /有效期：10 分钟/);
+});
+
 test('MailService rejects disabled applicant password reset template', async () => {
   const sent: Array<Record<string, unknown>> = [];
   const service = new MailService({
