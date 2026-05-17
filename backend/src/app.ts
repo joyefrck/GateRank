@@ -246,6 +246,7 @@ export async function createApp() {
       rankingRepository,
       publicViewService,
       marketingRepository: marketingEventRepository,
+      marketingSettingsService,
     }),
   );
 

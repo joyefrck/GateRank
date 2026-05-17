@@ -6,6 +6,53 @@ import { errorHandler } from '../src/middleware/errorHandler';
 import { createPublicRoutes } from '../src/routes/publicRoutes';
 import type { MarketingEventInsertRecord } from '../src/utils/marketing';
 
+test('GET /application-config returns public application fee from marketing settings', async () => {
+  const app = express();
+  app.use(
+    createPublicRoutes({
+      airportRepository: {
+        getById: async () => null,
+      },
+      airportApplicationRepository: {
+        create: async () => 1,
+      },
+      metricsRepository: {
+        getByAirportAndDate: async () => null,
+      },
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      rankingRepository: {
+        getRanking: async () => [],
+      },
+      publicViewService: {
+        getHomePageView: async () => ({}),
+        getFullRankingView: async () => ({}),
+        getRiskMonitorView: async () => ({}),
+        getReportView: async () => null,
+      } as any,
+      marketingSettingsService: {
+        getConfig: async () => ({
+          application_fee_amount: 100,
+        }),
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/application-config`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { application_fee_amount: number };
+    assert.equal(data.application_fee_amount, 100);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /marketing/events stores validated marketing events', async () => {
   const insertedRecords: MarketingEventInsertRecord[] = [];
   const app = express();

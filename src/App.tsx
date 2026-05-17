@@ -308,6 +308,10 @@ interface ApplicationSubmitResponse {
   portal_login_url: string;
 }
 
+interface ApplicationConfigResponse {
+  application_fee_amount: number;
+}
+
 interface PortalAccountView {
   id: number;
   email: string;
@@ -3211,6 +3215,9 @@ function ApplicationPage() {
   const [error, setError] = useState('');
   const [successPayload, setSuccessPayload] = useState<ApplicationSubmitResponse | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [showOfficialNotice, setShowOfficialNotice] = useState(true);
+  const [applicationFeeAmount, setApplicationFeeAmount] = useState<number | null>(null);
+  const [applicationFeeError, setApplicationFeeError] = useState('');
 
   usePageSeo({
     title: APPLY_SEO.title,
@@ -3225,6 +3232,23 @@ function ApplicationPage() {
       url: buildAbsoluteUrl('/apply'),
     },
   });
+
+  useEffect(() => {
+    let active = true;
+    void apiFetch<ApplicationConfigResponse>('/api/v1/application-config')
+      .then((config) => {
+        if (!active) return;
+        setApplicationFeeAmount(config.application_fee_amount);
+        setApplicationFeeError('');
+      })
+      .catch((err) => {
+        if (!active) return;
+        setApplicationFeeError(err instanceof Error ? err.message : '入驻费读取失败');
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   if (successPayload) {
     return (
@@ -3337,6 +3361,13 @@ function ApplicationPage() {
 
   return (
     <div className="min-h-screen bg-white font-sans relative">
+      {showOfficialNotice && (
+        <OfficialApplicationNoticeModal
+          feeAmount={applicationFeeAmount}
+          error={applicationFeeError}
+          onConfirm={() => setShowOfficialNotice(false)}
+        />
+      )}
       <div
         className="fixed inset-0 opacity-[0.015] pointer-events-none z-0"
         style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}
@@ -3561,6 +3592,60 @@ function ApplicationPage() {
           </div>
         </form>
       </div>
+    </div>
+  );
+}
+
+function OfficialApplicationNoticeModal({
+  feeAmount,
+  error,
+  onConfirm,
+}: {
+  feeAmount: number | null;
+  error: string;
+  onConfirm: () => void;
+}) {
+  const feeText = feeAmount === null ? '' : formatMetric(feeAmount);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/45 px-4 py-6 backdrop-blur-sm">
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="application-official-notice-title"
+        className="w-full max-w-lg rounded-[1.75rem] border border-neutral-200 bg-white p-6 shadow-[0_28px_80px_rgba(15,23,42,0.24)] md:p-7"
+      >
+        <div className="flex items-start gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-neutral-900 text-white">
+            <ShieldCheck className="h-5 w-5" />
+          </div>
+          <div className="min-w-0">
+            <h2 id="application-official-notice-title" className="text-xl font-black tracking-tight text-neutral-950">
+              友情提示
+            </h2>
+            <p className="mt-3 text-sm leading-7 text-neutral-700">
+              {feeAmount === null
+                ? '正在读取入驻费配置，请稍候。'
+                : <>机场榜坚持独立、公正收录，入驻可获得测速、展示与后台管理服务。入驻费{feeText}元，仅限USDT支付，请仔细考虑！</>}
+            </p>
+            <div className="mt-4 text-right text-sm font-black text-neutral-900">机场榜GateRank官方</div>
+            {error && (
+              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+                入驻费读取失败，请刷新页面后再申请。
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button
+          type="button"
+          className="mt-6 inline-flex w-full min-h-12 cursor-pointer items-center justify-center rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black text-white transition hover:bg-neutral-800 disabled:cursor-wait disabled:bg-neutral-400"
+          disabled={feeAmount === null}
+          onClick={onConfirm}
+        >
+          {feeAmount === null ? '正在读取费用' : '我已知晓，继续申请'}
+        </button>
+      </section>
     </div>
   );
 }

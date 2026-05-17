@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { APPLICATION_FEE_AMOUNT } from '../config/billing';
 import { RANKING_TYPES } from '../config/scoring';
 import { HttpError } from '../middleware/errorHandler';
 import type {
@@ -92,6 +93,11 @@ interface PublicDeps {
   marketingRepository?: {
     insertMany(records: ReturnType<typeof buildMarketingEventRecord>[]): Promise<void>;
   };
+  marketingSettingsService?: {
+    getConfig(): Promise<{
+      application_fee_amount: number;
+    }>;
+  };
 }
 
 const MARKETING_EVENT_TYPES: MarketingEventType[] = ['page_view', 'airport_impression', 'outbound_click'];
@@ -115,6 +121,20 @@ const MARKETING_TARGET_KINDS: MarketingTargetKind[] = ['website', 'subscription_
 export function createPublicRoutes(deps: PublicDeps): Router {
   const router = Router();
   const pageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
+
+  router.get('/application-config', async (_req, res, next) => {
+    try {
+      const config = deps.marketingSettingsService
+        ? await deps.marketingSettingsService.getConfig()
+        : { application_fee_amount: APPLICATION_FEE_AMOUNT };
+      setPublicCacheHeaders(res);
+      res.json({
+        application_fee_amount: Number(config.application_fee_amount || APPLICATION_FEE_AMOUNT),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.post('/airport-applications', async (req, res, next) => {
     try {
