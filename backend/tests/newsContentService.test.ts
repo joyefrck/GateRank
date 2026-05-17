@@ -14,6 +14,21 @@ test('NewsContentService.render supports markdown lists', () => {
   assert.deepEqual(rendered.headings, [{ id: slugifyNewsText('清单'), level: 2, text: '清单' }]);
 });
 
+test('NewsContentService.render strips dangerous raw HTML from markdown', () => {
+  const service = new NewsContentService();
+  const rendered = service.render([
+    '<script>alert(1)</script>',
+    '<img src="x" onerror="alert(2)">',
+    '<xmp><img src=x onerror=alert(3)></xmp>',
+    '<a href="javascript:alert(4)">bad link</a>',
+  ].join('\n\n'));
+
+  assert.doesNotMatch(rendered.html, /<script/i);
+  assert.doesNotMatch(rendered.html, /onerror/i);
+  assert.doesNotMatch(rendered.html, /<xmp/i);
+  assert.doesNotMatch(rendered.html, /javascript:/i);
+});
+
 test('stripLeadingMarkdownH1 removes only the first body H1 at document start', () => {
   assert.equal(
     stripLeadingMarkdownH1('\n\n# 文章标题\n\n## 小节\n\n正文\n\n# 后续 H1'),

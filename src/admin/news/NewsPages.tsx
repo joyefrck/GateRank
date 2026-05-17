@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { estimateReadingMinutes } from '../../news/renderMarkdown';
 
-const TOKEN_KEY = 'gaterank_admin_token';
 const COVER_SEARCH_PER_PAGE = 12;
 
 interface NewsArticle {
@@ -1113,6 +1112,7 @@ async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   const response = await fetch(`${getApiBase()}${path}`, {
     ...init,
+    credentials: 'include',
     headers,
   });
 
@@ -1128,6 +1128,7 @@ async function apiFetchText(path: string, init: RequestInit = {}): Promise<strin
   const headers = buildAuthHeaders(init.headers);
   const response = await fetch(`${getApiBase()}${path}`, {
     ...init,
+    credentials: 'include',
     headers,
   });
 
@@ -1140,12 +1141,7 @@ async function apiFetchText(path: string, init: RequestInit = {}): Promise<strin
 }
 
 function buildAuthHeaders(source?: HeadersInit): Headers {
-  const headers = new Headers(source || {});
-  const token = localStorage.getItem(TOKEN_KEY);
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
-  return headers;
+  return new Headers(source || {});
 }
 
 async function safeJson(response: Response): Promise<unknown> {

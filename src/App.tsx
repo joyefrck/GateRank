@@ -899,12 +899,8 @@ function getApiBase(): string {
   return '';
 }
 
-function getPortalToken(): string {
-  return localStorage.getItem(PORTAL_TOKEN_KEY) || '';
-}
-
-function setPortalToken(token: string): void {
-  localStorage.setItem(PORTAL_TOKEN_KEY, token);
+function setPortalToken(_token: string): void {
+  localStorage.removeItem(PORTAL_TOKEN_KEY);
 }
 
 function clearPortalToken(): void {
@@ -931,7 +927,7 @@ function wait(ms: number): Promise<void> {
 }
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const response = await fetch(`${getApiBase()}${path}`);
+  const response = await fetch(`${getApiBase()}${path}`, { credentials: 'include' });
   if (!response.ok) {
     const data = (await safeJson(response)) as { message?: string } | null;
     throw new Error(data?.message || `请求失败: ${response.status}`);
@@ -944,7 +940,7 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
   if (!headers.has('Content-Type') && init.body) {
     headers.set('Content-Type', 'application/json');
   }
-  const response = await fetch(`${getApiBase()}${path}`, { ...init, headers });
+  const response = await fetch(`${getApiBase()}${path}`, { ...init, credentials: 'include', headers });
   if (!response.ok) {
     const data = (await safeJson(response)) as { message?: string } | null;
     throw new Error(data?.message || `请求失败: ${response.status}`);
@@ -954,14 +950,10 @@ async function apiRequest<T>(path: string, init: RequestInit): Promise<T> {
 
 async function portalApiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers || {});
-  const token = getPortalToken();
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
   if (!headers.has('Content-Type') && init.body) {
     headers.set('Content-Type', 'application/json');
   }
-  const response = await fetch(`${getApiBase()}${path}`, { ...init, headers });
+  const response = await fetch(`${getApiBase()}${path}`, { ...init, credentials: 'include', headers });
   if (response.status === 401) {
     clearPortalToken();
     throw new Error('登录已失效，请重新登录');
@@ -3725,13 +3717,6 @@ function PortalPage() {
   });
 
   const loadView = async (billingPages?: Partial<Record<'recharge' | 'transactions' | 'clicks', number>>) => {
-    const token = getPortalToken();
-    if (!token) {
-      setView(null);
-      setLoading(false);
-      return;
-    }
-
     setLoading(true);
     setError('');
     try {
@@ -4404,7 +4389,12 @@ function PortalPage() {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await portalApiRequest('/api/v1/portal/logout', { method: 'POST' });
+    } catch {
+      // Keep logout local even if the session is already expired or the network is unavailable.
+    }
     resetPortalSession();
   };
 

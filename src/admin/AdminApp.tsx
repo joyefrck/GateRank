@@ -1033,16 +1033,12 @@ function getApiBase(): string {
 }
 
 async function apiFetch(path: string, init: RequestInit = {}) {
-  const token = localStorage.getItem(TOKEN_KEY);
   const headers = new Headers(init.headers || {});
   if (!headers.has('Content-Type') && init.body) {
     headers.set('Content-Type', 'application/json');
   }
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  }
 
-  const response = await fetch(`${getApiBase()}${path}`, { ...init, headers });
+  const response = await fetch(`${getApiBase()}${path}`, { ...init, credentials: 'include', headers });
   if (response.status === 401) {
     localStorage.removeItem(TOKEN_KEY);
     if (window.location.pathname !== '/admin/login') {
@@ -1074,7 +1070,7 @@ function getApplicantPasswordResetTargetEmail(airport: AirportFormState): string
 
 export default function AdminApp() {
   const [path, setPath] = useState(window.location.pathname);
-  const [adminToken, setAdminToken] = useState<string | null>(() => localStorage.getItem(TOKEN_KEY));
+  const [adminSessionActive, setAdminSessionActive] = useState(() => window.location.pathname !== '/admin/login');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   useEffect(() => {
     const onPop = () => setPath(window.location.pathname);
@@ -1103,19 +1099,19 @@ export default function AdminApp() {
   if (path === '/admin/login') {
     return (
       <LoginPage
-        onLoggedIn={(token) => {
-          setAdminToken(token);
+        onLoggedIn={() => {
+          setAdminSessionActive(true);
           navigate(ADMIN_DEFAULT_PATH);
         }}
       />
     );
   }
 
-  if (!adminToken) {
+  if (!adminSessionActive) {
     return (
       <LoginPage
-        onLoggedIn={(token) => {
-          setAdminToken(token);
+        onLoggedIn={() => {
+          setAdminSessionActive(true);
           navigate(ADMIN_DEFAULT_PATH);
         }}
       />
@@ -1151,9 +1147,14 @@ export default function AdminApp() {
           </a>
           <button
             className="text-xs md:text-sm px-2 md:px-3 py-1.5 rounded bg-neutral-900 text-white"
-            onClick={() => {
+            onClick={async () => {
+              try {
+                await apiFetch('/api/v1/admin/logout', { method: 'POST' });
+              } catch {
+                // Logging out should still clear local UI state if the network request fails.
+              }
               localStorage.removeItem(TOKEN_KEY);
-              setAdminToken(null);
+              setAdminSessionActive(false);
               navigate('/admin/login');
             }}
           >
@@ -1245,7 +1246,7 @@ function AdminNavList({ path, onNavigate }: { path: string; onNavigate: (path: s
   );
 }
 
-function LoginPage({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
+function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -1255,12 +1256,12 @@ function LoginPage({ onLoggedIn }: { onLoggedIn: (token: string) => void }) {
     setError('');
     setLoading(true);
     try {
-      const result = (await apiFetch('/api/v1/admin/login', {
+      await apiFetch('/api/v1/admin/login', {
         method: 'POST',
         body: JSON.stringify({ password }),
-      })) as { token: string };
-      localStorage.setItem(TOKEN_KEY, result.token);
-      onLoggedIn(result.token);
+      });
+      localStorage.removeItem(TOKEN_KEY);
+      onLoggedIn();
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
     } finally {

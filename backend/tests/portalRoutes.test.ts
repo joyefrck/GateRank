@@ -1460,6 +1460,119 @@ test('POST /portal/payment-orders creates payment order from configured amount',
   }
 });
 
+test('POST /portal/payment-orders requires explicit notify origin before creating gateway order', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const previousApiBase = process.env.API_BASE;
+  const previousPaymentNotifyOrigin = process.env.PAYMENT_NOTIFY_ORIGIN;
+  delete process.env.API_BASE;
+  delete process.env.PAYMENT_NOTIFY_ORIGIN;
+  let expiredOrders = 0;
+  let gatewayCreateCalls = 0;
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount({ id: 1, application_id: 7 }),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({
+          id: 7,
+          name: 'Cloud Airport',
+          website: 'https://example.com',
+          review_status: 'awaiting_payment',
+          payment_status: 'unpaid',
+          payment_amount: null,
+          applicant_email: 'user@example.com',
+          applicant_telegram: '@cloud',
+          founded_on: '2025-01-01',
+          airport_intro: 'intro',
+          created_at: '2026-04-18 10:00:00',
+        }),
+        markPaid: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => {
+          expiredOrders += 1;
+          return 0;
+        },
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({
+          enabled: true,
+          notify_origin: '',
+          pid: '28615',
+          private_key: 'private-key',
+          platform_public_key: 'public-key',
+          epay: { enabled: true },
+          usdt: {
+            enabled: false,
+            gateway_url: '',
+            merchant_id: '',
+            secret_key: '',
+          },
+        }),
+      },
+      marketingSettingsService: {
+        getConfig: async () => ({ application_fee_amount: 1888, click_charge_amount: 2.5 }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          gatewayCreateCalls += 1;
+          throw new Error('payment gateway should not be called');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/payment-orders`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        Origin: 'http://localhost:3000',
+      },
+      body: JSON.stringify({ channel: 'alipay' }),
+    });
+    const body = (await response.json()) as { code: string };
+
+    assert.equal(response.status, 409);
+    assert.equal(body.code, 'PAYMENT_NOTIFY_ORIGIN_NOT_CONFIGURED');
+    assert.equal(expiredOrders, 0);
+    assert.equal(gatewayCreateCalls, 0);
+  } finally {
+    if (previousApiBase === undefined) {
+      delete process.env.API_BASE;
+    } else {
+      process.env.API_BASE = previousApiBase;
+    }
+    if (previousPaymentNotifyOrigin === undefined) {
+      delete process.env.PAYMENT_NOTIFY_ORIGIN;
+    } else {
+      process.env.PAYMENT_NOTIFY_ORIGIN = previousPaymentNotifyOrigin;
+    }
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /portal/payment-orders rejects alipay when epay switch is disabled', async () => {
   process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
   const createdOrders: Array<Record<string, unknown>> = [];

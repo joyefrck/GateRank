@@ -1,6 +1,8 @@
 import express from 'express';
+import helmet from 'helmet';
 import { getDbPool } from './db/mysql';
 import { adminAuth } from './middleware/adminAuth';
+import { corsAllowlist } from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { requestContext } from './middleware/requestContext';
 import { AccessTokenRepository } from './repositories/accessTokenRepository';
@@ -213,20 +215,13 @@ export async function createApp() {
   });
 
   const app = express();
-  app.use(express.urlencoded({ extended: false }));
-  app.use(express.json());
+  app.disable('x-powered-by');
+  app.use(helmet({ contentSecurityPolicy: false }));
+  app.use(express.urlencoded({ extended: false, limit: process.env.URLENCODED_BODY_LIMIT || '100kb' }));
+  app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
   app.use(requestContext);
   app.use('/uploads', express.static(getNewsUploadRootDir()));
-  app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-api-key, x-request-id, x-admin-actor');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
-    if (req.method === 'OPTIONS') {
-      res.status(204).end();
-      return;
-    }
-    next();
-  });
+  app.use(corsAllowlist);
 
   app.get('/healthz', (_req, res) => {
     res.json({ status: 'ok' });

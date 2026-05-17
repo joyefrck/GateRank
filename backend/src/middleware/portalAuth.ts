@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { sendError } from '../utils/http';
 import { getPortalAuthConfig } from '../utils/portalAuthConfig';
 import { verifyApplicantToken } from '../utils/token';
+import { PORTAL_AUTH_COOKIE, readCookie } from '../utils/authCookies';
 
 declare global {
   namespace Express {
@@ -16,7 +17,9 @@ declare global {
 
 export function portalAuth(req: Request, res: Response, next: NextFunction): void {
   const authHeader = req.header('authorization') || '';
-  const token = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length) : '';
+  const token = authHeader.startsWith('Bearer ')
+    ? authHeader.slice('Bearer '.length)
+    : readCookie(req, PORTAL_AUTH_COOKIE);
   const config = getPortalAuthConfig();
   const payload = token ? verifyApplicantToken(config.jwtSecret, token) : null;
 

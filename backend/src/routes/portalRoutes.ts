@@ -1,8 +1,9 @@
 import { randomInt, randomUUID } from 'node:crypto';
-import { Router } from 'express';
+import { Router, type Request, type Response } from 'express';
 import { APPLICATION_FEE_AMOUNT, CLICK_CHARGE_AMOUNT, RECHARGE_AMOUNTS } from '../config/billing';
 import { HttpError } from '../middleware/errorHandler';
 import { portalAuth } from '../middleware/portalAuth';
+import { createPortalLoginFlowRateLimit, createPortalLoginRateLimit } from '../middleware/rateLimit';
 import type { ApplicantAccount } from '../repositories/applicantAccountRepository';
 import type { ApplicantEmailChangeCodeRepository } from '../repositories/applicantEmailChangeCodeRepository';
 import type { ApplicantTelegramBinding } from '../repositories/applicantTelegramBindingRepository';
@@ -40,6 +41,7 @@ import {
   type UserTelegramBotConfig,
 } from '../services/userTelegramBotSettingsService';
 import { resolveAvailablePaymentMethods } from '../services/paymentMethodAvailability';
+import { PORTAL_AUTH_COOKIE, clearAuthCookie, setAuthCookie } from '../utils/authCookies';
 
 interface PortalDeps {
   applicantAccountRepository: {
@@ -199,13 +201,16 @@ interface PortalDeps {
 
 export function createPortalRoutes(deps: PortalDeps): Router {
   const router = Router();
+  const portalLoginRateLimit = createPortalLoginRateLimit();
+  const portalLoginFlowRateLimit = createPortalLoginFlowRateLimit();
 
-  router.post('/portal/login', async (req, res, next) => {
+  router.post('/portal/login', portalLoginRateLimit, async (req, res, next) => {
     try {
       const payload = toPlainObject(req.body ?? {}, 'body');
       const email = mustEmail(payload.email, 'email');
       const password = mustString(payload.password, 'password');
       const auth = await deps.applicantPortalAuthService.login(email, password);
+      setPortalAuthCookie(res, req, auth.token, auth.expires_at);
       res.json({
         token: auth.token,
         expires_at: auth.expires_at,
@@ -216,7 +221,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
   });
 
-  router.post('/portal/x-oauth/login/start', async (_req, res, next) => {
+  router.post('/portal/x-oauth/login/start', portalLoginFlowRateLimit, async (_req, res, next) => {
     try {
       res.status(201).json(await requireApplicantXOAuthService(deps).startLogin());
     } catch (error) {
@@ -224,7 +229,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
   });
 
-  router.post('/portal/x-oauth/login/complete', async (req, res, next) => {
+  router.post('/portal/x-oauth/login/complete', portalLoginFlowRateLimit, async (req, res, next) => {
     try {
       const payload = toPlainObject(req.body ?? {}, 'body');
       const account = await requireApplicantXOAuthService(deps).consumeLoginHandoff(mustString(payload.code, 'code'));
@@ -232,6 +237,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         throw new Error('applicantPortalAuthService.createSession is not configured');
       }
       const auth = await deps.applicantPortalAuthService.createSession(account);
+      setPortalAuthCookie(res, req, auth.token, auth.expires_at);
       res.json({
         token: auth.token,
         expires_at: auth.expires_at,
@@ -242,7 +248,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
   });
 
-  router.post('/portal/telegram-login/start', async (_req, res, next) => {
+  router.post('/portal/telegram-login/start', portalLoginFlowRateLimit, async (_req, res, next) => {
     try {
       const config = await requireUserTelegramBotSettingsService(deps).getConfig();
       if (!isUserTelegramBotConfigReady(config) || !config.bot_username) {
@@ -260,7 +266,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
   });
 
-  router.post('/portal/telegram-login/complete', async (req, res, next) => {
+  router.post('/portal/telegram-login/complete', portalLoginFlowRateLimit, async (req, res, next) => {
     try {
       const payload = toPlainObject(req.body ?? {}, 'body');
       const result = await requireApplicantTelegramLoginFlowRepository(deps).consumeForLogin(
@@ -285,6 +291,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         throw new Error('applicantPortalAuthService.createSession is not configured');
       }
       const auth = await deps.applicantPortalAuthService.createSession(account);
+      setPortalAuthCookie(res, req, auth.token, auth.expires_at);
       res.json({
         token: auth.token,
         expires_at: auth.expires_at,
@@ -455,7 +462,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const marketingConfig = await getMarketingBillingConfig(deps);
       const amount = Number(marketingConfig.application_fee_amount);
       const outTradeNo = `gr_${application.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
-      const apiOrigin = await getPaymentNotifyOrigin(deps, req);
+      const apiOrigin = await getPaymentNotifyOrigin(deps);
       const siteOrigin = getSiteOrigin(req);
       const notifyUrl = `${apiOrigin}/api/v1/portal/payment-notify`;
       const returnUrl = `${siteOrigin}/portal`;
@@ -535,7 +542,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       await requirePaymentChannelAvailable(deps, channel);
       await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id);
       const outTradeNo = `grr_${account.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
-      const apiOrigin = await getPaymentNotifyOrigin(deps, req);
+      const apiOrigin = await getPaymentNotifyOrigin(deps);
       const siteOrigin = getSiteOrigin(req);
       const gatewayOrder = await deps.paymentGatewayService.createOrder({
         out_trade_no: outTradeNo,
@@ -713,7 +720,8 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
   });
 
-  router.post('/portal/logout', portalAuth, async (_req, res) => {
+  router.post('/portal/logout', portalAuth, async (req, res) => {
+    clearAuthCookie(res, req, PORTAL_AUTH_COOKIE);
     res.json({ ok: true });
   });
 
@@ -1447,6 +1455,10 @@ function requireApplicantSession(req: any): { applicant_id: number; email: strin
   return req.applicantSession;
 }
 
+function setPortalAuthCookie(res: Response, req: Request, token: string, expiresAt: string): void {
+  setAuthCookie(res, req, PORTAL_AUTH_COOKIE, token, expiresAt);
+}
+
 function getClientIp(req: any): string {
   const forwarded = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
   if (forwarded) {
@@ -1455,24 +1467,35 @@ function getClientIp(req: any): string {
   return String(req.ip || '127.0.0.1').replace('::ffff:', '');
 }
 
-function getRequestOrigin(req: any): string {
-  const proto = String(req.headers['x-forwarded-proto'] || req.protocol || 'http').split(',')[0];
-  const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0];
-  return `${proto}://${host}`;
+async function getPaymentNotifyOrigin(deps: PortalDeps): Promise<string> {
+  const config = toLooseObject(await deps.paymentGatewaySettingsService.getConfig());
+  const fromSettings = normalizeExplicitPaymentNotifyOrigin(config.notify_origin);
+  if (fromSettings) {
+    return fromSettings;
+  }
+
+  const configured = normalizeExplicitPaymentNotifyOrigin(process.env.PAYMENT_NOTIFY_ORIGIN || process.env.API_BASE);
+  if (configured) {
+    return configured;
+  }
+  throw new HttpError(
+    409,
+    'PAYMENT_NOTIFY_ORIGIN_NOT_CONFIGURED',
+    '支付回调 Origin 未配置，请设置 PAYMENT_NOTIFY_ORIGIN、API_BASE 或后台支付回调地址',
+  );
 }
 
-async function getPaymentNotifyOrigin(deps: PortalDeps, req: any): Promise<string> {
-  const config = toLooseObject(await deps.paymentGatewaySettingsService.getConfig());
-  const fromSettings = String(config.notify_origin || '').trim();
-  if (fromSettings) {
-    return fromSettings.replace(/\/+$/, '');
+function normalizeExplicitPaymentNotifyOrigin(value: unknown): string {
+  const raw = String(value || '').trim().replace(/\/+$/, '');
+  if (!raw) {
+    return '';
   }
-
-  const configured = String(process.env.PAYMENT_NOTIFY_ORIGIN || process.env.API_BASE || '').trim();
-  if (configured) {
-    return configured.replace(/\/+$/, '');
+  try {
+    const url = new URL(raw);
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return '';
   }
-  return getRequestOrigin(req).replace(/\/+$/, '');
 }
 
 async function getXOAuthReturnOrigin(deps: PortalDeps, req: any): Promise<string> {
