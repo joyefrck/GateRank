@@ -3608,33 +3608,34 @@ function OfficialApplicationNoticeModal({
   const feeText = feeAmount === null ? '' : formatMetric(feeAmount);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-neutral-950/45 px-4 py-6 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[999] flex min-h-[100dvh] items-start justify-center overflow-y-auto bg-neutral-950/45 px-4 py-8 backdrop-blur-sm sm:items-center sm:py-6">
       <section
         role="dialog"
         aria-modal="true"
         aria-labelledby="application-official-notice-title"
-        className="w-full max-w-lg rounded-[1.75rem] border border-neutral-200 bg-white p-6 shadow-[0_28px_80px_rgba(15,23,42,0.24)] md:p-7"
+        className="my-auto w-full max-w-lg rounded-[1.75rem] border border-neutral-200 bg-white p-5 shadow-[0_28px_80px_rgba(15,23,42,0.24)] sm:p-6 md:p-7"
       >
-        <div className="flex items-start gap-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-neutral-900 text-white">
+        <div className="flex items-center gap-4 border-b border-neutral-100 pb-5">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-neutral-900 text-white">
             <ShieldCheck className="h-5 w-5" />
           </div>
-          <div className="min-w-0">
-            <h2 id="application-official-notice-title" className="text-xl font-black tracking-tight text-neutral-950">
-              友情提示
-            </h2>
-            <p className="mt-3 text-sm leading-7 text-neutral-700">
-              {feeAmount === null
-                ? '正在读取入驻费配置，请稍候。'
-                : <>机场榜坚持独立、公正收录，入驻可获得测速、展示与后台管理服务。入驻费{feeText}元，仅限USDT支付，请仔细考虑！</>}
-            </p>
-            <div className="mt-4 text-right text-sm font-black text-neutral-900">机场榜GateRank官方</div>
-            {error && (
-              <div className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
-                入驻费读取失败，请刷新页面后再申请。
-              </div>
-            )}
-          </div>
+          <h2 id="application-official-notice-title" className="min-w-0 text-xl font-black tracking-tight text-neutral-950 sm:text-2xl">
+            友情提示
+          </h2>
+        </div>
+
+        <div className="mt-5 space-y-4">
+          <p className="rounded-2xl border border-neutral-100 bg-neutral-50 px-4 py-3 text-sm leading-7 text-neutral-700 sm:text-[15px] sm:leading-8">
+            {feeAmount === null
+              ? '正在读取入驻费配置，请稍候。'
+              : <>机场榜坚持独立、公正收录，入驻可获得测速、展示与后台管理服务。入驻费{feeText}元，仅限USDT支付，请仔细考虑！</>}
+          </p>
+          <div className="text-right text-sm font-black text-neutral-900">机场榜GateRank官方</div>
+          {error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">
+              入驻费读取失败，请刷新页面后再申请。
+            </div>
+          )}
         </div>
 
         <button
