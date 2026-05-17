@@ -5175,7 +5175,7 @@ function PortalPage() {
               </div>
             </div>
             <a
-              className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-4 py-3 text-sm font-black text-sky-700 transition hover:border-sky-200 hover:bg-sky-100/70 md:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-sky-100 bg-sky-50 px-4 py-3 text-sm font-black text-sky-700 transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-sky-500/25 md:w-auto"
               href={buildTelegramResolveUrl(view.admin_telegram_username)}
             >
               <Send className="h-4 w-4" />
@@ -5227,7 +5227,7 @@ function PortalPage() {
             {view && (
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm"
+                className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-slate-200 bg-white/90 px-4 py-2.5 text-sm font-medium text-slate-700 shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-900/10"
                 onClick={logout}
               >
                 <LogOut className="h-4 w-4" />
