@@ -1,4 +1,94 @@
 export type AirportStatus = 'normal' | 'risk' | 'down';
+export type AirportStreamingSupport =
+  | 'netflix'
+  | 'chatgpt'
+  | 'disney_plus'
+  | 'hbo_max'
+  | 'youtube_premium'
+  | 'tiktok'
+  | 'spotify';
+export type AirportPaymentMethod =
+  | 'wechat'
+  | 'alipay'
+  | 'usdt_trc20'
+  | 'usdt_erc20'
+  | 'usdt_bep20'
+  | 'stripe_card'
+  | 'paypal'
+  | 'crypto_other'
+  | 'unionpay';
+export type AirportProfileClientKey =
+  | 'clash'
+  | 'clash_verge'
+  | 'shadowrocket'
+  | 'quantumult_x'
+  | 'stash'
+  | 'surge'
+  | 'sing_box'
+  | 'v2rayn'
+  | 'v2rayng'
+  | 'nekobox'
+  | 'surfboard'
+  | 'xiaohuojian'
+  | 'openclash';
+export type AirportProfileRegionKey =
+  | 'hong_kong'
+  | 'taiwan'
+  | 'japan'
+  | 'singapore'
+  | 'united_states'
+  | 'south_korea'
+  | 'united_kingdom'
+  | 'germany'
+  | 'turkey'
+  | 'argentina'
+  | 'india';
+export type AirportProfileLineType = 'iepl' | 'iplc' | 'cn2' | 'bgp' | 'relay';
+
+export interface AirportProfilePlan {
+  supports_monthly: boolean | null;
+  supports_quarterly: boolean | null;
+  supports_half_yearly: boolean | null;
+  supports_annual: boolean | null;
+  lowest_monthly_price: number | null;
+  lowest_annual_monthly_price: number | null;
+  has_trial_plan: boolean | null;
+  has_lifetime_plan: boolean | null;
+}
+
+export interface AirportProfileTelegram {
+  has_group: boolean | null;
+  group_url: string | null;
+  has_channel: boolean | null;
+  channel_url: string | null;
+  group_allows_speaking: boolean | null;
+  group_member_count: number | null;
+  recent_active_at: string | null;
+  has_customer_service_bot: boolean | null;
+  has_ticket_system: boolean | null;
+}
+
+export interface AirportProfileRegionInfo {
+  has_residential: boolean | null;
+  has_native_ip: boolean | null;
+  line_types: AirportProfileLineType[];
+}
+
+export interface AirportProfileImportMethods {
+  one_click_import: boolean | null;
+  subscription_link: boolean | null;
+  universal_subscription: boolean | null;
+  qr_code_import: boolean | null;
+  tutorials: boolean | null;
+}
+
+export interface AirportProfile {
+  plan: AirportProfilePlan;
+  telegram: AirportProfileTelegram;
+  clients: Record<AirportProfileClientKey, boolean | null>;
+  import_methods: AirportProfileImportMethods;
+  regions: Record<AirportProfileRegionKey, AirportProfileRegionInfo>;
+}
 export type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
 export type AirportApplicationReviewStatus = 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
 export type AirportApplicationPaymentStatus = 'unpaid' | 'paid';
@@ -24,6 +114,14 @@ export interface Airport {
   is_listed: boolean;
   plan_price_month: number;
   has_trial: boolean;
+  streaming_support?: AirportStreamingSupport[];
+  payment_methods?: AirportPaymentMethod[];
+  payment_crypto_other?: string | null;
+  has_annual_plan?: boolean | null;
+  has_telegram_group?: boolean | null;
+  telegram_allows_speaking?: boolean | null;
+  has_lifetime_plan?: boolean | null;
+  profile?: AirportProfile;
   subscription_url?: string | null;
   applicant_email?: string | null;
   applicant_account_email?: string | null;

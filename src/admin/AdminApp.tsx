@@ -30,6 +30,52 @@ type AirportApplicationReviewStatus = 'awaiting_payment' | 'pending' | 'reviewed
 type AirportApplicationPaymentStatus = 'unpaid' | 'paid';
 type AirportApplicationDetailTab = 'basic' | 'review';
 type AirportEditTab = 'basic' | 'review' | 'account';
+type AirportEditorTab = 'basic' | 'review' | 'account' | 'plan' | 'telegram' | 'nodes' | 'clients' | 'import';
+type AirportStreamingSupport =
+  | 'netflix'
+  | 'chatgpt'
+  | 'disney_plus'
+  | 'hbo_max'
+  | 'youtube_premium'
+  | 'tiktok'
+  | 'spotify';
+type AirportPaymentMethod =
+  | 'wechat'
+  | 'alipay'
+  | 'usdt_trc20'
+  | 'usdt_erc20'
+  | 'usdt_bep20'
+  | 'stripe_card'
+  | 'paypal'
+  | 'crypto_other'
+  | 'unionpay';
+type AirportProfileClientKey =
+  | 'clash'
+  | 'clash_verge'
+  | 'shadowrocket'
+  | 'quantumult_x'
+  | 'stash'
+  | 'surge'
+  | 'sing_box'
+  | 'v2rayn'
+  | 'v2rayng'
+  | 'nekobox'
+  | 'surfboard'
+  | 'xiaohuojian'
+  | 'openclash';
+type AirportProfileRegionKey =
+  | 'hong_kong'
+  | 'taiwan'
+  | 'japan'
+  | 'singapore'
+  | 'united_states'
+  | 'south_korea'
+  | 'united_kingdom'
+  | 'germany'
+  | 'turkey'
+  | 'argentina'
+  | 'india';
+type AirportProfileLineType = 'iepl' | 'iplc' | 'cn2' | 'bgp' | 'relay';
 type ProbeSampleType = 'latency' | 'download' | 'availability';
 type ProbeScope = 'stability' | 'performance';
 type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
@@ -50,6 +96,14 @@ interface Airport {
   is_listed: boolean;
   plan_price_month: number;
   has_trial: boolean;
+  streaming_support?: AirportStreamingSupport[];
+  payment_methods?: AirportPaymentMethod[];
+  payment_crypto_other?: string | null;
+  has_annual_plan?: boolean | null;
+  has_telegram_group?: boolean | null;
+  telegram_allows_speaking?: boolean | null;
+  has_lifetime_plan?: boolean | null;
+  profile?: AirportProfile;
   subscription_url?: string | null;
   applicant_email?: string | null;
   applicant_account_email?: string | null;
@@ -83,6 +137,14 @@ interface AirportFormState {
   is_listed: boolean;
   plan_price_month: string;
   has_trial: boolean;
+  streaming_support: AirportStreamingSupport[];
+  payment_methods: AirportPaymentMethod[];
+  payment_crypto_other: string;
+  has_annual_plan: boolean | null;
+  has_telegram_group: boolean | null;
+  telegram_allows_speaking: boolean | null;
+  has_lifetime_plan: boolean | null;
+  profile: AirportProfile;
   subscription_url: string;
   applicant_email: string;
   applicant_password_reset_email: string;
@@ -95,6 +157,51 @@ interface AirportFormState {
   manual_tags: string[];
   wallet_id: number | null;
   wallet_balance: number | null;
+}
+
+interface AirportProfilePlan {
+  supports_monthly: boolean | null;
+  supports_quarterly: boolean | null;
+  supports_half_yearly: boolean | null;
+  supports_annual: boolean | null;
+  lowest_monthly_price: number | null;
+  lowest_annual_monthly_price: number | null;
+  has_trial_plan: boolean | null;
+  has_lifetime_plan: boolean | null;
+}
+
+interface AirportProfileTelegram {
+  has_group: boolean | null;
+  group_url: string | null;
+  has_channel: boolean | null;
+  channel_url: string | null;
+  group_allows_speaking: boolean | null;
+  group_member_count: number | null;
+  recent_active_at: string | null;
+  has_customer_service_bot: boolean | null;
+  has_ticket_system: boolean | null;
+}
+
+interface AirportProfileRegionInfo {
+  has_residential: boolean | null;
+  has_native_ip: boolean | null;
+  line_types: AirportProfileLineType[];
+}
+
+interface AirportProfileImportMethods {
+  one_click_import: boolean | null;
+  subscription_link: boolean | null;
+  universal_subscription: boolean | null;
+  qr_code_import: boolean | null;
+  tutorials: boolean | null;
+}
+
+interface AirportProfile {
+  plan: AirportProfilePlan;
+  telegram: AirportProfileTelegram;
+  clients: Record<AirportProfileClientKey, boolean | null>;
+  import_methods: AirportProfileImportMethods;
+  regions: Record<AirportProfileRegionKey, AirportProfileRegionInfo>;
 }
 
 type BillingDetailTab = 'recharge' | 'consumption';
@@ -123,6 +230,79 @@ interface WalletTransactionRecord {
   description: string;
   created_at: string;
 }
+
+const AIRPORT_STREAMING_SUPPORT_OPTIONS: Array<{ value: AirportStreamingSupport; label: string }> = [
+  { value: 'netflix', label: 'Netflix' },
+  { value: 'chatgpt', label: 'Chatgpt' },
+  { value: 'disney_plus', label: 'Disney_plus' },
+  { value: 'hbo_max', label: 'Hbo_max' },
+  { value: 'youtube_premium', label: 'Youtube_premium' },
+  { value: 'tiktok', label: 'Tiktok' },
+  { value: 'spotify', label: 'Spotify' },
+];
+
+const AIRPORT_PAYMENT_METHOD_OPTIONS: Array<{ value: AirportPaymentMethod; label: string }> = [
+  { value: 'wechat', label: '微信' },
+  { value: 'alipay', label: '支付宝' },
+  { value: 'usdt_trc20', label: 'USDT-TRC20' },
+  { value: 'usdt_erc20', label: 'USDT-ERC20' },
+  { value: 'usdt_bep20', label: 'USDT-BEP20' },
+  { value: 'stripe_card', label: 'Stripe / 信用卡' },
+  { value: 'paypal', label: 'PayPal' },
+  { value: 'crypto_other', label: '虚拟币其他币种' },
+  { value: 'unionpay', label: '银联' },
+];
+
+const AIRPORT_PROFILE_CLIENT_OPTIONS: Array<{ value: AirportProfileClientKey; label: string }> = [
+  { value: 'clash', label: 'Clash' },
+  { value: 'clash_verge', label: 'Clash Verge' },
+  { value: 'shadowrocket', label: 'Shadowrocket' },
+  { value: 'quantumult_x', label: 'Quantumult X' },
+  { value: 'stash', label: 'Stash' },
+  { value: 'surge', label: 'Surge' },
+  { value: 'sing_box', label: 'Sing-box' },
+  { value: 'v2rayn', label: 'V2rayN' },
+  { value: 'v2rayng', label: 'V2rayNG' },
+  { value: 'nekobox', label: 'NekoBox' },
+  { value: 'surfboard', label: 'Surfboard' },
+  { value: 'xiaohuojian', label: '小火箭' },
+  { value: 'openclash', label: 'OpenClash' },
+];
+
+const AIRPORT_PROFILE_REGION_OPTIONS: Array<{ value: AirportProfileRegionKey; label: string; aliases: string[] }> = [
+  { value: 'hong_kong', label: '香港', aliases: ['hong_kong', 'hong kong', 'hk', '香港'] },
+  { value: 'taiwan', label: '台湾', aliases: ['taiwan', 'tw', '台湾', '臺灣'] },
+  { value: 'japan', label: '日本', aliases: ['japan', 'jp', '日本'] },
+  { value: 'singapore', label: '新加坡', aliases: ['singapore', 'sg', '新加坡'] },
+  { value: 'united_states', label: '美国', aliases: ['united_states', 'united states', 'us', 'usa', '美国', '美國'] },
+  { value: 'south_korea', label: '韩国', aliases: ['south_korea', 'south korea', 'kr', 'korea', '韩国', '韓國'] },
+  { value: 'united_kingdom', label: '英国', aliases: ['united_kingdom', 'united kingdom', 'uk', 'gb', 'england', '英国', '英國'] },
+  { value: 'germany', label: '德国', aliases: ['germany', 'de', '德国', '德國'] },
+  { value: 'turkey', label: '土耳其', aliases: ['turkey', 'tr', '土耳其'] },
+  { value: 'argentina', label: '阿根廷', aliases: ['argentina', 'ar', '阿根廷'] },
+  { value: 'india', label: '印度', aliases: ['india', 'in', '印度'] },
+];
+
+const AIRPORT_PROFILE_LINE_TYPE_OPTIONS: Array<{ value: AirportProfileLineType; label: string }> = [
+  { value: 'iepl', label: 'IEPL' },
+  { value: 'iplc', label: 'IPLC' },
+  { value: 'cn2', label: 'CN2' },
+  { value: 'bgp', label: 'BGP' },
+  { value: 'relay', label: '中转' },
+];
+
+const EMPTY_AIRPORT_NODE_PROFILE: AirportNodeProfileState = {
+  loading: false,
+  error: '',
+  node_types: [],
+  node_regions: [],
+  node_transports: [],
+  region_counts: Object.fromEntries(AIRPORT_PROFILE_REGION_OPTIONS.map((item) => [item.value, 0])) as Record<
+    AirportProfileRegionKey,
+    number
+  >,
+  node_availability_percent: null,
+};
 
 interface PaginatedResponse<T> {
   page: number;
@@ -230,6 +410,26 @@ interface AirportDashboardView {
     historical_score?: number | null;
     final_score?: number | null;
   };
+}
+
+interface AirportSubscriptionNodeSnapshot {
+  nodes: Array<{
+    name: string;
+    region?: string | null;
+    type?: string | null;
+    outbound?: Record<string, unknown>;
+    raw_uri?: string;
+  }>;
+}
+
+interface AirportNodeProfileState {
+  loading: boolean;
+  error: string;
+  node_types: string[];
+  node_regions: string[];
+  node_transports: string[];
+  region_counts: Record<AirportProfileRegionKey, number>;
+  node_availability_percent: number | null;
 }
 
 interface AirportApplication {
@@ -1182,7 +1382,13 @@ export default function AdminApp() {
         </aside>
 
         <main className="max-h-full min-w-0 self-start overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-4 md:p-6">
-          {path === '/admin/airports' && <AirportsPage onOpenAirport={(id) => navigate(`/admin/airports/${id}/data`)} />}
+          {path === '/admin/airports' && (
+            <AirportsPage
+              onCreateAirport={() => navigate('/admin/airports/new')}
+              onEditAirport={(id) => navigate(`/admin/airports/${id}/edit`)}
+              onOpenAirport={(id) => navigate(`/admin/airports/${id}/data`)}
+            />
+          )}
           {path === '/admin/applications' && <ApplicationsPage onOpenAirports={() => navigate('/admin/airports')} />}
           {path === '/admin/news' && <NewsListPage onCreate={() => navigate('/admin/news/new')} onEdit={(id) => navigate(`/admin/news/${id}`)} />}
           {path === '/admin/marketing' && <MarketingPage />}
@@ -1198,6 +1404,13 @@ export default function AdminApp() {
           {path === '/admin/settings' && <SystemSettingsPage />}
           {path.match(/^\/admin\/airports\/\d+\/data$/) && (
             <AirportDataPage airportId={Number(path.split('/')[3])} onBack={() => navigate('/admin/airports')} />
+          )}
+          {(path === '/admin/airports/new' || path.match(/^\/admin\/airports\/\d+\/edit$/)) && (
+            <AirportEditorPage
+              airportId={path === '/admin/airports/new' ? undefined : Number(path.split('/')[3])}
+              onBack={() => navigate('/admin/airports')}
+              onSaved={(id) => navigate(`/admin/airports/${id}/edit`)}
+            />
           )}
         </main>
       </div>
@@ -5478,7 +5691,15 @@ function PublishTokensSettingsTab({ refreshTick }: { refreshTick: number }) {
   );
 }
 
-function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }) {
+function AirportsPage({
+  onCreateAirport,
+  onEditAirport,
+  onOpenAirport,
+}: {
+  onCreateAirport: () => void;
+  onEditAirport: (id: number) => void;
+  onOpenAirport: (id: number) => void;
+}) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [items, setItems] = useState<Airport[]>([]);
@@ -5501,6 +5722,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
   const [passwordResetSaving, setPasswordResetSaving] = useState(false);
   const [passwordResetError, setPasswordResetError] = useState('');
   const [passwordResetMessage, setPasswordResetMessage] = useState('');
+  const [nodeProfile, setNodeProfile] = useState<AirportNodeProfileState>(EMPTY_AIRPORT_NODE_PROFILE);
   const [billingAirport, setBillingAirport] = useState<Airport | null>(null);
   const [billingTab, setBillingTab] = useState<BillingDetailTab>('recharge');
   const [rechargeRecords, setRechargeRecords] = useState<PaginatedResponse<RechargeOrderRecord>>({
@@ -5560,6 +5782,43 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
     setPasswordResetMessage('');
   }, [editing?.id ?? (editing ? 'new' : 'none')]);
 
+  useEffect(() => {
+    const airportId = editing?.id;
+    if (!airportId) {
+      setNodeProfile(EMPTY_AIRPORT_NODE_PROFILE);
+      return;
+    }
+
+    let cancelled = false;
+    setNodeProfile({ ...EMPTY_AIRPORT_NODE_PROFILE, loading: true });
+
+    const loadNodeProfile = async () => {
+      const [snapshotResult, dashboardResult] = await Promise.allSettled([
+        apiFetch(`/api/v1/admin/airports/${airportId}/subscription-node-snapshots/latest`) as Promise<AirportSubscriptionNodeSnapshot>,
+        apiFetch(`/api/v1/admin/airports/${airportId}/dashboard?date=${today()}`) as Promise<AirportDashboardView>,
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+
+      const snapshot = snapshotResult.status === 'fulfilled' ? snapshotResult.value : null;
+      const dashboard = dashboardResult.status === 'fulfilled' ? dashboardResult.value : null;
+      setNodeProfile({
+        ...buildAirportNodeProfile(snapshot, dashboard),
+        loading: false,
+        error: snapshotResult.status === 'rejected' && dashboardResult.status === 'rejected'
+          ? '节点信息加载失败'
+          : '',
+      });
+    };
+
+    void loadNodeProfile();
+    return () => {
+      cancelled = true;
+    };
+  }, [editing?.id]);
+
   const saveAirport = async () => {
     if (!editing) return;
     const websites = normalizeUrlList(editing.websites);
@@ -5589,6 +5848,15 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       is_listed: editing.is_listed,
       plan_price_month: Number(editing.plan_price_month || 0),
       has_trial: Boolean(editing.has_trial),
+      streaming_support: editing.streaming_support,
+      payment_methods: editing.payment_methods,
+      payment_crypto_other: editing.payment_methods.includes('crypto_other')
+        ? editing.payment_crypto_other.trim() || null
+        : null,
+      has_annual_plan: editing.has_annual_plan,
+      has_telegram_group: editing.has_telegram_group,
+      telegram_allows_speaking: editing.telegram_allows_speaking,
+      has_lifetime_plan: editing.has_lifetime_plan,
       subscription_url: editing.subscription_url.trim() || null,
       applicant_email: editing.applicant_email.trim() || null,
       applicant_telegram: editing.applicant_telegram.trim() || null,
@@ -5597,6 +5865,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       test_account: editing.test_account.trim() || null,
       test_password: editing.test_password || null,
       manual_tags: manualTags,
+      profile: normalizeAirportProfile(editing.profile),
       confirm_down: confirmDown || undefined,
     };
 
@@ -5786,10 +6055,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
         <h2 className="text-lg font-bold">机场管理</h2>
         <button
           className="px-3 py-2 rounded bg-neutral-900 text-white text-sm"
-          onClick={() => {
-            setFormError('');
-            setEditing(createAirportForm());
-          }}
+          onClick={onCreateAirport}
         >
           <span className="inline-flex items-center gap-2"><Plus size={14} />新增机场</span>
         </button>
@@ -5822,18 +6088,18 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
       {error && <div className="text-sm text-rose-600">{error}</div>}
       {loading ? <div className="text-sm text-neutral-500">加载中...</div> : (
         <div className="overflow-x-auto overscroll-x-contain rounded border border-neutral-200">
-          <table className="w-full min-w-[1200px] table-fixed text-sm">
+          <table className="w-full min-w-[1280px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
                 <th className="w-[8%] text-left px-4 py-3">申请 ID</th>
-                <th className="w-[16%] text-left px-4 py-3">名称</th>
+                <th className="w-[15%] text-left px-4 py-3">名称</th>
                 <th className="w-[12%] text-left px-4 py-3">账户余额</th>
                 <th className="w-[10%] text-left px-4 py-3">已绑定 bot</th>
                 <th className="w-[7%] text-left px-4 py-3">状态</th>
                 <th className="w-[8%] text-left px-4 py-3 whitespace-nowrap">是否上架</th>
                 <th className="w-[6%] text-left px-4 py-3">总分</th>
-                <th className="w-[24%] text-left px-4 py-3">标签</th>
-                <th className="sticky right-0 z-20 w-[10%] text-left px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
+                <th className="w-[22%] text-left px-4 py-3">标签</th>
+                <th className="sticky right-0 z-20 w-[168px] min-w-[168px] text-left px-4 py-3 bg-neutral-100 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
                   操作
                 </th>
               </tr>
@@ -5873,13 +6139,10 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                   <td className="px-4 py-3">
                     <TagBadgeGroup tags={it.tags || []} size="sm" />
                   </td>
-                  <td className="sticky right-0 z-10 px-4 py-3 bg-white border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.14)]">
-                    <div className="flex items-center gap-3 whitespace-nowrap">
-                      <button className="underline" onClick={() => {
-                        setFormError('');
-                        setEditing(toAirportForm(it));
-                      }}>编辑</button>
-                      <button className="underline" onClick={() => onOpenAirport(it.id)}>数据台</button>
+                  <td className="sticky right-0 z-10 w-[168px] min-w-[168px] px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.14)]">
+                    <div className="inline-flex items-center justify-start gap-3 whitespace-nowrap">
+                      <button className="underline" onClick={() => onEditAirport(it.id)}>数据中心</button>
+                      <button className="underline" onClick={() => onOpenAirport(it.id)}>机场分</button>
                     </div>
                   </td>
                 </tr>
@@ -6128,6 +6391,81 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                     />
                     支持试用
                   </label>
+                </div>
+
+                <div className="rounded-2xl border border-neutral-300 bg-white px-4 py-4 space-y-4">
+                  <div>
+                    <div className="text-sm font-medium text-neutral-900">运营资料</div>
+                    <p className="mt-1 text-sm text-neutral-500">仅后台维护，用于运营快速核对，不影响公开页、申请表和评分逻辑。</p>
+                  </div>
+
+                  <FormField label="解锁能力" hint="支持多选。">
+                    <CheckboxPillGroup
+                      options={AIRPORT_STREAMING_SUPPORT_OPTIONS}
+                      value={editing.streaming_support}
+                      onChange={(streamingSupport) => setEditing({ ...editing, streaming_support: streamingSupport })}
+                    />
+                  </FormField>
+
+                  <FormField label="支付方式" hint="支持多选。">
+                    <CheckboxPillGroup
+                      options={AIRPORT_PAYMENT_METHOD_OPTIONS}
+                      value={editing.payment_methods}
+                      onChange={(paymentMethods) => setEditing({ ...editing, payment_methods: paymentMethods })}
+                    />
+                    {editing.payment_methods.includes('crypto_other') && (
+                      <input
+                        type="text"
+                        value={editing.payment_crypto_other}
+                        onChange={(event) => setEditing({ ...editing, payment_crypto_other: event.target.value })}
+                        placeholder="填写其他虚拟币币种"
+                        className="mt-3 w-full rounded-2xl border border-neutral-300 px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                      />
+                    )}
+                  </FormField>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <NullableBooleanRadioGroup
+                      label="是否有年付套餐"
+                      name="has_annual_plan"
+                      value={editing.has_annual_plan}
+                      onChange={(value) => setEditing({ ...editing, has_annual_plan: value })}
+                    />
+                    <NullableBooleanRadioGroup
+                      label="是否有电报群"
+                      name="has_telegram_group"
+                      value={editing.has_telegram_group}
+                      onChange={(value) => setEditing({ ...editing, has_telegram_group: value })}
+                    />
+                    <NullableBooleanRadioGroup
+                      label="是否允许发言"
+                      name="telegram_allows_speaking"
+                      value={editing.telegram_allows_speaking}
+                      onChange={(value) => setEditing({ ...editing, telegram_allows_speaking: value })}
+                    />
+                    <NullableBooleanRadioGroup
+                      label="是否存在永久套餐"
+                      name="has_lifetime_plan"
+                      value={editing.has_lifetime_plan}
+                      onChange={(value) => setEditing({ ...editing, has_lifetime_plan: value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-neutral-300 bg-white px-4 py-4">
+                  <div className="text-sm font-medium text-neutral-900">节点信息</div>
+                  <p className="mt-1 text-sm text-neutral-500">系统根据订阅解析和性能采集自动获取，不支持手工编辑。</p>
+                  <div className="mt-4 grid gap-4 md:grid-cols-3">
+                    <ReadField label="节点类型" value={formatAutoNodeList(editing.id, nodeProfile.loading, nodeProfile.node_types)} />
+                    <ReadField
+                      label="节点可用率"
+                      value={formatAutoNodeAvailability(editing.id, nodeProfile.loading, nodeProfile.node_availability_percent)}
+                    />
+                    <ReadField label="节点覆盖地区" value={formatAutoNodeList(editing.id, nodeProfile.loading, nodeProfile.node_regions)} />
+                  </div>
+                  {nodeProfile.error && (
+                    <div className="mt-3 text-xs text-rose-600">{nodeProfile.error}</div>
+                  )}
                 </div>
               </section>
               )}
@@ -6412,6 +6750,749 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
             </div>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function AirportEditorPage({
+  airportId,
+  onBack,
+  onSaved,
+}: {
+  airportId?: number;
+  onBack: () => void;
+  onSaved: (id: number) => void;
+}) {
+  const [editing, setEditing] = useState<AirportFormState | null>(null);
+  const [tab, setTab] = useState<AirportEditorTab>('basic');
+  const [slugEditing, setSlugEditing] = useState(false);
+  const [manualTagInput, setManualTagInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [balanceAmount, setBalanceAmount] = useState('');
+  const [balanceDescription, setBalanceDescription] = useState('');
+  const [balanceSaving, setBalanceSaving] = useState(false);
+  const [balanceError, setBalanceError] = useState('');
+  const [balanceMessage, setBalanceMessage] = useState('');
+  const [passwordResetSaving, setPasswordResetSaving] = useState(false);
+  const [passwordResetError, setPasswordResetError] = useState('');
+  const [passwordResetMessage, setPasswordResetMessage] = useState('');
+  const [nodeProfile, setNodeProfile] = useState<AirportNodeProfileState>(EMPTY_AIRPORT_NODE_PROFILE);
+
+  useEffect(() => {
+    let cancelled = false;
+    setError('');
+    setMessage('');
+    setBalanceAmount('');
+    setBalanceDescription('');
+    setBalanceError('');
+    setBalanceMessage('');
+    setPasswordResetError('');
+    setPasswordResetMessage('');
+    setSlugEditing(false);
+    setTab('basic');
+
+    if (!airportId) {
+      const form = createAirportForm();
+      setEditing(form);
+      setManualTagInput(formatTagInput(form.manual_tags));
+      setLoading(false);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setLoading(true);
+    void (async () => {
+      try {
+        const airport = (await apiFetch(`/api/v1/admin/airports/${airportId}`)) as Airport;
+        if (cancelled) return;
+        const form = toAirportForm(airport);
+        setEditing(form);
+        setManualTagInput(formatTagInput(form.manual_tags));
+      } catch (err) {
+        if (!cancelled) {
+          setEditing(null);
+          setError(err instanceof Error ? err.message : '加载失败');
+        }
+      } finally {
+        if (!cancelled) {
+          setLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [airportId]);
+
+  useEffect(() => {
+    const id = editing?.id;
+    if (!id) {
+      setNodeProfile(EMPTY_AIRPORT_NODE_PROFILE);
+      return;
+    }
+
+    let cancelled = false;
+    setNodeProfile({ ...EMPTY_AIRPORT_NODE_PROFILE, loading: true });
+    void (async () => {
+      const [snapshotResult, dashboardResult] = await Promise.allSettled([
+        apiFetch(`/api/v1/admin/airports/${id}/subscription-node-snapshots/latest`) as Promise<AirportSubscriptionNodeSnapshot>,
+        apiFetch(`/api/v1/admin/airports/${id}/dashboard?date=${today()}`) as Promise<AirportDashboardView>,
+      ]);
+
+      if (cancelled) {
+        return;
+      }
+      const snapshot = snapshotResult.status === 'fulfilled' ? snapshotResult.value : null;
+      const dashboard = dashboardResult.status === 'fulfilled' ? dashboardResult.value : null;
+      setNodeProfile({
+        ...buildAirportNodeProfile(snapshot, dashboard),
+        loading: false,
+        error: snapshotResult.status === 'rejected' && dashboardResult.status === 'rejected'
+          ? '节点信息加载失败'
+          : '',
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [editing?.id]);
+
+  if (loading) {
+    return <div className="text-sm text-neutral-500">加载中...</div>;
+  }
+
+  if (!editing) {
+    return (
+      <div className="space-y-4">
+        <button className="px-3 py-1.5 rounded border text-sm inline-flex items-center gap-2" onClick={onBack}>
+          <ArrowLeft size={14} />
+          返回列表
+        </button>
+        {error && <div className="text-sm text-rose-600">{error}</div>}
+      </div>
+    );
+  }
+
+  const updateProfilePlan = <K extends keyof AirportProfilePlan>(key: K, value: AirportProfilePlan[K]) => {
+    setEditing({ ...editing, profile: { ...editing.profile, plan: { ...editing.profile.plan, [key]: value } } });
+  };
+  const updateProfileTelegram = <K extends keyof AirportProfileTelegram>(key: K, value: AirportProfileTelegram[K]) => {
+    setEditing({ ...editing, profile: { ...editing.profile, telegram: { ...editing.profile.telegram, [key]: value } } });
+  };
+  const updateProfileClient = (key: AirportProfileClientKey, value: boolean | null) => {
+    setEditing({ ...editing, profile: { ...editing.profile, clients: { ...editing.profile.clients, [key]: value } } });
+  };
+  const updateImportMethod = <K extends keyof AirportProfileImportMethods>(key: K, value: AirportProfileImportMethods[K]) => {
+    setEditing({
+      ...editing,
+      profile: { ...editing.profile, import_methods: { ...editing.profile.import_methods, [key]: value } },
+    });
+  };
+  const updateRegion = <K extends keyof AirportProfileRegionInfo>(
+    regionKey: AirportProfileRegionKey,
+    key: K,
+    value: AirportProfileRegionInfo[K],
+  ) => {
+    setEditing({
+      ...editing,
+      profile: {
+        ...editing.profile,
+        regions: {
+          ...editing.profile.regions,
+          [regionKey]: { ...editing.profile.regions[regionKey], [key]: value },
+        },
+      },
+    });
+  };
+
+  const saveAirport = async () => {
+    const websites = normalizeUrlList(editing.websites);
+    const manualTags = parseTagInput(manualTagInput);
+    if (!editing.name.trim()) {
+      setError('请填写机场名称');
+      return;
+    }
+    if (websites.length === 0) {
+      setError('至少填写一个官网链接');
+      return;
+    }
+    const confirmDown = editing.status === 'down';
+    if (
+      confirmDown &&
+      !window.confirm('确认将该机场标记为“已跑路”？确认后它会从自动调度、手动任务和每日测评中全部排除。')
+    ) {
+      return;
+    }
+
+    setSaving(true);
+    setError('');
+    setMessage('');
+    try {
+      const body = buildAirportMutationBody(editing, manualTags, websites, confirmDown);
+      if (!editing.id) {
+        const result = (await apiFetch('/api/v1/admin/airports', {
+          method: 'POST',
+          body: JSON.stringify(body),
+        })) as { airport_id: number };
+        onSaved(result.airport_id);
+      } else {
+        await apiFetch(`/api/v1/admin/airports/${editing.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(body),
+        });
+        setMessage('机场资料已保存');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const addWalletBalance = async () => {
+    if (!editing.id) return;
+    const amount = Number(balanceAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setBalanceError('请输入大于 0 的加款金额');
+      return;
+    }
+
+    setBalanceSaving(true);
+    setBalanceError('');
+    setBalanceMessage('');
+    try {
+      const data = (await apiFetch(`/api/v1/admin/airports/${editing.id}/wallet/adjustments`, {
+        method: 'POST',
+        body: JSON.stringify({
+          amount,
+          description: balanceDescription.trim() || null,
+        }),
+      })) as { wallet: { id: number; balance: number } };
+      setEditing({
+        ...editing,
+        wallet_id: data.wallet.id,
+        wallet_balance: data.wallet.balance,
+      });
+      setBalanceAmount('');
+      setBalanceDescription('');
+      setBalanceMessage('余额已添加');
+    } catch (err) {
+      setBalanceError(err instanceof Error ? err.message : '添加余额失败');
+    } finally {
+      setBalanceSaving(false);
+    }
+  };
+
+  const resetApplicantLoginPassword = async () => {
+    if (!editing.id) return;
+    const targetEmail = getApplicantPasswordResetTargetEmail(editing);
+    if (!targetEmail) {
+      setPasswordResetError('未配置可接收重置密码邮件的邮箱');
+      return;
+    }
+    const confirmed = window.confirm([
+      '确认重置该申请人的登录密码？',
+      '',
+      `发送邮箱：${targetEmail}`,
+      '',
+      '确认后系统会生成新密码并发送到该邮箱，用户下次登录后需要立即修改密码。',
+    ].join('\n'));
+    if (!confirmed) return;
+
+    setPasswordResetSaving(true);
+    setPasswordResetError('');
+    setPasswordResetMessage('');
+    try {
+      const data = (await apiFetch(`/api/v1/admin/airports/${editing.id}/applicant-password-reset`, {
+        method: 'POST',
+      })) as { to_email?: string };
+      const toEmail = data.to_email ? `（${data.to_email}）` : '';
+      setPasswordResetMessage(`新密码已发送到申请人登录邮箱${toEmail}`);
+    } catch (err) {
+      setPasswordResetError(err instanceof Error ? err.message : '重置用户登录密码失败');
+    } finally {
+      setPasswordResetSaving(false);
+    }
+  };
+
+  const tabs: Array<{ key: AirportEditorTab; label: string }> = [
+    { key: 'basic', label: '基础信息' },
+    { key: 'review', label: '审核信息' },
+    { key: 'account', label: '账户管理' },
+    { key: 'plan', label: '套餐信息' },
+    { key: 'telegram', label: '电报信息' },
+    { key: 'nodes', label: '节点覆盖' },
+    { key: 'clients', label: '客户端支持' },
+    { key: 'import', label: '导入教程' },
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-3">
+          <button className="px-3 py-1.5 rounded border text-sm inline-flex items-center gap-2" onClick={onBack}>
+            <ArrowLeft size={14} />
+            返回列表
+          </button>
+          <h2 className="text-lg font-bold">{editing.id ? `编辑机场 - ${editing.name || `#${editing.id}`}` : '新增机场'}</h2>
+        </div>
+        <button
+          className="rounded bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          disabled={saving}
+          onClick={() => void saveAirport()}
+        >
+          {saving ? '保存中...' : '保存机场'}
+        </button>
+      </div>
+
+      {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+      {message && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{message}</div>}
+
+      <div className="flex gap-2 overflow-x-auto border-b pb-2">
+        {tabs.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            className={`shrink-0 rounded px-3 py-1.5 text-sm ${tab === item.key ? 'bg-neutral-900 text-white' : 'bg-neutral-100 text-neutral-700'}`}
+            onClick={() => setTab(item.key)}
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'basic' && (
+        <section className="space-y-4 rounded border border-neutral-200 bg-white p-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="机场名称" hint="用于管理列表、数据台标题与榜单识别。">
+              <input
+                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                placeholder="例如：大象网络"
+                value={editing.name}
+                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+              />
+            </FormField>
+            <FormField label="评分月价" hint="现有性价比计算字段，单位按元处理。">
+              <input
+                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editing.plan_price_month}
+                onChange={(e) => setEditing({ ...editing, plan_price_month: e.target.value })}
+              />
+            </FormField>
+          </div>
+
+          <div className="rounded border border-neutral-200 bg-neutral-50 p-4">
+            <label className="inline-flex items-center gap-3 text-sm font-medium">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-neutral-300"
+                checked={editing.has_trial}
+                onChange={(e) => setEditing({ ...editing, has_trial: e.target.checked })}
+              />
+              支持试用
+            </label>
+          </div>
+
+          <FormField label="解锁能力" hint="后台运营资料，支持多选。">
+            <CheckboxPillGroup
+              options={AIRPORT_STREAMING_SUPPORT_OPTIONS}
+              value={editing.streaming_support}
+              onChange={(streamingSupport) => setEditing({ ...editing, streaming_support: streamingSupport })}
+            />
+          </FormField>
+
+          <FormField label="支付方式" hint="后台运营资料，支持多选。">
+            <CheckboxPillGroup
+              options={AIRPORT_PAYMENT_METHOD_OPTIONS}
+              value={editing.payment_methods}
+              onChange={(paymentMethods) => setEditing({ ...editing, payment_methods: paymentMethods })}
+            />
+            {editing.payment_methods.includes('crypto_other') && (
+              <input
+                type="text"
+                value={editing.payment_crypto_other}
+                onChange={(event) => setEditing({ ...editing, payment_crypto_other: event.target.value })}
+                placeholder="填写其他虚拟币币种"
+                className="mt-3 w-full rounded border border-neutral-300 px-4 py-3 text-sm outline-none focus:border-neutral-900"
+              />
+            )}
+          </FormField>
+        </section>
+      )}
+
+      {tab === 'review' && (
+        <section className="space-y-4 rounded border border-neutral-200 bg-white p-5">
+          <div className="space-y-4">
+            {editing.websites.map((website, index) => (
+              <React.Fragment key={`website-${index}`}>
+                <FormField
+                  label={index === 0 ? '主官网链接' : `备用网址 ${index}`}
+                  hint={index === 0 ? '第一条会自动作为主官网。' : '备用网址会一并保存。'}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <input
+                      className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                      placeholder="https://example.com"
+                      value={website}
+                      onChange={(e) => setEditing({ ...editing, websites: updateListItem(editing.websites, index, e.target.value) })}
+                    />
+                    <button
+                      type="button"
+                      className="rounded border border-neutral-300 px-3 py-3 text-sm text-neutral-600 disabled:opacity-40"
+                      disabled={editing.websites.length === 1}
+                      onClick={() => setEditing({ ...editing, websites: removeListItem(editing.websites, index) })}
+                    >
+                      <span className="inline-flex items-center gap-2"><Trash2 size={14} />删除</span>
+                    </button>
+                  </div>
+                </FormField>
+              </React.Fragment>
+            ))}
+          </div>
+          <button
+            type="button"
+            className="w-full rounded border border-dashed border-neutral-400 px-4 py-3 text-sm font-medium text-neutral-700 hover:border-neutral-900"
+            onClick={() => setEditing({ ...editing, websites: [...editing.websites, ''] })}
+          >
+            <span className="inline-flex items-center gap-2"><Plus size={14} />继续添加官网链接</span>
+          </button>
+          <FormField label="订阅链接" hint="可选。如果和官网不同，单独录入更方便运营排查。">
+            <input
+              className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+              placeholder="https://example.com/subscribe"
+              value={editing.subscription_url}
+              onChange={(e) => setEditing({ ...editing, subscription_url: e.target.value })}
+            />
+          </FormField>
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="联系邮箱" hint="用于运营联系或回查申请记录。">
+              <input
+                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                type="email"
+                value={editing.applicant_email}
+                onChange={(e) => setEditing({ ...editing, applicant_email: e.target.value })}
+              />
+            </FormField>
+            <FormField label="Telegram" hint="用于快速联系机场运营方。">
+              <input
+                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                value={editing.applicant_telegram}
+                onChange={(e) => setEditing({ ...editing, applicant_telegram: e.target.value })}
+              />
+            </FormField>
+            <FormField label="成立日期" hint="可选，沿用入驻申请的成立时间。">
+              <input
+                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                type="date"
+                value={editing.founded_on}
+                onChange={(e) => setEditing({ ...editing, founded_on: e.target.value })}
+              />
+            </FormField>
+            <FormField label="测试账号" hint="审核或排障时可用的账号。">
+              <input
+                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                value={editing.test_account}
+                onChange={(e) => setEditing({ ...editing, test_account: e.target.value })}
+              />
+            </FormField>
+            <FormField label="测试密码" hint="为空则表示不更新或暂未提供。">
+              <input
+                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                type="text"
+                value={editing.test_password}
+                onChange={(e) => setEditing({ ...editing, test_password: e.target.value })}
+              />
+            </FormField>
+          </div>
+          <FormField label="机场基本介绍" hint="用于保存服务定位、节点特色或补充说明。">
+            <textarea
+              className="min-h-28 w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+              value={editing.airport_intro}
+              onChange={(e) => setEditing({ ...editing, airport_intro: e.target.value })}
+            />
+          </FormField>
+        </section>
+      )}
+
+      {tab === 'account' && (
+        <section className="space-y-4 rounded border border-neutral-200 bg-white p-5">
+          <FormField label="SEO URL Slug" hint="用于 /airports/slug 稳定报告地址；留空时后端按官网或名称自动生成。">
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <input
+                className={`w-full rounded border px-4 py-3 text-sm outline-none ${slugEditing
+                  ? 'border-neutral-300 bg-white focus:border-neutral-900'
+                  : 'cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-500'}`}
+                disabled={!slugEditing}
+                value={editing.slug}
+                onChange={(e) => setEditing({ ...editing, slug: e.target.value })}
+              />
+              <button
+                type="button"
+                className="rounded border border-neutral-300 px-4 py-3 text-sm font-medium text-neutral-700 sm:w-24"
+                onClick={() => setSlugEditing(!slugEditing)}
+              >
+                {slugEditing ? '锁定' : '编辑'}
+              </button>
+            </div>
+          </FormField>
+          <div className="grid gap-4 md:grid-cols-2">
+            <FormField label="运行状态" hint="控制榜单与管理列表的状态展示。">
+              <select
+                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                value={editing.status}
+                onChange={(e) => setEditing({ ...editing, status: e.target.value as AirportStatus })}
+              >
+                <option value="normal">正常</option>
+                <option value="risk">风险</option>
+                <option value="down">跑路</option>
+              </select>
+            </FormField>
+            <FormField label="上架状态" hint="控制是否出现在所有公开页面；下架后仅管理后台可见。">
+              <select
+                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                value={editing.is_listed ? 'listed' : 'unlisted'}
+                onChange={(e) => setEditing({ ...editing, is_listed: e.target.value === 'listed' })}
+              >
+                <option value="listed">上架</option>
+                <option value="unlisted">下架</option>
+              </select>
+            </FormField>
+          </div>
+          <FormField label="人工标签" hint="多个标签用逗号、顿号、空格或换行分隔。">
+            <textarea
+              className="min-h-[96px] w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+              value={manualTagInput}
+              onChange={(e) => setManualTagInput(e.target.value)}
+            />
+          </FormField>
+          {editing.id ? (
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section className="space-y-4 rounded border border-neutral-200 bg-neutral-50 p-4">
+                <div className="text-sm font-semibold text-neutral-900">余额管理</div>
+                <ReadField label="当前用户余额" value={formatMoneyOrDash(editing.wallet_balance)} />
+                {!editing.wallet_id && (
+                  <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    首次加款会自动为该机场创建内部钱包。
+                  </div>
+                )}
+                <FormField label="本次加款金额" hint="只支持增加余额，不能直接覆盖余额。">
+                  <input
+                    className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={balanceAmount}
+                    onChange={(e) => setBalanceAmount(e.target.value)}
+                  />
+                </FormField>
+                <FormField label="备注" hint="可选，不填写时系统会自动记录为后台加款。">
+                  <input
+                    className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                    value={balanceDescription}
+                    onChange={(e) => setBalanceDescription(e.target.value)}
+                  />
+                </FormField>
+                {balanceError && <div className="rounded border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{balanceError}</div>}
+                {balanceMessage && <div className="rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{balanceMessage}</div>}
+                <button
+                  type="button"
+                  className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
+                  disabled={balanceSaving}
+                  onClick={() => void addWalletBalance()}
+                >
+                  {balanceSaving ? '添加中...' : '添加余额'}
+                </button>
+              </section>
+              <section className="space-y-4 rounded border border-neutral-200 bg-neutral-50 p-4">
+                <div className="text-sm font-semibold text-neutral-900">申请人登录密码</div>
+                <p className="text-sm text-neutral-500">
+                  {getApplicantPasswordResetTargetEmail(editing)
+                    ? `生成新密码并发送到申请人登录邮箱：${getApplicantPasswordResetTargetEmail(editing)}。`
+                    : '未配置可接收重置密码邮件的邮箱。'}
+                </p>
+                <button
+                  type="button"
+                  className="rounded border border-rose-300 px-4 py-2.5 text-sm font-medium text-rose-700 disabled:opacity-50"
+                  disabled={passwordResetSaving || !getApplicantPasswordResetTargetEmail(editing)}
+                  onClick={() => void resetApplicantLoginPassword()}
+                >
+                  {passwordResetSaving ? '重置中...' : '重置用户登录密码'}
+                </button>
+                {passwordResetError && <div className="rounded border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{passwordResetError}</div>}
+                {passwordResetMessage && <div className="rounded border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{passwordResetMessage}</div>}
+              </section>
+            </div>
+          ) : (
+            <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              保存机场后才能管理余额和申请人登录密码。
+            </div>
+          )}
+        </section>
+      )}
+
+      {tab === 'plan' && (
+        <section className="space-y-4 rounded border border-neutral-200 bg-white p-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <NullableBooleanRadioGroup label="是否支持月付" name="profile_supports_monthly" value={editing.profile.plan.supports_monthly} onChange={(value) => updateProfilePlan('supports_monthly', value)} />
+            <NullableBooleanRadioGroup label="是否支持季付" name="profile_supports_quarterly" value={editing.profile.plan.supports_quarterly} onChange={(value) => updateProfilePlan('supports_quarterly', value)} />
+            <NullableBooleanRadioGroup label="是否支持半年付" name="profile_supports_half_yearly" value={editing.profile.plan.supports_half_yearly} onChange={(value) => updateProfilePlan('supports_half_yearly', value)} />
+            <NullableBooleanRadioGroup label="是否支持年付" name="profile_supports_annual" value={editing.profile.plan.supports_annual} onChange={(value) => updateProfilePlan('supports_annual', value)} />
+            <NullableBooleanRadioGroup label="是否有试用套餐" name="profile_has_trial_plan" value={editing.profile.plan.has_trial_plan} onChange={(value) => updateProfilePlan('has_trial_plan', value)} />
+            <NullableBooleanRadioGroup label="是否有不限时套餐" name="profile_has_lifetime_plan" value={editing.profile.plan.has_lifetime_plan} onChange={(value) => updateProfilePlan('has_lifetime_plan', value)} />
+            <FormField label="最低月付价格" hint="后台资料字段，不参与评分。">
+              <input
+                className="w-full rounded border border-neutral-300 px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editing.profile.plan.lowest_monthly_price ?? ''}
+                onChange={(e) => updateProfilePlan('lowest_monthly_price', parseOptionalNumberInput(e.target.value))}
+              />
+            </FormField>
+            <FormField label="最低年付折算月价" hint="后台资料字段，不参与评分。">
+              <input
+                className="w-full rounded border border-neutral-300 px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                type="number"
+                min="0"
+                step="0.01"
+                value={editing.profile.plan.lowest_annual_monthly_price ?? ''}
+                onChange={(e) => updateProfilePlan('lowest_annual_monthly_price', parseOptionalNumberInput(e.target.value))}
+              />
+            </FormField>
+          </div>
+        </section>
+      )}
+
+      {tab === 'telegram' && (
+        <section className="space-y-4 rounded border border-neutral-200 bg-white p-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <NullableBooleanRadioGroup label="是否有 Telegram 群" name="profile_has_group" value={editing.profile.telegram.has_group} onChange={(value) => updateProfileTelegram('has_group', value)} />
+            <NullableBooleanRadioGroup label="是否有 Telegram 频道" name="profile_has_channel" value={editing.profile.telegram.has_channel} onChange={(value) => updateProfileTelegram('has_channel', value)} />
+            <NullableBooleanRadioGroup label="群是否允许发言" name="profile_group_allows_speaking" value={editing.profile.telegram.group_allows_speaking} onChange={(value) => updateProfileTelegram('group_allows_speaking', value)} />
+            <NullableBooleanRadioGroup label="是否有客服 Bot" name="profile_has_customer_service_bot" value={editing.profile.telegram.has_customer_service_bot} onChange={(value) => updateProfileTelegram('has_customer_service_bot', value)} />
+            <NullableBooleanRadioGroup label="是否有工单系统" name="profile_has_ticket_system" value={editing.profile.telegram.has_ticket_system} onChange={(value) => updateProfileTelegram('has_ticket_system', value)} />
+            <FormField label="Telegram 群链接">
+              <input
+                className="w-full rounded border border-neutral-300 px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                value={editing.profile.telegram.group_url || ''}
+                onChange={(e) => updateProfileTelegram('group_url', e.target.value || null)}
+              />
+            </FormField>
+            <FormField label="Telegram 频道链接">
+              <input
+                className="w-full rounded border border-neutral-300 px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                value={editing.profile.telegram.channel_url || ''}
+                onChange={(e) => updateProfileTelegram('channel_url', e.target.value || null)}
+              />
+            </FormField>
+            <FormField label="群人数">
+              <input
+                className="w-full rounded border border-neutral-300 px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                type="number"
+                min="0"
+                step="1"
+                value={editing.profile.telegram.group_member_count ?? ''}
+                onChange={(e) => updateProfileTelegram('group_member_count', parseOptionalIntegerInput(e.target.value))}
+              />
+            </FormField>
+            <FormField label="最近活跃时间">
+              <input
+                className="w-full rounded border border-neutral-300 px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                type="date"
+                value={editing.profile.telegram.recent_active_at || ''}
+                onChange={(e) => updateProfileTelegram('recent_active_at', e.target.value || null)}
+              />
+            </FormField>
+          </div>
+        </section>
+      )}
+
+      {tab === 'nodes' && (
+        <section className="space-y-4 rounded border border-neutral-200 bg-white p-5">
+          <div className="grid gap-4 md:grid-cols-3">
+            <ReadField label="节点类型" value={formatAutoNodeList(editing.id, nodeProfile.loading, nodeProfile.node_types)} />
+            <ReadField label="传输/安全能力" value={formatAutoNodeList(editing.id, nodeProfile.loading, nodeProfile.node_transports)} />
+            <ReadField label="节点可用率" value={formatAutoNodeAvailability(editing.id, nodeProfile.loading, nodeProfile.node_availability_percent)} />
+          </div>
+          {nodeProfile.error && <div className="text-sm text-rose-600">{nodeProfile.error}</div>}
+          <div className="overflow-x-auto rounded border border-neutral-200">
+            <table className="w-full min-w-[920px] text-sm">
+              <thead className="bg-neutral-50">
+                <tr>
+                  <th className="text-left px-4 py-3">地区</th>
+                  <th className="text-left px-4 py-3">节点数量</th>
+                  <th className="text-left px-4 py-3">家宽节点</th>
+                  <th className="text-left px-4 py-3">原生 IP</th>
+                  <th className="text-left px-4 py-3">线路属性</th>
+                </tr>
+              </thead>
+              <tbody>
+                {AIRPORT_PROFILE_REGION_OPTIONS.map((region) => (
+                  <tr key={region.value} className="border-t border-neutral-100 align-top">
+                    <td className="px-4 py-3 font-medium">{region.label}</td>
+                    <td className="px-4 py-3">{editing.id ? nodeProfile.region_counts[region.value] || 0 : '保存后自动获取'}</td>
+                    <td className="px-4 py-3">
+                      <NullableBooleanInline
+                        name={`region-${region.value}-residential`}
+                        value={editing.profile.regions[region.value].has_residential}
+                        onChange={(value) => updateRegion(region.value, 'has_residential', value)}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <NullableBooleanInline
+                        name={`region-${region.value}-native-ip`}
+                        value={editing.profile.regions[region.value].has_native_ip}
+                        onChange={(value) => updateRegion(region.value, 'has_native_ip', value)}
+                      />
+                    </td>
+                    <td className="px-4 py-3">
+                      <CheckboxPillGroup
+                        options={AIRPORT_PROFILE_LINE_TYPE_OPTIONS}
+                        value={editing.profile.regions[region.value].line_types}
+                        onChange={(lineTypes) => updateRegion(region.value, 'line_types', lineTypes)}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
+      {tab === 'clients' && (
+        <section className="grid gap-4 rounded border border-neutral-200 bg-white p-5 md:grid-cols-2">
+          {AIRPORT_PROFILE_CLIENT_OPTIONS.map((client) => (
+            <React.Fragment key={client.value}>
+              <NullableBooleanRadioGroup
+                label={`是否支持 ${client.label}`}
+                name={`client-${client.value}`}
+                value={editing.profile.clients[client.value]}
+                onChange={(value) => updateProfileClient(client.value, value)}
+              />
+            </React.Fragment>
+          ))}
+        </section>
+      )}
+
+      {tab === 'import' && (
+        <section className="grid gap-4 rounded border border-neutral-200 bg-white p-5 md:grid-cols-2">
+          <NullableBooleanRadioGroup label="是否提供一键导入" name="import_one_click" value={editing.profile.import_methods.one_click_import} onChange={(value) => updateImportMethod('one_click_import', value)} />
+          <NullableBooleanRadioGroup label="是否提供订阅链接" name="import_subscription_link" value={editing.profile.import_methods.subscription_link} onChange={(value) => updateImportMethod('subscription_link', value)} />
+          <NullableBooleanRadioGroup label="是否支持通用订阅" name="import_universal_subscription" value={editing.profile.import_methods.universal_subscription} onChange={(value) => updateImportMethod('universal_subscription', value)} />
+          <NullableBooleanRadioGroup label="是否支持二维码导入" name="import_qr_code" value={editing.profile.import_methods.qr_code_import} onChange={(value) => updateImportMethod('qr_code_import', value)} />
+          <NullableBooleanRadioGroup label="是否提供教程" name="import_tutorials" value={editing.profile.import_methods.tutorials} onChange={(value) => updateImportMethod('tutorials', value)} />
+        </section>
       )}
     </div>
   );
@@ -7960,6 +9041,117 @@ function FormField({
   );
 }
 
+function CheckboxPillGroup<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ value: T; label: string }>;
+  value: T[];
+  onChange: (value: T[]) => void;
+}) {
+  const selected = new Set(value);
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((option) => (
+        <label
+          key={option.value}
+          className="inline-flex items-center gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm font-medium text-neutral-700"
+        >
+          <input
+            type="checkbox"
+            className="h-4 w-4 rounded border-neutral-300"
+            checked={selected.has(option.value)}
+            onChange={(event) => {
+              const next = event.target.checked
+                ? [...value, option.value]
+                : value.filter((item) => item !== option.value);
+              onChange([...new Set(next)]);
+            }}
+          />
+          {option.label}
+        </label>
+      ))}
+    </div>
+  );
+}
+
+function NullableBooleanRadioGroup({
+  label,
+  name,
+  value,
+  onChange,
+}: {
+  label: string;
+  name: string;
+  value: boolean | null;
+  onChange: (value: boolean | null) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+      <div className="text-sm font-medium text-neutral-900">{label}</div>
+      <div className="mt-3 flex flex-wrap gap-4">
+        <label className="inline-flex items-center gap-2 text-sm font-medium">
+          <input
+            type="radio"
+            name={name}
+            checked={value === true}
+            onChange={() => onChange(true)}
+          />
+          是
+        </label>
+        <label className="inline-flex items-center gap-2 text-sm font-medium">
+          <input
+            type="radio"
+            name={name}
+            checked={value === false}
+            onChange={() => onChange(false)}
+          />
+          否
+        </label>
+        <button
+          type="button"
+          className="text-xs font-medium text-neutral-500 underline underline-offset-2 hover:text-neutral-900"
+          onClick={() => onChange(null)}
+        >
+          设为未设置
+        </button>
+      </div>
+      {value === null && <div className="mt-2 text-xs text-amber-700">未设置</div>}
+    </div>
+  );
+}
+
+function NullableBooleanInline({
+  name,
+  value,
+  onChange,
+}: {
+  name: string;
+  value: boolean | null;
+  onChange: (value: boolean | null) => void;
+}) {
+  return (
+    <div className="flex flex-wrap gap-3">
+      <label className="inline-flex items-center gap-1 text-sm">
+        <input type="radio" name={name} checked={value === true} onChange={() => onChange(true)} />
+        是
+      </label>
+      <label className="inline-flex items-center gap-1 text-sm">
+        <input type="radio" name={name} checked={value === false} onChange={() => onChange(false)} />
+        否
+      </label>
+      <button
+        type="button"
+        className="text-xs text-neutral-500 underline underline-offset-2"
+        onClick={() => onChange(null)}
+      >
+        未知
+      </button>
+    </div>
+  );
+}
+
 function createPublishTokenForm(): PublishTokenCreateFormState {
   return {
     name: '',
@@ -8133,6 +9325,14 @@ function createAirportForm(): AirportFormState {
     is_listed: true,
     plan_price_month: '',
     has_trial: false,
+    streaming_support: [],
+    payment_methods: [],
+    payment_crypto_other: '',
+    has_annual_plan: null,
+    has_telegram_group: null,
+    telegram_allows_speaking: null,
+    has_lifetime_plan: null,
+    profile: createDefaultAirportProfile(),
     subscription_url: '',
     applicant_email: '',
     applicant_password_reset_email: '',
@@ -8158,6 +9358,14 @@ function toAirportForm(airport: Airport): AirportFormState {
     is_listed: airport.is_listed,
     plan_price_month: String(airport.plan_price_month ?? ''),
     has_trial: airport.has_trial,
+    streaming_support: normalizeAirportStreamingSupport(airport.streaming_support),
+    payment_methods: normalizeAirportPaymentMethods(airport.payment_methods),
+    payment_crypto_other: airport.payment_crypto_other || '',
+    has_annual_plan: normalizeNullableBoolean(airport.has_annual_plan),
+    has_telegram_group: normalizeNullableBoolean(airport.has_telegram_group),
+    telegram_allows_speaking: normalizeNullableBoolean(airport.telegram_allows_speaking),
+    has_lifetime_plan: normalizeNullableBoolean(airport.has_lifetime_plan),
+    profile: normalizeAirportProfile(airport.profile),
     subscription_url: airport.subscription_url || '',
     applicant_email: airport.applicant_email || '',
     applicant_password_reset_email: airport.applicant_email || '',
@@ -8203,6 +9411,288 @@ function removeListItem(values: string[], index: number): string[] {
 function formatWebsiteList(websites?: string[], primaryWebsite?: string): string {
   const all = normalizeUrlList([...(websites || []), primaryWebsite || '']);
   return all.length > 0 ? all.join('\n') : '-';
+}
+
+function createDefaultAirportProfile(): AirportProfile {
+  return {
+    plan: {
+      supports_monthly: null,
+      supports_quarterly: null,
+      supports_half_yearly: null,
+      supports_annual: null,
+      lowest_monthly_price: null,
+      lowest_annual_monthly_price: null,
+      has_trial_plan: null,
+      has_lifetime_plan: null,
+    },
+    telegram: {
+      has_group: null,
+      group_url: null,
+      has_channel: null,
+      channel_url: null,
+      group_allows_speaking: null,
+      group_member_count: null,
+      recent_active_at: null,
+      has_customer_service_bot: null,
+      has_ticket_system: null,
+    },
+    clients: Object.fromEntries(AIRPORT_PROFILE_CLIENT_OPTIONS.map((item) => [item.value, null])) as Record<
+      AirportProfileClientKey,
+      boolean | null
+    >,
+    import_methods: {
+      one_click_import: null,
+      subscription_link: null,
+      universal_subscription: null,
+      qr_code_import: null,
+      tutorials: null,
+    },
+    regions: Object.fromEntries(
+      AIRPORT_PROFILE_REGION_OPTIONS.map((item) => [item.value, {
+        has_residential: null,
+        has_native_ip: null,
+        line_types: [],
+      }]),
+    ) as Record<AirportProfileRegionKey, AirportProfileRegionInfo>,
+  };
+}
+
+function normalizeAirportProfile(value: unknown): AirportProfile {
+  const defaults = createDefaultAirportProfile();
+  if (!value || typeof value !== 'object') {
+    return defaults;
+  }
+  const input = value as Partial<AirportProfile>;
+  const plan = (input.plan || {}) as Partial<AirportProfilePlan>;
+  const telegram = (input.telegram || {}) as Partial<AirportProfileTelegram>;
+  const clients = (input.clients || {}) as Partial<Record<AirportProfileClientKey, boolean | null>>;
+  const importMethods = (input.import_methods || {}) as Partial<AirportProfileImportMethods>;
+  const regions = (input.regions || {}) as Partial<Record<AirportProfileRegionKey, Partial<AirportProfileRegionInfo>>>;
+  return {
+    plan: {
+      supports_monthly: normalizeNullableBoolean(plan.supports_monthly),
+      supports_quarterly: normalizeNullableBoolean(plan.supports_quarterly),
+      supports_half_yearly: normalizeNullableBoolean(plan.supports_half_yearly),
+      supports_annual: normalizeNullableBoolean(plan.supports_annual),
+      lowest_monthly_price: normalizeOptionalNumber(plan.lowest_monthly_price),
+      lowest_annual_monthly_price: normalizeOptionalNumber(plan.lowest_annual_monthly_price),
+      has_trial_plan: normalizeNullableBoolean(plan.has_trial_plan),
+      has_lifetime_plan: normalizeNullableBoolean(plan.has_lifetime_plan),
+    },
+    telegram: {
+      has_group: normalizeNullableBoolean(telegram.has_group),
+      group_url: normalizeOptionalString(telegram.group_url),
+      has_channel: normalizeNullableBoolean(telegram.has_channel),
+      channel_url: normalizeOptionalString(telegram.channel_url),
+      group_allows_speaking: normalizeNullableBoolean(telegram.group_allows_speaking),
+      group_member_count: normalizeOptionalInteger(telegram.group_member_count),
+      recent_active_at: normalizeOptionalString(telegram.recent_active_at),
+      has_customer_service_bot: normalizeNullableBoolean(telegram.has_customer_service_bot),
+      has_ticket_system: normalizeNullableBoolean(telegram.has_ticket_system),
+    },
+    clients: Object.fromEntries(
+      AIRPORT_PROFILE_CLIENT_OPTIONS.map((item) => [item.value, normalizeNullableBoolean(clients[item.value])]),
+    ) as Record<AirportProfileClientKey, boolean | null>,
+    import_methods: {
+      one_click_import: normalizeNullableBoolean(importMethods.one_click_import),
+      subscription_link: normalizeNullableBoolean(importMethods.subscription_link),
+      universal_subscription: normalizeNullableBoolean(importMethods.universal_subscription),
+      qr_code_import: normalizeNullableBoolean(importMethods.qr_code_import),
+      tutorials: normalizeNullableBoolean(importMethods.tutorials),
+    },
+    regions: Object.fromEntries(
+      AIRPORT_PROFILE_REGION_OPTIONS.map((item) => {
+        const region = (regions[item.value] || defaults.regions[item.value]) as Partial<AirportProfileRegionInfo>;
+        return [item.value, {
+          has_residential: normalizeNullableBoolean(region.has_residential),
+          has_native_ip: normalizeNullableBoolean(region.has_native_ip),
+          line_types: normalizeAirportOptionValues(region.line_types, AIRPORT_PROFILE_LINE_TYPE_OPTIONS),
+        }];
+      }),
+    ) as Record<AirportProfileRegionKey, AirportProfileRegionInfo>,
+  };
+}
+
+function buildAirportMutationBody(
+  editing: AirportFormState,
+  manualTags: string[],
+  websites: string[],
+  confirmDown: boolean,
+) {
+  return {
+    slug: editing.slug.trim() || null,
+    name: editing.name.trim(),
+    website: websites[0],
+    websites,
+    status: editing.status,
+    is_listed: editing.is_listed,
+    plan_price_month: Number(editing.plan_price_month || 0),
+    has_trial: Boolean(editing.has_trial),
+    streaming_support: editing.streaming_support,
+    payment_methods: editing.payment_methods,
+    payment_crypto_other: editing.payment_methods.includes('crypto_other')
+      ? editing.payment_crypto_other.trim() || null
+      : null,
+    has_annual_plan: editing.has_annual_plan,
+    has_telegram_group: editing.has_telegram_group,
+    telegram_allows_speaking: editing.telegram_allows_speaking,
+    has_lifetime_plan: editing.has_lifetime_plan,
+    profile: normalizeAirportProfile(editing.profile),
+    subscription_url: editing.subscription_url.trim() || null,
+    applicant_email: editing.applicant_email.trim() || null,
+    applicant_telegram: editing.applicant_telegram.trim() || null,
+    founded_on: editing.founded_on || null,
+    airport_intro: editing.airport_intro.trim() || null,
+    test_account: editing.test_account.trim() || null,
+    test_password: editing.test_password || null,
+    manual_tags: manualTags,
+    confirm_down: confirmDown || undefined,
+  };
+}
+
+function normalizeAirportStreamingSupport(value: unknown): AirportStreamingSupport[] {
+  return normalizeAirportOptionValues(value, AIRPORT_STREAMING_SUPPORT_OPTIONS);
+}
+
+function normalizeAirportPaymentMethods(value: unknown): AirportPaymentMethod[] {
+  return normalizeAirportOptionValues(value, AIRPORT_PAYMENT_METHOD_OPTIONS, { usdt: 'usdt_trc20' });
+}
+
+function normalizeAirportOptionValues<T extends string>(
+  value: unknown,
+  options: Array<{ value: T; label: string }>,
+  aliases: Partial<Record<string, T>> = {},
+): T[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const allowed = new Set(options.map((option) => option.value));
+  const normalized = value
+    .map((item) => aliases[String(item).trim()] ?? String(item).trim())
+    .filter((item): item is T => allowed.has(item as T));
+  return [...new Set(normalized)];
+}
+
+function normalizeNullableBoolean(value: boolean | null | undefined): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const trimmed = String(value).trim();
+  return trimmed || null;
+}
+
+function normalizeOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizeOptionalInteger(value: unknown): number | null {
+  const parsed = normalizeOptionalNumber(value);
+  return parsed === null ? null : Math.floor(parsed);
+}
+
+function parseOptionalNumberInput(value: string): number | null {
+  return normalizeOptionalNumber(value);
+}
+
+function parseOptionalIntegerInput(value: string): number | null {
+  return normalizeOptionalInteger(value);
+}
+
+function extractNodeTypes(snapshot: AirportSubscriptionNodeSnapshot | null): string[] {
+  return uniqueNodeValues(snapshot?.nodes.map((node) => node.type) || []);
+}
+
+function extractNodeRegions(snapshot: AirportSubscriptionNodeSnapshot | null): string[] {
+  return uniqueNodeValues(snapshot?.nodes.map((node) => node.region) || []);
+}
+
+function buildAirportNodeProfile(
+  snapshot: AirportSubscriptionNodeSnapshot | null,
+  dashboard: AirportDashboardView | null,
+): Omit<AirportNodeProfileState, 'loading' | 'error'> {
+  return {
+    node_types: extractNodeTypes(snapshot),
+    node_regions: extractNodeRegions(snapshot),
+    node_transports: extractNodeTransports(snapshot),
+    region_counts: countAirportRegions(snapshot),
+    node_availability_percent: dashboard?.performance.node_availability_percent ?? null,
+  };
+}
+
+function extractNodeTransports(snapshot: AirportSubscriptionNodeSnapshot | null): string[] {
+  const labels = new Set<string>();
+  for (const node of snapshot?.nodes || []) {
+    const outbound = node.outbound || {};
+    const rawUri = String(node.raw_uri || '').toLowerCase();
+    const security = String(outbound.security || outbound.tls || '').toLowerCase();
+    const network = String(outbound.network || outbound.transport || '').toLowerCase();
+    if (rawUri.includes('reality') || security === 'reality') labels.add('Reality');
+    if (rawUri.includes('tls') || security === 'tls' || security === 'reality') labels.add('TLS');
+    if (rawUri.includes('ws') || network === 'ws' || network === 'websocket') labels.add('WebSocket');
+    if (rawUri.includes('grpc') || network === 'grpc') labels.add('gRPC');
+    if (rawUri.includes('h2') || rawUri.includes('http/2') || network === 'h2' || network === 'http2') labels.add('HTTP/2');
+  }
+  return [...labels];
+}
+
+function countAirportRegions(snapshot: AirportSubscriptionNodeSnapshot | null): Record<AirportProfileRegionKey, number> {
+  const counts = Object.fromEntries(AIRPORT_PROFILE_REGION_OPTIONS.map((item) => [item.value, 0])) as Record<
+    AirportProfileRegionKey,
+    number
+  >;
+  for (const node of snapshot?.nodes || []) {
+    const region = normalizeAirportRegionKey(node.region || node.name);
+    if (region) {
+      counts[region] += 1;
+    }
+  }
+  return counts;
+}
+
+function normalizeAirportRegionKey(value: string | null | undefined): AirportProfileRegionKey | null {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  return AIRPORT_PROFILE_REGION_OPTIONS.find((region) => (
+    region.aliases.some((alias) => normalized.includes(alias.toLowerCase()))
+  ))?.value || null;
+}
+
+function uniqueNodeValues(values: Array<string | null | undefined>): string[] {
+  return [...new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))];
+}
+
+function formatAutoNodeList(airportId: number | undefined, loading: boolean, values: string[]): string {
+  if (!airportId) {
+    return '保存后自动获取';
+  }
+  if (loading) {
+    return '加载中...';
+  }
+  return values.length ? values.join(', ') : '暂无采集数据';
+}
+
+function formatAutoNodeAvailability(
+  airportId: number | undefined,
+  loading: boolean,
+  value: number | null,
+): string {
+  if (!airportId) {
+    return '保存后自动获取';
+  }
+  if (loading) {
+    return '加载中...';
+  }
+  return value === null ? '暂无采集数据' : `${value}%`;
 }
 
 function formatAirportStatus(status: AirportStatus): string {

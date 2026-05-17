@@ -1,7 +1,35 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
-import type { Airport, AirportStatus } from '../types/domain';
+import type {
+  Airport,
+  AirportProfile,
+  AirportPaymentMethod,
+  AirportStatus,
+  AirportStreamingSupport,
+} from '../types/domain';
 import { mergeDisplayTags, normalizeTagList } from '../utils/tags';
+import { normalizeAirportProfile } from '../utils/airportProfile';
 import { buildAirportSlugCandidate, normalizeAirportSlug } from '../../../shared/publicSeo';
+
+const AIRPORT_STREAMING_SUPPORT_VALUES: AirportStreamingSupport[] = [
+  'netflix',
+  'chatgpt',
+  'disney_plus',
+  'hbo_max',
+  'youtube_premium',
+  'tiktok',
+  'spotify',
+];
+const AIRPORT_PAYMENT_METHOD_VALUES: AirportPaymentMethod[] = [
+  'wechat',
+  'alipay',
+  'usdt_trc20',
+  'usdt_erc20',
+  'usdt_bep20',
+  'stripe_card',
+  'paypal',
+  'crypto_other',
+  'unionpay',
+];
 
 interface AirportRow extends RowDataPacket {
   id: number;
@@ -14,6 +42,14 @@ interface AirportRow extends RowDataPacket {
   is_listed: number;
   plan_price_month: number;
   has_trial: number;
+  streaming_support_json: unknown;
+  payment_methods_json: unknown;
+  payment_crypto_other: string | null;
+  has_annual_plan: number | null;
+  has_telegram_group: number | null;
+  telegram_allows_speaking: number | null;
+  has_lifetime_plan: number | null;
+  airport_profile_json: unknown;
   subscription_url: string | null;
   applicant_email: string | null;
   applicant_account_email: string | null;
@@ -39,6 +75,14 @@ export interface CreateAirportInput {
   is_listed?: boolean;
   plan_price_month: number;
   has_trial: boolean;
+  streaming_support?: AirportStreamingSupport[];
+  payment_methods?: AirportPaymentMethod[];
+  payment_crypto_other?: string | null;
+  has_annual_plan?: boolean | null;
+  has_telegram_group?: boolean | null;
+  telegram_allows_speaking?: boolean | null;
+  has_lifetime_plan?: boolean | null;
+  profile?: AirportProfile;
   subscription_url?: string | null;
   applicant_email?: string | null;
   applicant_telegram?: string | null;
@@ -59,6 +103,14 @@ export interface UpdateAirportInput {
   is_listed?: boolean;
   plan_price_month?: number;
   has_trial?: boolean;
+  streaming_support?: AirportStreamingSupport[];
+  payment_methods?: AirportPaymentMethod[];
+  payment_crypto_other?: string | null;
+  has_annual_plan?: boolean | null;
+  has_telegram_group?: boolean | null;
+  telegram_allows_speaking?: boolean | null;
+  has_lifetime_plan?: boolean | null;
+  profile?: AirportProfile;
   subscription_url?: string | null;
   applicant_email?: string | null;
   applicant_telegram?: string | null;
@@ -77,6 +129,14 @@ export class AirportRepository {
     await this.ensureColumn('slug', 'VARCHAR(160) NULL AFTER id');
     await this.ensureColumn('websites_json', 'JSON NULL AFTER website');
     await this.ensureColumn('is_listed', 'TINYINT(1) NOT NULL DEFAULT 1 AFTER status');
+    await this.ensureColumn('streaming_support_json', 'JSON NULL AFTER has_trial');
+    await this.ensureColumn('payment_methods_json', 'JSON NULL AFTER streaming_support_json');
+    await this.ensureColumn('payment_crypto_other', 'VARCHAR(255) NULL AFTER payment_methods_json');
+    await this.ensureColumn('has_annual_plan', 'TINYINT(1) NULL DEFAULT NULL AFTER payment_crypto_other');
+    await this.ensureColumn('has_telegram_group', 'TINYINT(1) NULL DEFAULT NULL AFTER has_annual_plan');
+    await this.ensureColumn('telegram_allows_speaking', 'TINYINT(1) NULL DEFAULT NULL AFTER has_telegram_group');
+    await this.ensureColumn('has_lifetime_plan', 'TINYINT(1) NULL DEFAULT NULL AFTER telegram_allows_speaking');
+    await this.ensureColumn('airport_profile_json', 'JSON NULL AFTER has_lifetime_plan');
     await this.ensureColumn('tags_json', 'JSON NULL AFTER subscription_url');
     await this.ensureColumn('manual_tags_json', 'JSON NULL AFTER tags_json');
     await this.ensureColumn('auto_tags_json', 'JSON NULL AFTER manual_tags_json');
@@ -99,6 +159,27 @@ export class AirportRepository {
         WHERE websites_json IS NULL
            OR JSON_TYPE(websites_json) != 'ARRAY'
            OR JSON_LENGTH(websites_json) = 0`,
+    );
+
+    await this.pool.query(
+      `UPDATE airports
+          SET streaming_support_json = JSON_ARRAY()
+        WHERE streaming_support_json IS NOT NULL
+          AND JSON_TYPE(streaming_support_json) != 'ARRAY'`,
+    );
+
+    await this.pool.query(
+      `UPDATE airports
+          SET payment_methods_json = JSON_ARRAY()
+        WHERE payment_methods_json IS NOT NULL
+          AND JSON_TYPE(payment_methods_json) != 'ARRAY'`,
+    );
+
+    await this.pool.query(
+      `UPDATE airports
+          SET airport_profile_json = JSON_OBJECT()
+        WHERE airport_profile_json IS NULL
+           OR JSON_TYPE(airport_profile_json) != 'OBJECT'`,
     );
 
     await this.pool.query(
@@ -145,6 +226,14 @@ export class AirportRepository {
          is_listed,
          plan_price_month,
          has_trial,
+         streaming_support_json,
+         payment_methods_json,
+         payment_crypto_other,
+         has_annual_plan,
+         has_telegram_group,
+         telegram_allows_speaking,
+         has_lifetime_plan,
+         airport_profile_json,
          subscription_url,
          applicant_email,
          (
@@ -243,6 +332,14 @@ export class AirportRepository {
          is_listed,
          plan_price_month,
          has_trial,
+         streaming_support_json,
+         payment_methods_json,
+         payment_crypto_other,
+         has_annual_plan,
+         has_telegram_group,
+         telegram_allows_speaking,
+         has_lifetime_plan,
+         airport_profile_json,
          subscription_url,
          applicant_email,
          (
@@ -316,6 +413,14 @@ export class AirportRepository {
          is_listed,
          plan_price_month,
          has_trial,
+         streaming_support_json,
+         payment_methods_json,
+         payment_crypto_other,
+         has_annual_plan,
+         has_telegram_group,
+         telegram_allows_speaking,
+         has_lifetime_plan,
+         airport_profile_json,
          subscription_url,
          applicant_email,
          (
@@ -380,6 +485,14 @@ export class AirportRepository {
          is_listed,
          plan_price_month,
          has_trial,
+         streaming_support_json,
+         payment_methods_json,
+         payment_crypto_other,
+         has_annual_plan,
+         has_telegram_group,
+         telegram_allows_speaking,
+         has_lifetime_plan,
+         airport_profile_json,
          subscription_url,
          applicant_email,
          (
@@ -444,6 +557,14 @@ export class AirportRepository {
          is_listed,
          plan_price_month,
          has_trial,
+         streaming_support_json,
+         payment_methods_json,
+         payment_crypto_other,
+         has_annual_plan,
+         has_telegram_group,
+         telegram_allows_speaking,
+         has_lifetime_plan,
+         airport_profile_json,
          subscription_url,
          applicant_email,
          (
@@ -497,6 +618,14 @@ export class AirportRepository {
          airports.is_listed,
          airports.plan_price_month,
          airports.has_trial,
+         airports.streaming_support_json,
+         airports.payment_methods_json,
+         airports.payment_crypto_other,
+         airports.has_annual_plan,
+         airports.has_telegram_group,
+         airports.telegram_allows_speaking,
+         airports.has_lifetime_plan,
+         airports.airport_profile_json,
          airports.subscription_url,
          airports.applicant_email,
          account.email AS applicant_account_email,
@@ -561,6 +690,14 @@ export class AirportRepository {
          is_listed,
          plan_price_month,
          has_trial,
+         streaming_support_json,
+         payment_methods_json,
+         payment_crypto_other,
+         has_annual_plan,
+         has_telegram_group,
+         telegram_allows_speaking,
+         has_lifetime_plan,
+         airport_profile_json,
          subscription_url,
          applicant_email,
          applicant_telegram,
@@ -571,7 +708,7 @@ export class AirportRepository {
          manual_tags_json,
          auto_tags_json,
          tags_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         slug,
         input.name,
@@ -581,6 +718,14 @@ export class AirportRepository {
         input.is_listed === undefined ? 1 : (input.is_listed ? 1 : 0),
         input.plan_price_month,
         input.has_trial ? 1 : 0,
+        JSON.stringify(normalizeAirportStreamingSupport(input.streaming_support)),
+        JSON.stringify(normalizeAirportPaymentMethods(input.payment_methods)),
+        input.payment_crypto_other || null,
+        nullableBooleanToDb(input.has_annual_plan),
+        nullableBooleanToDb(input.has_telegram_group),
+        nullableBooleanToDb(input.telegram_allows_speaking),
+        nullableBooleanToDb(input.has_lifetime_plan),
+        JSON.stringify(normalizeAirportProfile(input.profile)),
         input.subscription_url || null,
         input.applicant_email || null,
         input.applicant_telegram || null,
@@ -644,6 +789,38 @@ export class AirportRepository {
     if (typeof input.has_trial === 'boolean') {
       sets.push('has_trial = ?');
       values.push(input.has_trial ? 1 : 0);
+    }
+    if (input.streaming_support !== undefined) {
+      sets.push('streaming_support_json = ?');
+      values.push(JSON.stringify(normalizeAirportStreamingSupport(input.streaming_support)));
+    }
+    if (input.payment_methods !== undefined) {
+      sets.push('payment_methods_json = ?');
+      values.push(JSON.stringify(normalizeAirportPaymentMethods(input.payment_methods)));
+    }
+    if (input.payment_crypto_other !== undefined) {
+      sets.push('payment_crypto_other = ?');
+      values.push(input.payment_crypto_other || null);
+    }
+    if (input.has_annual_plan !== undefined) {
+      sets.push('has_annual_plan = ?');
+      values.push(nullableBooleanToDb(input.has_annual_plan));
+    }
+    if (input.has_telegram_group !== undefined) {
+      sets.push('has_telegram_group = ?');
+      values.push(nullableBooleanToDb(input.has_telegram_group));
+    }
+    if (input.telegram_allows_speaking !== undefined) {
+      sets.push('telegram_allows_speaking = ?');
+      values.push(nullableBooleanToDb(input.telegram_allows_speaking));
+    }
+    if (input.has_lifetime_plan !== undefined) {
+      sets.push('has_lifetime_plan = ?');
+      values.push(nullableBooleanToDb(input.has_lifetime_plan));
+    }
+    if (input.profile !== undefined) {
+      sets.push('airport_profile_json = ?');
+      values.push(JSON.stringify(normalizeAirportProfile(input.profile)));
     }
     if (input.subscription_url !== undefined) {
       sets.push('subscription_url = ?');
@@ -868,6 +1045,14 @@ function toAirportEntity(row: AirportRow): Airport {
     is_listed: !!row.is_listed,
     plan_price_month: Number(row.plan_price_month),
     has_trial: !!row.has_trial,
+    streaming_support: normalizeAirportStreamingSupport(row.streaming_support_json),
+    payment_methods: normalizeAirportPaymentMethods(row.payment_methods_json),
+    payment_crypto_other: row.payment_crypto_other,
+    has_annual_plan: nullableDbBoolean(row.has_annual_plan),
+    has_telegram_group: nullableDbBoolean(row.has_telegram_group),
+    telegram_allows_speaking: nullableDbBoolean(row.telegram_allows_speaking),
+    has_lifetime_plan: nullableDbBoolean(row.has_lifetime_plan),
+    profile: normalizeAirportProfile(row.airport_profile_json),
     subscription_url: row.subscription_url,
     applicant_email: row.applicant_email,
     applicant_account_email: row.applicant_account_email,
@@ -891,6 +1076,53 @@ function normalizeWebsiteList(websites?: string[], primaryWebsite?: string): str
     .filter(Boolean);
   const unique = [...new Set(ordered)];
   return unique.length > 0 ? unique : [''];
+}
+
+function normalizeAirportStreamingSupport(value: unknown): AirportStreamingSupport[] {
+  return normalizeAirportEnumList(value, AIRPORT_STREAMING_SUPPORT_VALUES);
+}
+
+function normalizeAirportPaymentMethods(value: unknown): AirportPaymentMethod[] {
+  return normalizeAirportEnumList(value, AIRPORT_PAYMENT_METHOD_VALUES, { usdt: 'usdt_trc20' });
+}
+
+function normalizeAirportEnumList<T extends string>(
+  value: unknown,
+  allowedValues: readonly T[],
+  aliases: Partial<Record<string, T>> = {},
+): T[] {
+  const values = Array.isArray(value) ? value : safeJsonArray(value);
+  const allowed = new Set(allowedValues);
+  const normalized = values
+    .map((item) => aliases[String(item).trim()] ?? String(item).trim())
+    .filter((item): item is T => allowed.has(item as T));
+  return [...new Set(normalized)];
+}
+
+function safeJsonArray(value: unknown): unknown[] {
+  if (typeof value !== 'string' || value.trim() === '') {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function nullableBooleanToDb(value: boolean | null | undefined): number | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return value ? 1 : 0;
+}
+
+function nullableDbBoolean(value: number | null | undefined): boolean | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  return Number(value) === 1;
 }
 
 function parseApplicationIdKeyword(keyword: string): number | null {

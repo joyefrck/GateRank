@@ -11,7 +11,7 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
       calls.push({ sql, params });
       if (sql.includes('FROM information_schema.COLUMNS')) {
         schemaChecks += 1;
-        return [schemaChecks <= 12 ? [] : [{ 1: 1 }]];
+        return [schemaChecks <= 20 ? [] : [{ 1: 1 }]];
       }
       return [[]];
     },
@@ -42,6 +42,39 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
   );
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN test_password VARCHAR(255) NULL AFTER test_account')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN streaming_support_json JSON NULL AFTER has_trial')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN payment_methods_json JSON NULL AFTER streaming_support_json')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN payment_crypto_other VARCHAR(255) NULL AFTER payment_methods_json')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN has_annual_plan TINYINT(1) NULL DEFAULT NULL AFTER payment_crypto_other')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN has_telegram_group TINYINT(1) NULL DEFAULT NULL AFTER has_annual_plan')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN telegram_allows_speaking TINYINT(1) NULL DEFAULT NULL AFTER has_telegram_group')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN has_lifetime_plan TINYINT(1) NULL DEFAULT NULL AFTER telegram_allows_speaking')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN airport_profile_json JSON NULL AFTER has_lifetime_plan')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('SET streaming_support_json = JSON_ARRAY()')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('SET payment_methods_json = JSON_ARRAY()')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('SET airport_profile_json = JSON_OBJECT()')),
   );
   assert.ok(
     calls.some((call) => call.sql.includes('SET is_listed = 1')),
@@ -81,6 +114,24 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
           is_listed: 1,
           plan_price_month: 10,
           has_trial: 1,
+          streaming_support_json: JSON.stringify(['netflix', 'youtube_premium', 'spotify']),
+          payment_methods_json: JSON.stringify(['wechat', 'usdt_trc20', 'paypal', 'crypto_other']),
+          payment_crypto_other: 'TON',
+          has_annual_plan: 1,
+          has_telegram_group: 0,
+          telegram_allows_speaking: null,
+          has_lifetime_plan: 1,
+          airport_profile_json: JSON.stringify({
+            plan: {
+              supports_monthly: true,
+              supports_quarterly: false,
+              lowest_monthly_price: 12.5,
+            },
+            telegram: { group_member_count: 1234 },
+            clients: { clash: true, shadowrocket: false },
+            import_methods: { subscription_link: true },
+            regions: { hong_kong: { has_residential: true, line_types: ['iepl', 'cn2'] } },
+          }),
           subscription_url: null,
           applicant_email: 'paid@example.com',
           applicant_account_email: 'login-paid@example.com',
@@ -106,6 +157,9 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
           is_listed: 1,
           plan_price_month: 10,
           has_trial: 1,
+          streaming_support_json: null,
+          payment_methods_json: null,
+          payment_crypto_other: null,
           subscription_url: null,
           applicant_email: 'imported@example.com',
           applicant_telegram: '@imported',
@@ -131,6 +185,28 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
   assert.equal(result.items[0]?.application_id, 101);
   assert.equal(result.items[1]?.application_id, null);
   assert.equal(result.items[0]?.applicant_account_email, 'login-paid@example.com');
+  assert.deepEqual(result.items[0]?.streaming_support, ['netflix', 'youtube_premium', 'spotify']);
+  assert.deepEqual(result.items[0]?.payment_methods, ['wechat', 'usdt_trc20', 'paypal', 'crypto_other']);
+  assert.equal(result.items[0]?.payment_crypto_other, 'TON');
+  assert.equal(result.items[0]?.has_annual_plan, true);
+  assert.equal(result.items[0]?.has_telegram_group, false);
+  assert.equal(result.items[0]?.telegram_allows_speaking, null);
+  assert.equal(result.items[0]?.has_lifetime_plan, true);
+  assert.equal(result.items[0]?.profile?.plan.supports_monthly, true);
+  assert.equal(result.items[0]?.profile?.plan.supports_quarterly, false);
+  assert.equal(result.items[0]?.profile?.plan.lowest_monthly_price, 12.5);
+  assert.equal(result.items[0]?.profile?.telegram.group_member_count, 1234);
+  assert.equal(result.items[0]?.profile?.clients.clash, true);
+  assert.equal(result.items[0]?.profile?.clients.shadowrocket, false);
+  assert.equal(result.items[0]?.profile?.import_methods.subscription_link, true);
+  assert.equal(result.items[0]?.profile?.regions.hong_kong.has_residential, true);
+  assert.deepEqual(result.items[0]?.profile?.regions.hong_kong.line_types, ['iepl', 'cn2']);
+  assert.deepEqual(result.items[1]?.streaming_support, []);
+  assert.deepEqual(result.items[1]?.payment_methods, []);
+  assert.equal(result.items[1]?.payment_crypto_other, null);
+  assert.equal(result.items[1]?.has_annual_plan, null);
+  assert.equal(result.items[1]?.profile?.plan.supports_monthly, null);
+  assert.deepEqual(result.items[1]?.profile?.regions.japan.line_types, []);
   assert.equal(result.items[0]?.telegram_bot_bound, true);
   assert.equal(result.items[1]?.telegram_bot_bound, false);
   assert.equal(result.items[0]?.paid_application_fee, true);

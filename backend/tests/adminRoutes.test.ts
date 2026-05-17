@@ -5369,6 +5369,61 @@ test('POST /airports prefers manual_tags over legacy tags field', async () => {
         status: 'normal',
         plan_price_month: 20,
         has_trial: true,
+        streaming_support: ['netflix', 'youtube_premium', 'tiktok'],
+        payment_methods: ['wechat', 'usdt_trc20', 'stripe_card', 'crypto_other'],
+        payment_crypto_other: 'TON',
+        has_annual_plan: true,
+        has_telegram_group: false,
+        telegram_allows_speaking: null,
+        has_lifetime_plan: false,
+        profile: {
+          plan: {
+            supports_monthly: true,
+            supports_quarterly: true,
+            supports_half_yearly: null,
+            supports_annual: false,
+            lowest_monthly_price: 18.8,
+            lowest_annual_monthly_price: 12.5,
+            has_trial_plan: true,
+            has_lifetime_plan: false,
+          },
+          telegram: {
+            has_group: true,
+            group_url: 'https://t.me/group',
+            has_channel: false,
+            channel_url: null,
+            group_allows_speaking: true,
+            group_member_count: 321,
+            recent_active_at: '2026-05-17',
+            has_customer_service_bot: true,
+            has_ticket_system: null,
+          },
+          clients: {
+            clash: true,
+            clash_verge: true,
+            shadowrocket: false,
+            quantumult_x: null,
+            stash: null,
+            surge: null,
+            sing_box: true,
+            v2rayn: null,
+            v2rayng: null,
+            nekobox: null,
+            surfboard: null,
+            xiaohuojian: true,
+            openclash: null,
+          },
+          import_methods: {
+            one_click_import: true,
+            subscription_link: true,
+            universal_subscription: false,
+            qr_code_import: null,
+            tutorials: true,
+          },
+          regions: {
+            hong_kong: { has_residential: true, has_native_ip: false, line_types: ['iepl', 'cn2'] },
+          },
+        },
         tags: ['旧标签'],
         manual_tags: ['人工标签'],
       }),
@@ -5377,6 +5432,212 @@ test('POST /airports prefers manual_tags over legacy tags field', async () => {
     assert.equal(response.status, 201);
     assert.equal(createdInputs.length, 1);
     assert.deepEqual(createdInputs[0].manual_tags, ['人工标签']);
+    assert.deepEqual(createdInputs[0].streaming_support, ['netflix', 'youtube_premium', 'tiktok']);
+    assert.deepEqual(createdInputs[0].payment_methods, ['wechat', 'usdt_trc20', 'stripe_card', 'crypto_other']);
+    assert.equal(createdInputs[0].payment_crypto_other, 'TON');
+    assert.equal(createdInputs[0].has_annual_plan, true);
+    assert.equal(createdInputs[0].has_telegram_group, false);
+    assert.equal(createdInputs[0].telegram_allows_speaking, null);
+    assert.equal(createdInputs[0].has_lifetime_plan, false);
+    assert.equal((createdInputs[0].profile as any).plan.lowest_monthly_price, 18.8);
+    assert.equal((createdInputs[0].profile as any).telegram.group_member_count, 321);
+    assert.equal((createdInputs[0].profile as any).clients.shadowrocket, false);
+    assert.equal((createdInputs[0].profile as any).clients.xiaohuojian, true);
+    assert.deepEqual((createdInputs[0].profile as any).regions.hong_kong.line_types, ['iepl', 'cn2']);
+    assert.equal((createdInputs[0].profile as any).regions.japan.has_native_ip, null);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airports validates and forwards backend-only airport profile fields', async () => {
+  const updatedInputs: Array<Record<string, unknown>> = [];
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: {
+        ...stubAirportRepository(),
+        update: async (_id, input) => {
+          updatedInputs.push(input as Record<string, unknown>);
+          return true;
+        },
+      },
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        streaming_support: ['chatgpt', 'disney_plus', 'spotify', 'chatgpt'],
+        payment_methods: ['alipay', 'paypal', 'unionpay'],
+        payment_crypto_other: null,
+        has_annual_plan: null,
+        has_telegram_group: true,
+        telegram_allows_speaking: false,
+        has_lifetime_plan: null,
+        profile: {
+          plan: {
+            supports_monthly: false,
+            lowest_monthly_price: 0,
+          },
+          telegram: {
+            group_member_count: 0,
+          },
+          clients: {
+            openclash: true,
+          },
+          regions: {
+            japan: {
+              has_native_ip: true,
+              line_types: ['relay', 'bgp', 'relay'],
+            },
+          },
+        },
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(updatedInputs.length, 1);
+    assert.deepEqual(updatedInputs[0].streaming_support, ['chatgpt', 'disney_plus', 'spotify']);
+    assert.deepEqual(updatedInputs[0].payment_methods, ['alipay', 'paypal', 'unionpay']);
+    assert.equal(updatedInputs[0].payment_crypto_other, null);
+    assert.equal(updatedInputs[0].has_annual_plan, null);
+    assert.equal(updatedInputs[0].has_telegram_group, true);
+    assert.equal(updatedInputs[0].telegram_allows_speaking, false);
+    assert.equal(updatedInputs[0].has_lifetime_plan, null);
+    assert.equal((updatedInputs[0].profile as any).plan.supports_monthly, false);
+    assert.equal((updatedInputs[0].profile as any).plan.lowest_monthly_price, 0);
+    assert.equal((updatedInputs[0].profile as any).telegram.group_member_count, 0);
+    assert.equal((updatedInputs[0].profile as any).clients.openclash, true);
+    assert.equal((updatedInputs[0].profile as any).clients.clash, null);
+    assert.deepEqual((updatedInputs[0].profile as any).regions.japan.line_types, ['relay', 'bgp']);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airports rejects invalid airport profile values', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const badLineTypeResponse = await fetch(`http://127.0.0.1:${port}/airports/1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile: {
+          regions: {
+            hong_kong: {
+              line_types: ['iepl', 'wrong_line'],
+            },
+          },
+        },
+      }),
+    });
+    const badLineTypeData = (await badLineTypeResponse.json()) as { code: string; message: string };
+
+    assert.equal(badLineTypeResponse.status, 400);
+    assert.equal(badLineTypeData.code, 'BAD_REQUEST');
+    assert.match(badLineTypeData.message, /profile\.regions\.hong_kong\.line_types contains unsupported value/);
+
+    const badMemberCountResponse = await fetch(`http://127.0.0.1:${port}/airports/1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        profile: {
+          telegram: {
+            group_member_count: -1,
+          },
+        },
+      }),
+    });
+    const badMemberCountData = (await badMemberCountResponse.json()) as { code: string; message: string };
+
+    assert.equal(badMemberCountResponse.status, 400);
+    assert.equal(badMemberCountData.code, 'BAD_REQUEST');
+    assert.match(badMemberCountData.message, /profile\.telegram\.group_member_count must be a non-negative number/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airports rejects unsupported streaming support values', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streaming_support: ['netflix', 'prime_video'] }),
+    });
+    const data = (await response.json()) as { code: string; message: string };
+
+    assert.equal(response.status, 400);
+    assert.equal(data.code, 'BAD_REQUEST');
+    assert.match(data.message, /streaming_support contains unsupported value/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -5393,6 +5654,13 @@ function stubAirportRepository() {
       status: 'normal',
       plan_price_month: 20,
       has_trial: true,
+      streaming_support: ['netflix'],
+      payment_methods: ['wechat'],
+      payment_crypto_other: null,
+      has_annual_plan: null,
+      has_telegram_group: true,
+      telegram_allows_speaking: false,
+      has_lifetime_plan: null,
       subscription_url: 'https://sub.example.com',
       applicant_email: 'ops@example.com',
       applicant_telegram: '@ops',

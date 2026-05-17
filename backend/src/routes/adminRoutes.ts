@@ -35,7 +35,10 @@ import { createRandomPassword, hashPassword } from '../utils/password';
 import type {
   AirportApplicationReviewStatus,
   AirportApplicationPaymentStatus,
+  AirportProfile,
+  AirportPaymentMethod,
   AirportStatus,
+  AirportStreamingSupport,
   ManualJobKind,
   MarketingAirportConversionItem,
   MarketingGranularity,
@@ -53,6 +56,7 @@ import type {
   SubscriptionNodeSnapshotNode,
   SubscriptionNodeSnapshotUnsupportedNode,
 } from '../types/domain';
+import { parseAirportProfilePayload } from '../utils/airportProfile';
 import {
   computeEffectiveLatencyStats,
   getStabilityTier,
@@ -85,6 +89,14 @@ interface AdminDeps {
       is_listed?: boolean;
       plan_price_month: number;
       has_trial: boolean;
+      streaming_support?: AirportStreamingSupport[];
+      payment_methods?: AirportPaymentMethod[];
+      payment_crypto_other?: string | null;
+      has_annual_plan?: boolean | null;
+      has_telegram_group?: boolean | null;
+      telegram_allows_speaking?: boolean | null;
+      has_lifetime_plan?: boolean | null;
+      profile?: AirportProfile;
       subscription_url?: string | null;
       applicant_email?: string | null;
       applicant_telegram?: string | null;
@@ -106,6 +118,14 @@ interface AdminDeps {
         is_listed?: boolean;
         plan_price_month?: number;
         has_trial?: boolean;
+        streaming_support?: AirportStreamingSupport[];
+        payment_methods?: AirportPaymentMethod[];
+        payment_crypto_other?: string | null;
+        has_annual_plan?: boolean | null;
+        has_telegram_group?: boolean | null;
+        telegram_allows_speaking?: boolean | null;
+        has_lifetime_plan?: boolean | null;
+        profile?: AirportProfile;
         subscription_url?: string | null;
         applicant_email?: string | null;
         applicant_telegram?: string | null;
@@ -1310,6 +1330,16 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       ensureDownConfirmed(status, payload.confirm_down);
       const planPriceMonth = mustNumber(payload.plan_price_month, 'plan_price_month');
       const hasTrial = Boolean(payload.has_trial);
+      const streamingSupport =
+        payload.streaming_support === undefined
+          ? []
+          : toAirportStreamingSupportArray(payload.streaming_support);
+      const paymentMethods =
+        payload.payment_methods === undefined
+          ? []
+          : toAirportPaymentMethodArray(payload.payment_methods);
+      const paymentCryptoOther = optionalString(payload.payment_crypto_other) || null;
+      const profile = parseAirportProfilePayload(payload.profile);
       const subscriptionUrl = optionalString(payload.subscription_url);
       const applicantEmail = optionalString(payload.applicant_email) || null;
       const applicantTelegram = optionalString(payload.applicant_telegram) || null;
@@ -1331,6 +1361,14 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         is_listed: isListed,
         plan_price_month: planPriceMonth,
         has_trial: hasTrial,
+        streaming_support: streamingSupport,
+        payment_methods: paymentMethods,
+        payment_crypto_other: paymentCryptoOther,
+        has_annual_plan: toNullableBooleanFlag(payload.has_annual_plan, 'has_annual_plan'),
+        has_telegram_group: toNullableBooleanFlag(payload.has_telegram_group, 'has_telegram_group'),
+        telegram_allows_speaking: toNullableBooleanFlag(payload.telegram_allows_speaking, 'telegram_allows_speaking'),
+        has_lifetime_plan: toNullableBooleanFlag(payload.has_lifetime_plan, 'has_lifetime_plan'),
+        profile,
         subscription_url: subscriptionUrl || null,
         applicant_email: applicantEmail,
         applicant_telegram: applicantTelegram,
@@ -1367,6 +1405,38 @@ export function createAdminRoutes(deps: AdminDeps): Router {
             ? undefined
             : mustNumber(payload.plan_price_month, 'plan_price_month'),
         has_trial: payload.has_trial === undefined ? undefined : Boolean(payload.has_trial),
+        streaming_support:
+          payload.streaming_support === undefined
+            ? undefined
+            : toAirportStreamingSupportArray(payload.streaming_support),
+        payment_methods:
+          payload.payment_methods === undefined
+            ? undefined
+            : toAirportPaymentMethodArray(payload.payment_methods),
+        payment_crypto_other:
+          payload.payment_crypto_other === undefined
+            ? undefined
+            : optionalString(payload.payment_crypto_other) || null,
+        has_annual_plan:
+          payload.has_annual_plan === undefined
+            ? undefined
+            : toNullableBooleanFlag(payload.has_annual_plan, 'has_annual_plan'),
+        has_telegram_group:
+          payload.has_telegram_group === undefined
+            ? undefined
+            : toNullableBooleanFlag(payload.has_telegram_group, 'has_telegram_group'),
+        telegram_allows_speaking:
+          payload.telegram_allows_speaking === undefined
+            ? undefined
+            : toNullableBooleanFlag(payload.telegram_allows_speaking, 'telegram_allows_speaking'),
+        has_lifetime_plan:
+          payload.has_lifetime_plan === undefined
+            ? undefined
+            : toNullableBooleanFlag(payload.has_lifetime_plan, 'has_lifetime_plan'),
+        profile:
+          payload.profile === undefined
+            ? undefined
+            : parseAirportProfilePayload(payload.profile),
         subscription_url:
           payload.subscription_url === undefined
             ? undefined
@@ -2887,11 +2957,36 @@ function toBooleanFlag(value: unknown): boolean {
   if (value === true || value === 1) {
     return true;
   }
+  if (value === false || value === 0) {
+    return false;
+  }
   if (typeof value === 'string') {
     const normalized = value.trim().toLowerCase();
     return normalized === '1' || normalized === 'true' || normalized === 'yes';
   }
   return false;
+}
+
+function toNullableBooleanFlag(value: unknown, fieldName: string): boolean | null {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  if (value === true || value === 1) {
+    return true;
+  }
+  if (value === false || value === 0) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === '1' || normalized === 'true' || normalized === 'yes') {
+      return true;
+    }
+    if (normalized === '0' || normalized === 'false' || normalized === 'no') {
+      return false;
+    }
+  }
+  throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be boolean or null`);
 }
 
 function ensureDownConfirmed(status: AirportStatus | undefined, confirmDown: unknown): void {
@@ -2905,6 +3000,44 @@ function toStatus(value: unknown): AirportStatus {
     return value;
   }
   throw new HttpError(400, 'BAD_REQUEST', 'status must be normal|risk|down');
+}
+
+function toAirportStreamingSupportArray(value: unknown): AirportStreamingSupport[] {
+  return toEnumArray(value, 'streaming_support', [
+    'netflix',
+    'chatgpt',
+    'disney_plus',
+    'hbo_max',
+    'youtube_premium',
+    'tiktok',
+    'spotify',
+  ]);
+}
+
+function toAirportPaymentMethodArray(value: unknown): AirportPaymentMethod[] {
+  return toEnumArray(value, 'payment_methods', [
+    'wechat',
+    'alipay',
+    'usdt_trc20',
+    'usdt_erc20',
+    'usdt_bep20',
+    'stripe_card',
+    'paypal',
+    'crypto_other',
+    'unionpay',
+  ]);
+}
+
+function toEnumArray<T extends string>(value: unknown, fieldName: string, allowedValues: readonly T[]): T[] {
+  const items = toStringArray(value, fieldName)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const allowed = new Set(allowedValues);
+  const invalid = items.find((item) => !allowed.has(item as T));
+  if (invalid) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} contains unsupported value: ${invalid}`);
+  }
+  return [...new Set(items as T[])];
 }
 
 function toAirportListedFilter(value: unknown): boolean {
