@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode, urlparse
+from urllib.parse import urlencode, urlparse, urlunparse
 from urllib.request import Request, urlopen
 
 
@@ -412,12 +412,22 @@ def normalize_url(value: str) -> str:
     text = value.strip()
     if not text:
         return text
-    parsed = urlparse(text)
-    if parsed.scheme:
-        return text
     if text.startswith("//"):
-        return f"https:{text}"
-    return f"https://{text}"
+        text = f"https:{text}"
+    elif not urlparse(text).scheme:
+        text = f"https://{text}"
+    return normalize_idn_host(text)
+
+
+def normalize_idn_host(url: str) -> str:
+    parsed = urlparse(url)
+    if not parsed.hostname:
+        return url
+    ascii_host = parsed.hostname.encode("idna").decode("ascii")
+    if ascii_host == parsed.hostname:
+        return url
+    netloc = parsed.netloc.replace(parsed.hostname, ascii_host, 1)
+    return urlunparse(parsed._replace(netloc=netloc))
 
 
 def shanghai_now_iso() -> str:

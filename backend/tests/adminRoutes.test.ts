@@ -608,6 +608,52 @@ test('GET /airports returns list items with latest available total_score', async
   }
 });
 
+test('GET /airports/:id returns wallet summary for account management', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      applicantBillingRepository: {
+        linkAirportByApplicationId: async () => undefined,
+        listWalletsByAirportIds: async (airportIds) => new Map(
+          airportIds.map((airportId) => [airportId, { id: 11, balance: 321.45 }]),
+        ),
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      id: number;
+      wallet_id: number | null;
+      wallet_balance: number | null;
+    };
+    assert.equal(data.id, 1);
+    assert.equal(data.wallet_id, 11);
+    assert.equal(data.wallet_balance, 321.45);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /airports/:id/wallet/adjustments adds wallet balance and audits adjustment', async () => {
   const adjustments: Array<{ airport_id: number; amount: number; description: string; reference_id: string }> = [];
   const auditLogs: Array<{ action: string; actor: string; payload: unknown }> = [];

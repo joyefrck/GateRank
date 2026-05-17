@@ -275,8 +275,8 @@ const AIRPORT_PROFILE_REGION_OPTIONS: Array<{ value: AirportProfileRegionKey; la
   { value: 'japan', label: '日本', aliases: ['japan', 'jp', '日本'] },
   { value: 'singapore', label: '新加坡', aliases: ['singapore', 'sg', '新加坡'] },
   { value: 'united_states', label: '美国', aliases: ['united_states', 'united states', 'us', 'usa', '美国', '美國'] },
-  { value: 'south_korea', label: '韩国', aliases: ['south_korea', 'south korea', 'kr', 'korea', '韩国', '韓國'] },
-  { value: 'united_kingdom', label: '英国', aliases: ['united_kingdom', 'united kingdom', 'uk', 'gb', 'england', '英国', '英國'] },
+  { value: 'south_korea', label: '韩国', aliases: ['south_korea', 'south korea', 'kr', 'korea', 'seoul', '韩国', '韓國', '首尔', '首爾'] },
+  { value: 'united_kingdom', label: '英国', aliases: ['united_kingdom', 'united kingdom', 'uk', 'gb', 'england', 'london', '英国', '英國', '伦敦', '倫敦'] },
   { value: 'germany', label: '德国', aliases: ['germany', 'de', '德国', '德國'] },
   { value: 'turkey', label: '土耳其', aliases: ['turkey', 'tr', '土耳其'] },
   { value: 'argentina', label: '阿根廷', aliases: ['argentina', 'ar', '阿根廷'] },
@@ -9663,8 +9663,20 @@ function normalizeAirportRegionKey(value: string | null | undefined): AirportPro
     return null;
   }
   return AIRPORT_PROFILE_REGION_OPTIONS.find((region) => (
-    region.aliases.some((alias) => normalized.includes(alias.toLowerCase()))
+    region.aliases.some((alias) => matchesAirportRegionAlias(normalized, alias))
   ))?.value || null;
+}
+
+function matchesAirportRegionAlias(normalizedValue: string, alias: string): boolean {
+  const normalizedAlias = alias.toLowerCase();
+  if (normalizedAlias.length <= 3 && /^[a-z0-9]+$/.test(normalizedAlias)) {
+    return new RegExp(`(^|[^a-z])${escapeRegExp(normalizedAlias)}($|[^a-z])`).test(normalizedValue);
+  }
+  return normalizedValue.includes(normalizedAlias);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function uniqueNodeValues(values: Array<string | null | undefined>): string[] {

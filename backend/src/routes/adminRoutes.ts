@@ -1312,7 +1312,15 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       if (!airport) {
         throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
       }
-      res.json(airport);
+      const walletMap = deps.applicantBillingRepository?.listWalletsByAirportIds
+        ? await deps.applicantBillingRepository.listWalletsByAirportIds([airportId])
+        : new Map<number, { id: number; balance: number }>();
+      const wallet = walletMap.get(airportId);
+      res.json({
+        ...(airport as Record<string, unknown>),
+        wallet_id: wallet?.id ?? null,
+        wallet_balance: wallet?.balance ?? null,
+      });
     } catch (error) {
       next(error);
     }

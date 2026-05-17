@@ -112,6 +112,18 @@ class MonitorPerformanceTests(unittest.TestCase):
         self.assertEqual(trojan_node.region, "US")
         self.assertEqual(trojan_node.outbound["transport"]["type"], "ws")
 
+    def test_parse_london_and_seoul_nodes_detects_display_regions(self) -> None:
+        london_node = parse_node_line("trojan://password@london.example.com:443#London-1")
+        seoul_node = parse_node_line("trojan://password@seoul.example.com:443#Seoul-1")
+        fukuoka_node = parse_node_line("trojan://password@fukuoka.example.com:443#Fukuoka-1")
+        assert london_node is not None
+        assert seoul_node is not None
+        assert fukuoka_node is not None
+
+        self.assertEqual(london_node.region, "UK")
+        self.assertEqual(seoul_node.region, "KR")
+        self.assertIsNone(fukuoka_node.region)
+
     def test_parse_anytls_node_builds_tls_outbound(self) -> None:
         uri = "anytls://letmein@example.com/?sni=real.example.com&insecure=1#HK-anytls"
         node = parse_node_line(uri)

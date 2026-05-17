@@ -3,7 +3,7 @@ import sys
 import unittest
 from unittest.mock import patch
 
-from scripts.monitor_stability import build_config, collect_latency_samples, list_airports
+from scripts.monitor_stability import build_config, collect_latency_samples, list_airports, normalize_url
 
 
 class MonitorStabilityTests(unittest.TestCase):
@@ -29,6 +29,10 @@ class MonitorStabilityTests(unittest.TestCase):
                 "ADMIN_API_KEY must be ASCII because it is sent as HTTP header x-api-key",
             ):
                 build_config()
+
+    def test_normalize_url_converts_idn_domain_to_ascii(self) -> None:
+        self.assertEqual(normalize_url("山水云.com"), "https://xn--9kq015a4jm.com")
+        self.assertEqual(normalize_url("https://山水云.com/path"), "https://xn--9kq015a4jm.com/path")
 
     def test_collect_latency_samples_returns_timestamped_samples_with_configured_gaps(self) -> None:
         latencies = iter([10.0, 11.0, 12.0, 13.0, 14.0, 15.0])

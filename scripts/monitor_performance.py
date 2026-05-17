@@ -14,6 +14,7 @@ import base64
 import json
 import os
 import random
+import re
 import shutil
 import socket
 import ssl
@@ -50,12 +51,14 @@ DEFAULT_SOURCE = "cron-performance"
 DEFAULT_TEST_URL_LATENCY = "https://www.google.com/generate_204"
 DEFAULT_TEST_URL_SPEED = "https://speed.cloudflare.com/__down?bytes=5000000"
 
-REGION_PRIORITY = ("HK", "JP", "SG", "US")
+REGION_PRIORITY = ("HK", "JP", "SG", "US", "KR", "UK")
 REGION_KEYWORDS = {
     "HK": ("hk", "hong kong", "hongkong", "香港", "港"),
     "JP": ("jp", "japan", "tokyo", "osaka", "日本", "东京", "大阪"),
     "SG": ("sg", "singapore", "新加坡", "狮城"),
     "US": ("us", "usa", "america", "united states", "美国", "洛杉矶", "硅谷", "西雅图", "纽约"),
+    "KR": ("kr", "korea", "south korea", "seoul", "韩国", "韓國", "首尔", "首爾"),
+    "UK": ("uk", "gb", "united kingdom", "england", "london", "英国", "英國", "伦敦", "倫敦"),
 }
 
 
@@ -1093,9 +1096,18 @@ def count_selected_regions(nodes: list[ParsedNode]) -> int:
 def detect_region(name: str) -> str | None:
     normalized = name.lower()
     for region, keywords in REGION_KEYWORDS.items():
-        if any(keyword in normalized for keyword in keywords):
-            return region
+        for keyword in keywords:
+            if is_short_region_keyword(keyword):
+                if re.search(rf"(?<![a-z]){re.escape(keyword)}(?![a-z])", normalized):
+                    return region
+                continue
+            if keyword in normalized:
+                return region
     return None
+
+
+def is_short_region_keyword(keyword: str) -> bool:
+    return len(keyword) <= 3 and keyword.isascii() and keyword.isalnum()
 
 
 def check_nodes_availability(
