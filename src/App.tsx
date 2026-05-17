@@ -1811,6 +1811,7 @@ function PortalEmailChangeModal({
   sendingCode,
   submitting,
   status,
+  error,
   onNewEmailChange,
   onCodeChange,
   onSendCode,
@@ -1824,6 +1825,7 @@ function PortalEmailChangeModal({
   sendingCode: boolean;
   submitting: boolean;
   status: string;
+  error: string;
   onNewEmailChange: (value: string) => void;
   onCodeChange: (value: string) => void;
   onSendCode: () => void;
@@ -1886,6 +1888,12 @@ function PortalEmailChangeModal({
               {sendingCode ? '发送中...' : '发送验证码'}
             </button>
           </div>
+
+          {error && (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm leading-6 text-rose-700" role="alert">
+              {error}
+            </div>
+          )}
 
           {status && (
             <div className="rounded-2xl border border-sky-100 bg-sky-50 px-4 py-3 text-sm leading-6 text-sky-800">
@@ -3698,6 +3706,7 @@ function PortalPage() {
   const [sendingEmailChangeCode, setSendingEmailChangeCode] = useState(false);
   const [changingEmail, setChangingEmail] = useState(false);
   const [emailChangeStatus, setEmailChangeStatus] = useState('');
+  const [emailChangeError, setEmailChangeError] = useState('');
   const passwordChangeRedirectTimerRef = useRef<number | null>(null);
   const telegramLoginRunRef = useRef(0);
 
@@ -3859,6 +3868,7 @@ function PortalPage() {
     setNewLoginEmail('');
     setEmailChangeCode('');
     setEmailChangeStatus('');
+    setEmailChangeError('');
     setSendingEmailChangeCode(false);
     setChangingEmail(false);
     setError('');
@@ -4078,15 +4088,18 @@ function PortalPage() {
     options: {
       setSending: (value: boolean) => void;
       setStatus: (value: string) => void;
+      setError?: (value: string) => void;
     },
   ) => {
     const targetEmail = email.trim();
+    const setRequestError = options.setError ?? setError;
+    options.setStatus('');
     if (!targetEmail) {
-      setError('请先填写新邮箱');
+      setRequestError('请先填写新邮箱');
       return;
     }
     options.setSending(true);
-    options.setStatus('');
+    options.setError?.('');
     setError('');
     setSuccess('');
     try {
@@ -4098,7 +4111,7 @@ function PortalPage() {
         ? '验证码已发送，请稍后再试；60 秒内不会重复发送。'
         : '验证码已发送，请查看新邮箱。');
     } catch (err) {
-      setError(err instanceof Error ? err.message : '发送验证码失败');
+      setRequestError(err instanceof Error ? err.message : '发送验证码失败');
     } finally {
       options.setSending(false);
     }
@@ -4108,6 +4121,7 @@ function PortalPage() {
     await sendEmailCodeForAddress(newLoginEmail, {
       setSending: setSendingEmailChangeCode,
       setStatus: setEmailChangeStatus,
+      setError: setEmailChangeError,
     });
   };
 
@@ -4122,15 +4136,16 @@ function PortalPage() {
     event.preventDefault();
     const targetEmail = newLoginEmail.trim();
     if (!targetEmail) {
-      setError('请填写新邮箱');
+      setEmailChangeError('请填写新邮箱');
       return;
     }
     if (!emailChangeCode.trim()) {
-      setError('请填写邮箱验证码');
+      setEmailChangeError('请填写邮箱验证码');
       return;
     }
 
     setChangingEmail(true);
+    setEmailChangeError('');
     setError('');
     setSuccess('');
     try {
@@ -4150,7 +4165,7 @@ function PortalPage() {
         resetPortalSession({ keepSuccess: true });
       }, 1000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '修改登录邮箱失败');
+      setEmailChangeError(err instanceof Error ? err.message : '修改登录邮箱失败');
     } finally {
       setChangingEmail(false);
     }
@@ -4414,6 +4429,7 @@ function PortalPage() {
     setNewLoginEmail('');
     setEmailChangeCode('');
     setEmailChangeStatus('');
+    setEmailChangeError('');
     setError('');
     setSuccess('');
     setIsEmailChangeModalOpen(true);
@@ -4423,6 +4439,7 @@ function PortalPage() {
     setNewLoginEmail('');
     setEmailChangeCode('');
     setEmailChangeStatus('');
+    setEmailChangeError('');
     setError('');
     setIsEmailChangeModalOpen(false);
   };
@@ -5400,12 +5417,17 @@ function PortalPage() {
         sendingCode={sendingEmailChangeCode}
         submitting={changingEmail}
         status={emailChangeStatus}
+        error={emailChangeError}
         onNewEmailChange={(value) => {
           setNewLoginEmail(value);
           setEmailChangeCode('');
           setEmailChangeStatus('');
+          setEmailChangeError('');
         }}
-        onCodeChange={setEmailChangeCode}
+        onCodeChange={(value) => {
+          setEmailChangeCode(value);
+          setEmailChangeError('');
+        }}
         onSendCode={() => void sendAccountEmailCode()}
         onClose={closeEmailChangeModal}
         onSubmit={submitAccountEmailChange}
