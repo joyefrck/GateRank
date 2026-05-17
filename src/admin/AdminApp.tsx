@@ -6094,7 +6094,7 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
               <section className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">基础信息</div>
-                  <p className="mt-1 text-sm text-neutral-500">维护机场名称、价格、试用支持和官网订阅信息。</p>
+                  <p className="mt-1 text-sm text-neutral-500">维护机场名称、价格和试用支持。</p>
                 </div>
 
                 <FormField label="机场名称" hint="用于管理列表、数据台标题与榜单识别。">
@@ -6138,7 +6138,65 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
               <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">审核信息</div>
-                  <p className="mt-1 text-sm text-neutral-500">这些字段与入驻申请保持一致，正式机场创建后也可在这里维护。</p>
+                  <p className="mt-1 text-sm text-neutral-500">这些字段与入驻申请保持一致，官网与订阅链接也在这里维护。</p>
+                </div>
+
+                <div className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
+                  <div>
+                    <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">官网配置</div>
+                    <p className="mt-1 text-sm text-neutral-500">支持多个域名，方便录入主站与备用网址。第一条会自动作为主官网。</p>
+                  </div>
+
+                  <div className="space-y-4">
+                    {editing.websites.map((website, index) => (
+                      <div key={`website-${index}`}>
+                        <FormField
+                          label={index === 0 ? '主官网链接' : `备用网址 ${index}`}
+                          hint={index === 0 ? '建议填写当前主站地址。' : '备用网址会一并保存，方便应对域名切换。'}
+                        >
+                          <div className="space-y-3">
+                            <input
+                              className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                              placeholder="https://example.com"
+                              value={website}
+                              onChange={(e) => setEditing({
+                                ...editing,
+                                websites: updateListItem(editing.websites, index, e.target.value),
+                              })}
+                            />
+                            <button
+                              type="button"
+                              className="rounded-2xl border border-neutral-300 px-3 py-3 text-sm text-neutral-600 disabled:cursor-not-allowed disabled:opacity-40"
+                              disabled={editing.websites.length === 1}
+                              onClick={() => setEditing({
+                                ...editing,
+                                websites: removeListItem(editing.websites, index),
+                              })}
+                            >
+                              <span className="inline-flex items-center gap-2"><Trash2 size={14} />删除</span>
+                            </button>
+                          </div>
+                        </FormField>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button
+                    type="button"
+                    className="w-full rounded-2xl border border-dashed border-neutral-400 px-4 py-3 text-sm font-medium text-neutral-700 hover:border-neutral-900 hover:text-neutral-900"
+                    onClick={() => setEditing({ ...editing, websites: [...editing.websites, ''] })}
+                  >
+                    <span className="inline-flex items-center gap-2"><Plus size={14} />继续添加官网链接</span>
+                  </button>
+
+                  <FormField label="订阅链接" hint="可选。如果和官网不同，单独录入更方便运营排查。">
+                    <input
+                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      placeholder="https://example.com/subscribe"
+                      value={editing.subscription_url}
+                      onChange={(e) => setEditing({ ...editing, subscription_url: e.target.value })}
+                    />
+                  </FormField>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -6337,66 +6395,6 @@ function AirportsPage({ onOpenAirport }: { onOpenAirport: (id: number) => void }
                 </section>
                 )}
                 </>
-              )}
-
-              {airportEditTab === 'basic' && (
-              <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
-                <div>
-                  <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">官网配置</div>
-                  <p className="mt-1 text-sm text-neutral-500">支持多个域名，方便录入主站与备用网址。第一条会自动作为主官网。</p>
-                </div>
-
-                <div className="space-y-4">
-                  {editing.websites.map((website, index) => (
-                    <div key={`website-${index}`}>
-                      <FormField
-                        label={index === 0 ? '主官网链接' : `备用网址 ${index}`}
-                        hint={index === 0 ? '建议填写当前主站地址。' : '备用网址会一并保存，方便应对域名切换。'}
-                      >
-                        <div className="space-y-3">
-                          <input
-                            className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                            placeholder="https://example.com"
-                            value={website}
-                            onChange={(e) => setEditing({
-                              ...editing,
-                              websites: updateListItem(editing.websites, index, e.target.value),
-                            })}
-                          />
-                          <button
-                            type="button"
-                            className="rounded-2xl border border-neutral-300 px-3 py-3 text-sm text-neutral-600 disabled:cursor-not-allowed disabled:opacity-40"
-                            disabled={editing.websites.length === 1}
-                            onClick={() => setEditing({
-                              ...editing,
-                              websites: removeListItem(editing.websites, index),
-                            })}
-                          >
-                            <span className="inline-flex items-center gap-2"><Trash2 size={14} />删除</span>
-                          </button>
-                        </div>
-                      </FormField>
-                    </div>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  className="w-full rounded-2xl border border-dashed border-neutral-400 px-4 py-3 text-sm font-medium text-neutral-700 hover:border-neutral-900 hover:text-neutral-900"
-                  onClick={() => setEditing({ ...editing, websites: [...editing.websites, ''] })}
-                >
-                  <span className="inline-flex items-center gap-2"><Plus size={14} />继续添加官网链接</span>
-                </button>
-
-                <FormField label="订阅链接" hint="可选。如果和官网不同，单独录入更方便运营排查。">
-                  <input
-                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                    placeholder="https://example.com/subscribe"
-                    value={editing.subscription_url}
-                    onChange={(e) => setEditing({ ...editing, subscription_url: e.target.value })}
-                  />
-                </FormField>
-              </section>
               )}
 
               {formError && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{formError}</div>}
