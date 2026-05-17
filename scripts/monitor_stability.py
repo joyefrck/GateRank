@@ -150,6 +150,8 @@ def build_config() -> Config:
 
     if not args.admin_api_key and not args.admin_bearer_token:
         raise ValueError("ADMIN_API_KEY or ADMIN_BEARER_TOKEN is required")
+    validate_header_value("ADMIN_API_KEY", args.admin_api_key, "x-api-key")
+    validate_header_value("ADMIN_BEARER_TOKEN", args.admin_bearer_token, "Authorization")
     if not args.all_airports and args.airport_id is None and not args.airport_keyword:
         raise ValueError("AIRPORT_ID or AIRPORT_KEYWORD is required")
     if args.all_airports and (args.website_url or args.tcp_host):
@@ -175,6 +177,13 @@ def build_config() -> Config:
         trigger_aggregate=not args.skip_aggregate,
         trigger_recompute=not args.skip_recompute,
     )
+
+
+def validate_header_value(env_name: str, value: str | None, header_name: str) -> None:
+    if not value:
+        return
+    if any(ord(char) < 32 or ord(char) > 126 for char in value):
+        raise ValueError(f"{env_name} must be ASCII because it is sent as HTTP header {header_name}")
 
 
 def resolve_airports(config: Config) -> list[dict[str, Any]]:

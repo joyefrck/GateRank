@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { ManualJobService, summarizeManualJobScriptFailure } from '../src/services/manualJobService';
+import { ManualJobService, assertHeaderSafeValue, summarizeManualJobScriptFailure } from '../src/services/manualJobService';
 import { getDateInTimezone } from '../src/utils/time';
 import type { ManualJob } from '../src/types/domain';
 
@@ -92,5 +92,12 @@ test('manual job script failures expose json failure detail', async () => {
   assert.equal(
     summarizeManualJobScriptFailure(error),
     "0/1 succeeded, 1 failed; 遥遥领先 #2: unknown url type: 'www.baidu.com'",
+  );
+});
+
+test('manual job rejects non-ascii admin api key before running script', () => {
+  assert.throws(
+    () => assertHeaderSafeValue('ADMIN_API_KEY', '山水云', 'x-api-key'),
+    /ADMIN_API_KEY must be ASCII because it is sent as HTTP header x-api-key/,
   );
 });

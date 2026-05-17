@@ -258,6 +258,7 @@ export class ManualJobService {
     if (!this.adminApiKey) {
       throw new Error('ADMIN_API_KEY 未配置，无法执行手动采集任务');
     }
+    assertHeaderSafeValue('ADMIN_API_KEY', this.adminApiKey, 'x-api-key');
 
     const scriptPath = path.resolve(this.repoRoot, 'scripts', scriptName);
     try {
@@ -288,6 +289,15 @@ export class ManualJobService {
     } catch (error) {
       const message = summarizeManualJobScriptFailure(error);
       throw new Error(normalizeSingBoxError(message, this.singBoxBin));
+    }
+  }
+}
+
+export function assertHeaderSafeValue(envName: string, value: string, headerName: string): void {
+  for (const char of value) {
+    const code = char.charCodeAt(0);
+    if (code < 32 || code > 126) {
+      throw new Error(`${envName} must be ASCII because it is sent as HTTP header ${headerName}`);
     }
   }
 }

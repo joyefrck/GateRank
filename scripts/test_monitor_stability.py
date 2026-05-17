@@ -18,6 +18,18 @@ class MonitorStabilityTests(unittest.TestCase):
         self.assertEqual(config.latency_sample_count, 6)
         self.assertEqual(config.latency_sample_interval_seconds, 3)
 
+    def test_build_config_rejects_non_ascii_admin_api_key(self) -> None:
+        env = {
+            "ADMIN_API_KEY": "山水云",
+            "AIRPORT_ID": "1",
+        }
+        with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", ["monitor_stability.py"]):
+            with self.assertRaisesRegex(
+                ValueError,
+                "ADMIN_API_KEY must be ASCII because it is sent as HTTP header x-api-key",
+            ):
+                build_config()
+
     def test_collect_latency_samples_returns_timestamped_samples_with_configured_gaps(self) -> None:
         latencies = iter([10.0, 11.0, 12.0, 13.0, 14.0, 15.0])
         timestamps = iter(

@@ -182,6 +182,18 @@ class MonitorPerformanceTests(unittest.TestCase):
         self.assertEqual(config.latency_sample_interval_seconds, 3)
         self.assertEqual(config.performance_concurrency, 4)
 
+    def test_build_config_rejects_non_ascii_admin_api_key(self) -> None:
+        env = {
+            "ADMIN_API_KEY": "山水云",
+            "AIRPORT_ID": "1",
+        }
+        with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", ["monitor_performance.py"]):
+            with self.assertRaisesRegex(
+                ValueError,
+                "ADMIN_API_KEY must be ASCII because it is sent as HTTP header x-api-key",
+            ):
+                build_config()
+
     def test_list_airports_filters_down_and_unlisted_airports(self) -> None:
         config = self.make_config()
         with patch("scripts.monitor_performance.get_json", return_value={
