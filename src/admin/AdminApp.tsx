@@ -3372,7 +3372,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
         body: JSON.stringify(buildPayload()),
       })) as UserTelegramBotSettingsView;
       applyView(data);
-      setSuccess(data.webhook_ready ? `用户服务 Bot 配置已保存，Webhook 已同步：${data.webhook_url || '-'}` : '用户服务 Bot 草稿已保存');
+      setSuccess(data.webhook_ready ? `用户服务 Bot 配置已保存，Webhook 和命令菜单已同步：${data.webhook_url || '-'}` : '用户服务 Bot 草稿已保存');
     } catch (err) {
       setError(err instanceof Error ? err.message : '保存失败');
     } finally {
@@ -3389,7 +3389,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
         method: 'POST',
         body: JSON.stringify({}),
       })) as { webhook_url: string };
-      setSuccess(`Webhook 已同步：${data.webhook_url}`);
+      setSuccess(`Webhook 和命令菜单已同步：${data.webhook_url}`);
       await fetchSettings();
     } catch (err) {
       setError(err instanceof Error ? err.message : '同步失败');
@@ -3709,7 +3709,7 @@ function UserTelegramBotSettingsTab({ refreshTick }: { refreshTick: number }) {
 
           <div className="flex items-center justify-end gap-3">
             <button className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50" disabled={syncing || !settings?.enabled} onClick={() => void syncWebhook()}>
-              {syncing ? '同步中...' : '重新同步/修复 Webhook'}
+              {syncing ? '同步中...' : '重新同步 Webhook/命令菜单'}
             </button>
             <button className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50" disabled={saving} onClick={() => void save()}>
               {saving ? '保存中...' : '保存配置'}

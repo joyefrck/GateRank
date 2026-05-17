@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { UserTelegramBotSettingsService } from '../src/services/userTelegramBotSettingsService';
 
+const EXPECTED_USER_TELEGRAM_BOT_COMMANDS = [
+  { command: 'start', description: '查看绑定状态' },
+  { command: 'balance', description: '账户余额/单价/上架状态' },
+  { command: 'transactions', description: '查看最近 5 条扣费流水' },
+  { command: 'clicks', description: '查看最近 5 条访问记录' },
+  { command: 'today', description: '查看今日访问量' },
+  { command: 'recharge', description: '创建充值支付链接' },
+  { command: 'unbind', description: '解绑 Telegram 账号' },
+];
+
 test('UserTelegramBotSettingsService validates bot token and masks secrets', async () => {
   let stored: unknown = null;
   const calls: Array<{ url: string; init?: RequestInit }> = [];
@@ -50,15 +60,7 @@ test('UserTelegramBotSettingsService validates bot token and masks secrets', asy
   assert.equal(calls[0]!.url, 'https://api.telegram.org/bot123456:abcdefghi/getMe');
   assert.equal(calls[1]!.url, 'https://api.telegram.org/bot123456:abcdefghi/setWebhook');
   assert.equal(calls[2]!.url, 'https://api.telegram.org/bot123456:abcdefghi/setMyCommands');
-  assert.deepEqual(JSON.parse(String(calls[2]!.init?.body || '{}')).commands, [
-    { command: 'start', description: '查看绑定状态和可用命令' },
-    { command: 'balance', description: '查看账户余额、点击单价和上架状态' },
-    { command: 'transactions', description: '查看最近 5 条扣费流水' },
-    { command: 'clicks', description: '查看最近 5 条访问记录' },
-    { command: 'today', description: '查看今日访问量' },
-    { command: 'recharge', description: '创建充值支付链接' },
-    { command: 'unbind', description: '解绑当前 Telegram 账号' },
-  ]);
+  assert.deepEqual(JSON.parse(String(calls[2]!.init?.body || '{}')).commands, EXPECTED_USER_TELEGRAM_BOT_COMMANDS);
 });
 
 test('UserTelegramBotSettingsService syncWebhook posts Telegram webhook URL', async () => {
@@ -97,15 +99,7 @@ test('UserTelegramBotSettingsService syncWebhook posts Telegram webhook URL', as
     allowed_updates: ['message', 'callback_query'],
   });
   assert.equal(calls[1]!.url, 'https://api.telegram.org/bot123456:abcdefghi/setMyCommands');
-  assert.deepEqual((calls[1]!.body as { commands: unknown }).commands, [
-    { command: 'start', description: '查看绑定状态和可用命令' },
-    { command: 'balance', description: '查看账户余额、点击单价和上架状态' },
-    { command: 'transactions', description: '查看最近 5 条扣费流水' },
-    { command: 'clicks', description: '查看最近 5 条访问记录' },
-    { command: 'today', description: '查看今日访问量' },
-    { command: 'recharge', description: '创建充值支付链接' },
-    { command: 'unbind', description: '解绑当前 Telegram 账号' },
-  ]);
+  assert.deepEqual((calls[1]!.body as { commands: unknown }).commands, EXPECTED_USER_TELEGRAM_BOT_COMMANDS);
 });
 
 test('UserTelegramBotSettingsService rejects enabled save without public webhook origin and does not save', async () => {

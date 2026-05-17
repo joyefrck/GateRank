@@ -199,7 +199,7 @@ test('user telegram webhook replies balance for bound user', async () => {
   assert.match(String(telegramCalls[0]!.body.text), /点击单价：¥0\.60 \/ 次/);
 });
 
-test('user telegram webhook replies help when bound user sends bare start', async () => {
+test('user telegram webhook replies command menu hint when bound user sends bare start', async () => {
   const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
@@ -227,8 +227,9 @@ test('user telegram webhook replies help when bound user sends bare start', asyn
 
   const text = String(telegramCalls[0]!.body.text);
   assert.match(text, /当前 Telegram 账号已绑定 GateRank 申请人账号/);
-  assert.match(text, /\/balance - 查看账户余额、点击单价和上架状态/);
-  assert.match(text, /\/today - 查看今日访问量/);
+  assert.match(text, /输入 \/ 可选择查询余额、流水、访问记录或充值/);
+  assert.doesNotMatch(text, /\/balance - /);
+  assert.doesNotMatch(text, /\/today - /);
   assert.doesNotMatch(text, /生成绑定链接/);
 });
 
@@ -264,6 +265,59 @@ test('user telegram webhook asks unbound user to generate link on bare start', a
   }
 
   assert.match(String(telegramCalls[0]!.body.text), /请先在 GateRank 申请人后台生成绑定链接/);
+});
+
+test('user telegram webhook confirms bind with command menu hint', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const consumedTokens: string[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps({
+      applicantTelegramBindingRepository: {
+        ...createDeps().applicantTelegramBindingRepository,
+        consumeBindToken: async (token: string) => {
+          consumedTokens.push(token);
+          return {
+            id: 1,
+            applicant_account_id: 1,
+            telegram_user_id: '42',
+            telegram_chat_id: '84',
+            telegram_username: 'owner',
+            telegram_first_name: 'Owner',
+            telegram_last_name: null,
+            bound_at: '2026-05-16T10:00:00+08:00',
+            updated_at: '2026-05-16T10:00:00+08:00',
+          };
+        },
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '/start bind-token',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(consumedTokens, ['bind-token']);
+  const text = String(telegramCalls[0]!.body.text);
+  assert.match(text, /绑定成功/);
+  assert.match(text, /输入 \/ 可选择查询余额、流水、访问记录或充值/);
+  assert.doesNotMatch(text, /\/balance - /);
+  assert.doesNotMatch(text, /\/recharge - /);
 });
 
 test('user telegram webhook completes Telegram login start token for bound user', async () => {
@@ -448,7 +502,43 @@ test('user telegram webhook asks unbound user to bind before today visit count',
   assert.match(String(telegramCalls[0]!.body.text), /此 Telegram 账号尚未绑定 GateRank 申请人账号/);
 });
 
-test('user telegram webhook replies localized help for unknown text', async () => {
+test('user telegram webhook sends recharge inline keyboard from command menu entry', async () => {
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+  try {
+    await withServer(createDeps(), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: {
+            text: '/recharge',
+            chat: { id: 84 },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.match(String(telegramCalls[0]!.body.text), /请选择充值金额和支付渠道/);
+  const replyMarkup = telegramCalls[0]!.body.reply_markup as {
+    inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
+  };
+  assert.deepEqual(replyMarkup.inline_keyboard[0], [
+    { text: '¥100 支付宝', callback_data: 'gr_recharge:100:alipay' },
+    { text: '¥100 微信', callback_data: 'gr_recharge:100:wxpay' },
+  ]);
+});
+
+test('user telegram webhook replies command menu hint for unknown text', async () => {
   const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
@@ -475,12 +565,11 @@ test('user telegram webhook replies localized help for unknown text', async () =
   }
 
   const text = String(telegramCalls[0]!.body.text);
-  assert.match(text, /\/balance - 查看账户余额、点击单价和上架状态/);
-  assert.match(text, /\/transactions - 查看最近 5 条扣费流水/);
-  assert.match(text, /\/clicks - 查看最近 5 条访问记录/);
-  assert.match(text, /\/today - 查看今日访问量/);
-  assert.match(text, /\/recharge - 创建充值支付链接/);
-  assert.match(text, /\/unbind - 解绑当前 Telegram 账号/);
+  assert.match(text, /暂不支持这条消息/);
+  assert.match(text, /输入 \/ 可选择查询余额、流水、访问记录或充值/);
+  assert.doesNotMatch(text, /\/balance - /);
+  assert.doesNotMatch(text, /\/transactions - /);
+  assert.doesNotMatch(text, /\/recharge - /);
 });
 
 test('user telegram webhook unbinds current telegram account', async () => {

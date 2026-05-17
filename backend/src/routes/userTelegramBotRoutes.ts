@@ -158,7 +158,7 @@ async function handleMessage(
         config,
         chatId,
         binding
-          ? `当前 Telegram 账号已绑定 GateRank 申请人账号。\n\n${buildHelpMessage()}`
+          ? `当前 Telegram 账号已绑定 GateRank 申请人账号。\n${buildCommandMenuHint()}`
           : '请先在 GateRank 申请人后台生成绑定链接，再从链接打开此 Bot。',
       );
       return;
@@ -178,7 +178,7 @@ async function handleMessage(
       config,
       chatId,
       binding
-        ? `绑定成功。\n\n${buildHelpMessage()}`
+        ? `绑定成功。\n${buildCommandMenuHint()}`
         : '绑定链接无效或已过期，请回到 GateRank 申请人后台重新生成绑定链接。',
     );
     return;
@@ -214,7 +214,7 @@ async function handleMessage(
     return;
   }
 
-  await sendTelegramMessage(config, chatId, buildHelpMessage());
+  await sendTelegramMessage(config, chatId, `暂不支持这条消息。\n${buildCommandMenuHint()}`);
 }
 
 async function handleTelegramLoginStart(
@@ -332,16 +332,8 @@ async function unbindTelegramAccount(
   );
 }
 
-function buildHelpMessage(): string {
-  return [
-    '可用命令：',
-    '/balance - 查看账户余额、点击单价和上架状态',
-    '/transactions - 查看最近 5 条扣费流水',
-    '/clicks - 查看最近 5 条访问记录',
-    '/today - 查看今日访问量',
-    '/recharge - 创建充值支付链接',
-    '/unbind - 解绑当前 Telegram 账号',
-  ].join('\n');
+function buildCommandMenuHint(): string {
+  return '输入 / 可选择查询余额、流水、访问记录或充值。';
 }
 
 async function sendBalanceMessage(
