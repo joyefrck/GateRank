@@ -25,6 +25,13 @@ import { buildPublishTokenDocsHref } from '../site/publicSite';
 import { manualTotalScoreInputValue } from './scoreInput';
 
 type AirportStatus = 'normal' | 'risk' | 'down';
+type AirportListedFilter = '' | 'listed' | 'unlisted';
+type AirportListQueryState = {
+  keyword: string;
+  status: '' | AirportStatus;
+  isListed: AirportListedFilter;
+  page: number;
+};
 type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
 type AirportApplicationReviewStatus = 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
 type AirportApplicationPaymentStatus = 'unpaid' | 'paid';
@@ -1034,6 +1041,8 @@ const ADMIN_NAV_ITEMS = [
 const AIRPORTS_PAGE_SIZE = 50;
 const AIRPORT_BILLING_PAGE_SIZE = 20;
 const APPLICATIONS_PAGE_SIZE = 20;
+const AIRPORT_STATUS_FILTERS: AirportStatus[] = ['normal', 'risk', 'down'];
+const AIRPORT_LISTED_FILTERS: Exclude<AirportListedFilter, ''>[] = ['listed', 'unlisted'];
 const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = [
   'applicant_credentials',
   'applicant_password_reset',
@@ -1265,16 +1274,61 @@ async function safeJson(response: Response): Promise<unknown> {
   }
 }
 
+function isAirportStatusFilter(value: string | null): value is AirportStatus {
+  return AIRPORT_STATUS_FILTERS.includes(value as AirportStatus);
+}
+
+function isAirportListedFilter(value: string | null): value is Exclude<AirportListedFilter, ''> {
+  return AIRPORT_LISTED_FILTERS.includes(value as Exclude<AirportListedFilter, ''>);
+}
+
+function parseAirportListPage(value: string | null): number {
+  const page = Number(value);
+  return Number.isInteger(page) && page > 0 ? page : 1;
+}
+
+function readAirportListQuery(search = window.location.search): AirportListQueryState {
+  const params = new URLSearchParams(search);
+  const status = params.get('status');
+  const isListed = params.get('is_listed');
+
+  return {
+    keyword: (params.get('keyword') || '').trim(),
+    status: isAirportStatusFilter(status) ? status : '',
+    isListed: isAirportListedFilter(isListed) ? isListed : '',
+    page: parseAirportListPage(params.get('page')),
+  };
+}
+
+function buildAirportListSearch(query: AirportListQueryState): string {
+  const params = new URLSearchParams();
+  const keyword = query.keyword.trim();
+  if (keyword) params.set('keyword', keyword);
+  if (query.status) params.set('status', query.status);
+  if (query.isListed) params.set('is_listed', query.isListed);
+  if (query.page > 1) params.set('page', String(query.page));
+  const search = params.toString();
+  return search ? `?${search}` : '';
+}
+
+function buildAirportListPath(query: AirportListQueryState): string {
+  return `/admin/airports${buildAirportListSearch(query)}`;
+}
+
 function getApplicantPasswordResetTargetEmail(airport: AirportFormState): string {
   return airport.applicant_password_reset_email.trim() || airport.applicant_account_email.trim();
 }
 
 export default function AdminApp() {
   const [path, setPath] = useState(window.location.pathname);
+  const [search, setSearch] = useState(window.location.search);
   const [adminSessionActive, setAdminSessionActive] = useState(() => window.location.pathname !== '/admin/login');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   useEffect(() => {
-    const onPop = () => setPath(window.location.pathname);
+    const onPop = () => {
+      setPath(window.location.pathname);
+      setSearch(window.location.search);
+    };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
   }, []);
@@ -1282,14 +1336,18 @@ export default function AdminApp() {
     if (path === '/admin') {
       window.history.replaceState({}, '', ADMIN_DEFAULT_PATH);
       setPath(ADMIN_DEFAULT_PATH);
+      setSearch('');
     }
   }, [path]);
 
   const navigate = (to: string) => {
     window.history.pushState({}, '', to);
-    setPath(to);
+    setPath(window.location.pathname);
+    setSearch(window.location.search);
     setMobileNavOpen(false);
   };
+
+  const currentAirportListPath = () => buildAirportListPath(readAirportListQuery(window.location.search));
 
   const activeAdminSection = useMemo(
     () => ADMIN_NAV_ITEMS.find((item) => item.isActive(path)) || ADMIN_NAV_ITEMS[0],
@@ -1384,9 +1442,11 @@ export default function AdminApp() {
         <main className="max-h-full min-w-0 self-start overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-4 md:p-6">
           {path === '/admin/airports' && (
             <AirportsPage
-              onCreateAirport={() => navigate('/admin/airports/new')}
-              onEditAirport={(id) => navigate(`/admin/airports/${id}/edit`)}
-              onOpenAirport={(id) => navigate(`/admin/airports/${id}/data`)}
+              routeSearch={search}
+              onUpdateAirportListUrl={navigate}
+              onCreateAirport={(listSearch) => navigate(`/admin/airports/new${listSearch}`)}
+              onEditAirport={(id, listSearch) => navigate(`/admin/airports/${id}/edit${listSearch}`)}
+              onOpenAirport={(id, listSearch) => navigate(`/admin/airports/${id}/data${listSearch}`)}
             />
           )}
           {path === '/admin/applications' && <ApplicationsPage onOpenAirports={() => navigate('/admin/airports')} />}
@@ -1403,13 +1463,13 @@ export default function AdminApp() {
           {path === '/admin/scheduler' && <SchedulerPage />}
           {path === '/admin/settings' && <SystemSettingsPage />}
           {path.match(/^\/admin\/airports\/\d+\/data$/) && (
-            <AirportDataPage airportId={Number(path.split('/')[3])} onBack={() => navigate('/admin/airports')} />
+            <AirportDataPage airportId={Number(path.split('/')[3])} onBack={() => navigate(currentAirportListPath())} />
           )}
           {(path === '/admin/airports/new' || path.match(/^\/admin\/airports\/\d+\/edit$/)) && (
             <AirportEditorPage
               airportId={path === '/admin/airports/new' ? undefined : Number(path.split('/')[3])}
-              onBack={() => navigate('/admin/airports')}
-              onSaved={(id) => navigate(`/admin/airports/${id}/edit`)}
+              onBack={() => navigate(currentAirportListPath())}
+              onSaved={(id) => navigate(`/admin/airports/${id}/edit${buildAirportListSearch(readAirportListQuery(window.location.search))}`)}
             />
           )}
         </main>
@@ -5692,22 +5752,27 @@ function PublishTokensSettingsTab({ refreshTick }: { refreshTick: number }) {
 }
 
 function AirportsPage({
+  routeSearch,
+  onUpdateAirportListUrl,
   onCreateAirport,
   onEditAirport,
   onOpenAirport,
 }: {
-  onCreateAirport: () => void;
-  onEditAirport: (id: number) => void;
-  onOpenAirport: (id: number) => void;
+  routeSearch: string;
+  onUpdateAirportListUrl: (path: string) => void;
+  onCreateAirport: (listSearch: string) => void;
+  onEditAirport: (id: number, listSearch: string) => void;
+  onOpenAirport: (id: number, listSearch: string) => void;
 }) {
+  const initialListQuery = useMemo(() => readAirportListQuery(routeSearch), []);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [items, setItems] = useState<Airport[]>([]);
-  const [page, setPage] = useState(1);
+  const [page, setPage] = useState(initialListQuery.page);
   const [total, setTotal] = useState(0);
-  const [keyword, setKeyword] = useState('');
-  const [status, setStatus] = useState<'' | AirportStatus>('');
-  const [isListed, setIsListed] = useState<'' | 'listed' | 'unlisted'>('');
+  const [keyword, setKeyword] = useState(initialListQuery.keyword);
+  const [status, setStatus] = useState<'' | AirportStatus>(initialListQuery.status);
+  const [isListed, setIsListed] = useState<AirportListedFilter>(initialListQuery.isListed);
   const [editing, setEditing] = useState<AirportFormState | null>(null);
   const [airportEditTab, setAirportEditTab] = useState<AirportEditTab>('basic');
   const [slugEditing, setSlugEditing] = useState(false);
@@ -5740,16 +5805,16 @@ function AirportsPage({
   const [billingLoading, setBillingLoading] = useState(false);
   const [billingError, setBillingError] = useState('');
 
-  const fetchList = async (targetPage = page) => {
+  const fetchList = async (queryState: AirportListQueryState) => {
     setLoading(true);
     setError('');
     try {
       const query = new URLSearchParams();
-      query.set('page', String(targetPage));
+      query.set('page', String(queryState.page));
       query.set('page_size', String(AIRPORTS_PAGE_SIZE));
-      if (keyword) query.set('keyword', keyword);
-      if (status) query.set('status', status);
-      if (isListed) query.set('is_listed', isListed);
+      if (queryState.keyword) query.set('keyword', queryState.keyword);
+      if (queryState.status) query.set('status', queryState.status);
+      if (queryState.isListed) query.set('is_listed', queryState.isListed);
       const data = (await apiFetch(`/api/v1/admin/airports?${query.toString()}`)) as {
         page: number;
         page_size: number;
@@ -5757,7 +5822,7 @@ function AirportsPage({
         items: Airport[];
       };
       setItems(data.items || []);
-      setPage(data.page || targetPage);
+      setPage(data.page || queryState.page);
       setTotal(data.total || 0);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
@@ -5766,9 +5831,33 @@ function AirportsPage({
     }
   };
 
+  const currentListQuery = (targetPage = page): AirportListQueryState => ({
+    keyword: keyword.trim(),
+    status,
+    isListed,
+    page: targetPage,
+  });
+
+  const applyListQuery = (queryState: AirportListQueryState) => {
+    setKeyword(queryState.keyword);
+    setStatus(queryState.status);
+    setIsListed(queryState.isListed);
+    setPage(queryState.page);
+    void fetchList(queryState);
+  };
+
+  const navigateToListQuery = (queryState: AirportListQueryState) => {
+    const nextPath = buildAirportListPath(queryState);
+    if (`${window.location.pathname}${window.location.search}` === nextPath) {
+      applyListQuery(queryState);
+      return;
+    }
+    onUpdateAirportListUrl(nextPath);
+  };
+
   useEffect(() => {
-    void fetchList();
-  }, []);
+    applyListQuery(readAirportListQuery(routeSearch));
+  }, [routeSearch]);
 
   useEffect(() => {
     setAirportEditTab('basic');
@@ -5882,7 +5971,7 @@ function AirportsPage({
       }
 
       setEditing(null);
-      await fetchList(page);
+      await fetchList(currentListQuery(page));
     } catch (err) {
       setFormError(err instanceof Error ? err.message : '保存失败');
     } finally {
@@ -5917,7 +6006,7 @@ function AirportsPage({
       setBalanceAmount('');
       setBalanceDescription('');
       setBalanceMessage('余额已添加');
-      await fetchList(page);
+      await fetchList(currentListQuery(page));
     } catch (err) {
       setBalanceError(err instanceof Error ? err.message : '添加余额失败');
     } finally {
@@ -6037,12 +6126,11 @@ function AirportsPage({
   const lastItemNo = Math.min(total, page * AIRPORTS_PAGE_SIZE);
   const goToPage = (nextPage: number) => {
     const boundedPage = Math.min(totalPages, Math.max(1, nextPage));
-    setPage(boundedPage);
-    void fetchList(boundedPage);
+    navigateToListQuery(currentListQuery(boundedPage));
   };
-  const searchList = () => {
-    setPage(1);
-    void fetchList(1);
+  const searchList = (event?: React.FormEvent) => {
+    event?.preventDefault();
+    navigateToListQuery(currentListQuery(1));
   };
   const activeBillingData = billingTab === 'recharge' ? rechargeRecords : consumptionRecords;
   const billingTotalPages = Math.max(1, Math.ceil(activeBillingData.total / AIRPORT_BILLING_PAGE_SIZE));
@@ -6054,14 +6142,15 @@ function AirportsPage({
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <h2 className="text-lg font-bold">机场管理</h2>
         <button
+          type="button"
           className="px-3 py-2 rounded bg-neutral-900 text-white text-sm"
-          onClick={onCreateAirport}
+          onClick={() => onCreateAirport(buildAirportListSearch(currentListQuery()))}
         >
           <span className="inline-flex items-center gap-2"><Plus size={14} />新增机场</span>
         </button>
       </div>
 
-      <div className="flex gap-2 flex-wrap">
+      <form className="flex gap-2 flex-wrap" onSubmit={searchList}>
         <div className="relative">
           <Search size={14} className="absolute left-2 top-2.5 text-neutral-400" />
           <input
@@ -6069,6 +6158,12 @@ function AirportsPage({
             placeholder="搜索名称 / 官网 / 备用网址 / 申请 ID"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                searchList();
+              }
+            }}
           />
         </div>
         <select className="border rounded px-3 py-2 text-sm" value={status} onChange={(e) => setStatus(e.target.value as '' | AirportStatus)}>
@@ -6082,8 +6177,8 @@ function AirportsPage({
           <option value="listed">已上架</option>
           <option value="unlisted">未上架</option>
         </select>
-        <button className="px-3 py-2 text-sm rounded border" onClick={searchList}>查询</button>
-      </div>
+        <button type="submit" className="px-3 py-2 text-sm rounded border">查询</button>
+      </form>
 
       {error && <div className="text-sm text-rose-600">{error}</div>}
       {loading ? <div className="text-sm text-neutral-500">加载中...</div> : (
@@ -6141,8 +6236,8 @@ function AirportsPage({
                   </td>
                   <td className="sticky right-0 z-10 w-[168px] min-w-[168px] px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.14)]">
                     <div className="inline-flex items-center justify-start gap-3 whitespace-nowrap">
-                      <button className="underline" onClick={() => onEditAirport(it.id)}>数据中心</button>
-                      <button className="underline" onClick={() => onOpenAirport(it.id)}>机场分</button>
+                      <button className="underline" onClick={() => onEditAirport(it.id, buildAirportListSearch(currentListQuery()))}>数据中心</button>
+                      <button className="underline" onClick={() => onOpenAirport(it.id, buildAirportListSearch(currentListQuery()))}>机场分</button>
                     </div>
                   </td>
                 </tr>
