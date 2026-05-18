@@ -2,7 +2,12 @@ import { Router } from 'express';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../types/domain';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { getDateInTimezone } from '../utils/time';
-import { PUBLIC_PAGE_CACHE_TTL_MS, setPublicCacheHeaders } from '../utils/publicCache';
+import {
+  createTimedPromiseCache,
+  PUBLIC_PAGE_CACHE_TTL_MS,
+  setPublicCacheHeaders,
+  type TimedPromiseCache,
+} from '../utils/publicCache';
 import {
   renderApplyPublicPage,
   renderFullRankingPublicPage,
@@ -21,11 +26,12 @@ interface PublicPageDeps {
     getReportView(airportId: number, date: string): Promise<ReportView | null>;
     getReportViewBySlug?(slug: string, date: string): Promise<ReportView | null>;
   };
+  pageCache?: TimedPromiseCache;
 }
 
 export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   const router = Router();
-  const pageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
+  const pageCache = deps.pageCache || createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
 
   router.get('/', async (req, res) => {
     const siteUrl = getSiteOrigin(req);
@@ -193,34 +199,4 @@ function parseDateQuery(input: unknown): string | undefined {
 function toPositiveInt(value: unknown, fallback: number): number {
   const num = Number(value ?? fallback);
   return Number.isInteger(num) && num > 0 ? num : fallback;
-}
-
-function createTimedPromiseCache(ttlMs: number): {
-  getOrLoad<T>(key: string, loader: () => Promise<T>): Promise<T>;
-} {
-  const cache = new Map<string, { expiresAt: number; promise: Promise<unknown> }>();
-
-  return {
-    getOrLoad<T>(key: string, loader: () => Promise<T>): Promise<T> {
-      const now = Date.now();
-      const cached = cache.get(key);
-      if (cached && cached.expiresAt > now) {
-        return cached.promise as Promise<T>;
-      }
-
-      const promise = loader().catch((error) => {
-        const current = cache.get(key);
-        if (current?.promise === promise) {
-          cache.delete(key);
-        }
-        throw error;
-      });
-
-      cache.set(key, {
-        expiresAt: now + ttlMs,
-        promise,
-      });
-      return promise;
-    },
-  };
 }

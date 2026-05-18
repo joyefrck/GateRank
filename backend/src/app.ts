@@ -66,6 +66,7 @@ import { UserTelegramBotMessageService } from './services/userTelegramBotMessage
 import { UserTelegramBotSettingsService } from './services/userTelegramBotSettingsService';
 import { XOAuthSettingsService } from './services/xOAuthSettingsService';
 import { getNewsUploadRootDir } from './utils/newsStorage';
+import { createTimedPromiseCache, PUBLIC_PAGE_CACHE_TTL_MS } from './utils/publicCache';
 
 export async function createApp() {
   const pool = getDbPool();
@@ -213,6 +214,14 @@ export async function createApp() {
   const applicationNotificationService = new TelegramNotificationService({
     systemSettingRepository,
   });
+  const publicApiPageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
+  const publicHtmlPageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
+  const publicPageCache = {
+    clear(): void {
+      publicApiPageCache.clear();
+      publicHtmlPageCache.clear();
+    },
+  };
 
   const app = express();
   app.disable('x-powered-by');
@@ -240,6 +249,7 @@ export async function createApp() {
       scoreRepository,
       rankingRepository,
       publicViewService,
+      pageCache: publicApiPageCache,
       marketingRepository: marketingEventRepository,
       marketingSettingsService,
     }),
@@ -323,6 +333,7 @@ export async function createApp() {
       marketingRepository: marketingEventRepository,
       auditRepository,
       publicViewService,
+      publicPageCache,
       telegramNotificationService: applicationNotificationService,
       userTelegramBotSettingsService,
       mediaLibrarySettingsService,
@@ -359,6 +370,7 @@ export async function createApp() {
   app.use(
     createPublicPageRoutes({
       publicViewService,
+      pageCache: publicHtmlPageCache,
     }),
   );
 

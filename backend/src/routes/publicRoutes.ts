@@ -10,7 +10,12 @@ import type {
 } from '../types/domain';
 import { hashPassword, createRandomPassword } from '../utils/password';
 import { buildMarketingEventRecord } from '../utils/marketing';
-import { PUBLIC_PAGE_CACHE_TTL_MS, setPublicCacheHeaders } from '../utils/publicCache';
+import {
+  createTimedPromiseCache,
+  PUBLIC_PAGE_CACHE_TTL_MS,
+  setPublicCacheHeaders,
+  type TimedPromiseCache,
+} from '../utils/publicCache';
 import { buildPortalLoginUrl } from '../utils/siteUrl';
 import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { AirportApplicationReviewStatus, AirportStatus } from '../types/domain';
@@ -90,6 +95,7 @@ interface PublicDeps {
     getReportView(airportId: number, date: string): Promise<unknown | null>;
     getReportViewBySlug?(slug: string, date: string): Promise<unknown | null>;
   };
+  pageCache?: TimedPromiseCache;
   marketingRepository?: {
     insertMany(records: ReturnType<typeof buildMarketingEventRecord>[]): Promise<void>;
   };
@@ -120,7 +126,7 @@ const MARKETING_PLACEMENTS: MarketingPlacement[] = [
 const MARKETING_TARGET_KINDS: MarketingTargetKind[] = ['website', 'subscription_url'];
 export function createPublicRoutes(deps: PublicDeps): Router {
   const router = Router();
-  const pageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
+  const pageCache = deps.pageCache || createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
 
   router.get('/application-config', async (_req, res, next) => {
     try {
@@ -640,34 +646,4 @@ function mustMarketingTargetKind(value: unknown, fieldName: string): MarketingTa
     throw new HttpError(400, 'BAD_REQUEST', `${fieldName} is invalid`);
   }
   return text;
-}
-
-function createTimedPromiseCache(ttlMs: number): {
-  getOrLoad<T>(key: string, loader: () => Promise<T>): Promise<T>;
-} {
-  const cache = new Map<string, { expiresAt: number; promise: Promise<unknown> }>();
-
-  return {
-    getOrLoad<T>(key: string, loader: () => Promise<T>): Promise<T> {
-      const now = Date.now();
-      const cached = cache.get(key);
-      if (cached && cached.expiresAt > now) {
-        return cached.promise as Promise<T>;
-      }
-
-      const promise = loader().catch((error) => {
-        const current = cache.get(key);
-        if (current?.promise === promise) {
-          cache.delete(key);
-        }
-        throw error;
-      });
-
-      cache.set(key, {
-        expiresAt: now + ttlMs,
-        promise,
-      });
-      return promise;
-    },
-  };
 }

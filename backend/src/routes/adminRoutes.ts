@@ -282,6 +282,9 @@ interface AdminDeps {
     getHomePageView(date: string): Promise<unknown>;
     getReportView(airportId: number, date: string): Promise<unknown | null>;
   };
+  publicPageCache?: {
+    clear(): void;
+  };
   telegramNotificationService?: {
     getAdminSettings(): Promise<unknown>;
     updateAdminSettings(input: TelegramNotificationSettingsInput, updatedBy: string): Promise<unknown>;
@@ -1238,6 +1241,9 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         approved_airport_id: approvedAirportId,
         reviewed_at: reviewedAt,
       });
+      if (reviewStatus === 'reviewed' && approvedAirportId) {
+        deps.publicPageCache?.clear();
+      }
       if (reviewStatus === 'reviewed' && currentApplication.applicant_email && deps.mailService) {
         try {
           await deps.mailService.sendApplicationApprovedEmail({
@@ -1388,6 +1394,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       });
 
       await deps.auditRepository.log('create_airport', actorFromReq(req), req.requestId, payload);
+      deps.publicPageCache?.clear();
       res.status(201).json({ airport_id: airportId });
     } catch (error) {
       next(normalizeAirportMutationError(error));
@@ -1493,6 +1500,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         airport_id: airportId,
         patch,
       });
+      deps.publicPageCache?.clear();
       res.json({ airport_id: airportId, updated: true });
     } catch (error) {
       next(normalizeAirportMutationError(error));

@@ -4750,6 +4750,7 @@ test('PATCH /airports persists extended airport fields', async () => {
   const created: Array<Record<string, unknown>> = [];
   const updated: Array<Record<string, unknown>> = [];
   const clearedAutoUnlistedAirportIds: number[] = [];
+  let publicCacheClears = 0;
   const app = express();
   app.use(express.json());
   app.use(
@@ -4794,6 +4795,7 @@ test('PATCH /airports persists extended airport fields', async () => {
       manualJobService: stubManualJobService(),
       auditRepository: { log: async () => undefined },
       publicViewService: stubPublicViewService(),
+      publicPageCache: { clear: () => { publicCacheClears += 1; } },
     }),
   );
 
@@ -4820,6 +4822,7 @@ test('PATCH /airports persists extended airport fields', async () => {
     assert.equal(created.length, 1);
     assert.equal(created[0].applicant_email, 'ops@example.com');
     assert.equal(created[0].test_password, 'secret');
+    assert.equal(publicCacheClears, 1);
 
     const updateResponse = await fetch(`http://127.0.0.1:${port}/airports/9`, {
       method: 'PATCH',
@@ -4835,6 +4838,7 @@ test('PATCH /airports persists extended airport fields', async () => {
     assert.equal(updated[0].airport_intro, 'updated intro');
     assert.equal(updated[0].founded_on, '2025-02-01');
     assert.deepEqual(clearedAutoUnlistedAirportIds, []);
+    assert.equal(publicCacheClears, 2);
 
     const listResponse = await fetch(`http://127.0.0.1:${port}/airports/9`, {
       method: 'PATCH',
@@ -4846,6 +4850,7 @@ test('PATCH /airports persists extended airport fields', async () => {
     assert.equal(updated[1].id, 9);
     assert.equal(updated[1].is_listed, true);
     assert.deepEqual(clearedAutoUnlistedAirportIds, [9]);
+    assert.equal(publicCacheClears, 3);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
