@@ -6194,7 +6194,7 @@ function AirportsPage({
                 <th className="w-[8%] text-left px-4 py-3 whitespace-nowrap">是否上架</th>
                 <th className="w-[6%] text-left px-4 py-3">总分</th>
                 <th className="w-[22%] text-left px-4 py-3">标签</th>
-                <th className="sticky right-0 z-20 w-[168px] min-w-[168px] text-left px-4 py-3 bg-neutral-100 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
+                <th className="sticky right-0 z-[2] w-[168px] min-w-[168px] text-left px-4 py-3 bg-neutral-100 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
                   操作
                 </th>
               </tr>
@@ -6234,7 +6234,7 @@ function AirportsPage({
                   <td className="px-4 py-3">
                     <TagBadgeGroup tags={it.tags || []} size="sm" />
                   </td>
-                  <td className="sticky right-0 z-10 w-[168px] min-w-[168px] px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.14)]">
+                  <td className="sticky right-0 z-[1] w-[168px] min-w-[168px] px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.14)]">
                     <div className="inline-flex items-center justify-start gap-3 whitespace-nowrap">
                       <button className="underline" onClick={() => onEditAirport(it.id, buildAirportListSearch(currentListQuery()))}>数据中心</button>
                       <button className="underline" onClick={() => onOpenAirport(it.id, buildAirportListSearch(currentListQuery()))}>机场分</button>
