@@ -37,6 +37,11 @@ from urllib.request import (
     urlopen,
 )
 
+try:
+    import yaml
+except ImportError:  # pragma: no cover - covered by runtime diagnostics.
+    yaml = None
+
 
 DEFAULT_API_BASE = "http://127.0.0.1:8787"
 DEFAULT_HTTP_TIMEOUT = 10
@@ -605,7 +610,7 @@ def resolve_nodes_for_airport(
             ),
         )
 
-    parsed_nodes, unsupported_nodes = parse_nodes(normalized_subscription)
+    parsed_nodes, unsupported_nodes = parse_nodes(normalized_subscription, subscription_format)
     if not parsed_nodes:
         return resolve_cached_nodes_or_raise(
             config,
@@ -782,8 +787,8 @@ def normalize_subscription_text(text: str) -> tuple[str, str]:
     stripped = text.strip()
     if not stripped:
         return "", "empty"
-    if "proxies:" in stripped.lower():
-        return "", "clash_yaml"
+    if looks_like_clash_yaml(stripped):
+        return stripped, "clash_yaml"
     if "outbounds" in stripped and stripped.lstrip().startswith("{"):
         return "", "provider_json"
     if "://" in stripped:
@@ -795,6 +800,11 @@ def normalize_subscription_text(text: str) -> tuple[str, str]:
     return "", "unknown"
 
 
+def looks_like_clash_yaml(text: str) -> bool:
+    lowered = text.lower()
+    return "proxies:" in lowered or "proxy-providers:" in lowered or "proxy-groups:" in lowered
+
+
 def decode_base64_text(value: str) -> str:
     clean = "".join(value.split())
     padding = "=" * (-len(clean) % 4)
@@ -804,7 +814,10 @@ def decode_base64_text(value: str) -> str:
         return ""
 
 
-def parse_nodes(subscription_text: str) -> tuple[list[ParsedNode], list[dict[str, str]]]:
+def parse_nodes(subscription_text: str, subscription_format: str | None = None) -> tuple[list[ParsedNode], list[dict[str, str]]]:
+    if subscription_format == "clash_yaml":
+        return parse_clash_yaml_nodes(subscription_text)
+
     parsed_nodes: list[ParsedNode] = []
     unsupported_nodes: list[dict[str, str]] = []
     for raw_line in subscription_text.splitlines():
@@ -820,6 +833,274 @@ def parse_nodes(subscription_text: str) -> tuple[list[ParsedNode], list[dict[str
         except Exception as exc:
             unsupported_nodes.append({"uri": line, "reason": str(exc)})
     return parsed_nodes, unsupported_nodes
+
+
+def parse_clash_yaml_nodes(subscription_text: str) -> tuple[list[ParsedNode], list[dict[str, str]]]:
+    if yaml is None:
+        return [], [{"uri": "clash_yaml", "reason": "pyyaml_not_installed"}]
+
+    try:
+        data = yaml.safe_load(subscription_text)
+    except Exception as exc:
+        return [], [{"uri": "clash_yaml", "reason": f"invalid_clash_yaml:{exc.__class__.__name__}"}]
+
+    if not isinstance(data, dict):
+        return [], [{"uri": "clash_yaml", "reason": "clash_config_not_object"}]
+
+    proxies = data.get("proxies")
+    if not isinstance(proxies, list):
+        return [], [{"uri": "clash_yaml", "reason": "clash_proxies_not_array"}]
+
+    parsed_nodes: list[ParsedNode] = []
+    unsupported_nodes: list[dict[str, str]] = []
+    for index, proxy in enumerate(proxies):
+        identifier = clash_proxy_identifier(proxy, index)
+        if not isinstance(proxy, dict):
+            unsupported_nodes.append({"uri": identifier, "reason": "clash_proxy_not_object"})
+            continue
+        try:
+            parsed_nodes.append(parse_clash_proxy(proxy))
+        except Exception as exc:
+            unsupported_nodes.append({"uri": identifier, "reason": str(exc)})
+    return parsed_nodes, unsupported_nodes
+
+
+def clash_proxy_identifier(proxy: Any, index: int) -> str:
+    if isinstance(proxy, dict):
+        name = str(proxy.get("name") or f"#{index}")
+        proxy_type = str(proxy.get("type") or "unknown")
+        return f"clash://{proxy_type}/{name}"
+    return f"clash://unknown/#{index}"
+
+
+def parse_clash_proxy(proxy: dict[str, Any]) -> ParsedNode:
+    proxy_type = str(require_value(proxy.get("type"), "clash_proxy_type")).strip().lower()
+    if proxy_type == "ss":
+        return parse_clash_shadowsocks_node(proxy)
+    if proxy_type == "vmess":
+        return parse_clash_vmess_node(proxy)
+    if proxy_type == "trojan":
+        return parse_clash_trojan_node(proxy)
+    if proxy_type == "vless":
+        return parse_clash_vless_node(proxy)
+    if proxy_type == "anytls":
+        return parse_clash_anytls_node(proxy)
+    raise ValueError(f"unsupported_clash_proxy_type_{proxy_type}")
+
+
+def parse_clash_shadowsocks_node(proxy: dict[str, Any]) -> ParsedNode:
+    name = clash_node_name(proxy)
+    if proxy.get("plugin") or proxy.get("plugin-opts"):
+        raise ValueError("unsupported_ss_plugin")
+    outbound: dict[str, Any] = {
+        "type": "shadowsocks",
+        "tag": "proxy",
+        "server": clash_server(proxy),
+        "server_port": clash_port(proxy),
+        "method": require_value(first_present(proxy, "cipher", "method"), "ss_method"),
+        "password": str(require_value(proxy.get("password"), "ss_password")),
+    }
+    return clash_parsed_node(name, "shadowsocks", outbound)
+
+
+def parse_clash_vmess_node(proxy: dict[str, Any]) -> ParsedNode:
+    name = clash_node_name(proxy)
+    outbound: dict[str, Any] = {
+        "type": "vmess",
+        "tag": "proxy",
+        "server": clash_server(proxy),
+        "server_port": clash_port(proxy),
+        "uuid": str(require_value(first_present(proxy, "uuid", "id"), "vmess_uuid")),
+        "security": str(first_present(proxy, "cipher", "security") or "auto"),
+        "alter_id": int(first_present(proxy, "alterId", "alter-id", "aid") or 0),
+    }
+    apply_clash_transport(outbound, proxy)
+    apply_tls(
+        outbound,
+        truthy_value(proxy.get("tls"), default=False),
+        server_name=clash_server_name(proxy),
+        insecure=truthy_value(first_present(proxy, "skip-cert-verify", "skip_cert_verify"), default=False),
+        fingerprint=str(first_present(proxy, "client-fingerprint", "client_fingerprint", "fingerprint", "fp") or ""),
+        alpn=clash_alpn(proxy),
+    )
+    return clash_parsed_node(name, "vmess", outbound)
+
+
+def parse_clash_trojan_node(proxy: dict[str, Any]) -> ParsedNode:
+    name = clash_node_name(proxy)
+    outbound: dict[str, Any] = {
+        "type": "trojan",
+        "tag": "proxy",
+        "server": clash_server(proxy),
+        "server_port": clash_port(proxy),
+        "password": str(require_value(proxy.get("password"), "trojan_password")),
+    }
+    apply_clash_transport(outbound, proxy)
+    apply_tls(
+        outbound,
+        truthy_value(proxy.get("tls"), default=True),
+        server_name=clash_server_name(proxy),
+        insecure=truthy_value(first_present(proxy, "skip-cert-verify", "skip_cert_verify"), default=False),
+        fingerprint=str(first_present(proxy, "client-fingerprint", "client_fingerprint", "fingerprint", "fp") or ""),
+        alpn=clash_alpn(proxy),
+    )
+    return clash_parsed_node(name, "trojan", outbound)
+
+
+def parse_clash_vless_node(proxy: dict[str, Any]) -> ParsedNode:
+    name = clash_node_name(proxy)
+    outbound: dict[str, Any] = {
+        "type": "vless",
+        "tag": "proxy",
+        "server": clash_server(proxy),
+        "server_port": clash_port(proxy),
+        "uuid": str(require_value(first_present(proxy, "uuid", "id"), "vless_uuid")),
+    }
+    flow = first_present(proxy, "flow")
+    if flow:
+        outbound["flow"] = str(flow)
+
+    apply_clash_transport(outbound, proxy)
+    reality_options = clash_reality_options(proxy)
+    apply_tls(
+        outbound,
+        truthy_value(proxy.get("tls"), default=bool(reality_options)),
+        server_name=clash_server_name(proxy),
+        insecure=truthy_value(first_present(proxy, "skip-cert-verify", "skip_cert_verify"), default=False),
+        fingerprint=str(first_present(proxy, "client-fingerprint", "client_fingerprint", "fingerprint", "fp") or ""),
+        alpn=clash_alpn(proxy),
+        reality=bool(reality_options),
+        public_key=str(first_present(reality_options, "public-key", "public_key") or ""),
+        short_id=str(first_present(reality_options, "short-id", "short_id") or ""),
+    )
+    return clash_parsed_node(name, "vless", outbound)
+
+
+def parse_clash_anytls_node(proxy: dict[str, Any]) -> ParsedNode:
+    name = clash_node_name(proxy)
+    outbound: dict[str, Any] = {
+        "type": "anytls",
+        "tag": "proxy",
+        "server": clash_server(proxy),
+        "server_port": clash_port(proxy, default=443),
+        "password": str(require_value(proxy.get("password"), "anytls_password")),
+    }
+    apply_tls(
+        outbound,
+        True,
+        server_name=clash_server_name(proxy),
+        insecure=truthy_value(first_present(proxy, "skip-cert-verify", "skip_cert_verify"), default=False),
+        fingerprint=str(first_present(proxy, "client-fingerprint", "client_fingerprint", "fingerprint", "fp") or ""),
+        alpn=clash_alpn(proxy),
+    )
+    return clash_parsed_node(name, "anytls", outbound)
+
+
+def clash_parsed_node(name: str, node_type: str, outbound: dict[str, Any]) -> ParsedNode:
+    return ParsedNode(
+        name=name,
+        node_type=node_type,
+        region=detect_region(name),
+        outbound=outbound,
+        raw_uri=f"clash://{node_type}/{name}",
+    )
+
+
+def clash_node_name(proxy: dict[str, Any]) -> str:
+    return str(require_value(proxy.get("name"), "clash_proxy_name"))
+
+
+def clash_server(proxy: dict[str, Any]) -> str:
+    return str(require_value(proxy.get("server"), "clash_proxy_server"))
+
+
+def clash_port(proxy: dict[str, Any], default: int | None = None) -> int:
+    value = proxy.get("port")
+    if value in (None, "") and default is not None:
+        return default
+    return int(require_value(value, "clash_proxy_port"))
+
+
+def clash_server_name(proxy: dict[str, Any]) -> str:
+    return str(first_present(proxy, "servername", "server-name", "sni") or proxy.get("server") or "")
+
+
+def clash_reality_options(proxy: dict[str, Any]) -> dict[str, Any]:
+    value = first_present(proxy, "reality-opts", "reality_opts", "reality")
+    return value if isinstance(value, dict) else {}
+
+
+def clash_alpn(proxy: dict[str, Any]) -> list[str]:
+    value = first_present(proxy, "alpn")
+    if isinstance(value, list):
+        return [str(item).strip() for item in value if str(item).strip()]
+    if value:
+        return split_csv(str(value))
+    return []
+
+
+def apply_clash_transport(outbound: dict[str, Any], proxy: dict[str, Any]) -> None:
+    network = str(first_present(proxy, "network", "net", "type") or "").lower()
+    if network == str(proxy.get("type") or "").lower():
+        network = ""
+    path = ""
+    host = ""
+    service_name = ""
+    if network == "ws":
+        ws_options = dict_value(first_present(proxy, "ws-opts", "ws_opts"))
+        path = str(first_present(ws_options, "path") or first_present(proxy, "path") or "")
+        headers = dict_value(first_present(ws_options, "headers"))
+        host = str(first_present(headers, "Host", "host") or first_present(proxy, "host") or "")
+    elif network == "grpc":
+        grpc_options = dict_value(first_present(proxy, "grpc-opts", "grpc_opts"))
+        service_name = str(
+            first_present(grpc_options, "grpc-service-name", "grpc_service_name", "serviceName", "service-name")
+            or first_present(proxy, "serviceName", "service-name")
+            or ""
+        )
+    elif network in {"http", "h2"}:
+        h2_options = dict_value(first_present(proxy, "h2-opts", "h2_opts", "http-opts", "http_opts"))
+        path_value = first_present(h2_options, "path") or first_present(proxy, "path")
+        host_value = first_present(h2_options, "host") or first_present(proxy, "host")
+        path = list_or_csv(path_value)
+        host = list_or_csv(host_value)
+    else:
+        path = str(first_present(proxy, "path") or "")
+        host = str(first_present(proxy, "host") or "")
+
+    apply_transport(outbound, network, path, host, service_name=service_name)
+
+
+def dict_value(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def first_present(values: dict[str, Any], *keys: str) -> Any:
+    for key in keys:
+        if key in values and values[key] not in (None, ""):
+            return values[key]
+    return None
+
+
+def list_or_csv(value: Any) -> str:
+    if isinstance(value, list):
+        return ",".join(str(item).strip() for item in value if str(item).strip())
+    return str(value or "")
+
+
+def truthy_value(value: Any, *, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return value != 0
+    normalized = str(value).strip().lower()
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    return default
 
 
 def parse_node_line(line: str) -> ParsedNode | None:

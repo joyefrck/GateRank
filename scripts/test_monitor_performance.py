@@ -17,6 +17,7 @@ from scripts.monitor_performance import (
     nodes_from_snapshot,
     normalize_subscription_text,
     parse_node_line,
+    parse_nodes,
     run_for_airport,
     select_nodes,
 )
@@ -63,6 +64,121 @@ class MonitorPerformanceTests(unittest.TestCase):
         normalized, subscription_format = normalize_subscription_text(encoded)
         self.assertEqual(subscription_format, "base64")
         self.assertEqual(normalized, plain)
+
+    def test_normalize_subscription_text_keeps_clash_yaml_for_parsing(self) -> None:
+        clash_yaml = "mixed-port: 7890\nproxies:\n  - name: HK Reality\n    type: vless\n"
+        normalized, subscription_format = normalize_subscription_text(clash_yaml)
+
+        self.assertEqual(subscription_format, "clash_yaml")
+        self.assertEqual(normalized, clash_yaml.strip())
+
+    def test_parse_clash_vless_reality_node_builds_sing_box_outbound(self) -> None:
+        clash_yaml = """
+mixed-port: 7890
+proxies:
+  - name: JP Reality
+    type: vless
+    server: jp.example.com
+    port: 443
+    uuid: 11111111-1111-1111-1111-111111111111
+    encryption: none
+    udp: true
+    tls: true
+    flow: xtls-rprx-vision
+    client-fingerprint: chrome
+    servername: cdn.example.com
+    skip-cert-verify: true
+    reality-opts:
+      public-key: pubkey123
+      short-id: abcd
+"""
+        nodes, unsupported_nodes = parse_nodes(clash_yaml, "clash_yaml")
+
+        self.assertEqual(unsupported_nodes, [])
+        self.assertEqual(len(nodes), 1)
+        node = nodes[0]
+        self.assertEqual(node.name, "JP Reality")
+        self.assertEqual(node.region, "JP")
+        self.assertEqual(node.node_type, "vless")
+        self.assertEqual(node.raw_uri, "clash://vless/JP Reality")
+        self.assertEqual(node.outbound["type"], "vless")
+        self.assertEqual(node.outbound["server"], "jp.example.com")
+        self.assertEqual(node.outbound["server_port"], 443)
+        self.assertEqual(node.outbound["uuid"], "11111111-1111-1111-1111-111111111111")
+        self.assertEqual(node.outbound["flow"], "xtls-rprx-vision")
+        self.assertEqual(node.outbound["tls"]["server_name"], "cdn.example.com")
+        self.assertEqual(node.outbound["tls"]["insecure"], True)
+        self.assertEqual(node.outbound["tls"]["utls"], {"enabled": True, "fingerprint": "chrome"})
+        self.assertEqual(node.outbound["tls"]["reality"]["public_key"], "pubkey123")
+        self.assertEqual(node.outbound["tls"]["reality"]["short_id"], "abcd")
+
+    def test_parse_clash_yaml_keeps_supported_nodes_when_some_types_are_unsupported(self) -> None:
+        clash_yaml = """
+proxies:
+  - name: HK SS
+    type: ss
+    server: hk.example.com
+    port: 8388
+    cipher: aes-256-gcm
+    password: secret
+  - name: unsupported-node
+    type: hysteria2
+    server: h2.example.com
+    port: 443
+    password: secret
+"""
+        nodes, unsupported_nodes = parse_nodes(clash_yaml, "clash_yaml")
+
+        self.assertEqual([node.name for node in nodes], ["HK SS"])
+        self.assertEqual(nodes[0].outbound["type"], "shadowsocks")
+        self.assertEqual(len(unsupported_nodes), 1)
+        self.assertEqual(unsupported_nodes[0]["uri"], "clash://hysteria2/unsupported-node")
+        self.assertEqual(unsupported_nodes[0]["reason"], "unsupported_clash_proxy_type_hysteria2")
+
+    def test_parse_clash_yaml_common_proxy_types(self) -> None:
+        clash_yaml = """
+proxies:
+  - name: HK VMess
+    type: vmess
+    server: vmess.example.com
+    port: 443
+    uuid: 11111111-1111-1111-1111-111111111111
+    cipher: auto
+    alterId: 0
+    tls: true
+    servername: edge.example.com
+    network: ws
+    ws-opts:
+      path: /ws
+      headers:
+        Host: cdn.example.com
+  - name: US Trojan
+    type: trojan
+    server: trojan.example.com
+    port: 443
+    password: secret
+    network: grpc
+    grpc-opts:
+      grpc-service-name: grpc-service
+  - name: SG AnyTLS
+    type: anytls
+    server: anytls.example.com
+    port: 443
+    password: secret
+    sni: real.example.com
+"""
+        nodes, unsupported_nodes = parse_nodes(clash_yaml, "clash_yaml")
+
+        self.assertEqual(unsupported_nodes, [])
+        self.assertEqual([node.node_type for node in nodes], ["vmess", "trojan", "anytls"])
+        self.assertEqual(nodes[0].outbound["transport"]["type"], "ws")
+        self.assertEqual(nodes[0].outbound["transport"]["path"], "/ws")
+        self.assertEqual(nodes[0].outbound["transport"]["headers"]["Host"], "cdn.example.com")
+        self.assertEqual(nodes[0].outbound["tls"]["server_name"], "edge.example.com")
+        self.assertEqual(nodes[1].outbound["transport"]["type"], "grpc")
+        self.assertEqual(nodes[1].outbound["transport"]["service_name"], "grpc-service")
+        self.assertEqual(nodes[2].outbound["type"], "anytls")
+        self.assertEqual(nodes[2].outbound["tls"]["server_name"], "real.example.com")
 
     def test_parse_vmess_node_builds_transport_and_tls(self) -> None:
         payload = {
@@ -354,7 +470,7 @@ class MonitorPerformanceTests(unittest.TestCase):
         self.assertEqual(payload["diagnostics"]["cache_snapshot_id"], 12)
         self.assertEqual(payload["diagnostics"]["subscription_refresh_error_code"], "subscription_fetch_failed")
 
-    def test_run_for_airport_uses_cached_snapshot_when_subscription_format_is_unsupported(self) -> None:
+    def test_run_for_airport_uses_cached_snapshot_when_clash_yaml_has_no_supported_nodes(self) -> None:
         config = self.make_config()
         airport = {"id": 1, "name": "Alpha", "subscription_url": "https://sub.example.com"}
         snapshot = {
@@ -391,7 +507,7 @@ class MonitorPerformanceTests(unittest.TestCase):
 
         self.assertEqual(result["payload"]["status"], "success")
         self.assertEqual(result["payload"]["diagnostics"]["node_source"], "cached_snapshot")
-        self.assertEqual(result["payload"]["diagnostics"]["subscription_refresh_error_code"], "unsupported_subscription_format")
+        self.assertEqual(result["payload"]["diagnostics"]["subscription_refresh_error_code"], "no_supported_nodes")
 
     def test_run_for_airport_keeps_original_failure_when_no_cached_snapshot_exists(self) -> None:
         config = self.make_config()

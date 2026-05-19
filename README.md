@@ -491,11 +491,17 @@ ADMIN_API_KEY=gaterank_admin_key \
 
 - 从后台基础信息读取 `subscription_url`
 - 检查 `sing-box` 是否可执行，并为代表节点启动临时本地代理
-- 解析 `vmess`、`ss`、`trojan`、`vless`、`anytls` 订阅节点；`anytls` 需要 `sing-box >= 1.12.0`
+- 解析普通 URI / Base64 订阅，以及 Clash YAML / Clash Meta 中的 `vmess`、`ss`、`trojan`、`vless`、`anytls` 节点；`anytls` 需要 `sing-box >= 1.12.0`
 - 按订阅解析出的每个地区随机选择 1 个代表节点，采集代理链路延迟、下载速度与代理探测失败率
 - 对全部支持节点执行轻量可用性检查，统计可用节点数、不可用节点数、可用率与不可用率
 - 调用后端 `performance-runs` 接口写入运行状态与原始性能样本
 - 调用后端 `aggregate` 与 `recompute`，刷新当日 P 分与榜单
+
+Python 依赖：
+
+```bash
+/usr/bin/python3 -m pip install -r requirements-monitor.txt
+```
 
 最小调用示例：
 
