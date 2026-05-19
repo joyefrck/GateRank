@@ -2785,10 +2785,6 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
 
                           <dl className="mt-5 grid gap-3 text-sm md:grid-cols-2 xl:grid-cols-3">
                             <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
-                              <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">官网链接</dt>
-                              <dd className="mt-1 break-all font-semibold text-neutral-800">{item.website}</dd>
-                            </div>
-                            <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3">
                               <dt className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">成立日期</dt>
                               <dd className="mt-1 font-semibold text-neutral-800">{formatDateLabel(item.founded_on)}</dd>
                             </div>
