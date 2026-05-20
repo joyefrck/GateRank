@@ -1,4 +1,9 @@
-import type { NewsArticle, NewsArticleListItem } from '../types/domain';
+import type {
+  NewsArticle,
+  NewsArticleListItem,
+  NewsCategorySummary,
+  NewsTopicSummary,
+} from '../types/domain';
 import { NewsContentService } from './newsContentService';
 import type { NewsRepository } from '../repositories/newsRepository';
 
@@ -10,6 +15,11 @@ export interface PublicNewsCardView {
   cover_image_url: string;
   published_at: string | null;
   reading_minutes: number;
+  category: NewsCategorySummary | null;
+  topics: NewsTopicSummary[];
+  is_featured: boolean;
+  is_recommended: boolean;
+  recommend_weight: number;
 }
 
 export interface PublicNewsListView {
@@ -17,8 +27,16 @@ export interface PublicNewsListView {
   page_size: number;
   total: number;
   total_pages: number;
+  query: string;
+  category: NewsCategorySummary | null;
+  topic: NewsTopicSummary | null;
+  categories: NewsCategorySummary[];
+  topics: NewsTopicSummary[];
   featured: PublicNewsCardView | null;
   items: PublicNewsCardView[];
+  recommended: PublicNewsCardView[];
+  risk_watch: PublicNewsCardView[];
+  guides: PublicNewsCardView[];
 }
 
 export interface PublicNewsArticleView extends PublicNewsCardView {
@@ -34,25 +52,62 @@ export class NewsPublicService {
     private readonly newsContentService: NewsContentService,
   ) {}
 
-  async getListView(page = 1, pageSize = 12): Promise<PublicNewsListView> {
+  async getListView(
+    page = 1,
+    pageSize = 12,
+    filters: { category_slug?: string; topic_slug?: string; q?: string } = {},
+  ): Promise<PublicNewsListView> {
     const safePage = Math.max(1, page);
     const safePageSize = Math.min(24, Math.max(1, pageSize));
-    const result = await this.newsRepository.listPublishedDetailed({
-      page: safePage,
-      pageSize: safePageSize,
-    });
+    const keyword = String(filters.q || '').trim();
+    const [categories, topics, category, topic, result, featuredArticle, recommendedItems, riskItems, guideItems] = await Promise.all([
+      this.newsRepository.listCategories(),
+      this.newsRepository.listTopics(),
+      filters.category_slug ? this.newsRepository.getCategoryBySlug(filters.category_slug) : Promise.resolve(null),
+      filters.topic_slug ? this.newsRepository.getTopicBySlug(filters.topic_slug) : Promise.resolve(null),
+      this.newsRepository.listPublishedDetailed({
+        page: safePage,
+        pageSize: safePageSize,
+        category_slug: filters.category_slug,
+        topic_slug: filters.topic_slug,
+        keyword,
+      }),
+      safePage === 1
+        ? this.newsRepository.getFeaturedPublished({
+            category_slug: filters.category_slug,
+            topic_slug: filters.topic_slug,
+            keyword,
+          })
+        : Promise.resolve(null),
+      this.newsRepository.listRecommendedPublished(6),
+      this.newsRepository.listLatestByCategory('risk-warning', 3),
+      this.newsRepository.listLatestByCategory('tutorials', 3),
+    ]);
 
     const cards = result.items.map((article) => this.toCardView(article));
-    const featured = safePage === 1 ? cards[0] || null : null;
-    const items = safePage === 1 ? cards.slice(1) : cards;
+    const featured = safePage === 1
+      ? (featuredArticle || result.items[0] ? this.toCardView(featuredArticle || result.items[0]) : null)
+      : null;
+    const items = featured ? cards.filter((card) => card.id !== featured.id) : cards;
+    const recommended = recommendedItems.length > 0
+      ? recommendedItems.map((item) => this.toCardView(item))
+      : cards.slice(0, 6);
 
     return {
       page: safePage,
       page_size: safePageSize,
       total: result.total,
       total_pages: Math.max(1, Math.ceil(result.total / safePageSize)),
+      query: keyword,
+      category,
+      topic,
+      categories,
+      topics,
       featured,
       items,
+      recommended,
+      risk_watch: riskItems.map((item) => this.toCardView(item)),
+      guides: guideItems.map((item) => this.toCardView(item)),
     };
   }
 
@@ -74,6 +129,17 @@ export class NewsPublicService {
 
   async getSitemapItems(): Promise<NewsArticleListItem[]> {
     return this.newsRepository.listPublishedForSitemap(1000);
+  }
+
+  async getSitemapTaxonomy(): Promise<{
+    categories: NewsCategorySummary[];
+    topics: NewsTopicSummary[];
+  }> {
+    const [categories, topics] = await Promise.all([
+      this.newsRepository.listCategories(),
+      this.newsRepository.listTopics(),
+    ]);
+    return { categories, topics };
   }
 
   private async buildArticleView(article: NewsArticle): Promise<PublicNewsArticleView> {
@@ -101,6 +167,11 @@ export class NewsPublicService {
       cover_image_url: article.cover_image_url,
       published_at: article.published_at,
       reading_minutes: this.newsContentService.render(markdown).reading_minutes,
+      category: article.category,
+      topics: article.topics,
+      is_featured: article.is_featured,
+      is_recommended: article.is_recommended,
+      recommend_weight: article.recommend_weight,
     };
   }
 }

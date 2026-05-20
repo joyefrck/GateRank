@@ -30,7 +30,32 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
     try {
       const page = toPositiveInt(req.query.page, 1);
       const pageSize = toPositiveInt(req.query.page_size, 12);
-      res.json(await deps.newsPublicService.getListView(page, pageSize));
+      const category = optionalString(req.query.category);
+      const topic = optionalString(req.query.topic);
+      const q = optionalString(req.query.q);
+      res.json(await deps.newsPublicService.getListView(page, pageSize, {
+        category_slug: category,
+        topic_slug: topic,
+        q,
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/api/v1/news/categories', async (_req, res, next) => {
+    try {
+      const taxonomy = await deps.newsPublicService.getSitemapTaxonomy();
+      res.json({ items: taxonomy.categories });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/api/v1/news/topics', async (_req, res, next) => {
+    try {
+      const taxonomy = await deps.newsPublicService.getSitemapTaxonomy();
+      res.json({ items: taxonomy.topics });
     } catch (error) {
       next(error);
     }
@@ -51,14 +76,62 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
   router.get('/news', async (req, res) => {
     try {
       const page = toPositiveInt(req.query.page, 1);
-      const view = await deps.newsPublicService.getListView(page, 12);
+      const q = optionalString(req.query.q);
+      const view = await deps.newsPublicService.getListView(page, 12, { q });
       trackMarketingPageView(deps, req, '/news', 'news');
       res
         .status(200)
         .type('html')
+        .set(setHtmlCacheHeaders())
         .send(renderNewsIndexPage({ siteUrl: getSiteUrl(req), listView: view }));
     } catch (error) {
       renderHtmlError(res, 500, 'News 页面加载失败');
+    }
+  });
+
+  router.get('/news/category/:slug', async (req, res) => {
+    try {
+      const page = toPositiveInt(req.query.page, 1);
+      const q = optionalString(req.query.q);
+      const view = await deps.newsPublicService.getListView(page, 12, {
+        category_slug: String(req.params.slug || ''),
+        q,
+      });
+      if (!view.category) {
+        renderHtmlError(res, 404, '分类不存在或尚未发布');
+        return;
+      }
+      trackMarketingPageView(deps, req, req.path, 'news');
+      res
+        .status(200)
+        .type('html')
+        .set(setHtmlCacheHeaders())
+        .send(renderNewsIndexPage({ siteUrl: getSiteUrl(req), listView: view }));
+    } catch {
+      renderHtmlError(res, 500, '分类页面加载失败');
+    }
+  });
+
+  router.get('/news/topic/:slug', async (req, res) => {
+    try {
+      const page = toPositiveInt(req.query.page, 1);
+      const q = optionalString(req.query.q);
+      const view = await deps.newsPublicService.getListView(page, 12, {
+        topic_slug: String(req.params.slug || ''),
+        q,
+      });
+      if (!view.topic) {
+        renderHtmlError(res, 404, '专题不存在或尚未发布');
+        return;
+      }
+      trackMarketingPageView(deps, req, req.path, 'news');
+      res
+        .status(200)
+        .type('html')
+        .set(setHtmlCacheHeaders())
+        .send(renderNewsIndexPage({ siteUrl: getSiteUrl(req), listView: view }));
+    } catch {
+      renderHtmlError(res, 500, '专题页面加载失败');
     }
   });
 
@@ -73,6 +146,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       res
         .status(200)
         .type('html')
+        .set(setHtmlCacheHeaders())
         .send(renderNewsArticlePage({ siteUrl: getSiteUrl(req), article }));
     } catch {
       renderHtmlError(res, 500, '文章加载失败');
@@ -105,8 +179,12 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
   router.get('/sitemap.xml', async (req, res) => {
     const siteUrl = getSiteUrl(req);
     const items = await deps.newsPublicService.getSitemapItems();
+    const taxonomy = typeof deps.newsPublicService.getSitemapTaxonomy === 'function'
+      ? await deps.newsPublicService.getSitemapTaxonomy()
+      : { categories: [], topics: [] };
     const reportEntries = await getReportSitemapEntries(deps);
     const dataLastmod = reportEntries[0]?.lastmod || formatSitemapLastmodDate(getDateInTimezone());
+    const newsLastmod = getNewsIndexLastmod(items);
     const urls = [
       '/',
       '/rankings/all',
@@ -115,6 +193,8 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       '/risk-monitor',
       '/publish-token-docs',
       '/news',
+      ...taxonomy.categories.map((item) => `/news/category/${item.slug}`),
+      ...taxonomy.topics.map((item) => `/news/topic/${item.slug}`),
       ...reportEntries.map((entry) => entry.path),
       ...items.map((item) => `/news/${item.slug}`),
     ];
@@ -125,7 +205,9 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       '/methodology': PUBLIC_SEO_STATIC_LASTMOD,
       '/apply': PUBLIC_SEO_STATIC_LASTMOD,
       '/publish-token-docs': PUBLISH_TOKEN_DOCS_LAST_UPDATED,
-      '/news': getNewsIndexLastmod(items),
+      '/news': newsLastmod,
+      ...Object.fromEntries(taxonomy.categories.map((item) => [`/news/category/${item.slug}`, newsLastmod])),
+      ...Object.fromEntries(taxonomy.topics.map((item) => [`/news/topic/${item.slug}`, newsLastmod])),
       ...Object.fromEntries(reportEntries.map((entry) => [entry.path, entry.lastmod])),
     };
     const xml = buildSitemapXml(siteUrl, urls, items, staticLastmodByPath);
@@ -183,6 +265,19 @@ function getSiteUrl(req: Request): string {
 function toPositiveInt(value: unknown, fallback: number): number {
   const number = Number(value ?? fallback);
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
+}
+
+function optionalString(value: unknown): string | undefined {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return undefined;
+  }
+  return String(value).trim();
+}
+
+function setHtmlCacheHeaders(): Record<string, string> {
+  return {
+    'Cache-Control': 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+  };
 }
 
 function renderHtmlError(res: Response, status: number, message: string): void {

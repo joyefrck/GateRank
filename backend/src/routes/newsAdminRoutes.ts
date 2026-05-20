@@ -53,8 +53,31 @@ export function createNewsAdminRoutes(deps: NewsAdminDeps): Router {
       const pageSize = toPositiveInt(req.query.page_size, 20);
       const keyword = optionalString(req.query.keyword);
       const status = req.query.status ? parseNewsStatus(String(req.query.status)) : undefined;
-      const result = await deps.newsRepository.listByQuery({ page, pageSize, keyword, status });
+      const categorySlug = optionalString(req.query.category);
+      const result = await deps.newsRepository.listByQuery({
+        page,
+        pageSize,
+        keyword,
+        status,
+        category_slug: categorySlug,
+      });
       res.json({ page, page_size: pageSize, total: result.total, items: result.items });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/news/categories', async (_req, res, next) => {
+    try {
+      res.json({ items: await deps.newsRepository.listCategories() });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/news/topics', async (_req, res, next) => {
+    try {
+      res.json({ items: await deps.newsRepository.listTopics() });
     } catch (error) {
       next(error);
     }

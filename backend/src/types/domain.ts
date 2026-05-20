@@ -606,10 +606,16 @@ export interface NewsArticle {
   cover_image_url: string;
   content_markdown: string;
   content_html: string;
+  category_id: number | null;
+  is_featured: boolean;
+  is_recommended: boolean;
+  recommend_weight: number;
   status: NewsStatus;
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  category: NewsCategorySummary | null;
+  topics: NewsTopicSummary[];
 }
 
 export interface NewsArticleListItem {
@@ -618,10 +624,32 @@ export interface NewsArticleListItem {
   slug: string;
   excerpt: string;
   cover_image_url: string;
+  category_id: number | null;
+  is_featured: boolean;
+  is_recommended: boolean;
+  recommend_weight: number;
   status: NewsStatus;
   published_at: string | null;
   created_at: string;
   updated_at: string;
+  category: NewsCategorySummary | null;
+  topics: NewsTopicSummary[];
+}
+
+export interface NewsCategorySummary {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  sort_order: number;
+}
+
+export interface NewsTopicSummary {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  sort_order: number;
 }
 
 export interface ProbeSample {

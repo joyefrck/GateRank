@@ -109,7 +109,7 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
     assert.doesNotMatch(html, /\.nav-link\.is-news/);
     assert.doesNotMatch(html, /\.topbar-inner/);
     assert.doesNotMatch(html, /\.nav-link\s*\{/);
-    assert.match(html, /<h1 class="news-index-title">机场榜GateRank News：机场行业观察、机场测评与风险动态<\/h1>/);
+    assert.match(html, /<h1 class="news-index-title">机场榜资讯中心：机场推荐、跑路预警与科学上网指南<\/h1>/);
     assert.match(html, /<h2 class="hero-title">头条文章<\/h2>/);
     assert.doesNotMatch(html, /<h1 class="hero-title">/);
   } finally {

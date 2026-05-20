@@ -513,10 +513,171 @@ const sharedStyles = `
     background: #111111;
     color: #ffffff;
   }
+  .news-portal-intro {
+    display: grid;
+    gap: 18px;
+  }
+  .news-search-form {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: min(720px, 100%);
+    padding: 7px;
+    border: 1px solid rgba(17,17,17,0.1);
+    border-radius: 999px;
+    background: #ffffff;
+    box-shadow: 0 18px 44px rgba(17,17,17,0.06);
+  }
+  .news-search-input {
+    min-width: 0;
+    flex: 1;
+    border: 0;
+    outline: 0;
+    padding: 12px 16px;
+    font: 600 14px/1.4 var(--sans);
+    color: #111111;
+    background: transparent;
+  }
+  .news-search-button {
+    border: 0;
+    border-radius: 999px;
+    padding: 12px 19px;
+    background: #111111;
+    color: #ffffff;
+    font: 800 13px/1 var(--sans);
+    cursor: pointer;
+  }
+  .news-category-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .news-category-nav a,
+  .news-taxonomy-chip,
+  .article-topic-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 7px 11px;
+    border-radius: 999px;
+    border: 1px solid rgba(17,17,17,0.1);
+    background: #ffffff;
+    color: rgba(17,17,17,0.68);
+    font-size: 12px;
+    font-weight: 800;
+  }
+  .news-category-nav a.is-active,
+  .news-taxonomy-chip.is-active {
+    background: #111111;
+    color: #ffffff;
+    border-color: #111111;
+  }
+  .news-hub-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 360px;
+    gap: 18px;
+    align-items: stretch;
+  }
+  .news-side-stack {
+    display: grid;
+    gap: 14px;
+  }
+  .news-panel {
+    border: 1px solid rgba(17,17,17,0.12);
+    border-radius: 24px;
+    padding: 20px;
+    background: #ffffff;
+  }
+  .news-panel-list {
+    display: grid;
+    gap: 12px;
+  }
+  .news-panel-link {
+    display: grid;
+    gap: 5px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid rgba(17,17,17,0.07);
+  }
+  .news-panel-link:last-child {
+    padding-bottom: 0;
+    border-bottom: 0;
+  }
+  .news-panel-title {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.45;
+    font-weight: 800;
+  }
+  .news-panel-meta {
+    color: rgba(17,17,17,0.52);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .topic-section {
+    margin-top: 38px;
+  }
+  .topic-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .topic-card {
+    min-height: 166px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 18px;
+    border: 1px solid rgba(17,17,17,0.12);
+    border-radius: 18px;
+    padding: 20px;
+    background: #ffffff;
+  }
+  .topic-card-index {
+    color: rgba(17,17,17,0.42);
+    font-weight: 900;
+    font-size: 14px;
+  }
+  .topic-card-title {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.25;
+    font-weight: 900;
+  }
+  .topic-card-desc {
+    margin: 8px 0 0;
+    color: rgba(17,17,17,0.62);
+    font-size: 13px;
+    line-height: 1.55;
+  }
+  .news-content-grid {
+    margin-top: 44px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 26px;
+    align-items: start;
+  }
+  .news-section-heading {
+    margin: 0 0 18px;
+    font-size: 24px;
+    line-height: 1.2;
+    font-weight: 900;
+    letter-spacing: -0.02em;
+  }
+  .feed-card-media {
+    min-height: 100%;
+  }
+  .article-taxonomy {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+  }
   @media (max-width: 980px) {
     .hero-card,
     .feed-card,
-    .article-grid {
+    .article-grid,
+    .news-hub-grid,
+    .news-content-grid {
       grid-template-columns: 1fr;
     }
     .article-grid {
@@ -550,6 +711,28 @@ const sharedStyles = `
     .feed-card-media {
       aspect-ratio: 16 / 10;
     }
+    .news-category-nav {
+      flex-wrap: nowrap;
+      overflow-x: auto;
+      padding-bottom: 4px;
+      scrollbar-width: none;
+    }
+    .news-category-nav a {
+      white-space: nowrap;
+    }
+    .news-search-form {
+      border-radius: 22px;
+      align-items: stretch;
+      flex-direction: column;
+      padding: 10px;
+    }
+    .news-search-button,
+    .news-search-input {
+      width: 100%;
+    }
+    .topic-grid {
+      grid-template-columns: 1fr;
+    }
     .hero-title,
     .article-title {
       max-width: none;
@@ -574,14 +757,22 @@ const sharedStyles = `
 
 export function renderNewsIndexPage(options: RenderListPageOptions): string {
   const { siteUrl, listView } = options;
-  const canonicalUrl = `${siteUrl}/news${listView.page > 1 ? `?page=${listView.page}` : ''}`;
+  const basePath = getNewsListBasePath(listView);
+  const query = listView.query || '';
+  const recommended = listView.recommended || [];
+  const riskWatch = listView.risk_watch || [];
+  const guides = listView.guides || [];
+  const topics = listView.topics || [];
+  const canonicalUrl = `${siteUrl}${buildPagedHref(basePath, listView.page, query)}`;
+  const titlePrefix = listView.category?.name || listView.topic?.name || '机场榜资讯中心';
   const title = listView.page > 1
-    ? `GateRank News 第 ${listView.page} 页 | 机场榜`
-    : 'GateRank News | 机场榜';
-  const description = 'GateRank News 聚合机场行业观察、测评方法更新与风控动态，采用长文阅读结构与可分享详情页，方便检索与转发。';
+    ? `${titlePrefix} 第 ${listView.page} 页 | GateRank News`
+    : `${titlePrefix} | GateRank News`;
+  const description = buildListDescription(listView);
   const featured = listView.featured;
   const featuredCoverImage = featured ? toAbsoluteUrl(siteUrl, featured.cover_image_url) : null;
   const listItems = listView.items.map((item) => renderFeedCard(item)).join('');
+  const isSearch = Boolean(query);
   const jsonLd = [
     {
       '@context': 'https://schema.org',
@@ -606,6 +797,12 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
           name: 'News',
           item: `${siteUrl}/news`,
         },
+        ...(listView.category || listView.topic ? [{
+          '@type': 'ListItem',
+          position: 3,
+          name: (listView.category || listView.topic)?.name,
+          item: `${siteUrl}${basePath}`,
+        }] : []),
       ],
     },
   ];
@@ -617,25 +814,56 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
     ogImage: featuredCoverImage,
     ogImageAlt: featured?.title || null,
     ogImageType: featuredCoverImage ? inferImageMimeType(featuredCoverImage) : null,
-    robots: 'index,follow,max-image-preview:large',
+    ogType: 'website',
+    robots: isSearch ? 'noindex,follow,max-image-preview:large' : 'index,follow,max-image-preview:large',
     jsonLd,
     body: `
       <div class="page-shell">
         ${renderPublicTopNav('news')}
         <main class="main-wrap">
-          <section>
+          <section class="news-portal-intro">
             <div class="eyebrow">GateRank Newsroom</div>
-            <h1 class="news-index-title">机场榜GateRank News：机场行业观察、机场测评与风险动态</h1>
-            <div style="display:grid; gap: 24px; margin-top: 18px;">
-              ${featured ? renderHeroCard(featured) : `
+            <h1 class="news-index-title">${escapeHtml(buildListH1(listView))}</h1>
+            <form class="news-search-form" action="${escapeAttribute(basePath)}" method="get" role="search">
+              <input class="news-search-input" type="search" name="q" value="${escapeAttribute(query)}" placeholder="搜索：机场推荐 / 跑路预警 / Clash / USDT / AI工具" />
+              <button class="news-search-button" type="submit">搜索</button>
+            </form>
+            ${renderCategoryNav(listView)}
+          </section>
+
+          <section class="news-hub-grid" style="margin-top: 30px;">
+            ${featured ? renderHeroCard(featured) : `
+              <div class="empty-state">
+                <div class="eyebrow" style="justify-content:center;">News</div>
+                <p style="margin:0; font-size:16px; line-height:1.8;">第一篇文章发布后，这里会显示精选头条与最新文章流。</p>
+              </div>
+            `}
+            <div class="news-side-stack">
+              ${renderCompactPanel('最新风险预警', riskWatch)}
+              ${renderCompactPanel('热门指南', guides.length ? guides : recommended.slice(0, 3))}
+            </div>
+          </section>
+
+          <section class="topic-section">
+            <h2 class="news-section-heading">专题</h2>
+            <div class="topic-grid">
+              ${topics.slice(0, 6).map((topic, index) => renderTopicCard(topic, index)).join('')}
+            </div>
+          </section>
+
+          <section class="news-content-grid">
+            <div>
+              <h2 class="news-section-heading">${isSearch ? '搜索结果' : '最新文章'}</h2>
+              ${listItems ? `<div class="feed-grid">${listItems}</div>` : `
                 <div class="empty-state">
-                  <div class="eyebrow" style="justify-content:center;">News</div>
-                  <p style="margin:0; font-size:16px; line-height:1.8;">第一篇文章发布后，这里会显示精选头条与最新文章流。</p>
+                  <p style="margin:0; font-size:16px; line-height:1.8;">当前条件下暂无已发布文章。</p>
                 </div>
               `}
-              ${listItems ? `<div class="feed-grid">${listItems}</div>` : ''}
-              ${renderPagination('/news', listView.page, listView.total_pages)}
+              ${renderPagination(basePath, listView.page, listView.total_pages, query)}
             </div>
+            <aside class="news-panel">
+              ${renderCompactPanel('热门文章', recommended, false)}
+            </aside>
           </section>
         </main>
         ${renderFooter()}
@@ -672,6 +900,9 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
     },
     mainEntityOfPage: shareUrl,
   };
+  if (article.category) {
+    articleJsonLd.articleSection = article.category.name;
+  }
   if (absoluteCoverImage) {
     articleJsonLd.image = [absoluteCoverImage];
   }
@@ -693,9 +924,15 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
           name: 'News',
           item: `${siteUrl}/news`,
         },
-        {
+        ...(article.category ? [{
           '@type': 'ListItem',
           position: 3,
+          name: article.category.name,
+          item: `${siteUrl}/news/category/${article.category.slug}`,
+        }] : []),
+        {
+          '@type': 'ListItem',
+          position: article.category ? 4 : 3,
           name: article.title,
           item: shareUrl,
         },
@@ -728,6 +965,10 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
                 <div class="eyebrow">GateRank News</div>
                 <h1 class="article-title">${escapeHtml(article.title)}</h1>
                 <p class="article-standfirst">${escapeHtml(article.excerpt)}</p>
+                <div class="article-taxonomy">
+                  ${article.category ? `<a class="news-taxonomy-chip is-active" href="/news/category/${escapeAttribute(article.category.slug)}">${escapeHtml(article.category.name)}</a>` : ''}
+                  ${(article.topics || []).map((topic) => `<a class="article-topic-link" href="/news/topic/${escapeAttribute(topic.slug)}">${escapeHtml(topic.name)}</a>`).join('')}
+                </div>
                 <div class="article-meta">
                   <span>${escapeHtml(formatNewsDate(article.published_at))}</span>
                   <span>${article.reading_minutes} min read</span>
@@ -826,11 +1067,101 @@ function demoteBodyH1(html: string): string {
     .replace(/<\/h1>/gi, '</h2>');
 }
 
+function buildListH1(listView: PublicNewsListView): string {
+  if (listView.query) {
+    return `机场榜资讯搜索：${listView.query}`;
+  }
+  if (listView.category) {
+    return `${listView.category.name}：机场推荐、跑路预警与科学上网指南`;
+  }
+  if (listView.topic) {
+    return listView.topic.name;
+  }
+  return '机场榜资讯中心：机场推荐、跑路预警与科学上网指南';
+}
+
+function buildListDescription(listView: PublicNewsListView): string {
+  if (listView.query) {
+    return `GateRank News 搜索「${listView.query}」相关的机场推荐、机场测评、风险预警、支付安全、客户端教程和 AI 工具访问内容，帮助用户快速定位科学上网指南。`;
+  }
+  if (listView.category) {
+    return `GateRank ${listView.category.name}聚合${listView.category.description}覆盖机场推荐、机场测评、风险预警、官网判断、支付安全和科学上网选择指南。`;
+  }
+  if (listView.topic) {
+    return `GateRank ${listView.topic.name}收录${listView.topic.description}帮助用户围绕机场 VPN 选择、风险判断、客户端配置和支付安全进行交叉判断。`;
+  }
+  return 'GateRank 机场榜资讯中心收录机场推荐、机场测评、跑路预警、科学上网教程、支付安全、客户端协议、行业监管和 AI 工具访问指南。';
+}
+
+function getNewsListBasePath(listView: PublicNewsListView): string {
+  if (listView.category) {
+    return `/news/category/${listView.category.slug}`;
+  }
+  if (listView.topic) {
+    return `/news/topic/${listView.topic.slug}`;
+  }
+  return '/news';
+}
+
+function buildPagedHref(basePath: string, page: number, query = ''): string {
+  const params = new URLSearchParams();
+  if (page > 1) {
+    params.set('page', String(page));
+  }
+  if (query) {
+    params.set('q', query);
+  }
+  const suffix = params.toString();
+  return suffix ? `${basePath}?${suffix}` : basePath;
+}
+
+function renderCategoryNav(listView: PublicNewsListView): string {
+  return `
+    <nav class="news-category-nav" aria-label="资讯分类">
+      <a href="/news" class="${!listView.category && !listView.topic ? 'is-active' : ''}">全部</a>
+      ${(listView.categories || []).map((category) => `
+        <a href="/news/category/${escapeAttribute(category.slug)}" class="${listView.category?.slug === category.slug ? 'is-active' : ''}">${escapeHtml(category.name)}</a>
+      `).join('')}
+    </nav>
+  `;
+}
+
+function renderTopicCard(topic: PublicNewsListView['topics'][number], index: number): string {
+  return `
+    <a class="topic-card" href="/news/topic/${escapeAttribute(topic.slug)}">
+      <span class="topic-card-index">${String(index + 1).padStart(2, '0')}.</span>
+      <span>
+        <h3 class="topic-card-title">${escapeHtml(topic.name)}</h3>
+        <p class="topic-card-desc">${escapeHtml(topic.description)}</p>
+      </span>
+      <span class="news-taxonomy-chip">查看专题</span>
+    </a>
+  `;
+}
+
+function renderCompactPanel(title: string, items: PublicNewsListView['items'], wrap = true): string {
+  const content = `
+    <p class="section-label">${escapeHtml(title)}</p>
+    ${
+      items.length > 0
+        ? `<div class="news-panel-list">${items.slice(0, 5).map((item) => `
+            <a class="news-panel-link" href="/news/${escapeAttribute(item.slug)}">
+              <span class="news-panel-title">${escapeHtml(item.title)}</span>
+              <span class="news-panel-meta">${escapeHtml(item.category?.name || 'GateRank News')} · ${escapeHtml(formatNewsDate(item.published_at))}</span>
+            </a>
+          `).join('')}</div>`
+        : '<div class="news-panel-meta">暂无内容</div>'
+    }
+  `;
+  return wrap ? `<section class="news-panel">${content}</section>` : content;
+}
+
 function renderHeroCard(featured: PublicNewsArticleView | PublicNewsListView['featured']) {
   if (!featured) {
     return '';
   }
   const hasCover = Boolean(featured.cover_image_url && featured.cover_image_url.trim());
+  const featuredTopics = featured.topics || [];
 
   return `
     <article class="hero-card${hasCover ? '' : ' no-cover'}">
@@ -839,6 +1170,10 @@ function renderHeroCard(featured: PublicNewsArticleView | PublicNewsListView['fe
           <div class="eyebrow">Featured Story</div>
           <h2 class="hero-title">${escapeHtml(featured.title)}</h2>
           <p class="hero-summary">${escapeHtml(featured.excerpt)}</p>
+          <div class="article-taxonomy">
+            ${featured.category ? `<a class="news-taxonomy-chip" href="/news/category/${escapeAttribute(featured.category.slug)}">${escapeHtml(featured.category.name)}</a>` : ''}
+            ${featuredTopics.slice(0, 2).map((topic) => `<a class="news-taxonomy-chip" href="/news/topic/${escapeAttribute(topic.slug)}">${escapeHtml(topic.name)}</a>`).join('')}
+          </div>
         </div>
         <div style="display:grid; gap: 18px;">
           <div class="hero-meta">
@@ -868,6 +1203,7 @@ function renderFeedCard(item: PublicNewsListView['items'][number]): string {
       ` : ''}
       <div class="feed-card-body">
         <div class="card-meta">
+          ${item.category ? `<span>${escapeHtml(item.category.name)}</span>` : ''}
           <span>${escapeHtml(formatNewsDate(item.published_at))}</span>
           <span>${item.reading_minutes} min read</span>
         </div>
@@ -879,7 +1215,7 @@ function renderFeedCard(item: PublicNewsListView['items'][number]): string {
   `;
 }
 
-function renderPagination(basePath: string, currentPage: number, totalPages: number): string {
+function renderPagination(basePath: string, currentPage: number, totalPages: number, query = ''): string {
   if (totalPages <= 1) {
     return '';
   }
@@ -894,7 +1230,7 @@ function renderPagination(basePath: string, currentPage: number, totalPages: num
   return `
     <nav class="pagination" aria-label="pagination">
       ${pages.map((page) => {
-        const href = page === 1 ? basePath : `${basePath}?page=${page}`;
+        const href = buildPagedHref(basePath, page, query);
         return `<a href="${href}" class="${page === currentPage ? 'is-current' : ''}">${page}</a>`;
       }).join('')}
     </nav>
@@ -944,6 +1280,7 @@ function renderDocument(options: {
   ogImage?: string | null;
   ogImageAlt?: string | null;
   ogImageType?: string | null;
+  ogType?: string;
   robots: string;
   jsonLd: unknown;
   body: string;
@@ -957,7 +1294,7 @@ function renderDocument(options: {
     <meta name="description" content="${escapeAttribute(options.description)}" />
     <meta name="robots" content="${escapeAttribute(options.robots)}" />
     <link rel="canonical" href="${escapeAttribute(options.canonicalUrl)}" />
-    <meta property="og:type" content="article" />
+    <meta property="og:type" content="${escapeAttribute(options.ogType || 'article')}" />
     <meta property="og:site_name" content="机场榜 GateRank" />
     <meta property="og:title" content="${escapeAttribute(options.title)}" />
     <meta property="og:description" content="${escapeAttribute(options.description)}" />

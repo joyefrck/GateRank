@@ -18,7 +18,7 @@ interface CurrentArticleState {
 }
 
 interface NewsMutationServiceDeps {
-  newsRepository: Pick<NewsRepository, 'getById' | 'create' | 'update'>;
+  newsRepository: Pick<NewsRepository, 'getById' | 'create' | 'update' | 'resolveCategoryId' | 'resolveTopicIds'>;
   newsContentService: Pick<NewsContentService, 'render'>;
   newsCoverImageService: Pick<NewsCoverImageService, 'compressUploadedCover'>;
 }
@@ -28,8 +28,10 @@ export class NewsMutationService {
 
   async create(payload: Record<string, unknown>, publishMode: NewsPublishMode = 'draft') {
     const articleInput = resolveArticlePayload(payload, this.deps.newsContentService, false);
+    const metadataInput = await this.resolveMetadataPayload(payload);
     const articleId = await this.deps.newsRepository.create({
       ...articleInput,
+      ...metadataInput,
       status: publishMode === 'publish' ? 'published' : 'draft',
       published_at: publishMode === 'publish' ? nowInShanghai() : null,
     });
@@ -39,15 +41,18 @@ export class NewsMutationService {
   async update(id: number, payload: Record<string, unknown>) {
     const current = await this.requireArticle(id);
     const articleInput = resolveArticlePayload(payload, this.deps.newsContentService, false, current);
-    await this.deps.newsRepository.update(id, articleInput);
+    const metadataInput = await this.resolveMetadataPayload(payload);
+    await this.deps.newsRepository.update(id, { ...articleInput, ...metadataInput });
     return this.requireArticle(id);
   }
 
   async publish(id: number, payload: Record<string, unknown> = {}) {
     const current = await this.requireArticle(id);
     const articleInput = resolveArticlePayload(payload, this.deps.newsContentService, true, current);
+    const metadataInput = await this.resolveMetadataPayload(payload);
     await this.deps.newsRepository.update(id, {
       ...articleInput,
+      ...metadataInput,
       status: 'published',
       published_at: nowInShanghai(),
     });
@@ -75,6 +80,47 @@ export class NewsMutationService {
       throw new HttpError(404, 'NEWS_NOT_FOUND', `news article ${id} not found`);
     }
     return article;
+  }
+
+  private async resolveMetadataPayload(payload: Record<string, unknown>): Promise<{
+    category_id?: number | null;
+    topic_ids?: number[];
+    is_featured?: boolean;
+    is_recommended?: boolean;
+    recommend_weight?: number;
+  }> {
+    const result: {
+      category_id?: number | null;
+      topic_ids?: number[];
+      is_featured?: boolean;
+      is_recommended?: boolean;
+      recommend_weight?: number;
+    } = {};
+
+    if (payload.category_id !== undefined) {
+      result.category_id = parseOptionalPositiveInt(payload.category_id);
+    } else if (payload.category_slug !== undefined) {
+      const slug = normalizeString(payload.category_slug);
+      result.category_id = slug ? await this.deps.newsRepository.resolveCategoryId(slug) : null;
+    }
+
+    if (payload.topic_ids !== undefined) {
+      result.topic_ids = parsePositiveIntList(payload.topic_ids);
+    } else if (payload.topic_slugs !== undefined) {
+      result.topic_ids = await this.deps.newsRepository.resolveTopicIds(parseStringList(payload.topic_slugs));
+    }
+
+    if (payload.is_featured !== undefined) {
+      result.is_featured = parseBoolean(payload.is_featured);
+    }
+    if (payload.is_recommended !== undefined) {
+      result.is_recommended = parseBoolean(payload.is_recommended);
+    }
+    if (payload.recommend_weight !== undefined) {
+      result.recommend_weight = clamp(Number(payload.recommend_weight || 0), -1000, 1000);
+    }
+
+    return result;
   }
 }
 
@@ -155,6 +201,44 @@ export function optionalString(value: unknown): string | undefined {
     return undefined;
   }
   return String(value).trim();
+}
+
+export function parseOptionalPositiveInt(value: unknown): number | null {
+  if (value === undefined || value === null || String(value).trim() === '') {
+    return null;
+  }
+  const number = Number(value);
+  if (!Number.isFinite(number) || number <= 0) {
+    throw new HttpError(400, 'BAD_REQUEST', 'id must be positive integer');
+  }
+  return Math.floor(number);
+}
+
+export function parsePositiveIntList(value: unknown): number[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return Array.from(new Set(value.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0)))
+    .map((item) => Math.floor(item));
+}
+
+export function parseStringList(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean);
+  }
+  const text = normalizeString(value);
+  return text ? text.split(',').map((item) => item.trim()).filter(Boolean) : [];
+}
+
+export function parseBoolean(value: unknown): boolean {
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  if (typeof value === 'number') {
+    return value === 1;
+  }
+  const text = String(value ?? '').trim().toLowerCase();
+  return text === 'true' || text === '1' || text === 'yes' || text === 'on';
 }
 
 export function toPositiveInt(value: unknown, fallback: number): number {

@@ -25,10 +25,24 @@ interface NewsArticle {
   cover_image_url: string;
   content_markdown: string;
   content_html: string;
+  category_id: number | null;
+  is_featured: boolean;
+  is_recommended: boolean;
+  recommend_weight: number;
+  category: NewsTaxonomyItem | null;
+  topics: NewsTaxonomyItem[];
   status: 'draft' | 'published' | 'archived';
   published_at: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface NewsTaxonomyItem {
+  id: number;
+  name: string;
+  slug: string;
+  description: string;
+  sort_order: number;
 }
 
 interface NewsListResponse {
@@ -41,6 +55,12 @@ interface NewsListResponse {
     slug: string;
     excerpt: string;
     cover_image_url: string;
+    category_id: number | null;
+    is_featured: boolean;
+    is_recommended: boolean;
+    recommend_weight: number;
+    category: NewsTaxonomyItem | null;
+    topics: NewsTaxonomyItem[];
     status: NewsArticle['status'];
     published_at: string | null;
     created_at: string;
@@ -84,6 +104,11 @@ interface NewsFormState {
   excerpt: string;
   cover_image_url: string;
   content_markdown: string;
+  category_id: number | null;
+  topic_ids: number[];
+  is_featured: boolean;
+  is_recommended: boolean;
+  recommend_weight: number;
   status: NewsArticle['status'];
   published_at: string | null;
 }
@@ -94,20 +119,33 @@ const emptyForm: NewsFormState = {
   excerpt: '',
   cover_image_url: '',
   content_markdown: '',
+  category_id: null,
+  topic_ids: [],
+  is_featured: false,
+  is_recommended: false,
+  recommend_weight: 0,
   status: 'draft',
   published_at: null,
 };
 
 export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
   const [items, setItems] = useState<NewsListResponse['items']>([]);
+  const [categories, setCategories] = useState<NewsTaxonomyItem[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<'all' | NewsArticle['status']>('all');
+  const [category, setCategory] = useState('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    void apiFetch<{ items: NewsTaxonomyItem[] }>('/api/v1/admin/news/categories')
+      .then((response) => setCategories(response.items))
+      .catch(() => setCategories([]));
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -121,6 +159,9 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
     }
     if (status !== 'all') {
       search.set('status', status);
+    }
+    if (category !== 'all') {
+      search.set('category', category);
     }
 
     void apiFetch<NewsListResponse>(`/api/v1/admin/news?${search.toString()}`)
@@ -146,7 +187,7 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
     return () => {
       active = false;
     };
-  }, [keyword, page, status, reloadKey]);
+  }, [category, keyword, page, status, reloadKey]);
 
   const totalPages = Math.max(1, Math.ceil(total / 12));
 
@@ -196,7 +237,7 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
         </button>
       </div>
 
-      <div className="grid gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 md:grid-cols-[minmax(0,1fr)_180px]">
+      <div className="grid gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 md:grid-cols-[minmax(0,1fr)_180px_180px]">
         <label className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2">
           <Search size={15} className="text-neutral-400" />
           <input
@@ -221,6 +262,19 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
           <option value="draft">草稿</option>
           <option value="published">已发布</option>
           <option value="archived">已下线</option>
+        </select>
+        <select
+          className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm outline-none"
+          value={category}
+          onChange={(event) => {
+            setPage(1);
+            setCategory(event.target.value);
+          }}
+        >
+          <option value="all">全部分类</option>
+          {categories.map((item) => (
+            <option key={item.slug} value={item.slug}>{item.name}</option>
+          ))}
         </select>
       </div>
 
@@ -258,6 +312,11 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
                       >
                         {item.title || '未命名文章'}
                       </button>
+                      <div className="mt-1 flex flex-wrap gap-1.5 text-xs text-neutral-500">
+                        {item.category ? <span className="rounded-full bg-neutral-100 px-2 py-0.5">{item.category.name}</span> : null}
+                        {item.is_featured ? <span className="rounded-full bg-amber-50 px-2 py-0.5 text-amber-700">主打</span> : null}
+                        {item.is_recommended ? <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">推荐 {item.recommend_weight}</span> : null}
+                      </div>
                     </div>
                   </td>
                   <td className="px-4 py-4">
@@ -320,6 +379,8 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
 
 export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsEditorPageProps) {
   const [form, setForm] = useState<NewsFormState>(emptyForm);
+  const [categories, setCategories] = useState<NewsTaxonomyItem[]>([]);
+  const [topics, setTopics] = useState<NewsTaxonomyItem[]>([]);
   const [loading, setLoading] = useState(Boolean(articleId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -334,6 +395,21 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   const [coverSearchError, setCoverSearchError] = useState('');
   const [coverPickerOpen, setCoverPickerOpen] = useState(false);
   const markdownRef = useRef<HTMLTextAreaElement | null>(null);
+
+  useEffect(() => {
+    void Promise.all([
+      apiFetch<{ items: NewsTaxonomyItem[] }>('/api/v1/admin/news/categories'),
+      apiFetch<{ items: NewsTaxonomyItem[] }>('/api/v1/admin/news/topics'),
+    ])
+      .then(([categoryResponse, topicResponse]) => {
+        setCategories(categoryResponse.items);
+        setTopics(topicResponse.items);
+      })
+      .catch(() => {
+        setCategories([]);
+        setTopics([]);
+      });
+  }, []);
 
   useEffect(() => {
     if (!articleId) {
@@ -358,6 +434,11 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
           excerpt: article.excerpt,
           cover_image_url: article.cover_image_url,
           content_markdown: article.content_markdown,
+          category_id: article.category_id,
+          topic_ids: article.topics.map((topic) => topic.id),
+          is_featured: article.is_featured,
+          is_recommended: article.is_recommended,
+          recommend_weight: article.recommend_weight,
           status: article.status,
           published_at: article.published_at,
         });
@@ -382,6 +463,21 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   const readingMinutes = useMemo(() => estimateReadingMinutes(form.content_markdown), [form.content_markdown]);
   const isSlugLocked = form.status !== 'draft';
 
+  function buildPayload() {
+    return {
+      title: form.title,
+      slug: form.slug,
+      excerpt: form.excerpt,
+      cover_image_url: form.cover_image_url,
+      content_markdown: form.content_markdown,
+      category_id: form.category_id,
+      topic_ids: form.topic_ids,
+      is_featured: form.is_featured,
+      is_recommended: form.is_recommended,
+      recommend_weight: form.recommend_weight,
+    };
+  }
+
   function validateManualSlug(): boolean {
     if (form.slug.trim()) {
       return true;
@@ -400,13 +496,7 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
     setError('');
     setNotice('');
     try {
-      const payload = {
-        title: form.title,
-        slug: form.slug,
-        excerpt: form.excerpt,
-        cover_image_url: form.cover_image_url,
-        content_markdown: form.content_markdown,
-      };
+      const payload = buildPayload();
       const article = articleId
         ? await apiFetch<NewsArticle>(`/api/v1/admin/news/${articleId}`, {
             method: 'PATCH',
@@ -421,6 +511,11 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
         ...current,
         status: article.status,
         published_at: article.published_at,
+        category_id: article.category_id,
+        topic_ids: article.topics.map((topic) => topic.id),
+        is_featured: article.is_featured,
+        is_recommended: article.is_recommended,
+        recommend_weight: article.recommend_weight,
       }));
       if (!articleId) {
         onNavigateToArticle(article.id);
@@ -455,18 +550,17 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
     try {
       const article = await apiFetch<NewsArticle>(`/api/v1/admin/news/${targetId}/publish`, {
         method: 'POST',
-        body: JSON.stringify({
-          title: form.title,
-          slug: form.slug,
-          excerpt: form.excerpt,
-          cover_image_url: form.cover_image_url,
-          content_markdown: form.content_markdown,
-        }),
+        body: JSON.stringify(buildPayload()),
       });
       setForm((current) => ({
         ...current,
         status: article.status,
         published_at: article.published_at,
+        category_id: article.category_id,
+        topic_ids: article.topics.map((topic) => topic.id),
+        is_featured: article.is_featured,
+        is_recommended: article.is_recommended,
+        recommend_weight: article.recommend_weight,
       }));
       if (!articleId) {
         onNavigateToArticle(article.id);
@@ -738,6 +832,80 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
                 onChange={(event) => setForm((current) => ({ ...current, excerpt: event.target.value }))}
                 placeholder="搜索摘要、社交分享摘要与列表摘要共用这段文案。"
               />
+            </Field>
+
+            <Field label="分类与专题">
+              <div className="grid gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+                <select
+                  className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+                  value={form.category_id ?? ''}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setForm((current) => ({ ...current, category_id: value ? Number(value) : null }));
+                  }}
+                >
+                  <option value="">不设置分类</option>
+                  {categories.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
+                <div className="flex flex-wrap gap-2">
+                  {topics.map((item) => {
+                    const checked = form.topic_ids.includes(item.id);
+                    return (
+                      <label
+                        key={item.id}
+                        className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
+                          checked ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-white text-neutral-600'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={checked}
+                          onChange={(event) => {
+                            setForm((current) => ({
+                              ...current,
+                              topic_ids: event.target.checked
+                                ? Array.from(new Set([...current.topic_ids, item.id]))
+                                : current.topic_ids.filter((id) => id !== item.id),
+                            }));
+                          }}
+                        />
+                        {item.name}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+            </Field>
+
+            <Field label="首页推荐">
+              <div className="grid gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 sm:grid-cols-[1fr_1fr_160px]">
+                <label className="inline-flex items-center gap-2 text-sm text-neutral-700">
+                  <input
+                    type="checkbox"
+                    checked={form.is_featured}
+                    onChange={(event) => setForm((current) => ({ ...current, is_featured: event.target.checked }))}
+                  />
+                  设为 News 主打文章
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm text-neutral-700">
+                  <input
+                    type="checkbox"
+                    checked={form.is_recommended}
+                    onChange={(event) => setForm((current) => ({ ...current, is_recommended: event.target.checked }))}
+                  />
+                  进入热门文章
+                </label>
+                <input
+                  className="w-full rounded-xl border border-neutral-200 px-3 py-2 text-sm outline-none focus:border-neutral-400"
+                  type="number"
+                  value={form.recommend_weight}
+                  onChange={(event) => setForm((current) => ({ ...current, recommend_weight: Number(event.target.value || 0) }))}
+                  placeholder="推荐权重"
+                />
+              </div>
             </Field>
 
             <Field

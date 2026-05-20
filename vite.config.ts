@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import type { Plugin } from 'vite';
 import {defineConfig, loadEnv} from 'vite';
+import { DEFAULT_NEWS_CATEGORIES, DEFAULT_NEWS_TOPICS } from './shared/newsTaxonomy';
 import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from './shared/publishTokenDocs';
 import { PUBLIC_SEO_STATIC_LASTMOD } from './shared/publicSeo';
 
@@ -20,6 +21,8 @@ function emitSeoAssets(siteUrl: string): Plugin {
         ['/apply', PUBLIC_SEO_STATIC_LASTMOD],
         ['/risk-monitor', PUBLIC_SEO_STATIC_LASTMOD],
         ['/publish-token-docs', PUBLISH_TOKEN_DOCS_LAST_UPDATED],
+        ...DEFAULT_NEWS_CATEGORIES.map((item) => [`/news/category/${item.slug}`, PUBLIC_SEO_STATIC_LASTMOD] as const),
+        ...DEFAULT_NEWS_TOPICS.map((item) => [`/news/topic/${item.slug}`, PUBLIC_SEO_STATIC_LASTMOD] as const),
       ] as const;
       const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <!-- Dynamic news pages are emitted by the backend sitemap route in production -->
