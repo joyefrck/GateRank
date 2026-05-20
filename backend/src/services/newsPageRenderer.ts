@@ -209,6 +209,47 @@ const sharedStyles = `
     max-width: 13.5em;
     text-wrap: balance;
   }
+  .hero-title a,
+  .feed-card-title a,
+  .news-panel-title,
+  .topic-card-title {
+    display: inline-block;
+    transition: color 160ms ease, transform 160ms ease, text-shadow 160ms ease;
+  }
+  .hero-card:hover .hero-title a,
+  .hero-title a:focus-visible,
+  .feed-card-title a:hover,
+  .feed-card-title a:focus-visible,
+  .news-panel-link:hover .news-panel-title,
+  .news-panel-link:focus-visible .news-panel-title {
+    color: var(--accent);
+    transform: translateY(-2px);
+    text-shadow: 0 10px 24px rgba(201,58,46,0.16);
+  }
+  .topic-card:hover .topic-card-title,
+  .topic-card:focus-visible .topic-card-title {
+    color: var(--topic-accent, var(--accent));
+    transform: translateY(-2px);
+    text-shadow: 0 10px 24px rgba(17,17,17,0.12);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .hero-title a,
+    .feed-card-title a,
+    .news-panel-title,
+    .topic-card-title {
+      transition: color 120ms ease, text-shadow 120ms ease;
+    }
+    .hero-card:hover .hero-title a,
+    .hero-title a:focus-visible,
+    .feed-card-title a:hover,
+    .feed-card-title a:focus-visible,
+    .news-panel-link:hover .news-panel-title,
+    .news-panel-link:focus-visible .news-panel-title,
+    .topic-card:hover .topic-card-title,
+    .topic-card:focus-visible .topic-card-title {
+      transform: none;
+    }
+  }
   .hero-summary {
     max-width: 50ch;
     font-size: 16px;
@@ -622,24 +663,65 @@ const sharedStyles = `
     gap: 14px;
   }
   .topic-card {
+    position: relative;
+    overflow: hidden;
     min-height: 166px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
     gap: 18px;
-    border: 1px solid rgba(17,17,17,0.12);
+    border: 1px solid rgba(17,17,17,0.10);
     border-radius: 18px;
-    padding: 20px;
-    background: #ffffff;
+    padding: 22px;
+    background:
+      linear-gradient(135deg, var(--topic-soft, rgba(17,17,17,0.04)) 0%, #fff 48%, #fff 100%);
+    box-shadow: 0 18px 44px rgba(17,17,17,0.04);
+    transition: transform 180ms ease, border-color 180ms ease, box-shadow 180ms ease;
+  }
+  .topic-card::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 5px;
+    background: var(--topic-accent, #111);
+  }
+  .topic-card::after {
+    content: "";
+    position: absolute;
+    right: 22px;
+    top: 20px;
+    width: 58px;
+    height: 58px;
+    border-radius: 18px;
+    background: var(--topic-accent, #111);
+    opacity: 0.10;
+    transform: rotate(10deg);
+  }
+  .topic-card:hover {
+    transform: translateY(-3px);
+    border-color: rgba(17,17,17,0.20);
+    box-shadow: 0 22px 52px rgba(17,17,17,0.09);
+  }
+  .topic-card:nth-child(1) { --topic-accent: #d43d31; --topic-soft: rgba(212,61,49,0.10); }
+  .topic-card:nth-child(2) { --topic-accent: #0f766e; --topic-soft: rgba(15,118,110,0.10); }
+  .topic-card:nth-child(3) { --topic-accent: #2563eb; --topic-soft: rgba(37,99,235,0.10); }
+  .topic-card:nth-child(4) { --topic-accent: #16a34a; --topic-soft: rgba(22,163,74,0.10); }
+  .topic-card:nth-child(5) { --topic-accent: #b45309; --topic-soft: rgba(180,83,9,0.11); }
+  .topic-card:nth-child(6) { --topic-accent: #7c3aed; --topic-soft: rgba(124,58,237,0.10); }
+  .topic-card > * {
+    position: relative;
+    z-index: 1;
   }
   .topic-card-index {
-    color: rgba(17,17,17,0.42);
+    color: var(--topic-accent, rgba(17,17,17,0.42));
     font-weight: 900;
-    font-size: 14px;
+    font-size: 15px;
+    letter-spacing: 0;
   }
   .topic-card-title {
     margin: 0;
-    font-size: 18px;
+    max-width: 82%;
+    font-size: 19px;
     line-height: 1.25;
     font-weight: 900;
   }
@@ -648,6 +730,20 @@ const sharedStyles = `
     color: rgba(17,17,17,0.62);
     font-size: 13px;
     line-height: 1.55;
+  }
+  .topic-card .news-taxonomy-chip {
+    align-self: stretch;
+    justify-content: space-between;
+    border: 0;
+    border-radius: 999px;
+    padding: 11px 14px 11px 16px;
+    background: var(--topic-accent, #111);
+    color: #fff;
+    box-shadow: 0 12px 26px rgba(17,17,17,0.12);
+  }
+  .topic-card .news-taxonomy-chip::after {
+    content: "->";
+    font-weight: 900;
   }
   .news-content-grid {
     margin-top: 44px;
@@ -1168,7 +1264,7 @@ function renderHeroCard(featured: PublicNewsArticleView | PublicNewsListView['fe
       <div class="hero-copy">
         <div>
           <div class="eyebrow">Featured Story</div>
-          <h2 class="hero-title">${escapeHtml(featured.title)}</h2>
+          <h2 class="hero-title"><a href="/news/${escapeAttribute(featured.slug)}">${escapeHtml(featured.title)}</a></h2>
           <p class="hero-summary">${escapeHtml(featured.excerpt)}</p>
           <div class="article-taxonomy">
             ${featured.category ? `<a class="news-taxonomy-chip" href="/news/category/${escapeAttribute(featured.category.slug)}">${escapeHtml(featured.category.name)}</a>` : ''}
