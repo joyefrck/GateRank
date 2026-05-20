@@ -239,7 +239,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /下载速率为 320 Mbps/);
     assert.match(okHtml, /月付支持/);
     assert.match(okHtml, /年付支持/);
-    assert.match(okHtml, /香港 IEPL 原生IP/);
+    assert.match(okHtml, /香港 6节点 IEPL 原生IP/);
     assert.match(okHtml, /Clash、Shadowrocket/);
     assert.match(okHtml, /Telegram 群支持/);
     assert.match(okHtml, /群人数 1,200 人/);
@@ -250,7 +250,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /#1677FF/);
     assert.match(okHtml, /Telegram 群组/);
     assert.match(okHtml, /#26A5E4/);
-    assert.match(okHtml, /香港 · IEPL/);
+    assert.match(okHtml, /香港 · 6 节点 · IEPL/);
     assert.match(okHtml, /🇭🇰/);
     assert.match(okHtml, /评分拆解/);
     assert.match(okHtml, /核心监测指标/);
@@ -277,7 +277,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /"name":"官网探测扣分","value":"0"/);
     assert.match(okHtml, /"name":"SSL扣分","value":"0"/);
     assert.match(okHtml, /"name":"套餐信息","value":"月付支持/);
-    assert.match(okHtml, /"name":"节点地区","value":"香港 IEPL 原生IP"/);
+    assert.match(okHtml, /"name":"节点地区","value":"香港 6节点 IEPL 原生IP"/);
     assert.match(okHtml, /"name":"客户端支持","value":"Clash、Shadowrocket"/);
     assert.match(okHtml, /"name":"售后支持","value":"Telegram 群支持/);
     assert.match(okHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/airports\/nebula"/);
@@ -541,6 +541,7 @@ const reportView: ReportView = {
       {
         key: 'hong_kong',
         label: '香港',
+        node_count: 6,
         line_types: ['IEPL'],
         has_residential: false,
         has_native_ip: true,

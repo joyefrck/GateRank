@@ -84,6 +84,7 @@ export interface PublicReportSeoView {
     regions: Array<{
       key: string;
       label: string;
+      node_count: number;
       line_types: string[];
       has_residential: boolean | null;
       has_native_ip: boolean | null;
@@ -517,10 +518,11 @@ function buildRegionSummaryText(view: PublicReportSeoView): string {
     return '节点地区未收录';
   }
   const labels = regions.slice(0, 5).map((region) => {
+    const nodeCount = region.node_count > 0 ? ` ${region.node_count}节点` : '';
     const lineTypes = region.line_types.length > 0 ? ` ${region.line_types.join('/')}` : '';
     const nativeIp = region.has_native_ip ? ' 原生IP' : '';
     const residential = region.has_residential ? ' 家宽' : '';
-    return `${region.label}${lineTypes}${nativeIp}${residential}`;
+    return `${region.label}${nodeCount}${lineTypes}${nativeIp}${residential}`;
   });
   return `${labels.join('、')}${regions.length > 5 ? `等 ${regions.length} 个地区` : ''}`;
 }

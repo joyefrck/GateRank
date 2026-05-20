@@ -420,12 +420,23 @@ function renderRegionGroup(view: ReportView): string {
       <h3>节点覆盖</h3>
       <div class="capability-list">
         ${regions.length > 0
-          ? regions.map((region) => renderCapabilityLine(region, 'region', `${region.label}${region.line_types.length > 0 ? ` · ${region.line_types.join('/')}` : ''}`)).join('')
+          ? regions.map((region) => renderCapabilityLine(region, 'region', formatReportRegionLabel(region))).join('')
           : '<p class="muted">未收录</p>'}
       </div>
       ${view.capabilities.regions.length > 5 ? `<div class="capability-footnote">另有 ${view.capabilities.regions.length - 5} 个地区</div>` : ''}
     </article>
   `;
+}
+
+function formatReportRegionLabel(region: ReportView['capabilities']['regions'][number]): string {
+  const parts = [region.label];
+  if (region.node_count > 0) {
+    parts.push(`${region.node_count} 节点`);
+  }
+  if (region.line_types.length > 0) {
+    parts.push(region.line_types.join('/'));
+  }
+  return parts.join(' · ');
 }
 
 function renderScoreMetric(label: string, value: number, tone: string): string {

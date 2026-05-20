@@ -383,6 +383,7 @@ export interface ReportCapabilityItem {
 export interface ReportCapabilityRegion {
   key: string;
   label: string;
+  node_count: number;
   line_types: string[];
   has_residential: boolean | null;
   has_native_ip: boolean | null;

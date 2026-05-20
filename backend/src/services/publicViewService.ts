@@ -14,6 +14,7 @@ import type {
   RiskMonitorView,
   ScoreDetailValue,
   ScoreDeltaView,
+  SubscriptionNodeSnapshot,
 } from '../types/domain';
 import {
   dateDaysAgo,
@@ -153,6 +154,9 @@ interface PublicViewDeps {
       realtime_tests: number;
       latest_data_at: string | null;
     }>;
+  };
+  subscriptionNodeSnapshotRepository?: {
+    getLatestByAirport(airportId: number): Promise<SubscriptionNodeSnapshot | null>;
   };
 }
 
@@ -404,7 +408,10 @@ export class PublicViewService {
       return null;
     }
 
-    const rawRanking = await this.deps.rankingRepository.getRanksForAirport(airportId, resolvedDate);
+    const [rawRanking, nodeSnapshot] = await Promise.all([
+      this.deps.rankingRepository.getRanksForAirport(airportId, resolvedDate),
+      this.deps.subscriptionNodeSnapshotRepository?.getLatestByAirport(airportId) ?? Promise.resolve(null),
+    ]);
     const todayRank = rawRanking.today ?? (await this.getTodayPickRankFromPublicRanking(airportId, resolvedDate));
     const ranking = {
       ...rawRanking,
@@ -479,7 +486,7 @@ export class PublicViewService {
           .filter((row) => typeof row.median_download_mbps === 'number')
           .map((row) => ({ date: row.date, value: round2(row.median_download_mbps) })),
       },
-      capabilities: buildReportCapabilities(base.airport),
+      capabilities: buildReportCapabilities(base.airport, nodeSnapshot),
     };
   }
 
@@ -819,6 +826,20 @@ const REGION_LABELS: Record<string, string> = {
   india: '印度',
 };
 
+const REGION_ALIASES: Record<string, string[]> = {
+  hong_kong: ['hong_kong', 'hong kong', 'hk', '香港'],
+  taiwan: ['taiwan', 'tw', '台湾', '臺灣'],
+  japan: ['japan', 'jp', '日本'],
+  singapore: ['singapore', 'sg', '新加坡'],
+  united_states: ['united_states', 'united states', 'us', 'usa', '美国', '美國'],
+  south_korea: ['south_korea', 'south korea', 'kr', 'korea', 'seoul', '韩国', '韓國', '首尔', '首爾'],
+  united_kingdom: ['united_kingdom', 'united kingdom', 'uk', 'gb', 'england', 'london', '英国', '英國', '伦敦', '倫敦'],
+  germany: ['germany', 'de', '德国', '德國'],
+  turkey: ['turkey', 'tr', '土耳其'],
+  argentina: ['argentina', 'ar', '阿根廷'],
+  india: ['india', 'in', '印度'],
+};
+
 const LINE_TYPE_LABELS: Record<string, string> = {
   iepl: 'IEPL',
   iplc: 'IPLC',
@@ -827,10 +848,11 @@ const LINE_TYPE_LABELS: Record<string, string> = {
   relay: '中转',
 };
 
-function buildReportCapabilities(airport: Airport): ReportCapabilities {
+function buildReportCapabilities(airport: Airport, nodeSnapshot: SubscriptionNodeSnapshot | null = null): ReportCapabilities {
   const profile = airport.profile;
   const plan = profile?.plan;
   const telegram = profile?.telegram;
+  const regionNodeCounts = buildRegionNodeCounts(nodeSnapshot);
   return {
     plan: {
       supports_monthly: plan?.supports_monthly ?? null,
@@ -858,7 +880,7 @@ function buildReportCapabilities(airport: Airport): ReportCapabilities {
     },
     clients: toCapabilityItemsFromBooleanMap(profile?.clients, CLIENT_LABELS),
     import_methods: toCapabilityItemsFromBooleanMap(profile?.import_methods, IMPORT_METHOD_LABELS),
-    regions: buildRegionCapabilities(profile?.regions),
+    regions: buildRegionCapabilities(profile?.regions, regionNodeCounts),
   };
 }
 
@@ -904,31 +926,65 @@ function buildTelegramCapabilityItems(airport: Airport): ReportCapabilities['tel
 
 function buildRegionCapabilities(
   values: Record<string, { line_types?: string[]; has_residential?: boolean | null; has_native_ip?: boolean | null }> | undefined,
+  nodeCounts: Record<string, number> = {},
 ): ReportCapabilities['regions'] {
-  if (!values) {
-    return [];
-  }
+  const source = values || {};
   return Object.entries(REGION_LABELS)
     .map(([key, label]) => {
-      const region = values[key as keyof typeof values];
-      if (!region) {
+      const region = source[key as keyof typeof source];
+      const nodeCount = nodeCounts[key] || 0;
+      if (!region && nodeCount <= 0) {
         return null;
       }
-      const lineTypes = Array.isArray(region.line_types)
+      const lineTypes = Array.isArray(region?.line_types)
         ? region.line_types.map((type) => LINE_TYPE_LABELS[type] || type)
         : [];
-      if (region.has_residential !== true && region.has_native_ip !== true && lineTypes.length === 0) {
+      if (region?.has_residential !== true && region?.has_native_ip !== true && lineTypes.length === 0 && nodeCount <= 0) {
         return null;
       }
       return {
         key,
         label,
+        node_count: nodeCount,
         line_types: lineTypes,
-        has_residential: region.has_residential,
-        has_native_ip: region.has_native_ip,
+        has_residential: region?.has_residential ?? null,
+        has_native_ip: region?.has_native_ip ?? null,
       };
     })
     .filter((item): item is ReportCapabilities['regions'][number] => item !== null);
+}
+
+function buildRegionNodeCounts(snapshot: SubscriptionNodeSnapshot | null): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const node of snapshot?.nodes || []) {
+    const key = normalizeReportRegionKey(node.region || node.name);
+    if (key) {
+      counts[key] = (counts[key] || 0) + 1;
+    }
+  }
+  return counts;
+}
+
+function normalizeReportRegionKey(value: string | null | undefined): string | null {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (!normalized) {
+    return null;
+  }
+  return Object.entries(REGION_ALIASES).find(([, aliases]) => (
+    aliases.some((alias) => matchesReportRegionAlias(normalized, alias))
+  ))?.[0] || null;
+}
+
+function matchesReportRegionAlias(normalizedValue: string, alias: string): boolean {
+  const normalizedAlias = alias.toLowerCase();
+  if (normalizedAlias.length <= 3 && /^[a-z0-9]+$/.test(normalizedAlias)) {
+    return new RegExp(`(^|[^a-z])${escapeRegExp(normalizedAlias)}($|[^a-z])`).test(normalizedValue);
+  }
+  return normalizedValue.includes(normalizedAlias);
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function mergeHomeSectionItems(limit: number, ...groups: PublicCardItem[][]): PublicCardItem[] {

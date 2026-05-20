@@ -1957,8 +1957,8 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
     ['一键导入', '订阅链接', '教程支持'],
   );
   assert.deepEqual(
-    result.capabilities.regions.map((item) => [item.label, item.line_types]),
-    [['香港', ['IEPL']], ['日本', ['BGP']]],
+    result.capabilities.regions.map((item) => [item.label, item.node_count, item.line_types]),
+    [['香港', 0, ['IEPL']], ['日本', 0, ['BGP']]],
   );
   assert.equal(result.capabilities.plan.supports_monthly, true);
   assert.equal(result.capabilities.plan.supports_quarterly, false);
@@ -1975,6 +1975,137 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
   assert.equal(result.capabilities.telegram.has_customer_service_bot, true);
   assert.equal(result.capabilities.telegram.has_ticket_system, false);
   assert.equal(result.capabilities.telegram.group_member_count, 1600);
+});
+
+test('PublicViewService.getReportView includes latest snapshot node counts as region coverage', async () => {
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => ({
+        id: 1,
+        name: 'Alpha',
+        website: 'https://alpha.example.com',
+        status: 'normal' as const,
+        is_listed: true,
+        plan_price_month: 12,
+        has_trial: true,
+        streaming_support: [],
+        payment_methods: [],
+        profile: {
+          plan: {
+            supports_monthly: null,
+            supports_quarterly: null,
+            supports_half_yearly: null,
+            supports_annual: null,
+            lowest_monthly_price: null,
+            lowest_annual_monthly_price: null,
+            has_trial_plan: null,
+            has_lifetime_plan: null,
+          },
+          telegram: {
+            has_group: null,
+            group_url: null,
+            has_channel: null,
+            channel_url: null,
+            has_customer_service_bot: null,
+            has_ticket_system: null,
+            group_allows_speaking: null,
+            group_member_count: null,
+            recent_active_at: null,
+          },
+          clients: {},
+          import_methods: {},
+          regions: {
+            hong_kong: { has_residential: null, has_native_ip: null, line_types: [] },
+            singapore: { has_residential: null, has_native_ip: null, line_types: [] },
+            united_states: { has_residential: null, has_native_ip: null, line_types: [] },
+          },
+        } as any,
+        tags: ['稳定'],
+        created_at: '2026-01-20',
+      }),
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 30,
+        domain_ok: true,
+        ssl_days_left: 90,
+        recent_complaints_count: 0,
+        history_incidents: 0,
+      }),
+      getTrend: async () => [],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-03-24',
+        s: 82,
+        p: 76,
+        c: 70,
+        r: 100,
+        risk_penalty: 0,
+        score: 80,
+        recent_score: 80,
+        historical_score: 78,
+        final_score: 79,
+        details: { total_score: 83 },
+      }),
+      getPublicDisplayScoreByAirportAndDate: async () => 80,
+      getTrend: async () => [],
+      getPublicFullRankingByDate: async () => ({ total: 1, items: [] }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 1,
+        realtime_tests: 8,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+    subscriptionNodeSnapshotRepository: {
+      getLatestByAirport: async () => ({
+        id: 99,
+        airport_id: 1,
+        captured_at: '2026-03-24T09:00:00+08:00',
+        source: 'test',
+        subscription_url: null,
+        subscription_format: 'clash_yaml',
+        parsed_nodes_count: 5,
+        supported_nodes_count: 5,
+        nodes: [
+          { name: 'HK-1', region: 'HK', type: 'vless', outbound: {}, raw_uri: '' },
+          { name: '香港 2', region: null, type: 'vless', outbound: {}, raw_uri: '' },
+          { name: 'SG-1', region: 'SG', type: 'vless', outbound: {}, raw_uri: '' },
+          { name: 'US-1', region: 'US', type: 'vless', outbound: {}, raw_uri: '' },
+          { name: 'Unknown-1', region: 'Mars', type: 'vless', outbound: {}, raw_uri: '' },
+        ],
+        unsupported_nodes: [],
+        created_at: '2026-03-24T09:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getReportView(1, '2026-03-24');
+
+  assert.ok(result);
+  assert.deepEqual(
+    result.capabilities.regions.map((item) => [item.key, item.label, item.node_count, item.line_types]),
+    [
+      ['hong_kong', '香港', 2, []],
+      ['singapore', '新加坡', 1, []],
+      ['united_states', '美国', 1, []],
+    ],
+  );
 });
 
 test('PublicViewService.getReportView derives today pick rank from public full ranking preview', async () => {

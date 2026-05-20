@@ -178,6 +178,7 @@ export async function createApp() {
     scoreRepository,
     rankingRepository,
     statsRepository,
+    subscriptionNodeSnapshotRepository,
   });
   const newsContentService = new NewsContentService();
   const newsCoverImageService = new NewsCoverImageService();

@@ -278,6 +278,7 @@ interface ReportViewResponse {
     regions: Array<{
       key: string;
       label: string;
+      node_count: number;
       line_types: string[];
       has_residential: boolean | null;
       has_native_ip: boolean | null;
@@ -774,11 +775,11 @@ const ConclusionCard = ({
   const primaryButtonText = isHomeCompact ? '查看报告' : '查看完整报告';
   const websiteButtonText = isHomeCompact ? '官网' : '打开官网';
   const primaryButtonClass = isHomeCompact
-    ? 'w-full min-h-10 px-3 py-2 rounded-lg bg-neutral-900 text-white text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 hover:bg-neutral-800 transition-colors whitespace-nowrap'
-    : 'w-full min-h-11 px-4 py-3 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 hover:bg-neutral-800 transition-colors mt-auto relative z-10';
+    ? 'w-full min-h-12 px-4 py-2.5 rounded-lg bg-neutral-900 text-white text-sm md:text-[15px] leading-none font-black uppercase tracking-[0.08em] flex items-center justify-center gap-2 hover:bg-neutral-800 transition-colors whitespace-nowrap cursor-pointer'
+    : 'w-full min-h-11 px-4 py-3 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 hover:bg-neutral-800 transition-colors mt-auto relative z-10 cursor-pointer';
   const websiteButtonClass = isHomeCompact
-    ? 'w-full min-h-10 px-3 py-2 rounded-lg bg-neutral-900 text-white text-[10px] md:text-[11px] font-black uppercase tracking-[0.12em] flex items-center justify-center gap-1.5 hover:bg-neutral-800 transition-colors whitespace-nowrap'
-    : 'w-full min-h-11 mt-3 px-4 py-3 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 shadow-[0_14px_32px_rgba(17,17,17,0.18)] hover:bg-neutral-800 transition-colors relative z-10';
+    ? 'w-full min-h-12 px-4 py-2.5 rounded-lg bg-neutral-900 text-white text-sm md:text-[15px] leading-none font-black uppercase tracking-[0.08em] flex items-center justify-center gap-2 hover:bg-neutral-800 transition-colors whitespace-nowrap cursor-pointer'
+    : 'w-full min-h-11 mt-3 px-4 py-3 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 shadow-[0_14px_32px_rgba(17,17,17,0.18)] hover:bg-neutral-800 transition-colors relative z-10 cursor-pointer';
 
   return (
     <motion.div
@@ -856,6 +857,7 @@ const ConclusionCard = ({
         <button
           type="button"
           className={primaryButtonClass}
+          style={primaryCtaTextStyle}
           onClick={onOpen}
         >
           {primaryButtonText}
@@ -3216,7 +3218,8 @@ function ReportHeroV2({ data }: { data: ReportViewResponse }) {
               targetKind: 'website',
               targetUrl: data.airport.website,
             })}
-            className="inline-flex min-h-11 items-center gap-2 rounded-[8px] bg-slate-950 px-5 text-sm font-black text-white shadow-sm transition hover:bg-slate-800"
+            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[8px] bg-slate-950 px-5 text-sm font-black text-white shadow-sm transition hover:bg-slate-800"
+            style={primaryCtaTextStyle}
           >
             访问官网
             <ExternalLink className="h-4 w-4" />
@@ -3561,13 +3564,24 @@ function ReportRegionGroup({ regions, className = '' }: { regions: ReportViewRes
             key={region.key}
             capabilityKey={region.key}
             category="region"
-            label={`${region.label}${region.line_types.length > 0 ? ` · ${region.line_types.join('/')}` : ''}`}
+            label={formatReportRegionLabel(region)}
           />
         )) : <EmptyCapabilityLine />}
       </div>
       {regions.length > 5 ? <div className="mt-3 text-xs font-bold text-slate-400">另有 {regions.length - 5} 个地区</div> : null}
     </div>
   );
+}
+
+function formatReportRegionLabel(region: ReportViewResponse['capabilities']['regions'][number]): string {
+  const parts = [region.label];
+  if (region.node_count > 0) {
+    parts.push(`${region.node_count} 节点`);
+  }
+  if (region.line_types.length > 0) {
+    parts.push(region.line_types.join('/'));
+  }
+  return parts.join(' · ');
 }
 
 function CapabilityIcon({ capabilityKey, category }: { capabilityKey: string; category: CapabilityIconCategory }) {
