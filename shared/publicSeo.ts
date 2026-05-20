@@ -32,6 +32,10 @@ export interface PublicReportSeoView {
     r: number;
     final_score: number;
     risk_penalty: number;
+    domain_penalty: number;
+    ssl_penalty: number;
+    complaint_penalty: number;
+    history_penalty: number;
   };
   metrics: {
     uptime_percent_30d: number;
@@ -50,11 +54,57 @@ export interface PublicReportSeoView {
     latency_30d: Array<{ date: string; value: number }>;
     download_30d: Array<{ date: string; value: number }>;
   };
+  capabilities: {
+    plan: {
+      supports_monthly: boolean | null;
+      supports_quarterly: boolean | null;
+      supports_half_yearly: boolean | null;
+      supports_annual: boolean | null;
+      lowest_monthly_price: number | null;
+      lowest_annual_monthly_price: number | null;
+      has_trial_plan: boolean | null;
+      has_lifetime_plan: boolean | null;
+    };
+    streaming: Array<{ key: string; label: string }>;
+    payment_methods: Array<{ key: string; label: string }>;
+    telegram: {
+      items: Array<{ key: string; label: string }>;
+      has_group: boolean | null;
+      group_url: string | null;
+      has_channel: boolean | null;
+      channel_url: string | null;
+      group_allows_speaking: boolean | null;
+      group_member_count: number | null;
+      recent_active_at: string | null;
+      has_customer_service_bot: boolean | null;
+      has_ticket_system: boolean | null;
+    };
+    clients: Array<{ key: string; label: string }>;
+    import_methods: Array<{ key: string; label: string }>;
+    regions: Array<{
+      key: string;
+      label: string;
+      line_types: string[];
+      has_residential: boolean | null;
+      has_native_ip: boolean | null;
+    }>;
+  };
 }
 
 export interface PublicReportFaqItem {
   question: string;
   answer: string;
+}
+
+export interface PublicReportContentSection {
+  title: string;
+  body: string;
+  facts: string[];
+}
+
+export interface PublicReportContentSummary {
+  body: string;
+  chips: string[];
 }
 
 export const PUBLIC_SEO_PATHS = {
@@ -165,6 +215,9 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
   const airportName = view.airport.name;
   const statusLabel = formatAirportStatusLabel(view.airport.status);
   const riskAnswer = buildReportRiskAnswer(view);
+  const planText = buildPlanSummaryText(view);
+  const regionText = buildRegionSummaryText(view);
+  const clientText = buildListSummary(view.capabilities.clients, '客户端未收录');
 
   return [
     {
@@ -183,7 +236,117 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
       question: `${airportName}跑路风险高吗？`,
       answer: riskAnswer,
     },
+    {
+      question: `${airportName}适合长期使用吗？`,
+      answer: `${airportName} 当前分数为 ${formatMetric(view.summary_card.score)}，稳定性评级为${formatStabilityTierLabel(view.metrics.stability_tier)}，健康记录 ${view.metrics.healthy_days_streak} 天。是否长期使用仍建议结合官网可达性、30 天趋势、套餐价格和风险扣分一起判断。`,
+    },
+    {
+      question: `${airportName}风险主要来自哪里？`,
+      answer: `${airportName} 当前风险惩罚为 ${formatMetric(view.score_breakdown.risk_penalty)}，其中官网探测扣分 ${formatMetric(view.score_breakdown.domain_penalty)}、SSL 扣分 ${formatMetric(view.score_breakdown.ssl_penalty)}、投诉扣分 ${formatMetric(view.score_breakdown.complaint_penalty)}、历史异常扣分 ${formatMetric(view.score_breakdown.history_penalty)}。`,
+    },
+    {
+      question: `${airportName}支持哪些套餐、客户端和地区？`,
+      answer: `${airportName} 套餐情况：${planText}。客户端支持：${clientText}。节点覆盖：${regionText}。`,
+    },
   ];
+}
+
+export function buildReportContentSections(view: PublicReportSeoView): PublicReportContentSection[] {
+  const airportName = view.airport.name;
+  const statusLabel = formatAirportStatusLabel(view.airport.status);
+  const score = formatMetric(view.summary_card.score);
+  const trendText = buildReportTrendText(view);
+  const scoreDeltaText = buildTrendDeltaText(view.trends.score_30d, '分');
+  const uptimeTrendText = buildTrendDeltaText(view.trends.uptime_30d, '个百分点');
+  const latencyTrendText = buildTrendDeltaText(view.trends.latency_30d, ' ms');
+  const downloadTrendText = buildTrendDeltaText(view.trends.download_30d, ' Mbps');
+  const planText = buildPlanSummaryText(view);
+  const regionText = buildRegionSummaryText(view);
+  const clientText = buildListSummary(view.capabilities.clients, '客户端未收录');
+  const streamingText = buildListSummary(view.capabilities.streaming, '解锁能力未收录');
+  const importText = buildListSummary(view.capabilities.import_methods, '导入方式未收录');
+  const paymentText = buildListSummary(view.capabilities.payment_methods, '支付方式未收录');
+  const telegramText = buildTelegramSummaryText(view);
+
+  return [
+    {
+      title: '综合结论',
+      body: `${airportName} 当前 GateRank 公开分数为 ${score}/100，状态为${statusLabel}。本页把 ${airportName} 机场测评拆成评分、风险、稳定性、性能、套餐、节点和售后信息，适合在选择机场 VPN 前做事实核对。${view.summary_card.conclusion}`,
+      facts: [
+        `数据日期 ${view.date}`,
+        `30 天趋势${trendText.replace(/^30 天趋势/, '') || '持平'}`,
+        `综合评级 ${buildScoreGradeText(view.summary_card.score)}`,
+      ],
+    },
+    {
+      title: '风险解读',
+      body: `${airportName} 当前风险惩罚为 ${formatMetric(view.score_breakdown.risk_penalty)}，风险维度得分 R=${formatMetric(view.score_breakdown.r)}。细分来看，官网探测扣分 ${formatMetric(view.score_breakdown.domain_penalty)}，SSL 扣分 ${formatMetric(view.score_breakdown.ssl_penalty)}，投诉扣分 ${formatMetric(view.score_breakdown.complaint_penalty)}，历史异常扣分 ${formatMetric(view.score_breakdown.history_penalty)}；近期投诉 ${view.metrics.recent_complaints_count} 条，历史异常 ${view.metrics.history_incidents} 次。`,
+      facts: [
+        `状态 ${statusLabel}`,
+        `风险惩罚 ${formatMetric(view.score_breakdown.risk_penalty)}`,
+        `官网探测扣分 ${formatMetric(view.score_breakdown.domain_penalty)}`,
+        `SSL 扣分 ${formatMetric(view.score_breakdown.ssl_penalty)}`,
+      ],
+    },
+    {
+      title: '稳定性与性能',
+      body: `${airportName} 近 30 天可用率为 ${formatMetric(view.metrics.uptime_percent_30d)}%，稳定性评级为${formatStabilityTierLabel(view.metrics.stability_tier)}，健康记录 ${view.metrics.healthy_days_streak} 天。性能侧的中位延迟为 ${formatMetric(view.metrics.median_latency_ms)} ms，下载速率为 ${formatMetric(view.metrics.median_download_mbps)} Mbps，丢包率为 ${formatMetric(view.metrics.packet_loss_percent)}%。趋势上，评分${scoreDeltaText}，可用率${uptimeTrendText}，延迟${latencyTrendText}，下载${downloadTrendText}。`,
+      facts: [
+        `30 天可用率 ${formatMetric(view.metrics.uptime_percent_30d)}%`,
+        `中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms`,
+        `下载速率 ${formatMetric(view.metrics.median_download_mbps)} Mbps`,
+        `丢包率 ${formatMetric(view.metrics.packet_loss_percent)}%`,
+      ],
+    },
+    {
+      title: '套餐与试用',
+      body: `${airportName} 的套餐信息显示：${planText}。最低月付价格为 ${formatOptionalCurrencyText(view.capabilities.plan.lowest_monthly_price)}，最低年付折算月价为 ${formatOptionalCurrencyText(view.capabilities.plan.lowest_annual_monthly_price)}，支付方式当前记录为 ${paymentText}。`,
+      facts: [
+        `月付 ${formatNullableSupportText(view.capabilities.plan.supports_monthly)}`,
+        `年付 ${formatNullableSupportText(view.capabilities.plan.supports_annual)}`,
+        `试用 ${formatNullableSupportText(view.capabilities.plan.has_trial_plan)}`,
+        `支付方式 ${paymentText}`,
+      ],
+    },
+    {
+      title: '节点、客户端与解锁',
+      body: `${airportName} 当前节点覆盖记录为 ${regionText}。客户端支持记录为 ${clientText}，导入方式为 ${importText}，解锁能力包括 ${streamingText}。这些信息用于判断日常使用、跨区访问和新手配置成本，不代表所有节点在任意时间都保持同等表现。`,
+      facts: [
+        `地区 ${regionText}`,
+        `客户端 ${clientText}`,
+        `导入 ${importText}`,
+        `解锁 ${streamingText}`,
+      ],
+    },
+    {
+      title: 'Telegram 与售后',
+      body: `${airportName} 的售后与社区记录显示：${telegramText}。如果准备购买或续费，建议先核对官网入口、Telegram 活跃度、订阅可用性和本页风险记录，再决定是否长期使用。`,
+      facts: [
+        `Telegram 群 ${formatNullableSupportText(view.capabilities.telegram.has_group)}`,
+        `Telegram 频道 ${formatNullableSupportText(view.capabilities.telegram.has_channel)}`,
+        `客服 Bot ${formatNullableSupportText(view.capabilities.telegram.has_customer_service_bot)}`,
+        `工单系统 ${formatNullableSupportText(view.capabilities.telegram.has_ticket_system)}`,
+      ],
+    },
+  ];
+}
+
+export function buildReportContentSummary(view: PublicReportSeoView): PublicReportContentSummary {
+  const airportName = view.airport.name;
+  const statusLabel = formatAirportStatusLabel(view.airport.status);
+  return {
+    body: `${airportName} 当前公开分数 ${formatMetric(view.summary_card.score)}/100，状态为${statusLabel}。本页汇总风险、稳定性、性能、套餐、节点和售后事实；详细解读已折叠保留，可展开核对。`,
+    chips: [
+      `分数 ${formatMetric(view.summary_card.score)}`,
+      `状态 ${statusLabel}`,
+      `风险惩罚 ${formatMetric(view.score_breakdown.risk_penalty)}`,
+      `官网扣分 ${formatMetric(view.score_breakdown.domain_penalty)}`,
+      `SSL 扣分 ${formatMetric(view.score_breakdown.ssl_penalty)}`,
+      `30 天可用率 ${formatMetric(view.metrics.uptime_percent_30d)}%`,
+      `中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms`,
+      `试用 ${formatNullableSupportText(view.capabilities.plan.has_trial_plan)}`,
+    ],
+  };
 }
 
 export function buildReportStructuredData(
@@ -210,11 +373,22 @@ export function buildReportStructuredData(
           buildPropertyValue('数据日期', view.date),
           buildPropertyValue('30天可用率', `${formatMetric(view.metrics.uptime_percent_30d)}%`),
           buildPropertyValue('风险惩罚', formatMetric(view.score_breakdown.risk_penalty)),
+          buildPropertyValue('官网探测扣分', formatMetric(view.score_breakdown.domain_penalty)),
+          buildPropertyValue('SSL扣分', formatMetric(view.score_breakdown.ssl_penalty)),
+          buildPropertyValue('投诉扣分', formatMetric(view.score_breakdown.complaint_penalty)),
+          buildPropertyValue('历史异常扣分', formatMetric(view.score_breakdown.history_penalty)),
+          buildPropertyValue('稳定性评级', formatStabilityTierLabel(view.metrics.stability_tier)),
+          buildPropertyValue('中位延迟', `${formatMetric(view.metrics.median_latency_ms)} ms`),
+          buildPropertyValue('下载速率', `${formatMetric(view.metrics.median_download_mbps)} Mbps`),
+          buildPropertyValue('套餐信息', buildPlanSummaryText(view)),
+          buildPropertyValue('节点地区', buildRegionSummaryText(view)),
+          buildPropertyValue('客户端支持', buildListSummary(view.capabilities.clients, '客户端未收录')),
+          buildPropertyValue('售后支持', buildTelegramSummaryText(view)),
         ],
       },
     },
     buildBreadcrumbJsonLd(siteUrl, [
-      ['今日推荐', '/'],
+      ['首页', '/'],
       [view.airport.name, canonicalPath],
     ]),
     buildReportRankingItemList(siteUrl, view),
@@ -313,6 +487,102 @@ export function formatAirportStatusLabel(status: string): string {
 
 export function formatMetric(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function buildListSummary(items: Array<{ label: string }>, emptyLabel: string, limit = 6): string {
+  if (items.length === 0) {
+    return emptyLabel;
+  }
+  const labels = items.slice(0, limit).map((item) => item.label);
+  const suffix = items.length > limit ? `等 ${items.length} 项` : '';
+  return `${labels.join('、')}${suffix}`;
+}
+
+function buildPlanSummaryText(view: PublicReportSeoView): string {
+  const plan = view.capabilities.plan;
+  const parts = [
+    `月付${formatNullableSupportText(plan.supports_monthly)}`,
+    `季付${formatNullableSupportText(plan.supports_quarterly)}`,
+    `半年付${formatNullableSupportText(plan.supports_half_yearly)}`,
+    `年付${formatNullableSupportText(plan.supports_annual)}`,
+    `试用${formatNullableSupportText(plan.has_trial_plan)}`,
+    `不限时套餐${formatNullableSupportText(plan.has_lifetime_plan)}`,
+  ];
+  return parts.join('，');
+}
+
+function buildRegionSummaryText(view: PublicReportSeoView): string {
+  const regions = view.capabilities.regions;
+  if (regions.length === 0) {
+    return '节点地区未收录';
+  }
+  const labels = regions.slice(0, 5).map((region) => {
+    const lineTypes = region.line_types.length > 0 ? ` ${region.line_types.join('/')}` : '';
+    const nativeIp = region.has_native_ip ? ' 原生IP' : '';
+    const residential = region.has_residential ? ' 家宽' : '';
+    return `${region.label}${lineTypes}${nativeIp}${residential}`;
+  });
+  return `${labels.join('、')}${regions.length > 5 ? `等 ${regions.length} 个地区` : ''}`;
+}
+
+function buildTelegramSummaryText(view: PublicReportSeoView): string {
+  const telegram = view.capabilities.telegram;
+  const memberText = telegram.group_member_count === null ? '群人数未收录' : `群人数 ${formatCount(telegram.group_member_count)} 人`;
+  const activeText = telegram.recent_active_at ? `最近活跃 ${telegram.recent_active_at}` : '最近活跃时间未收录';
+  return [
+    `Telegram 群${formatNullableSupportText(telegram.has_group)}`,
+    `频道${formatNullableSupportText(telegram.has_channel)}`,
+    `群内发言${formatNullableSupportText(telegram.group_allows_speaking)}`,
+    `客服 Bot ${formatNullableSupportText(telegram.has_customer_service_bot)}`,
+    `工单系统${formatNullableSupportText(telegram.has_ticket_system)}`,
+    memberText,
+    activeText,
+  ].join('，');
+}
+
+function buildTrendDeltaText(points: Array<{ value: number }>, unit: string): string {
+  if (points.length < 2) {
+    return '暂无足够 30 天趋势样本';
+  }
+  const first = points[0]?.value;
+  const last = points[points.length - 1]?.value;
+  if (typeof first !== 'number' || typeof last !== 'number') {
+    return '暂无足够 30 天趋势样本';
+  }
+  const delta = last - first;
+  if (delta > 0) {
+    return `上升 ${formatMetric(delta)}${unit}`;
+  }
+  if (delta < 0) {
+    return `下降 ${formatMetric(Math.abs(delta))}${unit}`;
+  }
+  return '持平';
+}
+
+function formatNullableSupportText(value: boolean | null | undefined): string {
+  if (value === true) return '支持';
+  if (value === false) return '不支持';
+  return '未收录';
+}
+
+function formatOptionalCurrencyText(value: number | null | undefined): string {
+  return value === null || value === undefined ? '未收录' : `¥${formatMetric(value)}`;
+}
+
+function formatStabilityTierLabel(tier: string): string {
+  if (tier === 'stable') return '稳定';
+  if (tier === 'minor_fluctuation') return '轻微波动';
+  if (tier === 'unstable') return '波动';
+  if (tier === 'unknown') return '未收录';
+  return tier;
+}
+
+function buildScoreGradeText(score: number): string {
+  if (score >= 90) return '优秀';
+  if (score >= 80) return '稳健';
+  if (score >= 70) return '可观察';
+  if (score >= 60) return '谨慎';
+  return '高风险';
 }
 
 function buildReportRiskAnswer(view: PublicReportSeoView): string {

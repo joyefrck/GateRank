@@ -389,16 +389,27 @@ export interface ReportCapabilityRegion {
 }
 
 export interface ReportCapabilityPlan {
-  lowest_monthly_price: number | null;
-  has_trial_plan: boolean | null;
+  supports_monthly: boolean | null;
+  supports_quarterly: boolean | null;
+  supports_half_yearly: boolean | null;
   supports_annual: boolean | null;
+  lowest_monthly_price: number | null;
+  lowest_annual_monthly_price: number | null;
+  has_trial_plan: boolean | null;
   has_lifetime_plan: boolean | null;
 }
 
 export interface ReportCapabilityTelegram {
   items: ReportCapabilityItem[];
+  has_group: boolean | null;
+  group_url: string | null;
+  has_channel: boolean | null;
+  channel_url: string | null;
+  group_allows_speaking: boolean | null;
   group_member_count: number | null;
   recent_active_at: string | null;
+  has_customer_service_bot: boolean | null;
+  has_ticket_system: boolean | null;
 }
 
 export interface ReportCapabilities {

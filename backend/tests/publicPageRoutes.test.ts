@@ -182,10 +182,67 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     );
     const okHtml = await okResponse.text();
     assert.match(okHtml, /<h1>星云机场 测评报告<\/h1>/);
+    assert.match(okHtml, /id="report-top"/);
+    assert.match(okHtml, /报告日期：2026-03-23/);
+    assert.match(okHtml, /<div class="breadcrumb"><a href="\/">首页<\/a><span>\/<\/span>星云机场<\/div>/);
+    assert.doesNotMatch(okHtml, /机场专题/);
+    assert.match(okHtml, /aria-label="报告页面导航"/);
+    assert.match(okHtml, /href="#report-overview"/);
+    assert.match(okHtml, /href="#report-content"/);
+    assert.match(okHtml, />测评摘要<\/a>/);
+    assert.match(okHtml, /href="#report-snapshot"/);
+    assert.match(okHtml, /href="#report-capabilities"/);
+    assert.match(okHtml, /href="#report-score"/);
+    assert.match(okHtml, /href="#report-metrics"/);
+    assert.match(okHtml, /href="#report-trends"/);
+    assert.match(okHtml, /href="#report-plan-telegram"/);
+    assert.match(okHtml, /href="#report-conclusion"/);
+    assert.doesNotMatch(okHtml, /回到顶部/);
     assert.match(okHtml, /今日推荐/);
     assert.match(okHtml, /全量榜单/);
     assert.match(okHtml, /申请入驻/);
     assert.match(okHtml, /GateRank Score/);
+    assert.match(okHtml, /星云机场 测评摘要/);
+    assert.doesNotMatch(okHtml, /星云机场 实际内容与 SEO 摘要/);
+    assert.doesNotMatch(okHtml, /report-content-grid/);
+    assert.match(okHtml, /report-content-summary/);
+    assert.match(okHtml, /星云机场 当前公开分数 98\.60\/100，状态为正常。本页汇总风险/);
+    assert.doesNotMatch(okHtml, /星云机场 当前公开分数 98\.60\/100，状态为正常，官网为/);
+    assert.match(okHtml, /<span>分数 98\.60<\/span>/);
+    assert.match(okHtml, /<span>状态 正常<\/span>/);
+    assert.match(okHtml, /<span>风险惩罚 0<\/span>/);
+    assert.match(okHtml, /<span>官网扣分 0<\/span>/);
+    assert.match(okHtml, /<span>SSL 扣分 0<\/span>/);
+    assert.match(okHtml, /<span>30 天可用率 99\.90%<\/span>/);
+    assert.match(okHtml, /<span>中位延迟 88 ms<\/span>/);
+    assert.match(okHtml, /<span>试用 支持<\/span>/);
+    assert.match(okHtml, /<details class="report-content-detail">/);
+    assert.doesNotMatch(okHtml, /<details class="report-content-detail" open>/);
+    assert.match(okHtml, /<summary>综合结论<\/summary>/);
+    assert.match(okHtml, /<summary>风险解读<\/summary>/);
+    assert.match(okHtml, /<summary>稳定性与性能<\/summary>/);
+    assert.match(okHtml, /<summary>套餐与试用<\/summary>/);
+    assert.match(okHtml, /<summary>节点、客户端与解锁<\/summary>/);
+    assert.match(okHtml, /<summary>Telegram 与售后<\/summary>/);
+    assert.match(okHtml, /综合结论/);
+    assert.match(okHtml, /星云机场 当前 GateRank 公开分数为 98\.60\/100，状态为正常。本页把 星云机场 机场测评拆成评分/);
+    assert.doesNotMatch(okHtml, /星云机场 当前 GateRank 公开分数为 98\.60\/100，状态为正常，官网为/);
+    assert.match(okHtml, /风险解读/);
+    assert.match(okHtml, /稳定性与性能/);
+    assert.match(okHtml, /套餐与试用/);
+    assert.match(okHtml, /节点、客户端与解锁/);
+    assert.match(okHtml, /Telegram 与售后/);
+    assert.match(okHtml, /官网探测扣分 0/);
+    assert.match(okHtml, /SSL 扣分 0/);
+    assert.match(okHtml, /30 天可用率为 99\.90%/);
+    assert.match(okHtml, /中位延迟为 88 ms/);
+    assert.match(okHtml, /下载速率为 320 Mbps/);
+    assert.match(okHtml, /月付支持/);
+    assert.match(okHtml, /年付支持/);
+    assert.match(okHtml, /香港 IEPL 原生IP/);
+    assert.match(okHtml, /Clash、Shadowrocket/);
+    assert.match(okHtml, /Telegram 群支持/);
+    assert.match(okHtml, /群人数 1,200 人/);
     assert.match(okHtml, /服务能力详情/);
     assert.match(okHtml, /Netflix/);
     assert.match(okHtml, /<svg viewBox="0 0 24 24" fill="currentColor"/);
@@ -199,17 +256,30 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /核心监测指标/);
     assert.match(okHtml, /30 天可用率/);
     assert.match(okHtml, /30 天趋势/);
-    assert.match(okHtml, /导入与配置/);
+    assert.match(okHtml, /套餐信息/);
+    assert.match(okHtml, /电报信息/);
+    assert.match(okHtml, /最低年付折算月价/);
+    assert.match(okHtml, /https:\/\/t\.me\/nebula_group/);
+    assert.doesNotMatch(okHtml, /导入与配置/);
     assert.match(okHtml, /结论与建议/);
-    assert.match(okHtml, /GateRank Pro 数据看板/);
+    assert.doesNotMatch(okHtml, /GateRank Pro 数据看板/);
     assert.match(okHtml, /常见问题/);
     assert.match(okHtml, /星云机场怎么样/);
     assert.match(okHtml, /星云机场测评怎么看/);
     assert.match(okHtml, /星云机场官网是什么/);
     assert.match(okHtml, /星云机场跑路风险高吗/);
+    assert.match(okHtml, /星云机场适合长期使用吗/);
+    assert.match(okHtml, /星云机场风险主要来自哪里/);
+    assert.match(okHtml, /星云机场支持哪些套餐、客户端和地区/);
     assert.match(okHtml, /<script type="application\/ld\+json">/);
     assert.match(okHtml, /"@type":"FAQPage"/);
     assert.match(okHtml, /"@type":"ItemList"/);
+    assert.match(okHtml, /"name":"官网探测扣分","value":"0"/);
+    assert.match(okHtml, /"name":"SSL扣分","value":"0"/);
+    assert.match(okHtml, /"name":"套餐信息","value":"月付支持/);
+    assert.match(okHtml, /"name":"节点地区","value":"香港 IEPL 原生IP"/);
+    assert.match(okHtml, /"name":"客户端支持","value":"Clash、Shadowrocket"/);
+    assert.match(okHtml, /"name":"售后支持","value":"Telegram 群支持/);
     assert.match(okHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/airports\/nebula"/);
     const description = extractMetaDescription(okHtml);
     assert.ok(description.length >= 80, `report description too short: ${description.length}`);
@@ -433,9 +503,13 @@ const reportView: ReportView = {
   },
   capabilities: {
     plan: {
-      lowest_monthly_price: 18,
-      has_trial_plan: true,
+      supports_monthly: true,
+      supports_quarterly: true,
+      supports_half_yearly: false,
       supports_annual: true,
+      lowest_monthly_price: 18,
+      lowest_annual_monthly_price: 15,
+      has_trial_plan: true,
       has_lifetime_plan: false,
     },
     streaming: [
@@ -448,8 +522,15 @@ const reportView: ReportView = {
     ],
     telegram: {
       items: [{ key: 'group', label: 'Telegram 群组' }],
+      has_group: true,
+      group_url: 'https://t.me/nebula_group',
+      has_channel: true,
+      channel_url: 'https://t.me/nebula_channel',
+      group_allows_speaking: false,
       group_member_count: 1200,
       recent_active_at: '2026-03-23',
+      has_customer_service_bot: true,
+      has_ticket_system: false,
     },
     clients: [
       { key: 'clash', label: 'Clash' },

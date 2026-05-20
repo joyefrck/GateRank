@@ -1801,14 +1801,20 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
         payment_methods: ['alipay', 'usdt_trc20'],
         profile: {
           plan: {
-            lowest_monthly_price: 9.9,
-            has_trial_plan: true,
+            supports_monthly: true,
+            supports_quarterly: false,
+            supports_half_yearly: true,
             supports_annual: true,
+            lowest_monthly_price: 9.9,
+            lowest_annual_monthly_price: 8.8,
+            has_trial_plan: true,
             has_lifetime_plan: false,
           },
           telegram: {
             has_group: true,
+            group_url: 'https://t.me/alpha_group',
             has_channel: true,
+            channel_url: 'https://t.me/alpha_channel',
             has_customer_service_bot: true,
             has_ticket_system: false,
             group_allows_speaking: true,
@@ -1954,6 +1960,20 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
     result.capabilities.regions.map((item) => [item.label, item.line_types]),
     [['香港', ['IEPL']], ['日本', ['BGP']]],
   );
+  assert.equal(result.capabilities.plan.supports_monthly, true);
+  assert.equal(result.capabilities.plan.supports_quarterly, false);
+  assert.equal(result.capabilities.plan.supports_half_yearly, true);
+  assert.equal(result.capabilities.plan.supports_annual, true);
+  assert.equal(result.capabilities.plan.lowest_monthly_price, 9.9);
+  assert.equal(result.capabilities.plan.lowest_annual_monthly_price, 8.8);
+  assert.equal(result.capabilities.plan.has_lifetime_plan, false);
+  assert.equal(result.capabilities.telegram.has_group, true);
+  assert.equal(result.capabilities.telegram.group_url, 'https://t.me/alpha_group');
+  assert.equal(result.capabilities.telegram.has_channel, true);
+  assert.equal(result.capabilities.telegram.channel_url, 'https://t.me/alpha_channel');
+  assert.equal(result.capabilities.telegram.group_allows_speaking, true);
+  assert.equal(result.capabilities.telegram.has_customer_service_bot, true);
+  assert.equal(result.capabilities.telegram.has_ticket_system, false);
   assert.equal(result.capabilities.telegram.group_member_count, 1600);
 });
 

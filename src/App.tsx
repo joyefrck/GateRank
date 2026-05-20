@@ -49,6 +49,8 @@ import {
   buildAirportReportPath,
   buildFullRankingSeo,
   buildHomeSeo,
+  buildReportContentSections,
+  buildReportContentSummary,
   buildReportSeo,
   buildReportStructuredData,
   buildRiskMonitorSeo,
@@ -248,17 +250,28 @@ interface ReportViewResponse {
   };
   capabilities: {
     plan: {
-      lowest_monthly_price: number | null;
-      has_trial_plan: boolean | null;
+      supports_monthly: boolean | null;
+      supports_quarterly: boolean | null;
+      supports_half_yearly: boolean | null;
       supports_annual: boolean | null;
+      lowest_monthly_price: number | null;
+      lowest_annual_monthly_price: number | null;
+      has_trial_plan: boolean | null;
       has_lifetime_plan: boolean | null;
     };
     streaming: ReportCapabilityItem[];
     payment_methods: ReportCapabilityItem[];
     telegram: {
       items: ReportCapabilityItem[];
+      has_group: boolean | null;
+      group_url: string | null;
+      has_channel: boolean | null;
+      channel_url: string | null;
+      group_allows_speaking: boolean | null;
       group_member_count: number | null;
       recent_active_at: string | null;
+      has_customer_service_bot: boolean | null;
+      has_ticket_system: boolean | null;
     };
     clients: ReportCapabilityItem[];
     import_methods: ReportCapabilityItem[];
@@ -519,6 +532,22 @@ const sectionOrder: HomeSectionKey[] = [
   'best_value',
   'risk_alerts',
 ];
+
+const reportCardInteractiveClass =
+  'transform-gpu transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_18px_45px_rgba(15,23,42,0.10)] motion-reduce:transition-none motion-reduce:hover:translate-y-0';
+const reportInnerTileInteractiveClass =
+  'transition-[box-shadow,border-color,background-color] duration-200 ease-out hover:border-slate-200 hover:bg-white hover:shadow-sm motion-reduce:transition-none';
+const reportAnchorSections = [
+  { id: 'report-overview', label: '概览' },
+  { id: 'report-content', label: '测评摘要' },
+  { id: 'report-snapshot', label: '数据快照' },
+  { id: 'report-capabilities', label: '服务能力' },
+  { id: 'report-score', label: '评分拆解' },
+  { id: 'report-metrics', label: '核心指标' },
+  { id: 'report-trends', label: '30天趋势' },
+  { id: 'report-plan-telegram', label: '套餐电报' },
+  { id: 'report-conclusion', label: '结论建议' },
+] as const;
 
 const PORTAL_TOKEN_KEY = 'gaterank_portal_token';
 const PORTAL_APPLICATION_PAYMENT_SECTION_ID = 'portal-application-payment-section';
@@ -3050,41 +3079,60 @@ function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airp
 
   return (
     <PageFrame active="full_ranking">
-      <main className="bg-[#f6f8fb]">
-        <div className="mx-auto max-w-7xl px-4 py-6 md:py-8">
-        <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
-          <button
-            type="button"
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-neutral-200 bg-white text-sm font-black uppercase tracking-[0.14em]"
-            onClick={() => window.history.length > 1 ? window.history.back() : navigate('/')}
-          >
-            <ArrowLeft className="w-4 h-4" />
-            返回首页
-          </button>
+      <main id="report-top" className="bg-transparent">
+        <div className="mx-auto max-w-7xl px-4 py-3 md:py-4">
           {data && (
-            <div className="flex flex-col items-end gap-2">
-              <div className="text-[11px] md:text-xs font-black uppercase tracking-[0.18em] text-neutral-400">
-                报告日期：{data.date}
-              </div>
+            <div className="mb-3 flex flex-wrap items-center justify-end gap-x-2 gap-y-1 text-[11px] font-black uppercase tracking-[0.12em] text-neutral-400 md:text-xs">
+              <span>报告日期：{data.date}</span>
               {data.resolved_from_fallback && data.fallback_notice ? (
-                <div className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-[11px] font-black tracking-[0.12em] text-amber-700">
+                <span className="inline-flex min-w-0 items-center gap-1.5 text-amber-700">
+                  <span className="text-neutral-300">·</span>
                   <AlertTriangle className="h-3.5 w-3.5" />
                   {data.fallback_notice}
-                </div>
+                </span>
               ) : null}
             </div>
           )}
-        </div>
 
         {loading && <EmptySection message="正在加载完整报告..." />}
         {error && !loading && <EmptySection message={error} />}
 
         {!loading && !error && data && (
-          <ReportContentV2 data={data} rankPairs={rankPairs} />
+          <>
+            <ReportFixedNav />
+            <ReportContentV2 data={data} rankPairs={rankPairs} />
+          </>
         )}
         </div>
       </main>
     </PageFrame>
+  );
+}
+
+function scrollToReportAnchor(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function ReportFixedNav() {
+  return (
+    <nav
+      aria-label="报告页面导航"
+      className="fixed right-2 top-1/2 z-40 hidden w-20 -translate-y-1/2 flex-col gap-0.5 rounded-[8px] border border-slate-200 bg-white/95 p-1.5 text-[11px] font-black text-slate-500 shadow-[0_14px_34px_rgba(15,23,42,0.12)] backdrop-blur xl:flex"
+    >
+      {reportAnchorSections.map((section) => (
+        <a
+          key={section.id}
+          href={`#${section.id}`}
+          onClick={(event) => {
+            event.preventDefault();
+            scrollToReportAnchor(section.id);
+          }}
+          className="rounded-[6px] px-1.5 py-1.5 text-center leading-tight transition hover:bg-slate-100 hover:text-slate-950"
+        >
+          {section.label}
+        </a>
+      ))}
+    </nav>
   );
 }
 
@@ -3106,13 +3154,13 @@ function ReportContentV2({
         <ReportHeroV2 data={data} />
       </MarketingImpressionWrapper>
 
+      <ReportContentNarrative data={data} />
       <ReportSnapshotGrid data={data} />
-      <ReportProBanner />
       <ReportCapabilitiesSection data={data} />
       <ReportScoreBreakdown data={data} />
       <ReportCoreMetrics data={data} />
       <ReportTrendSection data={data} />
-      <ReportImportConfig data={data} />
+      <ReportPlanTelegramSection data={data} />
       <ReportConclusion data={data} rankPairs={rankPairs} />
     </div>
   );
@@ -3120,10 +3168,21 @@ function ReportContentV2({
 
 function ReportHeroV2({ data }: { data: ReportViewResponse }) {
   return (
-    <section className="grid gap-6 rounded-[8px] border border-slate-200 bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_54%,#eef6ff_100%)] p-5 shadow-sm md:grid-cols-[minmax(0,1fr)_320px] md:p-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+    <section id="report-overview" className={`scroll-mt-36 grid gap-6 rounded-[8px] border border-slate-200 bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_54%,#eef6ff_100%)] p-5 shadow-sm md:grid-cols-[minmax(0,1fr)_320px] md:p-8 lg:grid-cols-[minmax(0,1fr)_380px] ${reportCardInteractiveClass}`}>
       <div className="min-w-0">
         <div className="mb-4 text-xs font-bold text-slate-500">
-          首页 / 机场专题 / {data.airport.name}
+          <a
+            href={buildHomeHref()}
+            onClick={(event) => {
+              event.preventDefault();
+              navigate(buildHomeHref());
+            }}
+            className="transition hover:text-slate-950"
+          >
+            首页
+          </a>
+          <span className="px-1.5 text-slate-300">/</span>
+          {data.airport.name}
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
@@ -3180,10 +3239,46 @@ function ReportHeroV2({ data }: { data: ReportViewResponse }) {
   );
 }
 
+function ReportContentNarrative({ data }: { data: ReportViewResponse }) {
+  const sections = buildReportContentSections(data);
+  const summary = buildReportContentSummary(data);
+
+  return (
+    <section id="report-content" className={`scroll-mt-36 rounded-[8px] border border-slate-200 bg-white p-5 ${reportCardInteractiveClass}`}>
+      <ReportSectionTitle title={`${data.airport.name} 测评摘要`} />
+      <div className={`mt-4 rounded-[8px] border border-blue-100 bg-[#f8fbff] p-4 ${reportInnerTileInteractiveClass}`}>
+        <p className="text-sm leading-8 text-slate-600 md:text-[15px]">{summary.body}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {summary.chips.map((chip) => (
+            <span key={chip} className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">
+              {chip}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2">
+        {sections.map((section) => (
+          <details key={section.title} className={`min-w-0 rounded-[8px] border border-slate-200 bg-slate-50 px-4 py-3 ${reportInnerTileInteractiveClass}`}>
+            <summary className="cursor-pointer text-sm font-black tracking-tight text-slate-950 md:text-[15px]">{section.title}</summary>
+            <p className="mt-3 text-sm leading-8 text-slate-600">{section.body}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              {section.facts.map((fact) => (
+                <span key={fact} className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">
+                  {fact}
+                </span>
+              ))}
+            </div>
+          </details>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function ReportScoreCard({ data }: { data: ReportViewResponse }) {
   const score = Math.max(0, Math.min(100, data.summary_card.score));
   return (
-    <aside className="rounded-[8px] border border-slate-200 bg-white p-6 text-center shadow-sm">
+    <aside className={`rounded-[8px] border border-slate-200 bg-white p-6 text-center shadow-sm ${reportCardInteractiveClass}`}>
       <div className="text-sm font-black text-slate-800">GateRank Score</div>
       <div className="mt-3 flex items-end justify-center gap-2">
         <span className="text-5xl font-black tracking-tight text-slate-950 md:text-6xl">{formatMetric(data.summary_card.score)}</span>
@@ -3202,7 +3297,7 @@ function ReportScoreCard({ data }: { data: ReportViewResponse }) {
 
 function ReportSnapshotGrid({ data }: { data: ReportViewResponse }) {
   return (
-    <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
+    <section id="report-snapshot" className="scroll-mt-36 grid grid-cols-2 gap-3 md:grid-cols-5">
       <ReportMetricTile icon={ShieldCheck} label="状态" value={formatAirportStatus(data.airport.status)} tone="green" />
       <ReportMetricTile icon={Clock} label="数据日期" value={data.date} tone="blue" />
       <ReportMetricTile icon={CheckCircle2} label="健康记录" value={`${data.metrics.healthy_days_streak} 天`} tone="rose" />
@@ -3212,38 +3307,9 @@ function ReportSnapshotGrid({ data }: { data: ReportViewResponse }) {
   );
 }
 
-function ReportProBanner() {
-  return (
-    <a
-      href="/apply"
-      className="grid gap-4 overflow-hidden rounded-[8px] border border-blue-100 bg-[linear-gradient(115deg,#ffffff_0%,#eef6ff_58%,#dbeafe_100%)] p-5 shadow-sm transition hover:border-blue-200 md:grid-cols-[minmax(0,1fr)_auto] md:p-7"
-    >
-      <div>
-        <div className="text-xs font-black uppercase tracking-[0.18em] text-blue-500">广告</div>
-        <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">GateRank Pro 数据看板</h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
-          更全面的数据洞察、更智能的机场评估，适合需要持续观察转化与测速表现的机场团队。
-        </p>
-        <div className="mt-4 grid gap-2 text-sm font-bold text-slate-600 sm:grid-cols-2">
-          <span>多维度数据对比</span>
-          <span>历史趋势分析</span>
-          <span>自定义监控告警</span>
-          <span>专属订阅佣金跟踪</span>
-        </div>
-      </div>
-      <div className="flex items-end">
-        <span className="inline-flex min-h-11 items-center gap-2 rounded-[8px] bg-blue-600 px-5 text-sm font-black text-white shadow-sm">
-          立即体验 Pro
-          <ArrowRight className="h-4 w-4" />
-        </span>
-      </div>
-    </a>
-  );
-}
-
 function ReportCapabilitiesSection({ data }: { data: ReportViewResponse }) {
   return (
-    <section>
+    <section id="report-capabilities" className="scroll-mt-36">
       <ReportSectionTitle title="服务能力详情" />
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-6">
         <ReportCapabilityGroup className="lg:col-span-1" title="解锁能力" icon={Zap} items={data.capabilities.streaming} category="streaming" />
@@ -3274,7 +3340,7 @@ function ReportScoreBreakdown({ data }: { data: ReportViewResponse }) {
     { label: '风险惩罚', value: data.score_breakdown.risk_penalty, color: 'bg-slate-400', suffix: '' },
   ];
   return (
-    <section>
+    <section id="report-score" className="scroll-mt-36">
       <ReportSectionTitle title="评分拆解" />
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
         {scores.map((item) => (
@@ -3287,7 +3353,7 @@ function ReportScoreBreakdown({ data }: { data: ReportViewResponse }) {
 
 function ReportCoreMetrics({ data }: { data: ReportViewResponse }) {
   return (
-    <section>
+    <section id="report-metrics" className="scroll-mt-36">
       <ReportSectionTitle title="核心监测指标" />
       <div className="mt-4 grid gap-3 md:grid-cols-4">
         <ReportTrendMetric title="30天可用率" value={`${formatMetric(data.metrics.uptime_percent_30d)}%`} points={data.trends.uptime_30d} color="#22c55e" />
@@ -3301,7 +3367,7 @@ function ReportCoreMetrics({ data }: { data: ReportViewResponse }) {
 
 function ReportTrendSection({ data }: { data: ReportViewResponse }) {
   return (
-    <section>
+    <section id="report-trends" className="scroll-mt-36">
       <ReportSectionTitle title="30天趋势" />
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <ReportTrendCard title="评分趋势" points={data.trends.score_30d} color="#22c55e" />
@@ -3313,34 +3379,71 @@ function ReportTrendSection({ data }: { data: ReportViewResponse }) {
   );
 }
 
-function ReportImportConfig({ data }: { data: ReportViewResponse }) {
-  const items = [
-    { label: '一键导入', value: hasCapability(data.capabilities.import_methods, 'one_click_import') ? '支持' : '未收录' },
-    { label: '订阅链接', value: hasCapability(data.capabilities.import_methods, 'subscription_link') ? '支持' : '未收录' },
-    { label: '教程支持', value: hasCapability(data.capabilities.import_methods, 'tutorials') ? '支持' : '未收录' },
-    { label: '客户端数量', value: `${data.capabilities.clients.length} 个` },
-    { label: '地区覆盖', value: `${data.capabilities.regions.length} 个` },
-    { label: '年付套餐', value: data.capabilities.plan.supports_annual ? '支持' : '未收录' },
+function ReportPlanTelegramSection({ data }: { data: ReportViewResponse }) {
+  const plan = data.capabilities.plan;
+  const telegram = data.capabilities.telegram;
+  const planItems: ReportInfoItem[] = [
+    { label: '月付套餐', value: formatNullableSupport(plan.supports_monthly) },
+    { label: '季付套餐', value: formatNullableSupport(plan.supports_quarterly) },
+    { label: '半年付套餐', value: formatNullableSupport(plan.supports_half_yearly) },
+    { label: '年付套餐', value: formatNullableSupport(plan.supports_annual) },
+    { label: '试用套餐', value: formatNullableSupport(plan.has_trial_plan) },
+    { label: '不限时套餐', value: formatNullableSupport(plan.has_lifetime_plan) },
+    { label: '最低月付价格', value: formatOptionalCurrency(plan.lowest_monthly_price) },
+    { label: '最低年付折算月价', value: formatOptionalCurrency(plan.lowest_annual_monthly_price) },
   ];
+  const telegramItems: ReportInfoItem[] = [
+    { label: 'Telegram 群', value: formatNullableSupport(telegram.has_group) },
+    { label: 'Telegram 群链接', value: telegram.group_url || '未设置', href: telegram.group_url || null },
+    { label: 'Telegram 频道', value: formatNullableSupport(telegram.has_channel) },
+    { label: 'Telegram 频道链接', value: telegram.channel_url || '未设置', href: telegram.channel_url || null },
+    { label: '群内发言权限', value: formatNullableSupport(telegram.group_allows_speaking) },
+    { label: '客服 Bot', value: formatNullableSupport(telegram.has_customer_service_bot) },
+    { label: '工单系统', value: formatNullableSupport(telegram.has_ticket_system) },
+    { label: '群人数', value: telegram.group_member_count === null ? '未设置' : `${formatNumber(telegram.group_member_count)} 人` },
+    { label: '最近活跃时间', value: telegram.recent_active_at || '未设置' },
+  ];
+
   return (
-    <section className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.9fr)]">
-      <div>
-        <ReportSectionTitle title="导入与配置" />
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
-          {items.map((item) => (
-            <div key={item.label} className="rounded-[8px] border border-slate-200 bg-white p-4">
-              <div className="text-xs font-bold text-slate-500">{item.label}</div>
-              <div className="mt-2 text-sm font-black text-slate-950">{item.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="rounded-[8px] border border-slate-200 bg-white p-5">
-        <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">综合评级</div>
-        <div className="mt-3 text-3xl font-black text-emerald-600">{getScoreGrade(data.summary_card.score)}</div>
-        <p className="mt-3 text-sm leading-7 text-slate-600">{data.summary_card.conclusion}</p>
-      </div>
+    <section id="report-plan-telegram" className="grid scroll-mt-36 gap-3 lg:grid-cols-2">
+      <ReportInfoPanel title="套餐信息" items={planItems} />
+      <ReportInfoPanel title="电报信息" items={telegramItems} />
     </section>
+  );
+}
+
+interface ReportInfoItem {
+  label: string;
+  value: string;
+  href?: string | null;
+}
+
+function ReportInfoPanel({ title, items }: { title: string; items: ReportInfoItem[] }) {
+  return (
+    <div className={`rounded-[8px] border border-slate-200 bg-white p-5 ${reportCardInteractiveClass}`}>
+      <ReportSectionTitle title={title} />
+      <dl className="mt-4 grid gap-2 sm:grid-cols-2">
+        {items.map((item) => (
+          <div key={item.label} className={`min-w-0 rounded-[8px] border border-transparent bg-slate-50 px-3 py-3 ${reportInnerTileInteractiveClass}`}>
+            <dt className="text-xs font-bold text-slate-500">{item.label}</dt>
+            <dd className="mt-1 min-w-0 text-sm font-black text-slate-950">
+              {item.href ? (
+                <a
+                  href={normalizeExternalHref(item.href)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="break-all text-blue-600 underline decoration-blue-200 underline-offset-4 hover:text-blue-800"
+                >
+                  {item.value}
+                </a>
+              ) : (
+                <span className="break-words">{item.value}</span>
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </div>
   );
 }
 
@@ -3352,7 +3455,7 @@ function ReportConclusion({
   rankPairs: Array<{ label: string; value: number | null }>;
 }) {
   return (
-    <section className="rounded-[8px] border border-slate-200 bg-white p-5">
+    <section id="report-conclusion" className={`scroll-mt-36 rounded-[8px] border border-slate-200 bg-white p-5 ${reportCardInteractiveClass}`}>
       <ReportSectionTitle title="结论与建议" />
       <p className="mt-4 text-sm leading-7 text-slate-600">
         本次评测数据显示 {data.airport.name} 当前综合分为 {formatMetric(data.summary_card.score)} / 100，
@@ -3402,8 +3505,8 @@ function ReportMetricTile({
     red: 'bg-red-50 text-red-600',
   };
   return (
-    <div className="flex min-h-[88px] items-center gap-3 rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm">
-      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] ${tones[tone]}`}>
+    <div className={`group flex min-h-[88px] items-center gap-3 rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm ${reportCardInteractiveClass}`}>
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] transition-[background-color,box-shadow] duration-200 group-hover:bg-white group-hover:shadow-sm ${tones[tone]}`}>
         <Icon className="h-5 w-5" />
       </div>
       <div className="min-w-0">
@@ -3430,7 +3533,7 @@ function ReportCapabilityGroup({
   className?: string;
 }) {
   return (
-    <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${className}`}>
+    <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${reportCardInteractiveClass} ${className}`}>
       <div className="mb-3 flex items-center gap-2">
         <Icon className="h-4 w-4 text-slate-500" />
         <h3 className="text-sm font-black text-slate-950">{title}</h3>
@@ -3447,7 +3550,7 @@ function ReportCapabilityGroup({
 
 function ReportRegionGroup({ regions, className = '' }: { regions: ReportViewResponse['capabilities']['regions']; className?: string }) {
   return (
-    <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${className}`}>
+    <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${reportCardInteractiveClass} ${className}`}>
       <div className="mb-3 flex items-center gap-2">
         <BarChart3 className="h-4 w-4 text-slate-500" />
         <h3 className="text-sm font-black text-slate-950">节点覆盖</h3>
@@ -3497,7 +3600,7 @@ function CapabilityLine({
   category: CapabilityIconCategory;
 }) {
   return (
-    <div className="flex items-center justify-between gap-2 rounded-[8px] bg-slate-50 px-2.5 py-2 text-sm">
+    <div className={`flex items-center justify-between gap-2 rounded-[8px] border border-transparent bg-slate-50 px-2.5 py-2 text-sm ${reportInnerTileInteractiveClass}`}>
       <span className="flex min-w-0 items-center gap-2">
         <CapabilityIcon capabilityKey={capabilityKey} category={category} />
         <span className="min-w-0 truncate font-bold text-slate-700">{label}</span>
@@ -3508,7 +3611,7 @@ function CapabilityLine({
 }
 
 function EmptyCapabilityLine() {
-  return <div className="rounded-[8px] bg-slate-50 px-3 py-2 text-sm font-bold text-slate-400">未收录</div>;
+  return <div className={`rounded-[8px] border border-transparent bg-slate-50 px-3 py-2 text-sm font-bold text-slate-400 ${reportInnerTileInteractiveClass}`}>未收录</div>;
 }
 
 function ReportScoreMetric({
@@ -3525,7 +3628,7 @@ function ReportScoreMetric({
 }) {
   const width = Math.max(0, Math.min(100, value));
   return (
-    <div className="rounded-[8px] border border-slate-200 bg-white p-4">
+    <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${reportCardInteractiveClass}`}>
       <div className="text-xs font-bold text-slate-500">{label}</div>
       <div className="mt-2 flex items-end justify-between gap-2">
         <span className="text-2xl font-black text-slate-950">{formatMetric(value)}</span>
@@ -3550,7 +3653,7 @@ function ReportTrendMetric({
   color: string;
 }) {
   return (
-    <div className="rounded-[8px] border border-slate-200 bg-white p-4">
+    <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${reportCardInteractiveClass}`}>
       <div className="text-xs font-bold text-slate-500">{title}</div>
       <div className="mt-2 text-xl font-black text-slate-950">{value}</div>
       <div className="mt-3 h-12">
@@ -3573,7 +3676,7 @@ function ReportTrendCard({
 }) {
   const latest = points[points.length - 1];
   return (
-    <div className="rounded-[8px] border border-slate-200 bg-white p-4">
+    <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${reportCardInteractiveClass}`}>
       <div className="text-sm font-black text-slate-950">{title}</div>
       <div className="mt-1 text-xs font-bold text-slate-400">{points[0]?.date || '-'} 至 {latest?.date || '-'}</div>
       <div className="mt-4 h-24">
@@ -3629,8 +3732,19 @@ function getScoreGrade(score: number): string {
   return '高风险';
 }
 
-function hasCapability(items: ReportCapabilityItem[], key: string): boolean {
-  return items.some((item) => item.key === key);
+function formatNullableSupport(value: boolean | null | undefined): string {
+  if (value === true) return '支持';
+  if (value === false) return '不支持';
+  return '未设置';
+}
+
+function formatOptionalCurrency(value: number | null | undefined): string {
+  return value === null || value === undefined ? '未设置' : `¥${formatMetric(value)}`;
+}
+
+function normalizeExternalHref(value: string): string {
+  const trimmed = value.trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 function formatTelegramFootnote(data: ReportViewResponse): string | null {

@@ -15,6 +15,8 @@ import {
   buildHomeSeo,
   buildQuery,
   buildAirportReportPath,
+  buildReportContentSections,
+  buildReportContentSummary,
   buildReportFaqItems,
   buildReportSeo,
   buildReportStructuredData,
@@ -45,6 +47,18 @@ interface PublicInitialData {
   };
   payload: unknown;
 }
+
+const reportAnchorSections = [
+  { id: 'report-overview', label: '概览' },
+  { id: 'report-content', label: '测评摘要' },
+  { id: 'report-snapshot', label: '数据快照' },
+  { id: 'report-capabilities', label: '服务能力' },
+  { id: 'report-score', label: '评分拆解' },
+  { id: 'report-metrics', label: '核心指标' },
+  { id: 'report-trends', label: '30天趋势' },
+  { id: 'report-plan-telegram', label: '套餐电报' },
+  { id: 'report-conclusion', label: '结论建议' },
+];
 
 export function renderHomePublicPage(siteUrl: string, view: HomePageView, requestedDate?: string): string {
   const seo = buildHomeSeo({
@@ -218,10 +232,15 @@ export function renderReportPublicPage(siteUrl: string, view: ReportView, reques
     active: 'rankings',
     jsonLd: buildReportStructuredData(siteUrl, canonicalPath, seo, view),
     body: `
-      <main class="page-main report-page">
-        <section class="report-hero">
+      <main id="report-top" class="page-main report-page">
+        ${renderReportFixedNav()}
+        <div class="report-date-status">
+          <span>报告日期：${escapeHtml(view.date)}</span>
+          ${view.resolved_from_fallback && view.fallback_notice ? `<span class="report-fallback-note">· ${escapeHtml(view.fallback_notice)}</span>` : ''}
+        </div>
+        <section id="report-overview" class="report-hero report-anchor-target">
           <div class="report-hero-copy">
-            <div class="breadcrumb">首页 / 机场专题 / ${escapeHtml(view.airport.name)}</div>
+            <div class="breadcrumb"><a href="/">首页</a><span>/</span>${escapeHtml(view.airport.name)}</div>
             <h1>${escapeHtml(view.airport.name)} 测评报告</h1>
             <p>${escapeHtml(seo.description)}</p>
             <div class="report-tags">
@@ -238,20 +257,13 @@ export function renderReportPublicPage(siteUrl: string, view: ReportView, reques
             <div class="score-grade">综合评级：${escapeHtml(formatScoreGrade(view.summary_card.score))}</div>
           </aside>
         </section>
-        <section class="report-snapshot">
+        ${renderReportContentSections(view)}
+        <section id="report-snapshot" class="report-snapshot report-anchor-target">
           ${renderSnapshotCard('状态', formatAirportStatusLabel(view.airport.status))}
           ${renderSnapshotCard('数据日期', view.date)}
           ${renderSnapshotCard('健康记录', `${view.metrics.healthy_days_streak} 天`)}
           ${renderSnapshotCard('稳定性', formatStabilityTier(view.metrics.stability_tier))}
           ${renderSnapshotCard('风险惩罚', formatMetric(view.score_breakdown.risk_penalty))}
-        </section>
-        <section class="pro-banner">
-          <div>
-            <div class="eyebrow">广告</div>
-            <h2>GateRank Pro 数据看板</h2>
-            <p>更全面的数据洞察、更智能的机场评估，适合需要持续观察转化与测速表现的机场团队。</p>
-          </div>
-          <a href="/apply">立即体验 Pro</a>
         </section>
         ${renderReportSummary(view)}
         ${renderReportFaq(faqItems)}
@@ -269,9 +281,44 @@ function renderSnapshotCard(label: string, value: string): string {
   `;
 }
 
+function renderReportFixedNav(): string {
+  return `
+    <nav class="report-fixed-nav" aria-label="报告页面导航">
+      ${reportAnchorSections.map((section) => `<a href="#${escapeAttribute(section.id)}">${escapeHtml(section.label)}</a>`).join('')}
+    </nav>
+  `;
+}
+
+function renderReportContentSections(view: ReportView): string {
+  const sections = buildReportContentSections(view);
+  const summary = buildReportContentSummary(view);
+  return `
+    <section id="report-content" class="report-section report-content report-anchor-target">
+      <h2>${escapeHtml(view.airport.name)} 测评摘要</h2>
+      <div class="report-content-summary">
+        <p>${escapeHtml(summary.body)}</p>
+        <div class="report-content-chips">
+          ${summary.chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join('')}
+        </div>
+      </div>
+      <div class="report-content-details">
+        ${sections.map((section) => `
+          <details class="report-content-detail">
+            <summary>${escapeHtml(section.title)}</summary>
+            <p>${escapeHtml(section.body)}</p>
+            <div class="report-content-facts">
+              ${section.facts.map((fact) => `<span>${escapeHtml(fact)}</span>`).join('')}
+            </div>
+          </details>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
 function renderReportSummary(view: ReportView): string {
   return `
-    <section class="report-section">
+    <section id="report-capabilities" class="report-section report-anchor-target">
       <h2>服务能力详情</h2>
       <div class="capability-grid">
         ${renderCapabilityGroup('解锁能力', view.capabilities.streaming, 'streaming')}
@@ -282,7 +329,7 @@ function renderReportSummary(view: ReportView): string {
         ${renderCapabilityGroup('新手引导', view.capabilities.import_methods, 'import')}
       </div>
     </section>
-    <section class="report-section">
+    <section id="report-score" class="report-section report-anchor-target">
       <h2>评分拆解</h2>
       <div class="score-grid">
         ${renderScoreMetric('稳定性 (S)', view.score_breakdown.s, 'emerald')}
@@ -293,7 +340,7 @@ function renderReportSummary(view: ReportView): string {
         ${renderScoreMetric('风险惩罚', view.score_breakdown.risk_penalty, 'slate')}
       </div>
     </section>
-    <section class="report-section">
+    <section id="report-metrics" class="report-section report-anchor-target">
       <h2>核心监测指标</h2>
       <div class="metric-grid">
         ${renderInfoCard('30 天可用率', `${formatMetric(view.metrics.uptime_percent_30d)}%`)}
@@ -302,7 +349,7 @@ function renderReportSummary(view: ReportView): string {
         ${renderInfoCard('丢包率', `${formatMetric(view.metrics.packet_loss_percent)}%`)}
       </div>
     </section>
-    <section class="report-section">
+    <section id="report-trends" class="report-section report-anchor-target">
       <h2>30 天趋势</h2>
       <div class="metric-grid">
         ${renderInfoCard('评分趋势', buildTrendSummary(view.trends.score_30d, '分'))}
@@ -311,18 +358,13 @@ function renderReportSummary(view: ReportView): string {
         ${renderInfoCard('下载趋势', buildTrendSummary(view.trends.download_30d, ' Mbps'))}
       </div>
     </section>
-    <section class="report-section">
-      <h2>导入与配置</h2>
-      <div class="metric-grid">
-        ${renderInfoCard('一键导入', hasCapability(view.capabilities.import_methods, 'one_click_import') ? '支持' : '未收录')}
-        ${renderInfoCard('订阅链接', hasCapability(view.capabilities.import_methods, 'subscription_link') ? '支持' : '未收录')}
-        ${renderInfoCard('教程支持', hasCapability(view.capabilities.import_methods, 'tutorials') ? '支持' : '未收录')}
-        ${renderInfoCard('客户端数量', `${view.capabilities.clients.length} 个`)}
-        ${renderInfoCard('地区覆盖', `${view.capabilities.regions.length} 个`)}
-        ${renderInfoCard('年付套餐', view.capabilities.plan.supports_annual ? '支持' : '未收录')}
+    <section id="report-plan-telegram" class="report-section report-anchor-target">
+      <div class="report-info-grid">
+        ${renderReportInfoPanel('套餐信息', buildPlanInfoItems(view))}
+        ${renderReportInfoPanel('电报信息', buildTelegramInfoItems(view))}
       </div>
     </section>
-    <section class="report-section report-conclusion">
+    <section id="report-conclusion" class="report-section report-conclusion report-anchor-target">
       <h2>结论与建议</h2>
       <p>本次评测数据显示 ${escapeHtml(view.airport.name)} 当前综合分为 ${escapeHtml(formatMetric(view.summary_card.score))} / 100，状态为 ${escapeHtml(formatAirportStatusLabel(view.airport.status))}，稳定性评级为 ${escapeHtml(formatStabilityTier(view.metrics.stability_tier))}。${escapeHtml(view.summary_card.conclusion)}</p>
     </section>
@@ -407,8 +449,70 @@ function renderTelegramFootnote(view: ReportView): string | null {
   return recent_active_at;
 }
 
-function hasCapability(items: Array<{ key: string }>, key: string): boolean {
-  return items.some((item) => item.key === key);
+interface ReportInfoItem {
+  label: string;
+  value: string;
+  href?: string | null;
+}
+
+function buildPlanInfoItems(view: ReportView): ReportInfoItem[] {
+  const plan = view.capabilities.plan;
+  return [
+    { label: '月付套餐', value: formatNullableSupport(plan.supports_monthly) },
+    { label: '季付套餐', value: formatNullableSupport(plan.supports_quarterly) },
+    { label: '半年付套餐', value: formatNullableSupport(plan.supports_half_yearly) },
+    { label: '年付套餐', value: formatNullableSupport(plan.supports_annual) },
+    { label: '试用套餐', value: formatNullableSupport(plan.has_trial_plan) },
+    { label: '不限时套餐', value: formatNullableSupport(plan.has_lifetime_plan) },
+    { label: '最低月付价格', value: formatOptionalCurrency(plan.lowest_monthly_price) },
+    { label: '最低年付折算月价', value: formatOptionalCurrency(plan.lowest_annual_monthly_price) },
+  ];
+}
+
+function buildTelegramInfoItems(view: ReportView): ReportInfoItem[] {
+  const telegram = view.capabilities.telegram;
+  return [
+    { label: 'Telegram 群', value: formatNullableSupport(telegram.has_group) },
+    { label: 'Telegram 群链接', value: telegram.group_url || '未设置', href: telegram.group_url },
+    { label: 'Telegram 频道', value: formatNullableSupport(telegram.has_channel) },
+    { label: 'Telegram 频道链接', value: telegram.channel_url || '未设置', href: telegram.channel_url },
+    { label: '群内发言权限', value: formatNullableSupport(telegram.group_allows_speaking) },
+    { label: '客服 Bot', value: formatNullableSupport(telegram.has_customer_service_bot) },
+    { label: '工单系统', value: formatNullableSupport(telegram.has_ticket_system) },
+    { label: '群人数', value: telegram.group_member_count === null ? '未设置' : `${formatNumber(telegram.group_member_count)} 人` },
+    { label: '最近活跃时间', value: telegram.recent_active_at || '未设置' },
+  ];
+}
+
+function renderReportInfoPanel(title: string, items: ReportInfoItem[]): string {
+  return `
+    <article class="report-info-panel">
+      <h2>${escapeHtml(title)}</h2>
+      <dl>
+        ${items.map((item) => `
+          <div>
+            <dt>${escapeHtml(item.label)}</dt>
+            <dd>${item.href ? `<a href="${escapeAttribute(normalizeExternalHref(item.href))}" rel="nofollow noreferrer">${escapeHtml(item.value)}</a>` : escapeHtml(item.value)}</dd>
+          </div>
+        `).join('')}
+      </dl>
+    </article>
+  `;
+}
+
+function formatNullableSupport(value: boolean | null | undefined): string {
+  if (value === true) return '支持';
+  if (value === false) return '不支持';
+  return '未设置';
+}
+
+function formatOptionalCurrency(value: number | null | undefined): string {
+  return value === null || value === undefined ? '未设置' : `¥${formatMetric(value)}`;
+}
+
+function normalizeExternalHref(value: string): string {
+  const trimmed = value.trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 function formatScoreGrade(score: number): string {
@@ -815,6 +919,7 @@ function escapeJsonScript(value: unknown): string {
 
 const styles = `
   * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
   body { margin: 0; font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; color: #111; background: #fff; }
   a { color: inherit; }
   .page-shell { min-height: 100vh; display: flex; flex-direction: column; }
@@ -843,9 +948,18 @@ const styles = `
   .metric div, .muted { color: #666; font-size: 13px; }
   .metric strong, .score { display: block; margin-top: 8px; font-size: 28px; font-weight: 900; }
   .content-card { border: 1px solid #e5e5e5; border-radius: 24px; padding: 26px; background: #fff; }
-  .report-page { width: min(1180px, calc(100vw - 32px)); }
+  .report-page { width: min(1180px, calc(100vw - 32px)); padding-top: 16px; gap: 28px; }
+  .report-anchor-target { scroll-margin-top: 144px; }
+  .report-date-status { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; color: #94a3b8; font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+  .report-fallback-note { color: #b45309; letter-spacing: .08em; }
+  .report-fixed-nav { position: fixed; right: 8px; top: 50%; z-index: 40; display: flex; width: 80px; transform: translateY(-50%); flex-direction: column; gap: 2px; border: 1px solid #e2e8f0; border-radius: 8px; background: rgba(255,255,255,.95); padding: 6px; color: #64748b; font-size: 11px; font-weight: 900; box-shadow: 0 14px 34px rgba(15, 23, 42, .12); backdrop-filter: blur(12px); }
+  .report-fixed-nav a { border-radius: 6px; padding: 6px; text-align: center; line-height: 1.25; text-decoration: none; transition: background-color .2s ease-out, color .2s ease-out; }
+  .report-fixed-nav a:hover { background: #f1f5f9; color: #020617; }
   .report-hero { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; border: 1px solid #dbe4f0; border-radius: 8px; padding: 32px; background: linear-gradient(135deg, #f8fbff, #fff 54%, #eef6ff); }
-  .breadcrumb { margin-bottom: 18px; color: #64748b; font-size: 13px; font-weight: 700; }
+  .breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 18px; color: #64748b; font-size: 13px; font-weight: 700; }
+  .breadcrumb a { text-decoration: none; transition: color .2s ease-out; }
+  .breadcrumb a:hover { color: #020617; }
+  .breadcrumb span { color: #cbd5e1; }
   .report-hero h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); line-height: 1.08; letter-spacing: 0; }
   .report-hero p { color: #475569; }
   .report-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
@@ -859,20 +973,34 @@ const styles = `
   .score-bar i { display: block; height: 100%; border-radius: 999px; background: #22c55e; }
   .score-grade { margin-top: 14px; color: #059669; font-size: 14px; font-weight: 900; }
   .report-snapshot { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
-  .snapshot-card, .capability-card, .score-metric, .report-section, .pro-banner { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+  .snapshot-card, .capability-card, .score-metric, .report-section, .report-info-panel { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
   .snapshot-card { min-height: 88px; padding: 18px; }
   .snapshot-card div { color: #64748b; font-size: 13px; font-weight: 700; }
   .snapshot-card strong { display: block; margin-top: 8px; color: #020617; font-size: 18px; font-weight: 900; }
-  .pro-banner { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end; padding: 28px; background: linear-gradient(115deg, #fff, #eef6ff 58%, #dbeafe); }
-  .pro-banner h2 { margin: 8px 0 0; color: #020617; }
-  .pro-banner a { display: inline-flex; min-height: 42px; align-items: center; border-radius: 8px; background: #2563eb; color: #fff; padding: 0 18px; text-decoration: none; font-weight: 900; }
   .report-section { padding: 24px; }
   .report-section h2 { margin-bottom: 18px; color: #020617; font-size: 22px; letter-spacing: 0; }
+  .report-content-summary { border: 1px solid #dbeafe; border-radius: 8px; background: #f8fbff; padding: 18px; }
+  .report-content-summary p { margin: 0; color: #475569; font-size: 15px; line-height: 1.9; }
+  .report-content-chips, .report-content-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  .report-content-chips span,
+  .report-content-facts span { border: 1px solid #dbeafe; border-radius: 999px; background: #eff6ff; padding: 5px 9px; color: #1d4ed8; font-size: 12px; font-weight: 900; }
+  .report-content-details { display: grid; gap: 10px; margin-top: 14px; }
+  .report-content-detail { min-width: 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 14px 16px; }
+  .report-content-detail summary { cursor: pointer; color: #020617; font-size: 15px; font-weight: 900; }
+  .report-content-detail p { margin: 12px 0 0; color: #475569; font-size: 14px; line-height: 1.9; }
+  .report-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .report-info-panel { padding: 24px; }
+  .report-info-panel h2 { margin: 0 0 16px; }
+  .report-info-panel dl { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0; }
+  .report-info-panel dl div { min-width: 0; border: 1px solid transparent; border-radius: 8px; background: #f8fafc; padding: 12px; transition: background-color .2s ease-out, border-color .2s ease-out, box-shadow .2s ease-out; }
+  .report-info-panel dt { color: #64748b; font-size: 13px; font-weight: 700; }
+  .report-info-panel dd { margin: 6px 0 0; overflow-wrap: anywhere; color: #020617; font-size: 14px; font-weight: 900; }
+  .report-info-panel a { color: #2563eb; text-decoration-color: #bfdbfe; text-underline-offset: 4px; }
   .capability-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
   .capability-card { padding: 16px; }
   .capability-card h3 { color: #020617; font-size: 15px; }
   .capability-list { display: grid; gap: 8px; }
-  .capability-list p { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; border-radius: 8px; background: #f8fafc; padding: 8px 10px; color: #334155; font-size: 14px; font-weight: 700; line-height: 1.4; }
+  .capability-list p { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; border: 1px solid transparent; border-radius: 8px; background: #f8fafc; padding: 8px 10px; color: #334155; font-size: 14px; font-weight: 700; line-height: 1.4; transition: background-color .2s ease-out, border-color .2s ease-out, box-shadow .2s ease-out; }
   .capability-entry { display: flex; min-width: 0; align-items: center; gap: 8px; }
   .capability-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .capability-icon { display: inline-flex; width: 28px; height: 28px; flex: 0 0 28px; align-items: center; justify-content: center; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-weight: 900; line-height: 1; }
@@ -889,14 +1017,78 @@ const styles = `
   .score-metric.purple i { background: #a855f7; }
   .score-metric.slate i { background: #94a3b8; }
   .report-conclusion p { color: #475569; }
+  .report-hero,
+  .score-card,
+  .snapshot-card,
+  .capability-card,
+  .score-metric,
+  .report-section,
+  .report-info-panel,
+  .report-content-summary,
+  .report-content-detail {
+    transition: transform .2s ease-out, box-shadow .2s ease-out, border-color .2s ease-out, background-color .2s ease-out;
+  }
+  .report-hero:hover,
+  .score-card:hover,
+  .snapshot-card:hover,
+  .capability-card:hover,
+  .score-metric:hover,
+  .report-section:hover,
+  .report-info-panel:hover {
+    transform: translateY(-2px);
+    border-color: #cbd5e1;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, .10);
+  }
+  .report-content-summary:hover,
+  .report-content-detail:hover {
+    border-color: #cbd5e1;
+    background: #fff;
+  }
+  .capability-list p:hover,
+  .report-info-panel dl div:hover {
+    border-color: #e2e8f0;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .08);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    .report-hero,
+    .score-card,
+    .snapshot-card,
+    .capability-card,
+    .score-metric,
+    .report-section,
+    .report-info-panel,
+    .report-content-summary,
+    .report-content-detail,
+    .capability-list p,
+    .report-info-panel dl div {
+      transition: none;
+    }
+    .report-hero:hover,
+    .score-card:hover,
+    .snapshot-card:hover,
+    .capability-card:hover,
+    .score-metric:hover,
+    .report-section:hover,
+    .report-info-panel:hover,
+    .report-info-panel:hover {
+      transform: none;
+    }
+  }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; border-bottom: 1px solid #eee; padding: 14px 10px; vertical-align: top; }
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #666; }
   @media (max-width: 900px) {
-    .report-hero, .pro-banner { grid-template-columns: 1fr; padding: 22px; }
-    .report-snapshot, .capability-grid, .score-grid { grid-template-columns: 1fr; }
+    .report-hero { grid-template-columns: 1fr; padding: 22px; }
+    .report-snapshot, .capability-grid, .score-grid, .report-info-grid, .report-info-panel dl { grid-template-columns: 1fr; }
     .score-card { padding: 22px; }
+  }
+  @media (max-width: 1279px) {
+    .report-fixed-nav { display: none; }
   }
   .footer { margin-top: auto; border-top: 1px solid #eee; padding: 32px 24px; text-align: center; color: #666; }
 `;
