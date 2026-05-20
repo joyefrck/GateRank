@@ -8,6 +8,7 @@ import type {
   PublicCardType,
   RankingItem,
   RankingType,
+  ReportCapabilities,
   ReportView,
   RiskMonitorItem,
   RiskMonitorView,
@@ -478,6 +479,7 @@ export class PublicViewService {
           .filter((row) => typeof row.median_download_mbps === 'number')
           .map((row) => ({ date: row.date, value: round2(row.median_download_mbps) })),
       },
+      capabilities: buildReportCapabilities(base.airport),
     };
   }
 
@@ -754,6 +756,167 @@ function collectRankingAirportIds(...rankingLists: Array<Array<Pick<RankingItem,
 
 function resolvePublicAirportSlug(airport: Pick<Airport, 'id' | 'slug' | 'name' | 'website'>): string {
   return airport.slug || buildAirportSlugCandidate({ name: airport.name, website: airport.website }) || `airport-${airport.id}`;
+}
+
+const STREAMING_LABELS: Record<string, string> = {
+  netflix: 'Netflix',
+  chatgpt: 'ChatGPT',
+  disney_plus: 'Disney+',
+  hbo_max: 'HBO Max',
+  youtube_premium: 'YouTube Premium',
+  tiktok: 'TikTok',
+  spotify: 'Spotify',
+};
+
+const PAYMENT_LABELS: Record<string, string> = {
+  wechat: '微信',
+  alipay: '支付宝',
+  usdt_trc20: 'USDT-TRC20',
+  usdt_erc20: 'USDT-ERC20',
+  usdt_bep20: 'USDT-BEP20',
+  stripe_card: '银行卡',
+  paypal: 'PayPal',
+  crypto_other: '其他加密货币',
+  unionpay: '银联',
+};
+
+const CLIENT_LABELS: Record<string, string> = {
+  clash: 'Clash',
+  clash_verge: 'Clash Verge',
+  shadowrocket: 'Shadowrocket',
+  quantumult_x: 'Quantumult X',
+  stash: 'Stash',
+  surge: 'Surge',
+  sing_box: 'sing-box',
+  v2rayn: 'v2rayN',
+  v2rayng: 'v2rayNG',
+  nekobox: 'NekoBox',
+  surfboard: 'Surfboard',
+  xiaohuojian: '小火箭',
+  openclash: 'OpenClash',
+};
+
+const IMPORT_METHOD_LABELS: Record<string, string> = {
+  one_click_import: '一键导入',
+  subscription_link: '订阅链接',
+  universal_subscription: '通用订阅',
+  qr_code_import: '二维码导入',
+  tutorials: '教程支持',
+};
+
+const REGION_LABELS: Record<string, string> = {
+  hong_kong: '香港',
+  taiwan: '台湾',
+  japan: '日本',
+  singapore: '新加坡',
+  united_states: '美国',
+  south_korea: '韩国',
+  united_kingdom: '英国',
+  germany: '德国',
+  turkey: '土耳其',
+  argentina: '阿根廷',
+  india: '印度',
+};
+
+const LINE_TYPE_LABELS: Record<string, string> = {
+  iepl: 'IEPL',
+  iplc: 'IPLC',
+  cn2: 'CN2',
+  bgp: 'BGP',
+  relay: '中转',
+};
+
+function buildReportCapabilities(airport: Airport): ReportCapabilities {
+  const profile = airport.profile;
+  const plan = profile?.plan;
+  const telegram = profile?.telegram;
+  return {
+    plan: {
+      lowest_monthly_price: plan?.lowest_monthly_price ?? airport.plan_price_month ?? null,
+      has_trial_plan: plan?.has_trial_plan ?? airport.has_trial ?? null,
+      supports_annual: plan?.supports_annual ?? airport.has_annual_plan ?? null,
+      has_lifetime_plan: plan?.has_lifetime_plan ?? airport.has_lifetime_plan ?? null,
+    },
+    streaming: toCapabilityItems(airport.streaming_support || [], STREAMING_LABELS),
+    payment_methods: toCapabilityItems(airport.payment_methods || [], PAYMENT_LABELS),
+    telegram: {
+      items: buildTelegramCapabilityItems(airport),
+      group_member_count: telegram?.group_member_count ?? null,
+      recent_active_at: telegram?.recent_active_at ?? null,
+    },
+    clients: toCapabilityItemsFromBooleanMap(profile?.clients, CLIENT_LABELS),
+    import_methods: toCapabilityItemsFromBooleanMap(profile?.import_methods, IMPORT_METHOD_LABELS),
+    regions: buildRegionCapabilities(profile?.regions),
+  };
+}
+
+function toCapabilityItems(values: string[], labels: Record<string, string>): ReportCapabilities['streaming'] {
+  return values
+    .filter((value) => Boolean(labels[value]))
+    .map((value) => ({ key: value, label: labels[value] }));
+}
+
+function toCapabilityItemsFromBooleanMap(
+  values: object | undefined,
+  labels: Record<string, string>,
+): ReportCapabilities['streaming'] {
+  if (!values) {
+    return [];
+  }
+  const source = values as Record<string, boolean | null | undefined>;
+  return Object.entries(labels)
+    .filter(([key]) => source[key] === true)
+    .map(([key, label]) => ({ key, label }));
+}
+
+function buildTelegramCapabilityItems(airport: Airport): ReportCapabilities['telegram']['items'] {
+  const telegram = airport.profile?.telegram;
+  const items: ReportCapabilities['telegram']['items'] = [];
+  if (telegram?.has_group === true || airport.has_telegram_group === true) {
+    items.push({ key: 'group', label: 'Telegram 群组' });
+  }
+  if (telegram?.has_channel === true) {
+    items.push({ key: 'channel', label: 'Telegram 频道' });
+  }
+  if (telegram?.has_customer_service_bot === true) {
+    items.push({ key: 'customer_service_bot', label: '客服机器人' });
+  }
+  if (telegram?.has_ticket_system === true) {
+    items.push({ key: 'ticket_system', label: '工单系统' });
+  }
+  if (telegram?.group_allows_speaking === true || airport.telegram_allows_speaking === true) {
+    items.push({ key: 'group_allows_speaking', label: '群内可发言' });
+  }
+  return items;
+}
+
+function buildRegionCapabilities(
+  values: Record<string, { line_types?: string[]; has_residential?: boolean | null; has_native_ip?: boolean | null }> | undefined,
+): ReportCapabilities['regions'] {
+  if (!values) {
+    return [];
+  }
+  return Object.entries(REGION_LABELS)
+    .map(([key, label]) => {
+      const region = values[key as keyof typeof values];
+      if (!region) {
+        return null;
+      }
+      const lineTypes = Array.isArray(region.line_types)
+        ? region.line_types.map((type) => LINE_TYPE_LABELS[type] || type)
+        : [];
+      if (region.has_residential !== true && region.has_native_ip !== true && lineTypes.length === 0) {
+        return null;
+      }
+      return {
+        key,
+        label,
+        line_types: lineTypes,
+        has_residential: region.has_residential,
+        has_native_ip: region.has_native_ip,
+      };
+    })
+    .filter((item): item is ReportCapabilities['regions'][number] => item !== null);
 }
 
 function mergeHomeSectionItems(limit: number, ...groups: PublicCardItem[][]): PublicCardItem[] {

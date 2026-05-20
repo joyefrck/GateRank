@@ -1797,6 +1797,49 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
         is_listed: true,
         plan_price_month: 12,
         has_trial: true,
+        streaming_support: ['netflix', 'chatgpt'],
+        payment_methods: ['alipay', 'usdt_trc20'],
+        profile: {
+          plan: {
+            lowest_monthly_price: 9.9,
+            has_trial_plan: true,
+            supports_annual: true,
+            has_lifetime_plan: false,
+          },
+          telegram: {
+            has_group: true,
+            has_channel: true,
+            has_customer_service_bot: true,
+            has_ticket_system: false,
+            group_allows_speaking: true,
+            group_member_count: 1600,
+            recent_active_at: '2026-03-23',
+          },
+          clients: {
+            clash: true,
+            shadowrocket: true,
+            surge: false,
+          },
+          import_methods: {
+            one_click_import: true,
+            subscription_link: true,
+            universal_subscription: false,
+            qr_code_import: false,
+            tutorials: true,
+          },
+          regions: {
+            hong_kong: {
+              has_residential: false,
+              has_native_ip: true,
+              line_types: ['iepl'],
+            },
+            japan: {
+              has_residential: true,
+              has_native_ip: false,
+              line_types: ['bgp'],
+            },
+          },
+        } as any,
         tags: ['稳定'],
         created_at: '2026-01-20',
       }),
@@ -1890,6 +1933,27 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
   assert.equal(result.summary_card.type, 'stable');
   assert.equal(result.summary_card.stability_tier, 'stable');
   assert.equal(result.ranking.risk_alerts_rank, null);
+  assert.deepEqual(
+    result.capabilities.streaming.map((item) => item.label),
+    ['Netflix', 'ChatGPT'],
+  );
+  assert.deepEqual(
+    result.capabilities.payment_methods.map((item) => item.label),
+    ['支付宝', 'USDT-TRC20'],
+  );
+  assert.deepEqual(
+    result.capabilities.clients.map((item) => item.label),
+    ['Clash', 'Shadowrocket'],
+  );
+  assert.deepEqual(
+    result.capabilities.import_methods.map((item) => item.label),
+    ['一键导入', '订阅链接', '教程支持'],
+  );
+  assert.deepEqual(
+    result.capabilities.regions.map((item) => [item.label, item.line_types]),
+    [['香港', ['IEPL']], ['日本', ['BGP']]],
+  );
+  assert.equal(result.capabilities.telegram.group_member_count, 1600);
 });
 
 test('PublicViewService.getReportView derives today pick rank from public full ranking preview', async () => {

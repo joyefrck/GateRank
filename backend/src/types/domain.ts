@@ -374,6 +374,42 @@ export interface RiskMonitorView {
   items: RiskMonitorItem[];
 }
 
+export interface ReportCapabilityItem {
+  key: string;
+  label: string;
+}
+
+export interface ReportCapabilityRegion {
+  key: string;
+  label: string;
+  line_types: string[];
+  has_residential: boolean | null;
+  has_native_ip: boolean | null;
+}
+
+export interface ReportCapabilityPlan {
+  lowest_monthly_price: number | null;
+  has_trial_plan: boolean | null;
+  supports_annual: boolean | null;
+  has_lifetime_plan: boolean | null;
+}
+
+export interface ReportCapabilityTelegram {
+  items: ReportCapabilityItem[];
+  group_member_count: number | null;
+  recent_active_at: string | null;
+}
+
+export interface ReportCapabilities {
+  plan: ReportCapabilityPlan;
+  streaming: ReportCapabilityItem[];
+  payment_methods: ReportCapabilityItem[];
+  telegram: ReportCapabilityTelegram;
+  clients: ReportCapabilityItem[];
+  import_methods: ReportCapabilityItem[];
+  regions: ReportCapabilityRegion[];
+}
+
 export interface ReportView {
   requested_date: string;
   date: string;
@@ -417,6 +453,7 @@ export interface ReportView {
     latency_30d: Array<{ date: string; value: number }>;
     download_30d: Array<{ date: string; value: number }>;
   };
+  capabilities: ReportCapabilities;
 }
 
 export type MarketingEventType = 'page_view' | 'airport_impression' | 'outbound_click';

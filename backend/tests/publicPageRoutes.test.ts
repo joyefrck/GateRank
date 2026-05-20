@@ -182,13 +182,22 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     );
     const okHtml = await okResponse.text();
     assert.match(okHtml, /<h1>星云机场 测评报告<\/h1>/);
-    assert.match(okHtml, /星云机场 机场基础信息/);
-    assert.match(okHtml, /官网入口/);
-    assert.match(okHtml, /公开分数/);
-    assert.match(okHtml, /榜单位置/);
+    assert.match(okHtml, /今日推荐/);
+    assert.match(okHtml, /全量榜单/);
+    assert.match(okHtml, /申请入驻/);
+    assert.match(okHtml, /GateRank Score/);
+    assert.match(okHtml, /服务能力详情/);
+    assert.match(okHtml, /Netflix/);
+    assert.match(okHtml, /支付宝/);
+    assert.match(okHtml, /Telegram 群组/);
+    assert.match(okHtml, /香港 · IEPL/);
     assert.match(okHtml, /评分拆解/);
+    assert.match(okHtml, /核心监测指标/);
     assert.match(okHtml, /30 天可用率/);
-    assert.match(okHtml, /30 天趋势摘要/);
+    assert.match(okHtml, /30 天趋势/);
+    assert.match(okHtml, /导入与配置/);
+    assert.match(okHtml, /结论与建议/);
+    assert.match(okHtml, /GateRank Pro 数据看板/);
     assert.match(okHtml, /常见问题/);
     assert.match(okHtml, /星云机场怎么样/);
     assert.match(okHtml, /星云机场测评怎么看/);
@@ -416,6 +425,41 @@ const reportView: ReportView = {
     download_30d: [
       { date: '2026-03-22', value: 300 },
       { date: '2026-03-23', value: 320 },
+    ],
+  },
+  capabilities: {
+    plan: {
+      lowest_monthly_price: 18,
+      has_trial_plan: true,
+      supports_annual: true,
+      has_lifetime_plan: false,
+    },
+    streaming: [
+      { key: 'netflix', label: 'Netflix' },
+      { key: 'chatgpt', label: 'ChatGPT' },
+    ],
+    payment_methods: [
+      { key: 'alipay', label: '支付宝' },
+      { key: 'usdt_trc20', label: 'USDT-TRC20' },
+    ],
+    telegram: {
+      items: [{ key: 'group', label: 'Telegram 群组' }],
+      group_member_count: 1200,
+      recent_active_at: '2026-03-23',
+    },
+    clients: [
+      { key: 'clash', label: 'Clash' },
+      { key: 'shadowrocket', label: 'Shadowrocket' },
+    ],
+    import_methods: [{ key: 'one_click_import', label: '一键导入' }],
+    regions: [
+      {
+        key: 'hong_kong',
+        label: '香港',
+        line_types: ['IEPL'],
+        has_residential: false,
+        has_native_ip: true,
+      },
     ],
   },
 };

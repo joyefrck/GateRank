@@ -245,6 +245,35 @@ interface ReportViewResponse {
     latency_30d: Array<{ date: string; value: number }>;
     download_30d: Array<{ date: string; value: number }>;
   };
+  capabilities: {
+    plan: {
+      lowest_monthly_price: number | null;
+      has_trial_plan: boolean | null;
+      supports_annual: boolean | null;
+      has_lifetime_plan: boolean | null;
+    };
+    streaming: ReportCapabilityItem[];
+    payment_methods: ReportCapabilityItem[];
+    telegram: {
+      items: ReportCapabilityItem[];
+      group_member_count: number | null;
+      recent_active_at: string | null;
+    };
+    clients: ReportCapabilityItem[];
+    import_methods: ReportCapabilityItem[];
+    regions: Array<{
+      key: string;
+      label: string;
+      line_types: string[];
+      has_residential: boolean | null;
+      has_native_ip: boolean | null;
+    }>;
+  };
+}
+
+interface ReportCapabilityItem {
+  key: string;
+  label: string;
 }
 
 type InitialPublicDataKind = 'home' | 'full_ranking' | 'risk_monitor';
@@ -3019,13 +3048,9 @@ function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airp
   });
 
   return (
-    <div className="min-h-screen bg-white relative">
-      <div
-        className="fixed inset-0 opacity-[0.015] pointer-events-none z-0"
-        style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}
-      />
-
-      <div className="relative z-10 max-w-7xl mx-auto px-4 py-8 md:py-12">
+    <PageFrame active="full_ranking">
+      <main className="bg-[#f6f8fb]">
+        <div className="mx-auto max-w-7xl px-4 py-6 md:py-8">
         <div className="flex items-center justify-between gap-4 flex-wrap mb-8">
           <button
             type="button"
@@ -3054,156 +3079,532 @@ function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airp
         {error && !loading && <EmptySection message={error} />}
 
         {!loading && !error && data && (
-          <div className="space-y-10">
-            <MarketingImpressionWrapper
-              airportId={data.airport.id}
-              placement="report_header"
-              pageKind="report"
-              dedupeKey={`report|${data.airport.id}`}
-            >
-              <header className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.8fr)] gap-6 items-start">
-              <div>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-11 h-11 rounded-xl bg-neutral-900 text-white flex items-center justify-center shadow-xl">
-                    <ShieldCheck className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <div className="text-[11px] uppercase tracking-[0.18em] text-neutral-400 font-black">Full Report</div>
-                    <h1 className="text-3xl md:text-5xl font-black tracking-tight text-neutral-900">{data.airport.name}</h1>
-                  </div>
-                </div>
-                <p className="text-sm md:text-base text-neutral-600 leading-7 max-w-2xl">
-                  基于稳定性、性能、价格和风险维度生成的当前报告视图。下方卡片与首页口径保持一致，便于用户从推荐列表进入后继续查看原因与趋势。
-                </p>
-                <a
-                  href={buildMethodologyHref()}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    navigate(buildMethodologyHref());
-                  }}
-                  className="mt-5 inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-600 transition-colors hover:border-neutral-900 hover:text-neutral-900"
-                >
-                  查看测评方法
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </a>
-                <div className="mt-5 flex flex-wrap gap-2">
-                  {data.airport.tags.map((tag) => (
-                    <TagBadge key={tag} tag={tag} />
-                  ))}
-                  <span className={`px-3 py-1 rounded-sm border text-[11px] font-black uppercase tracking-[0.16em] ${getAirportStatusTone(data.airport.status)}`}>
-                    {formatAirportStatus(data.airport.status)}
-                  </span>
-                  <a
-                    href={buildOutboundAirportHref(data.airport.id, 'website', 'report_header')}
-                    target="_blank"
-                    rel="noreferrer"
-                    onClick={createTrackedOutboundClickHandler({
-                      airportId: data.airport.id,
-                      pageKind: 'report',
-                      placement: 'report_header',
-                      targetKind: 'website',
-                      targetUrl: data.airport.website,
-                    })}
-                    className="px-3 py-1 rounded-sm border border-neutral-200 text-[11px] font-black uppercase tracking-[0.16em] text-neutral-600"
-                  >
-                    官网
-                  </a>
-                </div>
-              </div>
-
-              <ConclusionCard
-                type={data.summary_card.type}
-                title="完整报告"
-                name={data.summary_card.name}
-                tags={data.summary_card.tags}
-                score={data.summary_card.score}
-                stabilityTier={data.summary_card.stability_tier}
-                details={data.summary_card.details}
-                conclusion={data.summary_card.conclusion}
-              />
-              </header>
-            </MarketingImpressionWrapper>
-
-            <section className="space-y-4">
-              <SectionHeader
-                icon={BarChart3}
-                title="榜单位置"
-                subtitle="Ranking Snapshot"
-                color="text-neutral-900"
-                bgClass="bg-neutral-900"
-              />
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                {rankPairs.map((item) => (
-                  <div key={item.label}>
-                    <StatusPill label={item.label} value={item.value ? `#${item.value}` : '-'} />
-                  </div>
-                ))}
-              </div>
-            </section>
-
-            <section className="space-y-4">
-              <SectionHeader
-                icon={ShieldCheck}
-                title="关键指标"
-                subtitle="Metrics Snapshot"
-                color="text-emerald-500"
-                bgClass="bg-emerald-500"
-              />
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <StatusPill label="30 天可用率" value={`${formatMetric(data.metrics.uptime_percent_30d)}%`} />
-                <StatusPill label="中位延迟" value={`${formatMetric(data.metrics.median_latency_ms)} ms`} />
-                <StatusPill label="下载速率" value={`${formatMetric(data.metrics.median_download_mbps)} Mbps`} />
-                <StatusPill label="丢包率" value={`${formatMetric(data.metrics.packet_loss_percent)}%`} />
-                <StatusPill label="健康记录" value={`${data.metrics.healthy_days_streak} 天`} />
-                <StatusPill label="当前状态" value={getStabilityTierLabel(data.metrics.stability_tier)} />
-                <StatusPill label="近期投诉" value={data.metrics.recent_complaints_count} />
-                <StatusPill label="历史异常" value={data.metrics.history_incidents} />
-                <StatusPill label="状态" value={formatAirportStatus(data.airport.status)} />
-              </div>
-            </section>
-
-            <section className="space-y-4">
-              <SectionHeader
-                icon={Clock}
-                title="评分拆解"
-                subtitle="Score Breakdown"
-                color="text-sky-500"
-                bgClass="bg-sky-500"
-              />
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                <StatusPill label="稳定性 S" value={formatMetric(data.score_breakdown.s)} />
-                <StatusPill label="性能 P" value={formatMetric(data.score_breakdown.p)} />
-                <StatusPill label="价格 C" value={formatMetric(data.score_breakdown.c)} />
-                <StatusPill label="风险 R" value={formatMetric(data.score_breakdown.r)} />
-                <StatusPill label="最终分" value={formatMetric(data.score_breakdown.final_score)} />
-                <StatusPill label="风险惩罚" value={formatMetric(data.score_breakdown.risk_penalty)} />
-                <StatusPill label="域名惩罚" value={formatMetric(data.score_breakdown.domain_penalty)} />
-                <StatusPill label="SSL 惩罚" value={formatMetric(data.score_breakdown.ssl_penalty)} />
-                <StatusPill label="投诉惩罚" value={formatMetric(data.score_breakdown.complaint_penalty)} />
-                <StatusPill label="历史惩罚" value={formatMetric(data.score_breakdown.history_penalty)} />
-              </div>
-            </section>
-
-            <section className="space-y-4">
-              <SectionHeader
-                icon={Zap}
-                title="30 天趋势"
-                subtitle="Recent Trend"
-                color="text-indigo-500"
-                bgClass="bg-indigo-500"
-              />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <TrendPanel icon={BarChart3} title="最终评分" items={data.trends.score_30d} />
-                <TrendPanel icon={ShieldCheck} title="可用率" items={data.trends.uptime_30d} suffix="%" />
-                <TrendPanel icon={Clock} title="延迟" items={data.trends.latency_30d} suffix=" ms" />
-                <TrendPanel icon={Zap} title="下载速率" items={data.trends.download_30d} suffix=" Mbps" />
-              </div>
-            </section>
-          </div>
+          <ReportContentV2 data={data} rankPairs={rankPairs} />
         )}
+        </div>
+      </main>
+    </PageFrame>
+  );
+}
+
+function ReportContentV2({
+  data,
+  rankPairs,
+}: {
+  data: ReportViewResponse;
+  rankPairs: Array<{ label: string; value: number | null }>;
+}) {
+  return (
+    <div className="space-y-7 md:space-y-8">
+      <MarketingImpressionWrapper
+        airportId={data.airport.id}
+        placement="report_header"
+        pageKind="report"
+        dedupeKey={`report|${data.airport.id}`}
+      >
+        <ReportHeroV2 data={data} />
+      </MarketingImpressionWrapper>
+
+      <ReportSnapshotGrid data={data} />
+      <ReportProBanner />
+      <ReportCapabilitiesSection data={data} />
+      <ReportScoreBreakdown data={data} />
+      <ReportCoreMetrics data={data} />
+      <ReportTrendSection data={data} />
+      <ReportImportConfig data={data} />
+      <ReportConclusion data={data} rankPairs={rankPairs} />
+    </div>
+  );
+}
+
+function ReportHeroV2({ data }: { data: ReportViewResponse }) {
+  return (
+    <section className="grid gap-6 rounded-[8px] border border-slate-200 bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_54%,#eef6ff_100%)] p-5 shadow-sm md:grid-cols-[minmax(0,1fr)_320px] md:p-8 lg:grid-cols-[minmax(0,1fr)_380px]">
+      <div className="min-w-0">
+        <div className="mb-4 text-xs font-bold text-slate-500">
+          首页 / 机场专题 / {data.airport.name}
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
+            {data.airport.name} 测评报告
+          </h1>
+          <span className={`rounded-full border px-3 py-1 text-xs font-black ${getAirportStatusTone(data.airport.status)}`}>
+            {formatAirportStatus(data.airport.status)}
+          </span>
+        </div>
+        <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
+          基于 GateRank 全球节点监测数据，从稳定性、性能、价格与风险四个维度综合评估。
+          本页展示 {data.airport.name} 的综合评分、服务能力、关键指标与 30 天趋势，帮助判断是否适合作为机场 VPN 选择。
+        </p>
+        <div className="mt-5 flex flex-wrap gap-2">
+          {data.airport.tags.map((tag) => (
+            <TagBadge key={tag} tag={tag} />
+          ))}
+          <ReportTag label={data.capabilities.plan.has_trial_plan ? '免费试用' : '试用未收录'} tone="green" />
+          <ReportTag label={data.capabilities.plan.lowest_monthly_price === null ? '价格未收录' : `¥${formatMetric(data.capabilities.plan.lowest_monthly_price)}/月起`} tone="blue" />
+          <ReportTag label={getStabilityTierLabel(data.metrics.stability_tier)} tone="emerald" />
+        </div>
+        <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            href={buildOutboundAirportHref(data.airport.id, 'website', 'report_header')}
+            target="_blank"
+            rel="noreferrer"
+            onClick={createTrackedOutboundClickHandler({
+              airportId: data.airport.id,
+              pageKind: 'report',
+              placement: 'report_header',
+              targetKind: 'website',
+              targetUrl: data.airport.website,
+            })}
+            className="inline-flex min-h-11 items-center gap-2 rounded-[8px] bg-slate-950 px-5 text-sm font-black text-white shadow-sm transition hover:bg-slate-800"
+          >
+            访问官网
+            <ExternalLink className="h-4 w-4" />
+          </a>
+          <a
+            href={buildMethodologyHref()}
+            onClick={(event) => {
+              event.preventDefault();
+              navigate(buildMethodologyHref());
+            }}
+            className="inline-flex min-h-11 items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
+          >
+            测评方法
+            <ArrowRight className="h-4 w-4" />
+          </a>
+        </div>
+      </div>
+      <ReportScoreCard data={data} />
+    </section>
+  );
+}
+
+function ReportScoreCard({ data }: { data: ReportViewResponse }) {
+  const score = Math.max(0, Math.min(100, data.summary_card.score));
+  return (
+    <aside className="rounded-[8px] border border-slate-200 bg-white p-6 text-center shadow-sm">
+      <div className="text-sm font-black text-slate-800">GateRank Score</div>
+      <div className="mt-3 flex items-end justify-center gap-2">
+        <span className="text-5xl font-black tracking-tight text-slate-950 md:text-6xl">{formatMetric(data.summary_card.score)}</span>
+        <span className="pb-2 text-sm font-bold text-slate-500">/100</span>
+      </div>
+      <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
+        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${score}%` }} />
+      </div>
+      <div className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-600">
+        <span>综合评级：</span>
+        <span className="font-black text-emerald-600">{getScoreGrade(data.summary_card.score)}</span>
+      </div>
+    </aside>
+  );
+}
+
+function ReportSnapshotGrid({ data }: { data: ReportViewResponse }) {
+  return (
+    <section className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <ReportMetricTile icon={ShieldCheck} label="状态" value={formatAirportStatus(data.airport.status)} tone="green" />
+      <ReportMetricTile icon={Clock} label="数据日期" value={data.date} tone="blue" />
+      <ReportMetricTile icon={CheckCircle2} label="健康记录" value={`${data.metrics.healthy_days_streak} 天`} tone="rose" />
+      <ReportMetricTile icon={Zap} label="稳定性" value={getStabilityTierLabel(data.metrics.stability_tier)} tone="cyan" />
+      <ReportMetricTile icon={AlertTriangle} label="风险惩罚" value={formatMetric(data.score_breakdown.risk_penalty)} tone="red" />
+    </section>
+  );
+}
+
+function ReportProBanner() {
+  return (
+    <a
+      href="/apply"
+      className="grid gap-4 overflow-hidden rounded-[8px] border border-blue-100 bg-[linear-gradient(115deg,#ffffff_0%,#eef6ff_58%,#dbeafe_100%)] p-5 shadow-sm transition hover:border-blue-200 md:grid-cols-[minmax(0,1fr)_auto] md:p-7"
+    >
+      <div>
+        <div className="text-xs font-black uppercase tracking-[0.18em] text-blue-500">广告</div>
+        <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-950 md:text-3xl">GateRank Pro 数据看板</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-600">
+          更全面的数据洞察、更智能的机场评估，适合需要持续观察转化与测速表现的机场团队。
+        </p>
+        <div className="mt-4 grid gap-2 text-sm font-bold text-slate-600 sm:grid-cols-2">
+          <span>多维度数据对比</span>
+          <span>历史趋势分析</span>
+          <span>自定义监控告警</span>
+          <span>专属订阅佣金跟踪</span>
+        </div>
+      </div>
+      <div className="flex items-end">
+        <span className="inline-flex min-h-11 items-center gap-2 rounded-[8px] bg-blue-600 px-5 text-sm font-black text-white shadow-sm">
+          立即体验 Pro
+          <ArrowRight className="h-4 w-4" />
+        </span>
+      </div>
+    </a>
+  );
+}
+
+function ReportCapabilitiesSection({ data }: { data: ReportViewResponse }) {
+  return (
+    <section>
+      <ReportSectionTitle title="服务能力详情" />
+      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-6">
+        <ReportCapabilityGroup className="lg:col-span-1" title="解锁能力" icon={Zap} items={data.capabilities.streaming} />
+        <ReportCapabilityGroup className="lg:col-span-1" title="支付方式" icon={Banknote} items={data.capabilities.payment_methods} />
+        <ReportCapabilityGroup
+          className="lg:col-span-1"
+          title="售后支持"
+          icon={Headphones}
+          items={data.capabilities.telegram.items}
+          footnote={formatTelegramFootnote(data)}
+        />
+        <ReportRegionGroup className="lg:col-span-1" regions={data.capabilities.regions} />
+        <ReportCapabilityGroup className="lg:col-span-1" title="客户端支持" icon={ShieldCheck} items={data.capabilities.clients} />
+        <ReportCapabilityGroup className="lg:col-span-1" title="新手引导" icon={ArrowRight} items={data.capabilities.import_methods} />
+      </div>
+    </section>
+  );
+}
+
+function ReportScoreBreakdown({ data }: { data: ReportViewResponse }) {
+  const scores = [
+    { label: '稳定性 (S)', value: data.score_breakdown.s, color: 'bg-emerald-500', suffix: 'S' },
+    { label: '性能 (P)', value: data.score_breakdown.p, color: 'bg-blue-500', suffix: 'P' },
+    { label: '价格 (C)', value: data.score_breakdown.c, color: 'bg-orange-500', suffix: 'C' },
+    { label: '风险 (R)', value: data.score_breakdown.r, color: 'bg-purple-500', suffix: 'R' },
+    { label: '最终分', value: data.score_breakdown.final_score, color: 'bg-emerald-500', suffix: '' },
+    { label: '风险惩罚', value: data.score_breakdown.risk_penalty, color: 'bg-slate-400', suffix: '' },
+  ];
+  return (
+    <section>
+      <ReportSectionTitle title="评分拆解" />
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-6">
+        {scores.map((item) => (
+          <ReportScoreMetric key={item.label} {...item} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReportCoreMetrics({ data }: { data: ReportViewResponse }) {
+  return (
+    <section>
+      <ReportSectionTitle title="核心监测指标" />
+      <div className="mt-4 grid gap-3 md:grid-cols-4">
+        <ReportTrendMetric title="30天可用率" value={`${formatMetric(data.metrics.uptime_percent_30d)}%`} points={data.trends.uptime_30d} color="#22c55e" />
+        <ReportTrendMetric title="平均延迟" value={`${formatMetric(data.metrics.median_latency_ms)} ms`} points={data.trends.latency_30d} color="#0ea5e9" />
+        <ReportTrendMetric title="下载速率" value={`${formatMetric(data.metrics.median_download_mbps)} Mbps`} points={data.trends.download_30d} color="#f97316" />
+        <ReportTrendMetric title="丢包率" value={`${formatMetric(data.metrics.packet_loss_percent)}%`} points={[]} color="#8b5cf6" />
+      </div>
+    </section>
+  );
+}
+
+function ReportTrendSection({ data }: { data: ReportViewResponse }) {
+  return (
+    <section>
+      <ReportSectionTitle title="30天趋势" />
+      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <ReportTrendCard title="评分趋势" points={data.trends.score_30d} color="#22c55e" />
+        <ReportTrendCard title="可用率趋势" points={data.trends.uptime_30d} color="#0ea5e9" suffix="%" />
+        <ReportTrendCard title="延迟趋势 (ms)" points={data.trends.latency_30d} color="#64748b" suffix=" ms" />
+        <ReportTrendCard title="下载速率趋势 (Mbps)" points={data.trends.download_30d} color="#f97316" suffix=" Mbps" />
+      </div>
+    </section>
+  );
+}
+
+function ReportImportConfig({ data }: { data: ReportViewResponse }) {
+  const items = [
+    { label: '一键导入', value: hasCapability(data.capabilities.import_methods, 'one_click_import') ? '支持' : '未收录' },
+    { label: '订阅链接', value: hasCapability(data.capabilities.import_methods, 'subscription_link') ? '支持' : '未收录' },
+    { label: '教程支持', value: hasCapability(data.capabilities.import_methods, 'tutorials') ? '支持' : '未收录' },
+    { label: '客户端数量', value: `${data.capabilities.clients.length} 个` },
+    { label: '地区覆盖', value: `${data.capabilities.regions.length} 个` },
+    { label: '年付套餐', value: data.capabilities.plan.supports_annual ? '支持' : '未收录' },
+  ];
+  return (
+    <section className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(260px,0.9fr)]">
+      <div>
+        <ReportSectionTitle title="导入与配置" />
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+          {items.map((item) => (
+            <div key={item.label} className="rounded-[8px] border border-slate-200 bg-white p-4">
+              <div className="text-xs font-bold text-slate-500">{item.label}</div>
+              <div className="mt-2 text-sm font-black text-slate-950">{item.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="rounded-[8px] border border-slate-200 bg-white p-5">
+        <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-400">综合评级</div>
+        <div className="mt-3 text-3xl font-black text-emerald-600">{getScoreGrade(data.summary_card.score)}</div>
+        <p className="mt-3 text-sm leading-7 text-slate-600">{data.summary_card.conclusion}</p>
+      </div>
+    </section>
+  );
+}
+
+function ReportConclusion({
+  data,
+  rankPairs,
+}: {
+  data: ReportViewResponse;
+  rankPairs: Array<{ label: string; value: number | null }>;
+}) {
+  return (
+    <section className="rounded-[8px] border border-slate-200 bg-white p-5">
+      <ReportSectionTitle title="结论与建议" />
+      <p className="mt-4 text-sm leading-7 text-slate-600">
+        本次评测数据显示 {data.airport.name} 当前综合分为 {formatMetric(data.summary_card.score)} / 100，
+        状态为 {formatAirportStatus(data.airport.status)}，稳定性评级为 {getStabilityTierLabel(data.metrics.stability_tier)}。
+        建议结合官网可达性、近期投诉、风险惩罚和 30 天趋势一起判断，不仅按单次测速决定是否长期使用。
+      </p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {rankPairs.map((item) => (
+          <span key={item.label} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-black text-slate-600">
+            {item.label} {item.value ? `#${item.value}` : '未入榜'}
+          </span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ReportSectionTitle({ title }: { title: string }) {
+  return <h2 className="text-xl font-black tracking-tight text-slate-950">{title}</h2>;
+}
+
+function ReportTag({ label, tone }: { label: string; tone: 'green' | 'blue' | 'emerald' }) {
+  const classes = {
+    green: 'border-emerald-100 bg-emerald-50 text-emerald-700',
+    blue: 'border-blue-100 bg-blue-50 text-blue-700',
+    emerald: 'border-teal-100 bg-teal-50 text-teal-700',
+  };
+  return <span className={`rounded-full border px-3 py-1 text-xs font-black ${classes[tone]}`}>{label}</span>;
+}
+
+function ReportMetricTile({
+  icon: Icon,
+  label,
+  value,
+  tone,
+}: {
+  icon: typeof ShieldCheck;
+  label: string;
+  value: string;
+  tone: 'green' | 'blue' | 'rose' | 'cyan' | 'red';
+}) {
+  const tones = {
+    green: 'bg-emerald-50 text-emerald-600',
+    blue: 'bg-blue-50 text-blue-600',
+    rose: 'bg-rose-50 text-rose-600',
+    cyan: 'bg-cyan-50 text-cyan-600',
+    red: 'bg-red-50 text-red-600',
+  };
+  return (
+    <div className="flex min-h-[88px] items-center gap-3 rounded-[8px] border border-slate-200 bg-white p-4 shadow-sm">
+      <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-[8px] ${tones[tone]}`}>
+        <Icon className="h-5 w-5" />
+      </div>
+      <div className="min-w-0">
+        <div className="text-xs font-bold text-slate-500">{label}</div>
+        <div className="mt-1 truncate text-base font-black text-slate-950">{value}</div>
       </div>
     </div>
   );
+}
+
+function ReportCapabilityGroup({
+  title,
+  icon: Icon,
+  items,
+  footnote,
+  className = '',
+}: {
+  title: string;
+  icon: typeof ShieldCheck;
+  items: ReportCapabilityItem[];
+  footnote?: string | null;
+  className?: string;
+}) {
+  return (
+    <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${className}`}>
+      <div className="mb-3 flex items-center gap-2">
+        <Icon className="h-4 w-4 text-slate-500" />
+        <h3 className="text-sm font-black text-slate-950">{title}</h3>
+      </div>
+      <div className="space-y-2">
+        {items.length > 0 ? items.map((item) => (
+          <CapabilityLine key={item.key} label={item.label} />
+        )) : <EmptyCapabilityLine />}
+      </div>
+      {footnote ? <div className="mt-3 text-xs font-bold text-slate-400">{footnote}</div> : null}
+    </div>
+  );
+}
+
+function ReportRegionGroup({ regions, className = '' }: { regions: ReportViewResponse['capabilities']['regions']; className?: string }) {
+  return (
+    <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${className}`}>
+      <div className="mb-3 flex items-center gap-2">
+        <BarChart3 className="h-4 w-4 text-slate-500" />
+        <h3 className="text-sm font-black text-slate-950">节点覆盖</h3>
+      </div>
+      <div className="space-y-2">
+        {regions.length > 0 ? regions.slice(0, 5).map((region) => (
+          <CapabilityLine
+            key={region.key}
+            label={`${region.label}${region.line_types.length > 0 ? ` · ${region.line_types.join('/')}` : ''}`}
+          />
+        )) : <EmptyCapabilityLine />}
+      </div>
+      {regions.length > 5 ? <div className="mt-3 text-xs font-bold text-slate-400">另有 {regions.length - 5} 个地区</div> : null}
+    </div>
+  );
+}
+
+function CapabilityLine({ label }: { key?: React.Key; label: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-[8px] bg-slate-50 px-3 py-2 text-sm">
+      <span className="min-w-0 truncate font-bold text-slate-700">{label}</span>
+      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+    </div>
+  );
+}
+
+function EmptyCapabilityLine() {
+  return <div className="rounded-[8px] bg-slate-50 px-3 py-2 text-sm font-bold text-slate-400">未收录</div>;
+}
+
+function ReportScoreMetric({
+  label,
+  value,
+  color,
+  suffix,
+}: {
+  key?: React.Key;
+  label: string;
+  value: number;
+  color: string;
+  suffix: string;
+}) {
+  const width = Math.max(0, Math.min(100, value));
+  return (
+    <div className="rounded-[8px] border border-slate-200 bg-white p-4">
+      <div className="text-xs font-bold text-slate-500">{label}</div>
+      <div className="mt-2 flex items-end justify-between gap-2">
+        <span className="text-2xl font-black text-slate-950">{formatMetric(value)}</span>
+        {suffix ? <span className="text-sm font-black text-slate-400">{suffix}</span> : null}
+      </div>
+      <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${width}%` }} />
+      </div>
+    </div>
+  );
+}
+
+function ReportTrendMetric({
+  title,
+  value,
+  points,
+  color,
+}: {
+  title: string;
+  value: string;
+  points: Array<{ date: string; value: number }>;
+  color: string;
+}) {
+  return (
+    <div className="rounded-[8px] border border-slate-200 bg-white p-4">
+      <div className="text-xs font-bold text-slate-500">{title}</div>
+      <div className="mt-2 text-xl font-black text-slate-950">{value}</div>
+      <div className="mt-3 h-12">
+        <Sparkline points={points} color={color} />
+      </div>
+    </div>
+  );
+}
+
+function ReportTrendCard({
+  title,
+  points,
+  color,
+  suffix = '',
+}: {
+  title: string;
+  points: Array<{ date: string; value: number }>;
+  color: string;
+  suffix?: string;
+}) {
+  const latest = points[points.length - 1];
+  return (
+    <div className="rounded-[8px] border border-slate-200 bg-white p-4">
+      <div className="text-sm font-black text-slate-950">{title}</div>
+      <div className="mt-1 text-xs font-bold text-slate-400">{points[0]?.date || '-'} 至 {latest?.date || '-'}</div>
+      <div className="mt-4 h-24">
+        <Sparkline points={points} color={color} fill />
+      </div>
+      <div className="mt-3 text-sm font-black text-slate-700">
+        最新：{latest ? `${formatMetric(latest.value)}${suffix}` : '暂无数据'}
+      </div>
+    </div>
+  );
+}
+
+function Sparkline({
+  points,
+  color,
+  fill = false,
+}: {
+  points: Array<{ date: string; value: number }>;
+  color: string;
+  fill?: boolean;
+}) {
+  if (points.length < 2) {
+    return (
+      <div className="flex h-full items-center justify-center rounded-[8px] bg-slate-50 text-xs font-bold text-slate-400">
+        暂无趋势
+      </div>
+    );
+  }
+
+  const values = points.map((point) => point.value);
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const chartPoints = points.map((point, index) => {
+    const x = (index / (points.length - 1)) * 100;
+    const y = 92 - ((point.value - min) / range) * 76;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  });
+  const areaPoints = `0,100 ${chartPoints.join(' ')} 100,100`;
+
+  return (
+    <svg viewBox="0 0 100 100" className="h-full w-full" preserveAspectRatio="none" aria-hidden="true">
+      {fill ? <polygon points={areaPoints} fill={color} opacity="0.12" /> : null}
+      <polyline points={chartPoints.join(' ')} fill="none" stroke={color} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+    </svg>
+  );
+}
+
+function getScoreGrade(score: number): string {
+  if (score >= 85) return '优秀';
+  if (score >= 75) return '良好';
+  if (score >= 60) return '观察';
+  return '高风险';
+}
+
+function hasCapability(items: ReportCapabilityItem[], key: string): boolean {
+  return items.some((item) => item.key === key);
+}
+
+function formatTelegramFootnote(data: ReportViewResponse): string | null {
+  const { group_member_count, recent_active_at } = data.capabilities.telegram;
+  if (group_member_count && recent_active_at) {
+    return `${formatNumber(group_member_count)} 人 · ${recent_active_at}`;
+  }
+  if (group_member_count) {
+    return `${formatNumber(group_member_count)} 人`;
+  }
+  return recent_active_at;
 }
 
 function ApplicationPage() {

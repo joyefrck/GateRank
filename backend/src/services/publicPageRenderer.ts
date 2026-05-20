@@ -217,23 +217,178 @@ export function renderReportPublicPage(siteUrl: string, view: ReportView, reques
     active: 'rankings',
     jsonLd: buildReportStructuredData(siteUrl, canonicalPath, seo, view),
     body: `
-      <main class="page-main">
-        <section class="hero">
-          <div class="eyebrow">机场测评报告</div>
-          <h1>${escapeHtml(view.airport.name)} 测评报告</h1>
-          <p>${escapeHtml(seo.description)}</p>
-          <div class="metric-grid">
-            ${renderMetric('公开分数', formatMetric(view.summary_card.score))}
-            ${renderMetric('状态', formatAirportStatusLabel(view.airport.status))}
-            ${renderMetric('数据日期', view.date)}
-            ${renderMetric('稳定性', formatStabilityTier(view.metrics.stability_tier))}
+      <main class="page-main report-page">
+        <section class="report-hero">
+          <div class="report-hero-copy">
+            <div class="breadcrumb">首页 / 机场专题 / ${escapeHtml(view.airport.name)}</div>
+            <h1>${escapeHtml(view.airport.name)} 测评报告</h1>
+            <p>${escapeHtml(seo.description)}</p>
+            <div class="report-tags">
+              ${view.airport.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}
+              <span>${escapeHtml(formatAirportStatusLabel(view.airport.status))}</span>
+              <span>${escapeHtml(view.capabilities.plan.has_trial_plan ? '免费试用' : '试用未收录')}</span>
+            </div>
+            <p><a class="primary-link" href="${escapeAttribute(view.airport.website)}" rel="nofollow noreferrer">访问官网</a></p>
           </div>
+          <aside class="score-card">
+            <div class="score-title">GateRank Score</div>
+            <div class="score-number">${escapeHtml(formatMetric(view.summary_card.score))}<span>/100</span></div>
+            <div class="score-bar"><i style="width:${Math.max(0, Math.min(100, view.summary_card.score))}%"></i></div>
+            <div class="score-grade">综合评级：${escapeHtml(formatScoreGrade(view.summary_card.score))}</div>
+          </aside>
+        </section>
+        <section class="report-snapshot">
+          ${renderSnapshotCard('状态', formatAirportStatusLabel(view.airport.status))}
+          ${renderSnapshotCard('数据日期', view.date)}
+          ${renderSnapshotCard('健康记录', `${view.metrics.healthy_days_streak} 天`)}
+          ${renderSnapshotCard('稳定性', formatStabilityTier(view.metrics.stability_tier))}
+          ${renderSnapshotCard('风险惩罚', formatMetric(view.score_breakdown.risk_penalty))}
+        </section>
+        <section class="pro-banner">
+          <div>
+            <div class="eyebrow">广告</div>
+            <h2>GateRank Pro 数据看板</h2>
+            <p>更全面的数据洞察、更智能的机场评估，适合需要持续观察转化与测速表现的机场团队。</p>
+          </div>
+          <a href="/apply">立即体验 Pro</a>
         </section>
         ${renderReportSummary(view)}
         ${renderReportFaq(faqItems)}
       </main>
     `,
   });
+}
+
+function renderSnapshotCard(label: string, value: string): string {
+  return `
+    <article class="snapshot-card">
+      <div>${escapeHtml(label)}</div>
+      <strong>${escapeHtml(value)}</strong>
+    </article>
+  `;
+}
+
+function renderReportSummary(view: ReportView): string {
+  return `
+    <section class="report-section">
+      <h2>服务能力详情</h2>
+      <div class="capability-grid">
+        ${renderCapabilityGroup('解锁能力', view.capabilities.streaming)}
+        ${renderCapabilityGroup('支付方式', view.capabilities.payment_methods)}
+        ${renderCapabilityGroup('售后支持', view.capabilities.telegram.items, renderTelegramFootnote(view))}
+        ${renderRegionGroup(view)}
+        ${renderCapabilityGroup('客户端支持', view.capabilities.clients)}
+        ${renderCapabilityGroup('新手引导', view.capabilities.import_methods)}
+      </div>
+    </section>
+    <section class="report-section">
+      <h2>评分拆解</h2>
+      <div class="score-grid">
+        ${renderScoreMetric('稳定性 (S)', view.score_breakdown.s, 'emerald')}
+        ${renderScoreMetric('性能 (P)', view.score_breakdown.p, 'blue')}
+        ${renderScoreMetric('价格 (C)', view.score_breakdown.c, 'orange')}
+        ${renderScoreMetric('风险 (R)', view.score_breakdown.r, 'purple')}
+        ${renderScoreMetric('最终分', view.score_breakdown.final_score, 'emerald')}
+        ${renderScoreMetric('风险惩罚', view.score_breakdown.risk_penalty, 'slate')}
+      </div>
+    </section>
+    <section class="report-section">
+      <h2>核心监测指标</h2>
+      <div class="metric-grid">
+        ${renderInfoCard('30 天可用率', `${formatMetric(view.metrics.uptime_percent_30d)}%`)}
+        ${renderInfoCard('中位延迟', `${formatMetric(view.metrics.median_latency_ms)} ms`)}
+        ${renderInfoCard('下载速率', `${formatMetric(view.metrics.median_download_mbps)} Mbps`)}
+        ${renderInfoCard('丢包率', `${formatMetric(view.metrics.packet_loss_percent)}%`)}
+      </div>
+    </section>
+    <section class="report-section">
+      <h2>30 天趋势</h2>
+      <div class="metric-grid">
+        ${renderInfoCard('评分趋势', buildTrendSummary(view.trends.score_30d, '分'))}
+        ${renderInfoCard('可用率趋势', buildTrendSummary(view.trends.uptime_30d, '%'))}
+        ${renderInfoCard('延迟趋势', buildTrendSummary(view.trends.latency_30d, ' ms'))}
+        ${renderInfoCard('下载趋势', buildTrendSummary(view.trends.download_30d, ' Mbps'))}
+      </div>
+    </section>
+    <section class="report-section">
+      <h2>导入与配置</h2>
+      <div class="metric-grid">
+        ${renderInfoCard('一键导入', hasCapability(view.capabilities.import_methods, 'one_click_import') ? '支持' : '未收录')}
+        ${renderInfoCard('订阅链接', hasCapability(view.capabilities.import_methods, 'subscription_link') ? '支持' : '未收录')}
+        ${renderInfoCard('教程支持', hasCapability(view.capabilities.import_methods, 'tutorials') ? '支持' : '未收录')}
+        ${renderInfoCard('客户端数量', `${view.capabilities.clients.length} 个`)}
+        ${renderInfoCard('地区覆盖', `${view.capabilities.regions.length} 个`)}
+        ${renderInfoCard('年付套餐', view.capabilities.plan.supports_annual ? '支持' : '未收录')}
+      </div>
+    </section>
+    <section class="report-section report-conclusion">
+      <h2>结论与建议</h2>
+      <p>本次评测数据显示 ${escapeHtml(view.airport.name)} 当前综合分为 ${escapeHtml(formatMetric(view.summary_card.score))} / 100，状态为 ${escapeHtml(formatAirportStatusLabel(view.airport.status))}，稳定性评级为 ${escapeHtml(formatStabilityTier(view.metrics.stability_tier))}。${escapeHtml(view.summary_card.conclusion)}</p>
+    </section>
+  `;
+}
+
+function renderCapabilityGroup(
+  title: string,
+  items: Array<{ key: string; label: string }>,
+  footnote?: string | null,
+): string {
+  return `
+    <article class="capability-card">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="capability-list">
+        ${items.length > 0 ? items.map((item) => `<p>${escapeHtml(item.label)} <span>✓</span></p>`).join('') : '<p class="muted">未收录</p>'}
+      </div>
+      ${footnote ? `<div class="capability-footnote">${escapeHtml(footnote)}</div>` : ''}
+    </article>
+  `;
+}
+
+function renderRegionGroup(view: ReportView): string {
+  const regions = view.capabilities.regions.slice(0, 5);
+  return `
+    <article class="capability-card">
+      <h3>节点覆盖</h3>
+      <div class="capability-list">
+        ${regions.length > 0
+          ? regions.map((region) => `<p>${escapeHtml(`${region.label}${region.line_types.length > 0 ? ` · ${region.line_types.join('/')}` : ''}`)} <span>✓</span></p>`).join('')
+          : '<p class="muted">未收录</p>'}
+      </div>
+      ${view.capabilities.regions.length > 5 ? `<div class="capability-footnote">另有 ${view.capabilities.regions.length - 5} 个地区</div>` : ''}
+    </article>
+  `;
+}
+
+function renderScoreMetric(label: string, value: number, tone: string): string {
+  return `
+    <article class="score-metric ${escapeAttribute(tone)}">
+      <div>${escapeHtml(label)}</div>
+      <strong>${escapeHtml(formatMetric(value))}</strong>
+      <i style="width:${Math.max(0, Math.min(100, value))}%"></i>
+    </article>
+  `;
+}
+
+function renderTelegramFootnote(view: ReportView): string | null {
+  const { group_member_count, recent_active_at } = view.capabilities.telegram;
+  if (group_member_count && recent_active_at) {
+    return `${formatNumber(group_member_count)} 人 · ${recent_active_at}`;
+  }
+  if (group_member_count) {
+    return `${formatNumber(group_member_count)} 人`;
+  }
+  return recent_active_at;
+}
+
+function hasCapability(items: Array<{ key: string }>, key: string): boolean {
+  return items.some((item) => item.key === key);
+}
+
+function formatScoreGrade(score: number): string {
+  if (score >= 85) return '优秀';
+  if (score >= 75) return '良好';
+  if (score >= 60) return '观察';
+  return '高风险';
 }
 
 export function renderMethodologyPublicPage(siteUrl: string): string {
@@ -491,74 +646,11 @@ function renderRiskTable(items: RiskMonitorItem[]): string {
   `;
 }
 
-function renderReportSummary(view: ReportView): string {
-  return `
-    <section class="content-card">
-      <h2>${escapeHtml(view.airport.name)} 机场基础信息</h2>
-      <p>${escapeHtml(view.summary_card.conclusion)}</p>
-      <div class="card-grid">
-        ${renderLinkedInfoCard('官网入口', view.airport.website, view.airport.website)}
-        ${renderInfoCard('当前状态', formatAirportStatusLabel(view.airport.status))}
-        ${renderInfoCard('报告日期', view.date)}
-        ${renderInfoCard('健康记录', `${view.metrics.healthy_days_streak} 天`)}
-      </div>
-    </section>
-    <section class="content-card">
-      <h2>榜单位置</h2>
-      <div class="card-grid">
-        ${renderInfoCard('今日推荐', formatRank(view.ranking.today_pick_rank))}
-        ${renderInfoCard('长期稳定', formatRank(view.ranking.most_stable_rank))}
-        ${renderInfoCard('性价比', formatRank(view.ranking.best_value_rank))}
-        ${renderInfoCard('新入榜', formatRank(view.ranking.new_entries_rank))}
-        ${renderInfoCard('风险预警', formatRank(view.ranking.risk_alerts_rank))}
-      </div>
-    </section>
-    <section class="content-card">
-      <h2>评分拆解</h2>
-      <div class="card-grid">
-        ${renderInfoCard('稳定性 S', formatMetric(view.score_breakdown.s))}
-        ${renderInfoCard('性能 P', formatMetric(view.score_breakdown.p))}
-        ${renderInfoCard('价格 C', formatMetric(view.score_breakdown.c))}
-        ${renderInfoCard('风险 R', formatMetric(view.score_breakdown.r))}
-        ${renderInfoCard('最终分', formatMetric(view.score_breakdown.final_score))}
-        ${renderInfoCard('风险惩罚', formatMetric(view.score_breakdown.risk_penalty))}
-      </div>
-    </section>
-    <section class="content-card">
-      <h2>关键指标</h2>
-      <div class="card-grid">
-        ${renderInfoCard('30 天可用率', `${formatMetric(view.metrics.uptime_percent_30d)}%`)}
-        ${renderInfoCard('中位延迟', `${formatMetric(view.metrics.median_latency_ms)} ms`)}
-        ${renderInfoCard('下载速率', `${formatMetric(view.metrics.median_download_mbps)} Mbps`)}
-        ${renderInfoCard('丢包率', `${formatMetric(view.metrics.packet_loss_percent)}%`)}
-      </div>
-    </section>
-    <section class="content-card">
-      <h2>30 天趋势摘要</h2>
-      <div class="card-grid">
-        ${renderInfoCard('评分趋势', buildTrendSummary(view.trends.score_30d, '分'))}
-        ${renderInfoCard('可用率趋势', buildTrendSummary(view.trends.uptime_30d, '%'))}
-        ${renderInfoCard('延迟趋势', buildTrendSummary(view.trends.latency_30d, ' ms'))}
-        ${renderInfoCard('下载趋势', buildTrendSummary(view.trends.download_30d, ' Mbps'))}
-      </div>
-    </section>
-  `;
-}
-
 function renderInfoCard(title: string, body: string): string {
   return `
     <article class="mini-card">
       <h3>${escapeHtml(title)}</h3>
       <p>${escapeHtml(body)}</p>
-    </article>
-  `;
-}
-
-function renderLinkedInfoCard(title: string, body: string, href: string): string {
-  return `
-    <article class="mini-card">
-      <h3>${escapeHtml(title)}</h3>
-      <p><a href="${escapeAttribute(href)}" rel="nofollow noreferrer">${escapeHtml(body)}</a></p>
     </article>
   `;
 }
@@ -657,10 +749,6 @@ function buildRankingItemList(
   };
 }
 
-function formatRank(value: number | null): string {
-  return value === null ? '未入榜' : `#${value}`;
-}
-
 function formatMonitorReason(reason: RiskMonitorItem['monitor_reason']): string {
   return reason === 'down' ? '管理员确认跑路' : '风险观察';
 }
@@ -728,9 +816,56 @@ const styles = `
   .metric div, .muted { color: #666; font-size: 13px; }
   .metric strong, .score { display: block; margin-top: 8px; font-size: 28px; font-weight: 900; }
   .content-card { border: 1px solid #e5e5e5; border-radius: 24px; padding: 26px; background: #fff; }
+  .report-page { width: min(1180px, calc(100vw - 32px)); }
+  .report-hero { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; border: 1px solid #dbe4f0; border-radius: 8px; padding: 32px; background: linear-gradient(135deg, #f8fbff, #fff 54%, #eef6ff); }
+  .breadcrumb { margin-bottom: 18px; color: #64748b; font-size: 13px; font-weight: 700; }
+  .report-hero h1 { margin: 0; font-size: clamp(32px, 5vw, 48px); line-height: 1.08; letter-spacing: 0; }
+  .report-hero p { color: #475569; }
+  .report-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+  .report-tags span { border: 1px solid #dbeafe; border-radius: 999px; padding: 6px 10px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 900; }
+  .primary-link { display: inline-flex; margin-top: 8px; min-height: 42px; align-items: center; border-radius: 8px; background: #020617; color: #fff; padding: 0 18px; text-decoration: none; font-weight: 900; }
+  .score-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 28px; background: #fff; text-align: center; box-shadow: 0 10px 30px rgba(15, 23, 42, .06); }
+  .score-title { color: #1e293b; font-size: 14px; font-weight: 900; }
+  .score-number { margin-top: 12px; color: #020617; font-size: 58px; line-height: 1; font-weight: 900; }
+  .score-number span { margin-left: 6px; color: #64748b; font-size: 14px; }
+  .score-bar { height: 8px; margin-top: 20px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
+  .score-bar i { display: block; height: 100%; border-radius: 999px; background: #22c55e; }
+  .score-grade { margin-top: 14px; color: #059669; font-size: 14px; font-weight: 900; }
+  .report-snapshot { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
+  .snapshot-card, .capability-card, .score-metric, .report-section, .pro-banner { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
+  .snapshot-card { min-height: 88px; padding: 18px; }
+  .snapshot-card div { color: #64748b; font-size: 13px; font-weight: 700; }
+  .snapshot-card strong { display: block; margin-top: 8px; color: #020617; font-size: 18px; font-weight: 900; }
+  .pro-banner { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 24px; align-items: end; padding: 28px; background: linear-gradient(115deg, #fff, #eef6ff 58%, #dbeafe); }
+  .pro-banner h2 { margin: 8px 0 0; color: #020617; }
+  .pro-banner a { display: inline-flex; min-height: 42px; align-items: center; border-radius: 8px; background: #2563eb; color: #fff; padding: 0 18px; text-decoration: none; font-weight: 900; }
+  .report-section { padding: 24px; }
+  .report-section h2 { margin-bottom: 18px; color: #020617; font-size: 22px; letter-spacing: 0; }
+  .capability-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+  .capability-card { padding: 16px; }
+  .capability-card h3 { color: #020617; font-size: 15px; }
+  .capability-list { display: grid; gap: 8px; }
+  .capability-list p { display: flex; justify-content: space-between; gap: 8px; margin: 0; border-radius: 8px; background: #f8fafc; padding: 8px 10px; color: #334155; font-size: 14px; font-weight: 700; line-height: 1.4; }
+  .capability-list span { color: #10b981; }
+  .capability-footnote { margin-top: 10px; color: #94a3b8; font-size: 12px; font-weight: 800; }
+  .score-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+  .score-metric { padding: 16px; }
+  .score-metric div { color: #64748b; font-size: 13px; font-weight: 700; }
+  .score-metric strong { display: block; margin-top: 8px; color: #020617; font-size: 26px; font-weight: 900; }
+  .score-metric i { display: block; height: 6px; margin-top: 12px; border-radius: 999px; background: #22c55e; }
+  .score-metric.blue i { background: #3b82f6; }
+  .score-metric.orange i { background: #f97316; }
+  .score-metric.purple i { background: #a855f7; }
+  .score-metric.slate i { background: #94a3b8; }
+  .report-conclusion p { color: #475569; }
   .table-wrap { overflow-x: auto; }
   table { width: 100%; border-collapse: collapse; font-size: 14px; }
   th, td { text-align: left; border-bottom: 1px solid #eee; padding: 14px 10px; vertical-align: top; }
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #666; }
+  @media (max-width: 900px) {
+    .report-hero, .pro-banner { grid-template-columns: 1fr; padding: 22px; }
+    .report-snapshot, .capability-grid, .score-grid { grid-template-columns: 1fr; }
+    .score-card { padding: 22px; }
+  }
   .footer { margin-top: auto; border-top: 1px solid #eee; padding: 32px 24px; text-align: center; color: #666; }
 `;
