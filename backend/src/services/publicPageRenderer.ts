@@ -24,6 +24,7 @@ import {
   type PublicSeoText,
 } from '../../../shared/publicSeo';
 import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
+import { getCapabilityIcon, type CapabilityIconCategory, type CapabilityIconData } from '../../../shared/capabilityIcons';
 
 interface RenderOptions {
   siteUrl: string;
@@ -273,12 +274,12 @@ function renderReportSummary(view: ReportView): string {
     <section class="report-section">
       <h2>服务能力详情</h2>
       <div class="capability-grid">
-        ${renderCapabilityGroup('解锁能力', view.capabilities.streaming)}
-        ${renderCapabilityGroup('支付方式', view.capabilities.payment_methods)}
-        ${renderCapabilityGroup('售后支持', view.capabilities.telegram.items, renderTelegramFootnote(view))}
+        ${renderCapabilityGroup('解锁能力', view.capabilities.streaming, 'streaming')}
+        ${renderCapabilityGroup('支付方式', view.capabilities.payment_methods, 'payment')}
+        ${renderCapabilityGroup('售后支持', view.capabilities.telegram.items, 'support', renderTelegramFootnote(view))}
         ${renderRegionGroup(view)}
-        ${renderCapabilityGroup('客户端支持', view.capabilities.clients)}
-        ${renderCapabilityGroup('新手引导', view.capabilities.import_methods)}
+        ${renderCapabilityGroup('客户端支持', view.capabilities.clients, 'client')}
+        ${renderCapabilityGroup('新手引导', view.capabilities.import_methods, 'import')}
       </div>
     </section>
     <section class="report-section">
@@ -331,16 +332,42 @@ function renderReportSummary(view: ReportView): string {
 function renderCapabilityGroup(
   title: string,
   items: Array<{ key: string; label: string }>,
+  category: CapabilityIconCategory,
   footnote?: string | null,
 ): string {
   return `
     <article class="capability-card">
       <h3>${escapeHtml(title)}</h3>
       <div class="capability-list">
-        ${items.length > 0 ? items.map((item) => `<p>${escapeHtml(item.label)} <span>✓</span></p>`).join('') : '<p class="muted">未收录</p>'}
+        ${items.length > 0 ? items.map((item) => renderCapabilityLine(item, category)).join('') : '<p class="muted">未收录</p>'}
       </div>
       ${footnote ? `<div class="capability-footnote">${escapeHtml(footnote)}</div>` : ''}
     </article>
+  `;
+}
+
+function renderCapabilityIcon(icon: CapabilityIconData): string {
+  const style = `background-color:${escapeAttribute(icon.bg)};border-color:${escapeAttribute(icon.border)};color:${escapeAttribute(icon.color)}`;
+  if (icon.kind === 'svg') {
+    return `<span class="capability-icon" style="${style}" aria-hidden="true"><svg viewBox="0 0 24 24" fill="currentColor" focusable="false"><path d="${escapeAttribute(icon.path)}"></path></svg></span>`;
+  }
+  return `<span class="capability-icon" style="${style}" aria-hidden="true">${escapeHtml(icon.mark)}</span>`;
+}
+
+function renderCapabilityLine(
+  item: { key: string; label: string },
+  category: CapabilityIconCategory,
+  displayLabel = item.label,
+): string {
+  const icon = getCapabilityIcon(item.key, category);
+  return `
+    <p>
+      <span class="capability-entry">
+        ${renderCapabilityIcon(icon)}
+        <span class="capability-label">${escapeHtml(displayLabel)}</span>
+      </span>
+      <span class="capability-check">✓</span>
+    </p>
   `;
 }
 
@@ -351,7 +378,7 @@ function renderRegionGroup(view: ReportView): string {
       <h3>节点覆盖</h3>
       <div class="capability-list">
         ${regions.length > 0
-          ? regions.map((region) => `<p>${escapeHtml(`${region.label}${region.line_types.length > 0 ? ` · ${region.line_types.join('/')}` : ''}`)} <span>✓</span></p>`).join('')
+          ? regions.map((region) => renderCapabilityLine(region, 'region', `${region.label}${region.line_types.length > 0 ? ` · ${region.line_types.join('/')}` : ''}`)).join('')
           : '<p class="muted">未收录</p>'}
       </div>
       ${view.capabilities.regions.length > 5 ? `<div class="capability-footnote">另有 ${view.capabilities.regions.length - 5} 个地区</div>` : ''}
@@ -845,8 +872,12 @@ const styles = `
   .capability-card { padding: 16px; }
   .capability-card h3 { color: #020617; font-size: 15px; }
   .capability-list { display: grid; gap: 8px; }
-  .capability-list p { display: flex; justify-content: space-between; gap: 8px; margin: 0; border-radius: 8px; background: #f8fafc; padding: 8px 10px; color: #334155; font-size: 14px; font-weight: 700; line-height: 1.4; }
-  .capability-list span { color: #10b981; }
+  .capability-list p { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin: 0; border-radius: 8px; background: #f8fafc; padding: 8px 10px; color: #334155; font-size: 14px; font-weight: 700; line-height: 1.4; }
+  .capability-entry { display: flex; min-width: 0; align-items: center; gap: 8px; }
+  .capability-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .capability-icon { display: inline-flex; width: 28px; height: 28px; flex: 0 0 28px; align-items: center; justify-content: center; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-weight: 900; line-height: 1; }
+  .capability-icon svg { width: 17px; height: 17px; }
+  .capability-check { flex: 0 0 auto; color: #10b981; }
   .capability-footnote { margin-top: 10px; color: #94a3b8; font-size: 12px; font-weight: 800; }
   .score-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
   .score-metric { padding: 16px; }

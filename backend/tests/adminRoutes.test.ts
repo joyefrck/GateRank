@@ -5450,6 +5450,7 @@ test('POST /airports prefers manual_tags over legacy tags field', async () => {
             has_ticket_system: null,
           },
           clients: {
+            self_built_client: true,
             clash: true,
             clash_verge: true,
             shadowrocket: false,
@@ -5492,6 +5493,7 @@ test('POST /airports prefers manual_tags over legacy tags field', async () => {
     assert.equal(createdInputs[0].has_lifetime_plan, false);
     assert.equal((createdInputs[0].profile as any).plan.lowest_monthly_price, 18.8);
     assert.equal((createdInputs[0].profile as any).telegram.group_member_count, 321);
+    assert.equal((createdInputs[0].profile as any).clients.self_built_client, true);
     assert.equal((createdInputs[0].profile as any).clients.shadowrocket, false);
     assert.equal((createdInputs[0].profile as any).clients.xiaohuojian, true);
     assert.deepEqual((createdInputs[0].profile as any).regions.hong_kong.line_types, ['iepl', 'cn2']);
@@ -5555,6 +5557,7 @@ test('PATCH /airports validates and forwards backend-only airport profile fields
             group_member_count: 0,
           },
           clients: {
+            self_built_client: false,
             openclash: true,
           },
           regions: {
@@ -5579,6 +5582,7 @@ test('PATCH /airports validates and forwards backend-only airport profile fields
     assert.equal((updatedInputs[0].profile as any).plan.supports_monthly, false);
     assert.equal((updatedInputs[0].profile as any).plan.lowest_monthly_price, 0);
     assert.equal((updatedInputs[0].profile as any).telegram.group_member_count, 0);
+    assert.equal((updatedInputs[0].profile as any).clients.self_built_client, false);
     assert.equal((updatedInputs[0].profile as any).clients.openclash, true);
     assert.equal((updatedInputs[0].profile as any).clients.clash, null);
     assert.deepEqual((updatedInputs[0].profile as any).regions.japan.line_types, ['relay', 'bgp']);

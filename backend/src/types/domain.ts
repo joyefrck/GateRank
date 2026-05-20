@@ -18,6 +18,7 @@ export type AirportPaymentMethod =
   | 'crypto_other'
   | 'unionpay';
 export type AirportProfileClientKey =
+  | 'self_built_client'
   | 'clash'
   | 'clash_verge'
   | 'shadowrocket'

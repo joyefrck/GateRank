@@ -57,6 +57,7 @@ type AirportPaymentMethod =
   | 'crypto_other'
   | 'unionpay';
 type AirportProfileClientKey =
+  | 'self_built_client'
   | 'clash'
   | 'clash_verge'
   | 'shadowrocket'
@@ -261,6 +262,7 @@ const AIRPORT_PAYMENT_METHOD_OPTIONS: Array<{ value: AirportPaymentMethod; label
 ];
 
 const AIRPORT_PROFILE_CLIENT_OPTIONS: Array<{ value: AirportProfileClientKey; label: string }> = [
+  { value: 'self_built_client', label: '自建客户端' },
   { value: 'clash', label: 'Clash' },
   { value: 'clash_verge', label: 'Clash Verge' },
   { value: 'shadowrocket', label: 'Shadowrocket' },
@@ -5935,8 +5937,8 @@ function AirportsPage({
       websites,
       status: editing.status,
       is_listed: editing.is_listed,
-      plan_price_month: Number(editing.plan_price_month || 0),
-      has_trial: Boolean(editing.has_trial),
+      plan_price_month: getAirportPlanPriceMonth(editing),
+      has_trial: getAirportHasTrial(editing),
       streaming_support: editing.streaming_support,
       payment_methods: editing.payment_methods,
       payment_crypto_other: editing.payment_methods.includes('crypto_other')
@@ -6462,7 +6464,7 @@ function AirportsPage({
                   />
                 </FormField>
 
-                <FormField label="月付价格" hint="用于性价比计算，单位按元处理。">
+                <FormField label="最低月付价格" hint="用于性价比计算，单位按元处理。">
                   <input
                     className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
                     placeholder="例如：10"
@@ -6470,7 +6472,17 @@ function AirportsPage({
                     min="0"
                     step="0.01"
                     value={editing.plan_price_month}
-                    onChange={(e) => setEditing({ ...editing, plan_price_month: e.target.value })}
+                    onChange={(e) => setEditing({
+                      ...editing,
+                      plan_price_month: e.target.value,
+                      profile: {
+                        ...editing.profile,
+                        plan: {
+                          ...editing.profile.plan,
+                          lowest_monthly_price: parseOptionalNumberInput(e.target.value),
+                        },
+                      },
+                    })}
                   />
                 </FormField>
 
@@ -6482,7 +6494,17 @@ function AirportsPage({
                       type="checkbox"
                       className="h-4 w-4 rounded border-neutral-300"
                       checked={editing.has_trial}
-                      onChange={(e) => setEditing({ ...editing, has_trial: e.target.checked })}
+                      onChange={(e) => setEditing({
+                        ...editing,
+                        has_trial: e.target.checked,
+                        profile: {
+                          ...editing.profile,
+                          plan: {
+                            ...editing.profile.plan,
+                            has_trial_plan: e.target.checked,
+                          },
+                        },
+                      })}
                     />
                     支持试用
                   </label>
@@ -6976,7 +6998,17 @@ function AirportEditorPage({
   }
 
   const updateProfilePlan = <K extends keyof AirportProfilePlan>(key: K, value: AirportProfilePlan[K]) => {
-    setEditing({ ...editing, profile: { ...editing.profile, plan: { ...editing.profile.plan, [key]: value } } });
+    const nextEditing = {
+      ...editing,
+      profile: { ...editing.profile, plan: { ...editing.profile.plan, [key]: value } },
+    };
+    if (key === 'lowest_monthly_price') {
+      nextEditing.plan_price_month = value === null ? '' : String(value);
+    }
+    if (key === 'has_trial_plan') {
+      nextEditing.has_trial = value === true;
+    }
+    setEditing(nextEditing);
   };
   const updateProfileTelegram = <K extends keyof AirportProfileTelegram>(key: K, value: AirportProfileTelegram[K]) => {
     setEditing({ ...editing, profile: { ...editing.profile, telegram: { ...editing.profile.telegram, [key]: value } } });
@@ -7165,38 +7197,14 @@ function AirportEditorPage({
 
       {tab === 'basic' && (
         <section className="space-y-4 rounded border border-neutral-200 bg-white p-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <FormField label="机场名称" hint="用于管理列表、数据台标题与榜单识别。">
-              <input
-                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
-                placeholder="例如：大象网络"
-                value={editing.name}
-                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-              />
-            </FormField>
-            <FormField label="评分月价" hint="现有性价比计算字段，单位按元处理。">
-              <input
-                className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
-                type="number"
-                min="0"
-                step="0.01"
-                value={editing.plan_price_month}
-                onChange={(e) => setEditing({ ...editing, plan_price_month: e.target.value })}
-              />
-            </FormField>
-          </div>
-
-          <div className="rounded border border-neutral-200 bg-neutral-50 p-4">
-            <label className="inline-flex items-center gap-3 text-sm font-medium">
-              <input
-                type="checkbox"
-                className="h-4 w-4 rounded border-neutral-300"
-                checked={editing.has_trial}
-                onChange={(e) => setEditing({ ...editing, has_trial: e.target.checked })}
-              />
-              支持试用
-            </label>
-          </div>
+          <FormField label="机场名称" hint="用于管理列表、数据台标题与榜单识别。">
+            <input
+              className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+              placeholder="例如：大象网络"
+              value={editing.name}
+              onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+            />
+          </FormField>
 
           <FormField label="解锁能力" hint="后台运营资料，支持多选。">
             <CheckboxPillGroup
@@ -7442,9 +7450,9 @@ function AirportEditorPage({
             <NullableBooleanRadioGroup label="是否支持季付" name="profile_supports_quarterly" value={editing.profile.plan.supports_quarterly} onChange={(value) => updateProfilePlan('supports_quarterly', value)} />
             <NullableBooleanRadioGroup label="是否支持半年付" name="profile_supports_half_yearly" value={editing.profile.plan.supports_half_yearly} onChange={(value) => updateProfilePlan('supports_half_yearly', value)} />
             <NullableBooleanRadioGroup label="是否支持年付" name="profile_supports_annual" value={editing.profile.plan.supports_annual} onChange={(value) => updateProfilePlan('supports_annual', value)} />
-            <NullableBooleanRadioGroup label="是否有试用套餐" name="profile_has_trial_plan" value={editing.profile.plan.has_trial_plan} onChange={(value) => updateProfilePlan('has_trial_plan', value)} />
+            <NullableBooleanRadioGroup label="是否支持试用" name="profile_has_trial_plan" value={editing.profile.plan.has_trial_plan} onChange={(value) => updateProfilePlan('has_trial_plan', value)} />
             <NullableBooleanRadioGroup label="是否有不限时套餐" name="profile_has_lifetime_plan" value={editing.profile.plan.has_lifetime_plan} onChange={(value) => updateProfilePlan('has_lifetime_plan', value)} />
-            <FormField label="最低月付价格" hint="后台资料字段，不参与评分。">
+            <FormField label="最低月付价格" hint="同时作为评分月价使用，单位按元处理。">
               <input
                 className="w-full rounded border border-neutral-300 px-4 py-3 text-sm outline-none focus:border-neutral-900"
                 type="number"
@@ -7570,7 +7578,7 @@ function AirportEditorPage({
           {AIRPORT_PROFILE_CLIENT_OPTIONS.map((client) => (
             <React.Fragment key={client.value}>
               <NullableBooleanRadioGroup
-                label={`是否支持 ${client.label}`}
+                label={client.value === 'self_built_client' ? '是否自建客户端' : `是否支持 ${client.label}`}
                 name={`client-${client.value}`}
                 value={editing.profile.clients[client.value]}
                 onChange={(value) => updateProfileClient(client.value, value)}
@@ -9444,6 +9452,14 @@ function createAirportForm(): AirportFormState {
 }
 
 function toAirportForm(airport: Airport): AirportFormState {
+  const profile = normalizeAirportProfile(airport.profile);
+  if (profile.plan.lowest_monthly_price === null && airport.plan_price_month !== null && airport.plan_price_month !== undefined) {
+    profile.plan.lowest_monthly_price = airport.plan_price_month;
+  }
+  if (profile.plan.has_trial_plan === null) {
+    profile.plan.has_trial_plan = airport.has_trial;
+  }
+
   return {
     id: airport.id,
     slug: airport.slug || '',
@@ -9460,7 +9476,7 @@ function toAirportForm(airport: Airport): AirportFormState {
     has_telegram_group: normalizeNullableBoolean(airport.has_telegram_group),
     telegram_allows_speaking: normalizeNullableBoolean(airport.telegram_allows_speaking),
     has_lifetime_plan: normalizeNullableBoolean(airport.has_lifetime_plan),
-    profile: normalizeAirportProfile(airport.profile),
+    profile,
     subscription_url: airport.subscription_url || '',
     applicant_email: airport.applicant_email || '',
     applicant_password_reset_email: airport.applicant_email || '',
@@ -9474,6 +9490,18 @@ function toAirportForm(airport: Airport): AirportFormState {
     wallet_id: airport.wallet_id ?? null,
     wallet_balance: airport.wallet_balance ?? null,
   };
+}
+
+function getAirportPlanPriceMonth(editing: AirportFormState): number {
+  const lowestMonthlyPrice = editing.profile.plan.lowest_monthly_price;
+  if (lowestMonthlyPrice !== null && Number.isFinite(lowestMonthlyPrice)) {
+    return lowestMonthlyPrice;
+  }
+  return Number(editing.plan_price_month || 0);
+}
+
+function getAirportHasTrial(editing: AirportFormState): boolean {
+  return editing.profile.plan.has_trial_plan ?? Boolean(editing.has_trial);
 }
 
 function parseTagInput(value: string): string[] {
@@ -9621,8 +9649,8 @@ function buildAirportMutationBody(
     websites,
     status: editing.status,
     is_listed: editing.is_listed,
-    plan_price_month: Number(editing.plan_price_month || 0),
-    has_trial: Boolean(editing.has_trial),
+    plan_price_month: getAirportPlanPriceMonth(editing),
+    has_trial: getAirportHasTrial(editing),
     streaming_support: editing.streaming_support,
     payment_methods: editing.payment_methods,
     payment_crypto_other: editing.payment_methods.includes('crypto_other')

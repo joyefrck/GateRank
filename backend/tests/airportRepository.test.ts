@@ -128,7 +128,7 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
               lowest_monthly_price: 12.5,
             },
             telegram: { group_member_count: 1234 },
-            clients: { clash: true, shadowrocket: false },
+            clients: { self_built_client: true, clash: true, shadowrocket: false },
             import_methods: { subscription_link: true },
             regions: { hong_kong: { has_residential: true, line_types: ['iepl', 'cn2'] } },
           }),
@@ -196,6 +196,7 @@ test('AirportRepository.listByQuery maps paid application fee marker from paid n
   assert.equal(result.items[0]?.profile?.plan.supports_quarterly, false);
   assert.equal(result.items[0]?.profile?.plan.lowest_monthly_price, 12.5);
   assert.equal(result.items[0]?.profile?.telegram.group_member_count, 1234);
+  assert.equal(result.items[0]?.profile?.clients.self_built_client, true);
   assert.equal(result.items[0]?.profile?.clients.clash, true);
   assert.equal(result.items[0]?.profile?.clients.shadowrocket, false);
   assert.equal(result.items[0]?.profile?.import_methods.subscription_link, true);

@@ -1816,6 +1816,7 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
             recent_active_at: '2026-03-23',
           },
           clients: {
+            self_built_client: true,
             clash: true,
             shadowrocket: true,
             surge: false,
@@ -1943,7 +1944,7 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
   );
   assert.deepEqual(
     result.capabilities.clients.map((item) => item.label),
-    ['Clash', 'Shadowrocket'],
+    ['自建客户端', 'Clash', 'Shadowrocket'],
   );
   assert.deepEqual(
     result.capabilities.import_methods.map((item) => item.label),

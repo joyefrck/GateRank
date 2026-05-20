@@ -56,6 +56,7 @@ import {
 } from '../shared/publicSeo';
 import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import { trackPageView } from './site/analytics';
+import { getCapabilityIcon, type CapabilityIconCategory } from '../shared/capabilityIcons';
 import {
   createTrackedOutboundClickHandler,
   flushMarketingEvents,
@@ -3245,18 +3246,19 @@ function ReportCapabilitiesSection({ data }: { data: ReportViewResponse }) {
     <section>
       <ReportSectionTitle title="服务能力详情" />
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-6">
-        <ReportCapabilityGroup className="lg:col-span-1" title="解锁能力" icon={Zap} items={data.capabilities.streaming} />
-        <ReportCapabilityGroup className="lg:col-span-1" title="支付方式" icon={Banknote} items={data.capabilities.payment_methods} />
+        <ReportCapabilityGroup className="lg:col-span-1" title="解锁能力" icon={Zap} items={data.capabilities.streaming} category="streaming" />
+        <ReportCapabilityGroup className="lg:col-span-1" title="支付方式" icon={Banknote} items={data.capabilities.payment_methods} category="payment" />
         <ReportCapabilityGroup
           className="lg:col-span-1"
           title="售后支持"
           icon={Headphones}
           items={data.capabilities.telegram.items}
+          category="support"
           footnote={formatTelegramFootnote(data)}
         />
         <ReportRegionGroup className="lg:col-span-1" regions={data.capabilities.regions} />
-        <ReportCapabilityGroup className="lg:col-span-1" title="客户端支持" icon={ShieldCheck} items={data.capabilities.clients} />
-        <ReportCapabilityGroup className="lg:col-span-1" title="新手引导" icon={ArrowRight} items={data.capabilities.import_methods} />
+        <ReportCapabilityGroup className="lg:col-span-1" title="客户端支持" icon={ShieldCheck} items={data.capabilities.clients} category="client" />
+        <ReportCapabilityGroup className="lg:col-span-1" title="新手引导" icon={ArrowRight} items={data.capabilities.import_methods} category="import" />
       </div>
     </section>
   );
@@ -3416,12 +3418,14 @@ function ReportCapabilityGroup({
   title,
   icon: Icon,
   items,
+  category,
   footnote,
   className = '',
 }: {
   title: string;
   icon: typeof ShieldCheck;
   items: ReportCapabilityItem[];
+  category: CapabilityIconCategory;
   footnote?: string | null;
   className?: string;
 }) {
@@ -3433,7 +3437,7 @@ function ReportCapabilityGroup({
       </div>
       <div className="space-y-2">
         {items.length > 0 ? items.map((item) => (
-          <CapabilityLine key={item.key} label={item.label} />
+          <CapabilityLine key={item.key} capabilityKey={item.key} label={item.label} category={category} />
         )) : <EmptyCapabilityLine />}
       </div>
       {footnote ? <div className="mt-3 text-xs font-bold text-slate-400">{footnote}</div> : null}
@@ -3452,6 +3456,8 @@ function ReportRegionGroup({ regions, className = '' }: { regions: ReportViewRes
         {regions.length > 0 ? regions.slice(0, 5).map((region) => (
           <CapabilityLine
             key={region.key}
+            capabilityKey={region.key}
+            category="region"
             label={`${region.label}${region.line_types.length > 0 ? ` · ${region.line_types.join('/')}` : ''}`}
           />
         )) : <EmptyCapabilityLine />}
@@ -3461,10 +3467,41 @@ function ReportRegionGroup({ regions, className = '' }: { regions: ReportViewRes
   );
 }
 
-function CapabilityLine({ label }: { key?: React.Key; label: string }) {
+function CapabilityIcon({ capabilityKey, category }: { capabilityKey: string; category: CapabilityIconCategory }) {
+  const icon = getCapabilityIcon(capabilityKey, category);
   return (
-    <div className="flex items-center justify-between gap-2 rounded-[8px] bg-slate-50 px-3 py-2 text-sm">
-      <span className="min-w-0 truncate font-bold text-slate-700">{label}</span>
+    <span
+      className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-[8px] border text-[13px] font-black leading-none"
+      style={{ backgroundColor: icon.bg, borderColor: icon.border, color: icon.color }}
+      aria-hidden="true"
+    >
+      {icon.kind === 'svg' ? (
+        <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor" focusable="false">
+          <path d={icon.path} />
+        </svg>
+      ) : (
+        icon.mark
+      )}
+    </span>
+  );
+}
+
+function CapabilityLine({
+  capabilityKey,
+  label,
+  category,
+}: {
+  key?: React.Key;
+  capabilityKey: string;
+  label: string;
+  category: CapabilityIconCategory;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-2 rounded-[8px] bg-slate-50 px-2.5 py-2 text-sm">
+      <span className="flex min-w-0 items-center gap-2">
+        <CapabilityIcon capabilityKey={capabilityKey} category={category} />
+        <span className="min-w-0 truncate font-bold text-slate-700">{label}</span>
+      </span>
       <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
     </div>
   );

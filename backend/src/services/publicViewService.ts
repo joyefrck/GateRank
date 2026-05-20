@@ -781,6 +781,7 @@ const PAYMENT_LABELS: Record<string, string> = {
 };
 
 const CLIENT_LABELS: Record<string, string> = {
+  self_built_client: '自建客户端',
   clash: 'Clash',
   clash_verge: 'Clash Verge',
   shadowrocket: 'Shadowrocket',

@@ -8,6 +8,7 @@ import type {
 import { HttpError } from '../middleware/errorHandler';
 
 export const AIRPORT_PROFILE_CLIENT_KEYS: AirportProfileClientKey[] = [
+  'self_built_client',
   'clash',
   'clash_verge',
   'shadowrocket',

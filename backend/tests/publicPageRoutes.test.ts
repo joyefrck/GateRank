@@ -188,9 +188,13 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /GateRank Score/);
     assert.match(okHtml, /服务能力详情/);
     assert.match(okHtml, /Netflix/);
+    assert.match(okHtml, /<svg viewBox="0 0 24 24" fill="currentColor"/);
     assert.match(okHtml, /支付宝/);
+    assert.match(okHtml, /#1677FF/);
     assert.match(okHtml, /Telegram 群组/);
+    assert.match(okHtml, /#26A5E4/);
     assert.match(okHtml, /香港 · IEPL/);
+    assert.match(okHtml, /🇭🇰/);
     assert.match(okHtml, /评分拆解/);
     assert.match(okHtml, /核心监测指标/);
     assert.match(okHtml, /30 天可用率/);
