@@ -19,6 +19,7 @@ import {
 import { buildPortalLoginUrl } from '../utils/siteUrl';
 import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { AirportApplicationReviewStatus, AirportStatus } from '../types/domain';
+import { parseFullRankingFilters, type FullRankingFilters } from '../../../shared/fullRankingFilters';
 
 interface PublicDeps {
   airportRepository: {
@@ -90,7 +91,7 @@ interface PublicDeps {
   };
   publicViewService: {
     getHomePageView(date: string): Promise<unknown>;
-    getFullRankingView(date: string, page: number, pageSize: number): Promise<unknown>;
+    getFullRankingView(date: string, page: number, pageSize: number, filters?: FullRankingFilters): Promise<unknown>;
     getRiskMonitorView(date: string, page: number, pageSize: number): Promise<unknown>;
     getReportView(airportId: number, date: string): Promise<unknown | null>;
     getReportViewBySlug?(slug: string, date: string): Promise<unknown | null>;
@@ -291,9 +292,10 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       const date = parseDateQuery(req.query.date);
       const page = toPositiveInt(req.query.page, 1);
       const pageSize = 20;
+      const filters = parseFullRankingFilters(req.query);
       const data = await pageCache.getOrLoad(
-        `full-ranking:${date}:${page}:${pageSize}`,
-        () => deps.publicViewService.getFullRankingView(date, page, pageSize),
+        `full-ranking:${date}:${page}:${pageSize}:${JSON.stringify(filters)}`,
+        () => deps.publicViewService.getFullRankingView(date, page, pageSize, filters),
       );
       setPublicCacheHeaders(res);
       res.json(data);

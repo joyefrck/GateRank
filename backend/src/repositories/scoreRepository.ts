@@ -11,6 +11,15 @@ import type {
 import { buildRiskReasonSummary, deriveRiskReasonCodes } from '../utils/risk';
 import { formatDateOnly } from '../utils/time';
 import { buildAirportReportPath, buildAirportSlugCandidate } from '../../../shared/publicSeo';
+import {
+  AIRPORT_CLIENT_FILTERS,
+  AIRPORT_FILTER_CATALOG,
+  AIRPORT_IMPORT_FILTERS,
+  AIRPORT_LINE_FILTERS,
+  AIRPORT_REGION_FILTERS,
+  getAirportFilterLabel,
+} from '../../../shared/airportFilterCatalog';
+import { EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../../shared/fullRankingFilters';
 
 interface ScoreRow extends RowDataPacket {
   airport_id: number;
@@ -43,6 +52,13 @@ interface PublicFullRankingRow extends RowDataPacket {
   website: string;
   status: AirportStatus;
   tags_json: unknown;
+  streaming_support_json: unknown;
+  payment_methods_json: unknown;
+  has_annual_plan: number | null;
+  has_telegram_group: number | null;
+  telegram_allows_speaking: number | null;
+  has_lifetime_plan: number | null;
+  airport_profile_json: unknown;
   founded_on: unknown;
   plan_price_month: number;
   has_trial: number;
@@ -79,6 +95,8 @@ interface PublicRiskMonitorRow extends RowDataPacket {
   history_incidents: number | null;
   score_r: number | null;
 }
+
+type FullRankingCapabilities = NonNullable<FullRankingItem['capabilities']>;
 
 export class ScoreRepository {
   constructor(private readonly pool: Pool) {}
@@ -320,17 +338,19 @@ export class ScoreRepository {
     date: string,
     page: number,
     pageSize: number,
+    filters: FullRankingFilters = EMPTY_FULL_RANKING_FILTERS,
   ): Promise<{ total: number; items: FullRankingItem[] }> {
     const safePage = Math.max(1, page);
     const safePageSize = Math.min(100, Math.max(1, pageSize));
     const offset = (safePage - 1) * safePageSize;
+    const rankingFilters = buildPublicFullRankingFilters(filters);
 
     const [totalRows] = await this.pool.query<Array<RowDataPacket & { total: number }>>(
       `SELECT COUNT(*) AS total
          FROM airports a
         WHERE a.is_listed = 1
-          AND a.status IN ('normal', 'risk')`,
-      [],
+          ${rankingFilters.whereSql}`,
+      rankingFilters.params,
     );
 
     const [rows] = await this.pool.query<PublicFullRankingRow[]>(
@@ -341,6 +361,13 @@ export class ScoreRepository {
          a.website,
          a.status,
          a.tags_json,
+         a.streaming_support_json,
+         a.payment_methods_json,
+         a.has_annual_plan,
+         a.has_telegram_group,
+         a.telegram_allows_speaking,
+         a.has_lifetime_plan,
+         a.airport_profile_json,
          a.founded_on,
          a.plan_price_month,
          a.has_trial,
@@ -364,14 +391,14 @@ export class ScoreRepository {
          ON s.airport_id = a.id
         AND s.date = latest_score.score_date
       WHERE a.is_listed = 1
-        AND a.status IN ('normal', 'risk')
+        ${rankingFilters.whereSql}
       ORDER BY
         CASE WHEN s.date IS NULL THEN 1 ELSE 0 END ASC,
         display_score DESC,
         a.created_at DESC,
         a.id ASC
       LIMIT ? OFFSET ?`,
-      [date, safePageSize, offset],
+      [date, ...rankingFilters.params, safePageSize, offset],
     );
 
     const yesterdayDate = shiftDateByDays(date, -1);
@@ -408,6 +435,7 @@ export class ScoreRepository {
           },
           score_date: row.score_date ? formatDateOnly(row.score_date) : null,
           report_url: row.score_date ? buildAirportReportPath(resolveAirportSlugFromRow(row)) : null,
+          capabilities: buildFullRankingCapabilities(row),
         };
       }),
     };
@@ -557,6 +585,167 @@ export class ScoreRepository {
   }
 }
 
+function buildPublicFullRankingFilters(filters: FullRankingFilters): { whereSql: string; params: unknown[] } {
+  const clauses = ["a.status IN ('normal', 'risk')"];
+  const params: unknown[] = [];
+
+  if (filters.q) {
+    const keyword = `%${filters.q.toLowerCase()}%`;
+    clauses.push(`(
+      LOWER(a.name) LIKE ?
+      OR LOWER(a.website) LIKE ?
+      OR LOWER(COALESCE(a.airport_intro, '')) LIKE ?
+      OR LOWER(COALESCE(JSON_UNQUOTE(a.tags_json), '')) LIKE ?
+    )`);
+    params.push(keyword, keyword, keyword, keyword);
+  }
+
+  addJsonArrayFilter(clauses, params, 'a.payment_methods_json', filters.payment);
+  addJsonArrayFilter(clauses, params, 'a.streaming_support_json', filters.streaming);
+  addJsonBooleanMapFilter(clauses, 'clients', filters.client);
+  addJsonBooleanMapFilter(clauses, 'import_methods', filters.import);
+  addRegionFilter(clauses, filters.region);
+  addLineFilter(clauses, params, filters.line);
+
+  if (filters.trial !== null) {
+    clauses.push('a.has_trial = ?');
+    params.push(filters.trial ? 1 : 0);
+  }
+  if (filters.annual !== null) {
+    clauses.push('(a.has_annual_plan = ? OR JSON_UNQUOTE(JSON_EXTRACT(a.airport_profile_json, "$.plan.supports_annual")) = ?)');
+    params.push(filters.annual ? 1 : 0, filters.annual ? 'true' : 'false');
+  }
+  if (filters.lifetime !== null) {
+    clauses.push('(a.has_lifetime_plan = ? OR JSON_UNQUOTE(JSON_EXTRACT(a.airport_profile_json, "$.plan.has_lifetime_plan")) = ?)');
+    params.push(filters.lifetime ? 1 : 0, filters.lifetime ? 'true' : 'false');
+  }
+  if (filters.telegram !== null) {
+    clauses.push('(a.has_telegram_group = ? OR JSON_UNQUOTE(JSON_EXTRACT(a.airport_profile_json, "$.telegram.has_group")) = ?)');
+    params.push(filters.telegram ? 1 : 0, filters.telegram ? 'true' : 'false');
+  }
+  if (filters.price_min !== null) {
+    clauses.push('a.plan_price_month >= ?');
+    params.push(filters.price_min);
+  }
+  if (filters.price_max !== null) {
+    clauses.push('a.plan_price_month <= ?');
+    params.push(filters.price_max);
+  }
+
+  return {
+    whereSql: clauses.map((clause) => `AND ${clause}`).join('\n          '),
+    params,
+  };
+}
+
+function addJsonArrayFilter(clauses: string[], params: unknown[], column: string, values: string[]): void {
+  if (values.length === 0) {
+    return;
+  }
+  clauses.push(`(${values.map(() => `JSON_CONTAINS(COALESCE(${column}, JSON_ARRAY()), JSON_QUOTE(?))`).join(' OR ')})`);
+  params.push(...values);
+}
+
+function addJsonBooleanMapFilter(clauses: string[], field: 'clients' | 'import_methods', values: string[]): void {
+  if (values.length === 0) {
+    return;
+  }
+  clauses.push(`(${values.map((value) => (
+    `JSON_UNQUOTE(JSON_EXTRACT(a.airport_profile_json, '$.${field}.${value}')) = 'true'`
+  )).join(' OR ')})`);
+}
+
+function addRegionFilter(clauses: string[], values: string[]): void {
+  if (values.length === 0) {
+    return;
+  }
+  clauses.push(`(${values.map((value) => {
+    const path = `$.regions.${value}`;
+    return `(
+      JSON_UNQUOTE(JSON_EXTRACT(a.airport_profile_json, '${path}.has_residential')) = 'true'
+      OR JSON_UNQUOTE(JSON_EXTRACT(a.airport_profile_json, '${path}.has_native_ip')) = 'true'
+      OR COALESCE(JSON_LENGTH(JSON_EXTRACT(a.airport_profile_json, '${path}.line_types')), 0) > 0
+    )`;
+  }).join(' OR ')})`);
+}
+
+function addLineFilter(clauses: string[], params: unknown[], values: string[]): void {
+  if (values.length === 0) {
+    return;
+  }
+  const regionKeys = AIRPORT_REGION_FILTERS.map((item) => item.key);
+  clauses.push(`(${values.map(() => (
+    `(${regionKeys.map((regionKey) => (
+      `JSON_CONTAINS(COALESCE(JSON_EXTRACT(a.airport_profile_json, '$.regions.${regionKey}.line_types'), JSON_ARRAY()), JSON_QUOTE(?))`
+    )).join(' OR ')})`
+  )).join(' OR ')})`);
+  for (const value of values) {
+    params.push(...regionKeys.map(() => value));
+  }
+}
+
+function buildFullRankingCapabilities(row: PublicFullRankingRow): FullRankingCapabilities {
+  const profile = safeJsonRecord(row.airport_profile_json);
+  const plan = safeJsonRecord(profile.plan);
+  const telegram = safeJsonRecord(profile.telegram);
+  return {
+    payment_methods: toCatalogItems(safeJsonArray(row.payment_methods_json), 'payment'),
+    streaming: toCatalogItems(safeJsonArray(row.streaming_support_json), 'streaming'),
+    clients: toBooleanCatalogItems(safeJsonRecord(profile.clients), AIRPORT_CLIENT_FILTERS),
+    import_methods: toBooleanCatalogItems(safeJsonRecord(profile.import_methods), AIRPORT_IMPORT_FILTERS),
+    regions: buildFullRankingRegionCapabilities(safeJsonRecord(profile.regions)),
+    plan: {
+      supports_annual: nullableBoolean(plan.supports_annual) ?? nullableDbBoolean(row.has_annual_plan),
+      has_lifetime_plan: nullableBoolean(plan.has_lifetime_plan) ?? nullableDbBoolean(row.has_lifetime_plan),
+    },
+    telegram: {
+      has_group: nullableBoolean(telegram.has_group) ?? nullableDbBoolean(row.has_telegram_group),
+      group_allows_speaking: nullableBoolean(telegram.group_allows_speaking) ?? nullableDbBoolean(row.telegram_allows_speaking),
+    },
+  };
+}
+
+function toCatalogItems(values: string[], category: 'payment' | 'streaming'): FullRankingCapabilities['payment_methods'] {
+  const allowed = new Set(AIRPORT_FILTER_CATALOG[category].map((item) => item.key));
+  return values
+    .filter((value) => allowed.has(value))
+    .map((value) => ({ key: value, label: getAirportFilterLabel(category, value) }));
+}
+
+function toBooleanCatalogItems(
+  source: Record<string, unknown>,
+  options: Array<{ key: string; label: string }>,
+): FullRankingCapabilities['clients'] {
+  return options
+    .filter((item) => nullableBoolean(source[item.key]) === true)
+    .map((item) => ({ key: item.key, label: item.label }));
+}
+
+function buildFullRankingRegionCapabilities(
+  source: Record<string, unknown>,
+): FullRankingCapabilities['regions'] {
+  return AIRPORT_REGION_FILTERS
+    .map((option) => {
+      const region = safeJsonRecord(source[option.key]);
+      const lineTypes = safeJsonArray(region.line_types)
+        .filter((value) => AIRPORT_LINE_FILTERS.some((item) => item.key === value))
+        .map((value) => ({ key: value, label: getAirportFilterLabel('line', value) }));
+      const hasResidential = nullableBoolean(region.has_residential);
+      const hasNativeIp = nullableBoolean(region.has_native_ip);
+      if (lineTypes.length === 0 && hasResidential !== true && hasNativeIp !== true) {
+        return null;
+      }
+      return {
+        key: option.key,
+        label: option.label,
+        line_types: lineTypes,
+        has_residential: hasResidential,
+        has_native_ip: hasNativeIp,
+      };
+    })
+    .filter((item): item is FullRankingCapabilities['regions'][number] => item !== null);
+}
+
 function safeJsonObject(value: unknown): Record<string, ScoreDetailValue> {
   if (value && typeof value === 'object' && !Array.isArray(value)) {
     return sanitizeDetails(value as Record<string, unknown>);
@@ -603,6 +792,41 @@ function safeJsonArray(value: unknown): string[] {
   } catch {
     return [];
   }
+}
+
+function safeJsonRecord(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object' && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
+function nullableBoolean(value: unknown): boolean | null {
+  if (value === true || value === 1) {
+    return true;
+  }
+  if (value === false || value === 0) {
+    return false;
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === 'true' || normalized === '1' || normalized === 'yes') {
+      return true;
+    }
+    if (normalized === 'false' || normalized === '0' || normalized === 'no') {
+      return false;
+    }
+  }
+  return null;
+}
+
+function nullableDbBoolean(value: number | null): boolean | null {
+  return value === null ? null : Number(value) > 0;
 }
 
 function sanitizeDetails(details: Record<string, unknown>): Record<string, ScoreDetailValue> {

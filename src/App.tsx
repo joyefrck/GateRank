@@ -47,6 +47,7 @@ import {
 import {
   APPLY_SEO,
   buildAirportReportPath,
+  buildFullRankingHeading,
   buildFullRankingSeo,
   buildHomeSeo,
   buildReportContentSections,
@@ -56,6 +57,27 @@ import {
   buildRiskMonitorSeo,
   formatAirportStatusLabel,
 } from '../shared/publicSeo';
+import {
+  AIRPORT_CLIENT_FILTERS,
+  AIRPORT_IMPORT_FILTERS,
+  AIRPORT_LINE_FILTERS,
+  AIRPORT_PAYMENT_FILTERS,
+  AIRPORT_REGION_FILTERS,
+  AIRPORT_STREAMING_FILTERS,
+  getAirportFilterLabel,
+  type AirportFilterCategory,
+  type AirportFilterOption,
+} from '../shared/airportFilterCatalog';
+import {
+  buildFullRankingQuery,
+  cloneFullRankingFilters,
+  EMPTY_FULL_RANKING_FILTERS,
+  fullRankingFiltersEqual,
+  getFullRankingFilterCount,
+  getFullRankingSeoDecision,
+  parseFullRankingFilters,
+  type FullRankingFilters,
+} from '../shared/fullRankingFilters';
 import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import { trackPageView } from './site/analytics';
 import { getCapabilityIcon, type CapabilityIconCategory } from '../shared/capabilityIcons';
@@ -160,11 +182,33 @@ interface FullRankingItemResponse {
   score_delta_vs_yesterday: ScoreDeltaView;
   score_date?: string | null;
   report_url?: string | null;
+  capabilities?: {
+    payment_methods: ReportCapabilityItem[];
+    streaming: ReportCapabilityItem[];
+    clients: ReportCapabilityItem[];
+    import_methods: ReportCapabilityItem[];
+    regions: Array<{
+      key: string;
+      label: string;
+      line_types: ReportCapabilityItem[];
+      has_residential: boolean | null;
+      has_native_ip: boolean | null;
+    }>;
+    plan: {
+      supports_annual: boolean | null;
+      has_lifetime_plan: boolean | null;
+    };
+    telegram: {
+      has_group: boolean | null;
+      group_allows_speaking: boolean | null;
+    };
+  };
 }
 
 interface FullRankingPageResponse {
   date: string;
   generated_at: string;
+  filters: FullRankingFilters;
   page: number;
   page_size: number;
   total: number;
@@ -298,6 +342,7 @@ interface InitialPublicDataEnvelope<T> {
   params?: {
     date?: string | null;
     page?: number | null;
+    filters?: FullRankingFilters;
   };
   payload: T;
 }
@@ -326,6 +371,7 @@ interface RouteState {
   airportSlug?: string;
   date?: string;
   page?: number;
+  filters?: FullRankingFilters;
 }
 
 type AirportStatus = 'normal' | 'risk' | 'down';
@@ -1116,11 +1162,13 @@ function parseRoute(): RouteState {
     const page = Number(params.get('page') || '1');
     const safePage = Number.isFinite(page) && page > 0 ? page : 1;
     const date = normalizePublicListDate(params.get('date') || undefined);
-    canonicalizeCurrentPublicListUrl(buildFullRankingHref(date, safePage));
+    const filters = parseFullRankingFilters(params);
+    canonicalizeCurrentPublicListUrl(buildFullRankingHref(date, safePage, filters));
     return {
       kind: 'full_ranking',
       date,
       page: safePage,
+      filters,
     };
   }
 
@@ -1184,6 +1232,228 @@ function buildPageWindow(currentPage: number, totalPages: number): number[] {
     pages.push(page);
   }
   return pages;
+}
+
+function FullRankingFilterPanel({ date, filters }: { date?: string; filters: FullRankingFilters }) {
+  const selectedLabels = buildSelectedFullRankingFilterLabels(filters);
+  const goToFilters = (nextFilters: FullRankingFilters) => {
+    navigate(buildFullRankingHref(date, 1, nextFilters));
+  };
+
+  return (
+    <section className="mt-8 rounded-[24px] border border-neutral-200 bg-white px-4 py-5 shadow-[0_14px_40px_rgba(15,23,42,0.05)] md:px-6">
+      <form
+        className="grid gap-3 md:grid-cols-[minmax(0,1fr)_140px_140px_112px]"
+        onSubmit={(event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          const next = cloneFullRankingFilters(filters);
+          next.q = String(form.get('q') || '').trim();
+          next.price_min = parsePriceInput(form.get('price_min'));
+          next.price_max = parsePriceInput(form.get('price_max'));
+          goToFilters(next);
+        }}
+      >
+        <label className="flex min-h-12 items-center gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-4">
+          <Search className="h-4 w-4 text-neutral-400" />
+          <input
+            className="min-w-0 flex-1 bg-transparent text-sm font-semibold text-neutral-800 outline-none placeholder:text-neutral-400"
+            name="q"
+            type="search"
+            defaultValue={filters.q}
+            placeholder="搜索机场名称、官网、标签或简介"
+          />
+        </label>
+        <input
+          className="min-h-12 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 text-sm font-semibold outline-none"
+          name="price_min"
+          inputMode="decimal"
+          defaultValue={filters.price_min ?? ''}
+          placeholder="最低月付"
+        />
+        <input
+          className="min-h-12 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 text-sm font-semibold outline-none"
+          name="price_max"
+          inputMode="decimal"
+          defaultValue={filters.price_max ?? ''}
+          placeholder="最高月付"
+        />
+        <button
+          type="submit"
+          className="inline-flex min-h-12 items-center justify-center rounded-2xl bg-neutral-900 px-4 text-sm font-black text-white"
+        >
+          搜索
+        </button>
+      </form>
+
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {selectedLabels.length === 0 ? (
+          <span className="text-sm font-semibold text-neutral-500">可按支付方式、客户端、节点地区、线路、套餐和 Telegram 支持筛选。</span>
+        ) : (
+          <>
+            {selectedLabels.map((label) => (
+              <span key={label} className="inline-flex min-h-9 items-center rounded-full bg-neutral-900 px-3 text-xs font-black text-white">
+                {label}
+              </span>
+            ))}
+            <button
+              type="button"
+              className="inline-flex min-h-9 items-center gap-1 rounded-full border border-rose-200 bg-rose-50 px-3 text-xs font-black text-rose-700"
+              onClick={() => goToFilters(EMPTY_FULL_RANKING_FILTERS)}
+            >
+              <X className="h-3.5 w-3.5" />
+              清空
+            </button>
+          </>
+        )}
+      </div>
+
+      <div className="mt-5 grid gap-5">
+        <FullRankingFilterGroup title="支付方式" category="payment" options={AIRPORT_PAYMENT_FILTERS} filters={filters} onChange={goToFilters} />
+        <FullRankingFilterGroup title="客户端类型" category="client" options={AIRPORT_CLIENT_FILTERS} filters={filters} onChange={goToFilters} />
+        <FullRankingFilterGroup title="节点地区" category="region" options={AIRPORT_REGION_FILTERS} filters={filters} onChange={goToFilters} />
+        <FullRankingFilterGroup title="线路类型" category="line" options={AIRPORT_LINE_FILTERS} filters={filters} onChange={goToFilters} />
+        <FullRankingFilterGroup title="流媒体与服务" category="streaming" options={AIRPORT_STREAMING_FILTERS} filters={filters} onChange={goToFilters} />
+        <FullRankingFilterGroup title="导入方式" category="import" options={AIRPORT_IMPORT_FILTERS} filters={filters} onChange={goToFilters} />
+        <div>
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-neutral-400">套餐与社群</div>
+          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+            {[
+              ['trial', '支持试用', filters.trial],
+              ['annual', '支持年付', filters.annual],
+              ['lifetime', '不限时套餐', filters.lifetime],
+              ['telegram', 'Telegram 群', filters.telegram],
+            ].map(([key, label, value]) => (
+              <button
+                key={String(key)}
+                type="button"
+                className={`inline-flex min-h-10 flex-none items-center rounded-full border px-3 text-sm font-black ${
+                  value === true ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-600'
+                }`}
+                onClick={() => goToFilters(toggleBooleanFullRankingFilter(filters, key as 'trial' | 'annual' | 'lifetime' | 'telegram'))}
+              >
+                {String(label)}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function FullRankingFilterGroup({
+  title,
+  category,
+  options,
+  filters,
+  onChange,
+}: {
+  title: string;
+  category: AirportFilterCategory;
+  options: AirportFilterOption[];
+  filters: FullRankingFilters;
+  onChange: (filters: FullRankingFilters) => void;
+}) {
+  return (
+    <div>
+      <div className="text-xs font-black uppercase tracking-[0.18em] text-neutral-400">{title}</div>
+      <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+        {options.map((option) => {
+          const active = isFullRankingFilterActive(category, option.key, filters);
+          return (
+            <button
+              key={option.key}
+              type="button"
+              className={`inline-flex min-h-10 flex-none items-center rounded-full border px-3 text-sm font-black ${
+                active ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-600'
+              }`}
+              onClick={() => onChange(toggleFullRankingFilterValue(filters, category, option.key))}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function FullRankingCapabilitySummary({ item }: { item: FullRankingItemResponse }) {
+  if (!item.capabilities) {
+    return null;
+  }
+  const regions = item.capabilities.regions.slice(0, 4).map((region) => region.label);
+  const capabilities = [
+    ...item.capabilities.payment_methods.slice(0, 3).map((capability) => capability.label),
+    ...item.capabilities.clients.slice(0, 3).map((capability) => capability.label),
+    ...regions,
+    item.capabilities.plan.supports_annual ? '年付' : '',
+    item.capabilities.plan.has_lifetime_plan ? '不限时套餐' : '',
+    item.capabilities.telegram.has_group ? 'Telegram 群' : '',
+  ].filter(Boolean);
+
+  if (capabilities.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 flex flex-wrap gap-2">
+      {capabilities.slice(0, 10).map((label) => (
+        <span key={label} className="inline-flex min-h-8 items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-800">
+          {label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function isFullRankingFilterActive(category: AirportFilterCategory, value: string, filters: FullRankingFilters): boolean {
+  return filters[category].includes(value);
+}
+
+function toggleFullRankingFilterValue(
+  filters: FullRankingFilters,
+  category: AirportFilterCategory,
+  value: string,
+): FullRankingFilters {
+  const next = cloneFullRankingFilters(filters);
+  next[category] = next[category].includes(value)
+    ? next[category].filter((item) => item !== value)
+    : [...next[category], value];
+  return next;
+}
+
+function toggleBooleanFullRankingFilter(
+  filters: FullRankingFilters,
+  key: 'trial' | 'annual' | 'lifetime' | 'telegram',
+): FullRankingFilters {
+  const next = cloneFullRankingFilters(filters);
+  next[key] = next[key] === true ? null : true;
+  return next;
+}
+
+function buildSelectedFullRankingFilterLabels(filters: FullRankingFilters): string[] {
+  const labels: string[] = [];
+  if (filters.q) {
+    labels.push(`搜索：${filters.q}`);
+  }
+  for (const category of ['payment', 'streaming', 'client', 'import', 'region', 'line'] as const) {
+    labels.push(...filters[category].map((value) => getAirportFilterLabel(category, value)));
+  }
+  if (filters.trial !== null) labels.push(filters.trial ? '支持试用' : '无试用');
+  if (filters.annual !== null) labels.push(filters.annual ? '支持年付' : '无年付');
+  if (filters.lifetime !== null) labels.push(filters.lifetime ? '不限时套餐' : '无不限时套餐');
+  if (filters.telegram !== null) labels.push(filters.telegram ? 'Telegram 群' : '无 Telegram 群');
+  if (filters.price_min !== null || filters.price_max !== null) {
+    labels.push(`月付 ${filters.price_min ?? 0}-${filters.price_max ?? '不限'}`);
+  }
+  return labels;
+}
+
+function parsePriceInput(value: FormDataEntryValue | null): number | null {
+  const parsed = Number(String(value || '').trim());
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : null;
 }
 
 function StatusPill({ label, value }: { label: string; value: string | number | null }) {
@@ -2323,16 +2593,25 @@ function HomePage({ date }: { date?: string }) {
   );
 }
 
-function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
+function FullRankingPage({
+  date,
+  page = 1,
+  filters = EMPTY_FULL_RANKING_FILTERS,
+}: {
+  date?: string;
+  page?: number;
+  filters?: FullRankingFilters;
+}) {
   const initialData = useMemo(
     () => getInitialPublicData<FullRankingPageResponse>(
       'full_ranking',
       (envelope) => (
         initialDateMatches(envelope.params?.date, date) &&
-        Number(envelope.params?.page || 1) === Math.max(1, page || 1)
+        Number(envelope.params?.page || 1) === Math.max(1, page || 1) &&
+        fullRankingFiltersEqual(envelope.params?.filters || EMPTY_FULL_RANKING_FILTERS, filters)
       ),
     ),
-    [date, page],
+    [date, page, filters],
   );
   const [data, setData] = useState<FullRankingPageResponse | null>(() => initialData);
   const [loading, setLoading] = useState(() => !initialData);
@@ -2350,12 +2629,12 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
     setLoading(true);
     setError('');
 
-    const query = buildQuery({
+    const filterQuery = buildFullRankingQuery(filters, {
       date,
       page: page > 1 ? page : undefined,
     });
 
-    void apiFetch<FullRankingPageResponse>(`/api/v1/pages/full-ranking${query}`)
+    void apiFetch<FullRankingPageResponse>(`/api/v1/pages/full-ranking${filterQuery}`)
       .then((next) => {
         if (active) {
           setData(next);
@@ -2376,13 +2655,18 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
     return () => {
       active = false;
     };
-  }, [date, page, initialData]);
+  }, [date, page, filters, initialData]);
 
   const rankingDate = data?.date || date || '今日';
   const safePage = data?.page || page || 1;
   const totalPages = data?.total_pages || 1;
   const visiblePages = buildPageWindow(safePage, totalPages);
-  const fullRankingSeo = buildFullRankingSeo(data ? { dateLabel: rankingDate, total: data.total } : undefined);
+  const activeFilters = data?.filters || filters;
+  const fullRankingSeo = buildFullRankingSeo(data ? { dateLabel: rankingDate, total: data.total, filters: activeFilters } : { filters: activeFilters });
+  const rankingHeading = buildFullRankingHeading(activeFilters);
+  const selectedFilterCount = getFullRankingFilterCount(activeFilters);
+  const seoDecision = getFullRankingSeoDecision(activeFilters, safePage);
+  const canonicalPage = getFullRankingFilterCount(seoDecision.canonicalFilters) > 0 ? 1 : safePage;
   const seoTitle = fullRankingSeo.title;
   const seoDescription = fullRankingSeo.description;
   const seoStructuredData = useMemo(
@@ -2392,7 +2676,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
         '@type': 'CollectionPage',
         name: seoTitle,
         description: seoDescription,
-        url: buildAbsoluteUrl(buildFullRankingHref(date, safePage)),
+        url: buildAbsoluteUrl(buildFullRankingHref(date, safePage, activeFilters)),
       },
       {
         '@context': 'https://schema.org',
@@ -2408,7 +2692,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
             '@type': 'ListItem',
             position: 2,
             name: '全量榜单',
-            item: buildAbsoluteUrl(buildFullRankingHref(date, safePage)),
+            item: buildAbsoluteUrl(buildFullRankingHref(date, safePage, activeFilters)),
           },
         ],
       },
@@ -2427,14 +2711,15 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
           })),
       },
     ]),
-    [data, date, safePage, seoDescription, seoTitle],
+    [activeFilters, data, date, safePage, seoDescription, seoTitle],
   );
 
   usePageSeo({
     title: seoTitle,
     description: seoDescription,
     keywords: fullRankingSeo.keywords,
-    canonicalPath: buildFullRankingHref(date, safePage),
+    robots: seoDecision.robots,
+    canonicalPath: buildFullRankingHref(date, canonicalPage, seoDecision.canonicalFilters),
     structuredData: seoStructuredData,
   });
 
@@ -2443,16 +2728,18 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
       <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-10">
         <ListPageHero
           eyebrow="全量榜单"
-          title="机场排行榜：全量机场 VPN 评分排名"
+          title={rankingHeading}
           subtitle=""
-          description="这里汇总所有已上线机场，并统一提供官网入口、运行状态、标签、成立日期、月付价格、试用支持、公开分数与测评报告入口。风险机场会保留显著标识，方便用户和 AI 检索系统快速判断。"
+          description={seoDescription}
           stats={[
             { label: '收录机场', value: formatNumber(data?.total || 0) },
             { label: '当前分页', value: `${safePage}/${totalPages}` },
-            { label: '默认页容量', value: data?.page_size || 20 },
+            { label: '已选筛选', value: selectedFilterCount },
             { label: '数据说明', value: <div className="text-sm font-semibold leading-6 text-white/78">仅展示 normal 与 risk 状态机场</div> },
           ]}
         />
+
+        <FullRankingFilterPanel date={date} filters={activeFilters} />
 
         <section className="mt-10 rounded-[28px] border border-neutral-200 bg-white px-5 py-6 md:px-7 md:py-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
           <div className="flex flex-col gap-4 border-b border-neutral-100 pb-6 md:flex-row md:items-end md:justify-between">
@@ -2485,7 +2772,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                         airportId={item.airport_id}
                         placement="full_ranking_item"
                         pageKind="full_ranking"
-                        dedupeKey={`full_ranking|${item.airport_id}|${item.rank}|${safePage}`}
+                        dedupeKey={`full_ranking|${item.airport_id}|${item.rank}|${safePage}|${buildFullRankingQuery(activeFilters)}`}
                       >
                         <article className="grid gap-5 rounded-[28px] border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 shadow-[0_20px_55px_rgba(15,23,42,0.05)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_65px_rgba(15,23,42,0.08)] lg:grid-cols-[132px_minmax(0,1fr)_240px] lg:items-start">
                           <div className="rounded-2xl border border-neutral-200 bg-neutral-950 px-4 py-5 text-white">
@@ -2553,6 +2840,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                           </dl>
 
                           <TagBadgeGroup tags={item.tags} size="sm" className="mt-5" />
+                          <FullRankingCapabilitySummary item={item} />
                         </div>
 
                         <div className="flex flex-col gap-3 rounded-[24px] border border-neutral-200 bg-white p-4 lg:sticky lg:top-24">
@@ -2609,7 +2897,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                       type="button"
                       className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={safePage <= 1}
-                      onClick={() => navigate(buildFullRankingHref(date, safePage - 1))}
+                      onClick={() => navigate(buildFullRankingHref(date, safePage - 1, activeFilters))}
                     >
                       <ChevronLeft className="h-4 w-4" />
                       上一页
@@ -2623,7 +2911,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                             ? 'bg-neutral-900 text-white shadow-lg'
                             : 'border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-900 hover:text-neutral-900'
                         }`}
-                        onClick={() => navigate(buildFullRankingHref(date, pageNumber))}
+                        onClick={() => navigate(buildFullRankingHref(date, pageNumber, activeFilters))}
                       >
                         {pageNumber}
                       </button>
@@ -2632,7 +2920,7 @@ function FullRankingPage({ date, page = 1 }: { date?: string; page?: number }) {
                       type="button"
                       className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={safePage >= totalPages}
-                      onClick={() => navigate(buildFullRankingHref(date, safePage + 1))}
+                      onClick={() => navigate(buildFullRankingHref(date, safePage + 1, activeFilters))}
                     >
                       下一页
                       <ChevronRight className="h-4 w-4" />
@@ -6283,7 +6571,7 @@ export default function App() {
   }
 
   if (route.kind === 'full_ranking') {
-    return <FullRankingPage date={route.date} page={route.page} />;
+    return <FullRankingPage date={route.date} page={route.page} filters={route.filters} />;
   }
 
   if (route.kind === 'risk_monitor') {

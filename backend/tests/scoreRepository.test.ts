@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ScoreRepository } from '../src/repositories/scoreRepository';
+import { parseFullRankingFilters } from '../../shared/fullRankingFilters';
 
 test('ScoreRepository reads details_json when mysql returns object values', async () => {
   const repository = new ScoreRepository({
@@ -129,6 +130,81 @@ test('ScoreRepository.getPublicFullRankingByDate keeps airports without scores',
   });
   assert.equal(result.items[0].score_date, null);
   assert.equal(result.items[0].report_url, null);
+});
+
+test('ScoreRepository.getPublicFullRankingByDate applies search and structured filters', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new ScoreRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql.includes('COUNT(*) AS total')) {
+        return [[{ total: 1 }]];
+      }
+      if (sql.includes('WHERE date = ?') && sql.includes('airport_id IN')) {
+        return [[{ airport_id: 3, display_score: 90 }]];
+      }
+      return [[
+        {
+          airport_id: 3,
+          slug: 'filtered-airport',
+          name: 'Filtered Airport',
+          website: 'https://filtered.example.com',
+          status: 'normal',
+          tags_json: '["香港","Clash"]',
+          streaming_support_json: '["netflix"]',
+          payment_methods_json: '["alipay","usdt_trc20"]',
+          has_annual_plan: 1,
+          has_telegram_group: 1,
+          telegram_allows_speaking: 0,
+          has_lifetime_plan: 0,
+          airport_profile_json: JSON.stringify({
+            clients: { clash: true, shadowrocket: true },
+            import_methods: { one_click_import: true },
+            regions: {
+              hong_kong: { line_types: ['iepl'], has_residential: false, has_native_ip: true },
+            },
+          }),
+          founded_on: null,
+          plan_price_month: 18,
+          has_trial: 1,
+          airport_intro: 'Intro',
+          created_at: new Date('2025-02-01T00:00:00.000Z'),
+          score_date: new Date('2026-03-24T00:00:00.000Z'),
+          display_score: 95,
+        },
+      ]];
+    },
+  } as never);
+
+  const filters = parseFullRankingFilters(new URLSearchParams([
+    ['q', 'filtered'],
+    ['payment', 'alipay'],
+    ['payment', 'paypal'],
+    ['client', 'clash'],
+    ['region', 'hong_kong'],
+    ['line', 'iepl'],
+    ['trial', '1'],
+    ['price_min', '10'],
+    ['price_max', '30'],
+  ]));
+  const result = await repository.getPublicFullRankingByDate('2026-03-24', 1, 20, filters);
+
+  assert.equal(result.total, 1);
+  assert.deepEqual(result.items[0].capabilities?.payment_methods.map((item) => item.key), ['alipay', 'usdt_trc20']);
+  assert.deepEqual(result.items[0].capabilities?.clients.map((item) => item.key), ['clash', 'shadowrocket']);
+  assert.deepEqual(result.items[0].capabilities?.regions.map((item) => item.key), ['hong_kong']);
+  const rankingCall = calls.find((call) => call.sql.includes('ORDER BY'));
+  assert.ok(rankingCall);
+  assert.match(rankingCall.sql, /LOWER\(a\.name\) LIKE/);
+  assert.match(rankingCall.sql, /JSON_CONTAINS\(COALESCE\(a\.payment_methods_json, JSON_ARRAY\(\)\), JSON_QUOTE\(\?\)\)/);
+  assert.match(rankingCall.sql, /JSON_UNQUOTE\(JSON_EXTRACT\(a\.airport_profile_json, '\$\.clients\.clash'\)\) = 'true'/);
+  assert.match(rankingCall.sql, /\$\.regions\.hong_kong\.has_native_ip/);
+  assert.match(rankingCall.sql, /\$\.regions\.hong_kong\.line_types/);
+  assert.deepEqual(rankingCall.params?.slice(1, 6), ['%filtered%', '%filtered%', '%filtered%', '%filtered%', 'alipay']);
+  assert.ok(rankingCall.params?.includes('paypal'));
+  assert.ok(rankingCall.params?.includes('iepl'));
+  assert.ok(rankingCall.params?.includes(10));
+  assert.ok(rankingCall.params?.includes(30));
 });
 
 test('ScoreRepository.getPublicDisplayScoreByAirportAndDate prefers manual total score', async () => {

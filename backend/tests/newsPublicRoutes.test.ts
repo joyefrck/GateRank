@@ -110,7 +110,7 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
     assert.doesNotMatch(html, /\.topbar-inner/);
     assert.doesNotMatch(html, /\.nav-link\s*\{/);
     assert.match(html, /<h1 class="news-index-title">机场榜资讯中心：机场推荐、跑路预警与科学上网指南<\/h1>/);
-    assert.match(html, /<h2 class="hero-title">头条文章<\/h2>/);
+    assert.match(html, /<h2 class="hero-title"><a href="\/news\/headline">头条文章<\/a><\/h2>/);
     assert.doesNotMatch(html, /<h1 class="hero-title">/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -378,12 +378,15 @@ test('GET /sitemap.xml includes published news urls', async () => {
     );
     const xml = await response.text();
     const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) || [];
-    assert.equal(urlBlocks.length, 9);
+    assert.equal(urlBlocks.length, 55);
     urlBlocks.forEach((block) => {
       assert.match(block, /<lastmod>[^<]+<\/lastmod>/);
     });
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?payment=alipay<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?client=clash<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?region=hong_kong<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/risk-monitor<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/methodology<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/apply<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);

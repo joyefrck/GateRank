@@ -108,12 +108,88 @@ test('public data routes embed initial payload for React takeover', async () => 
 
     const initialData = JSON.parse(matched[1]) as {
       kind: string;
-      params: { date: string | null; page: number };
+      params: { date: string | null; page: number; filters: { q: string; payment: string[] } };
       payload: { items: Array<{ name: string }> };
     };
     assert.equal(initialData.kind, 'full_ranking');
-    assert.deepEqual(initialData.params, { date: '2026-03-23', page: 1 });
+    assert.equal(initialData.params.date, '2026-03-23');
+    assert.equal(initialData.params.page, 1);
+    assert.equal(initialData.params.filters.q, '');
+    assert.deepEqual(initialData.params.filters.payment, []);
     assert.equal(initialData.payload.items[0].name, '星云机场');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /rankings/all renders indexable single-filter SEO page', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: {
+      ...createPublicViewServiceStub(),
+      getFullRankingView: async (_date: string, _page: number, _pageSize: number, filters): Promise<FullRankingView> => ({
+        ...fullRankingView,
+        filters,
+      }),
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/all?payment=alipay`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<h1>支持支付宝的机场 VPN 排名<\/h1>/);
+    assert.match(html, /<meta name="robots" content="index,follow,max-image-preview:large"/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?payment=alipay"/);
+    assert.match(html, /搜索与分类筛选/);
+    assert.match(html, /class="filter-chip active" href="\/rankings\/all">支付宝<\/a>/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /rankings/all noindexes search and combination filters', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: {
+      ...createPublicViewServiceStub(),
+      getFullRankingView: async (_date: string, _page: number, _pageSize: number, filters): Promise<FullRankingView> => ({
+        ...fullRankingView,
+        filters,
+      }),
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/all?q=clash&client=clash&region=hong_kong`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<h1>机场搜索与筛选结果<\/h1>/);
+    assert.match(html, /<meta name="robots" content="noindex,follow"/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/rankings\/all"/);
+    assert.match(html, /搜索：clash/);
+    assert.match(html, /香港/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /rankings/all removes unsupported filter values from URL', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/all?payment=alipay&payment=unknown`, {
+      redirect: 'manual',
+    });
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), '/rankings/all?payment=alipay');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

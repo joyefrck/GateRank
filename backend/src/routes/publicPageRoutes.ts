@@ -17,11 +17,16 @@ import {
   renderReportPublicPage,
   renderRiskMonitorPublicPage,
 } from '../services/publicPageRenderer';
+import {
+  buildFullRankingPath,
+  parseFullRankingFilters,
+  type FullRankingFilters,
+} from '../../../shared/fullRankingFilters';
 
 interface PublicPageDeps {
   publicViewService: {
     getHomePageView(date: string): Promise<HomePageView>;
-    getFullRankingView(date: string, page: number, pageSize: number): Promise<FullRankingView>;
+    getFullRankingView(date: string, page: number, pageSize: number, filters?: FullRankingFilters): Promise<FullRankingView>;
     getRiskMonitorView(date: string, page: number, pageSize: number): Promise<RiskMonitorView>;
     getReportView(airportId: number, date: string): Promise<ReportView | null>;
     getReportViewBySlug?(slug: string, date: string): Promise<ReportView | null>;
@@ -55,20 +60,22 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     try {
       const requestedDate = parseDateQuery(req.query.date);
       const page = toPositiveInt(req.query.page, 1);
-      if (redirectDefaultDateQuery(req, res, PUBLIC_RANKING_PATH, requestedDate, page)) {
+      const filters = parseFullRankingFilters(req.query);
+      if (redirectFullRankingQuery(req, res, requestedDate, page, filters)) {
         return;
       }
       const renderDate = requestedDate || getDateInTimezone();
       const view = await pageCache.getOrLoad(
-        `full-ranking:${renderDate}:${page}:20`,
+        `full-ranking:${renderDate}:${page}:20:${JSON.stringify(filters)}`,
         () => deps.publicViewService.getFullRankingView(
           renderDate,
           page,
           20,
+          filters,
         ),
       );
       setPublicCacheHeaders(res);
-      res.status(200).type('html').send(renderFullRankingPublicPage(siteUrl, view, requestedDate, page));
+      res.status(200).type('html').send(renderFullRankingPublicPage(siteUrl, view, requestedDate, page, filters));
     } catch (error) {
       console.error('[public-page] failed to render full ranking page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '全量榜单加载失败'));
@@ -186,6 +193,23 @@ function redirectDefaultDateQuery(
   const query = search.toString();
   res.redirect(301, `${pathname}${query ? `?${query}` : ''}`);
   return true;
+}
+
+function redirectFullRankingQuery(
+  req: { query: Record<string, unknown>; originalUrl?: string; url?: string },
+  res: { redirect(status: number, path: string): void },
+  requestedDate: string | undefined,
+  page: number,
+  filters: FullRankingFilters,
+): boolean {
+  const normalizedDate = requestedDate === getDateInTimezone() ? undefined : requestedDate;
+  const normalizedPath = buildFullRankingPath(filters, { date: normalizedDate, page });
+  const currentPath = req.originalUrl || req.url || PUBLIC_RANKING_PATH;
+  if (currentPath !== normalizedPath) {
+    res.redirect(301, normalizedPath);
+    return true;
+  }
+  return false;
 }
 
 function parseDateQuery(input: unknown): string | undefined {

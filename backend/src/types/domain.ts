@@ -1,3 +1,5 @@
+import type { FullRankingFilters } from '../../../shared/fullRankingFilters';
+
 export type AirportStatus = 'normal' | 'risk' | 'down';
 export type AirportStreamingSupport =
   | 'netflix'
@@ -345,11 +347,33 @@ export interface FullRankingItem {
   score_delta_vs_yesterday: ScoreDeltaView;
   score_date?: string | null;
   report_url?: string | null;
+  capabilities?: {
+    payment_methods: ReportCapabilityItem[];
+    streaming: ReportCapabilityItem[];
+    clients: ReportCapabilityItem[];
+    import_methods: ReportCapabilityItem[];
+    regions: Array<{
+      key: string;
+      label: string;
+      line_types: ReportCapabilityItem[];
+      has_residential: boolean | null;
+      has_native_ip: boolean | null;
+    }>;
+    plan: {
+      supports_annual: boolean | null;
+      has_lifetime_plan: boolean | null;
+    };
+    telegram: {
+      has_group: boolean | null;
+      group_allows_speaking: boolean | null;
+    };
+  };
 }
 
 export interface FullRankingView {
   date: string;
   generated_at: string;
+  filters?: FullRankingFilters;
   page: number;
   page_size: number;
   total: number;

@@ -11,6 +11,7 @@ import {
   METHODOLOGY_SEO,
   PUBLIC_FRONTEND_ASSETS,
   PUBLIC_SEO_PATHS,
+  buildFullRankingHeading,
   buildFullRankingSeo,
   buildHomeSeo,
   buildQuery,
@@ -27,6 +28,24 @@ import {
 } from '../../../shared/publicSeo';
 import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
 import { getCapabilityIcon, type CapabilityIconCategory, type CapabilityIconData } from '../../../shared/capabilityIcons';
+import {
+  AIRPORT_CLIENT_FILTERS,
+  AIRPORT_IMPORT_FILTERS,
+  AIRPORT_LINE_FILTERS,
+  AIRPORT_PAYMENT_FILTERS,
+  AIRPORT_REGION_FILTERS,
+  AIRPORT_STREAMING_FILTERS,
+  getAirportFilterLabel,
+  type AirportFilterCategory,
+  type AirportFilterOption,
+} from '../../../shared/airportFilterCatalog';
+import {
+  buildFullRankingPath,
+  EMPTY_FULL_RANKING_FILTERS,
+  getFullRankingSeoDecision,
+  hasFullRankingFilters,
+  type FullRankingFilters,
+} from '../../../shared/fullRankingFilters';
 
 interface RenderOptions {
   siteUrl: string;
@@ -36,6 +55,7 @@ interface RenderOptions {
   jsonLd: unknown;
   body: string;
   status?: number;
+  robots?: string;
   initialData?: PublicInitialData;
 }
 
@@ -44,6 +64,7 @@ interface PublicInitialData {
   params: {
     date?: string | null;
     page?: number | null;
+    filters?: FullRankingFilters;
   };
   payload: unknown;
 }
@@ -119,18 +140,22 @@ export function renderFullRankingPublicPage(
   view: FullRankingView,
   requestedDate: string | undefined,
   requestedPage: number,
+  filters: FullRankingFilters = view.filters || EMPTY_FULL_RANKING_FILTERS,
 ): string {
   const page = view.page || requestedPage || 1;
-  const seo = buildFullRankingSeo({ dateLabel: view.date, total: view.total });
-  const canonicalPath = `${PUBLIC_SEO_PATHS.fullRanking}${buildQuery({
+  const seo = buildFullRankingSeo({ dateLabel: view.date, total: view.total, filters });
+  const seoDecision = getFullRankingSeoDecision(filters, page);
+  const canonicalPath = buildFullRankingPath(seoDecision.canonicalFilters, {
     date: requestedDate,
-    page: page > 1 ? page : undefined,
-  })}`;
+    page: hasFullRankingFilters(seoDecision.canonicalFilters) ? undefined : page,
+  });
+  const heading = buildFullRankingHeading(filters);
 
   return renderPublicDocument({
     siteUrl,
     canonicalPath,
     seo,
+    robots: seoDecision.robots,
     active: 'rankings',
     jsonLd: [
       buildCollectionPageJsonLd(siteUrl, canonicalPath, seo),
@@ -145,6 +170,7 @@ export function renderFullRankingPublicPage(
       params: {
         date: requestedDate ?? null,
         page,
+        filters,
       },
       payload: view,
     },
@@ -152,15 +178,16 @@ export function renderFullRankingPublicPage(
       <main class="page-main">
         <section class="hero hero-dark">
           <div class="eyebrow">全量榜单</div>
-          <h1>机场排行榜：全量机场 VPN 评分排名</h1>
-          <p>全部已上线机场按公开展示分数降序排列，原始 HTML 直接包含排名、分数、状态、官网和测评报告入口。</p>
+          <h1>${escapeHtml(heading)}</h1>
+          <p>${escapeHtml(seo.description)}</p>
           <div class="metric-grid">
             ${renderMetric('收录机场', formatNumber(view.total))}
             ${renderMetric('当前分页', `${view.page}/${view.total_pages}`)}
-            ${renderMetric('默认页容量', String(view.page_size))}
+            ${renderMetric('已选筛选', String(getSelectedFilterLabels(filters).length))}
             ${renderMetric('数据日期', view.date)}
           </div>
         </section>
+        ${renderFullRankingFilters(filters)}
         ${renderRankingTable(view.items)}
       </main>
     `,
@@ -650,7 +677,7 @@ function renderPublicDocument(options: RenderOptions): string {
     <title>${escapeHtml(options.seo.title)}</title>
     <meta name="description" content="${escapeAttribute(options.seo.description)}" />
     <meta name="keywords" content="${escapeAttribute(options.seo.keywords)}" />
-    <meta name="robots" content="index,follow,max-image-preview:large" />
+    <meta name="robots" content="${escapeAttribute(options.robots || 'index,follow,max-image-preview:large')}" />
     <link rel="canonical" href="${escapeAttribute(canonicalUrl)}" />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="${escapeAttribute(PUBLIC_SITE_BRAND_NAME)}" />
@@ -738,13 +765,103 @@ function renderAirportCard(item: {
   `;
 }
 
+function renderFullRankingFilters(filters: FullRankingFilters): string {
+  const selectedLabels = getSelectedFilterLabels(filters);
+  const selected = selectedLabels.length > 0
+    ? `<div class="filter-chip-row">${selectedLabels.map((label) => `<span class="filter-chip active">${escapeHtml(label)}</span>`).join('')}<a class="filter-clear" href="/rankings/all">清空筛选</a></div>`
+    : '<p class="muted">可按机场名称、支付方式、客户端、节点地区、线路、套餐和 Telegram 支持筛选。</p>';
+
+  return `
+    <section class="content-card ranking-filter-card">
+      <h2>搜索与分类筛选</h2>
+      <form class="ranking-search-form" action="/rankings/all" method="get" role="search">
+        <input class="ranking-search-input" type="search" name="q" value="${escapeAttribute(filters.q)}" placeholder="搜索机场名称、官网、标签或简介" />
+        <button class="ranking-search-button" type="submit">搜索</button>
+      </form>
+      ${selected}
+      ${renderFilterGroup('支付方式', 'payment', AIRPORT_PAYMENT_FILTERS, filters)}
+      ${renderFilterGroup('客户端', 'client', AIRPORT_CLIENT_FILTERS, filters)}
+      ${renderFilterGroup('节点地区', 'region', AIRPORT_REGION_FILTERS, filters)}
+      ${renderFilterGroup('线路类型', 'line', AIRPORT_LINE_FILTERS, filters)}
+      ${renderFilterGroup('流媒体与服务', 'streaming', AIRPORT_STREAMING_FILTERS, filters)}
+      ${renderFilterGroup('导入方式', 'import', AIRPORT_IMPORT_FILTERS, filters)}
+    </section>
+  `;
+}
+
+function renderFilterGroup(
+  title: string,
+  category: AirportFilterCategory,
+  options: AirportFilterOption[],
+  filters: FullRankingFilters,
+): string {
+  return `
+    <div class="filter-group">
+      <h3>${escapeHtml(title)}</h3>
+      <div class="filter-chip-row">
+        ${options.map((option) => {
+          const active = isFilterOptionActive(category, option.key, filters);
+          const nextFilters = toggleFilterValue(category, option.key, filters);
+          return `<a class="filter-chip ${active ? 'active' : ''}" href="${escapeAttribute(buildFullRankingPath(nextFilters))}">${escapeHtml(option.label)}</a>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
+function isFilterOptionActive(category: AirportFilterCategory, value: string, filters: FullRankingFilters): boolean {
+  return filters[category].includes(value);
+}
+
+function toggleFilterValue(category: AirportFilterCategory, value: string, filters: FullRankingFilters): FullRankingFilters {
+  const next: FullRankingFilters = {
+    ...filters,
+    payment: [...filters.payment],
+    streaming: [...filters.streaming],
+    client: [...filters.client],
+    import: [...filters.import],
+    region: [...filters.region],
+    line: [...filters.line],
+  };
+  next[category] = next[category].includes(value)
+    ? next[category].filter((item) => item !== value)
+    : [...next[category], value];
+  return next;
+}
+
+function getSelectedFilterLabels(filters: FullRankingFilters): string[] {
+  const labels: string[] = [];
+  if (filters.q) {
+    labels.push(`搜索：${filters.q}`);
+  }
+  for (const category of ['payment', 'streaming', 'client', 'import', 'region', 'line'] as const) {
+    labels.push(...filters[category].map((value) => getAirportFilterLabel(category, value)));
+  }
+  if (filters.trial !== null) {
+    labels.push(filters.trial ? '支持试用' : '无试用');
+  }
+  if (filters.annual !== null) {
+    labels.push(filters.annual ? '支持年付' : '无年付');
+  }
+  if (filters.lifetime !== null) {
+    labels.push(filters.lifetime ? '不限时套餐' : '无不限时套餐');
+  }
+  if (filters.telegram !== null) {
+    labels.push(filters.telegram ? '有 Telegram 群' : '无 Telegram 群');
+  }
+  if (filters.price_min !== null || filters.price_max !== null) {
+    labels.push(`价格：${filters.price_min ?? 0}-${filters.price_max ?? '不限'} 元`);
+  }
+  return labels;
+}
+
 function renderRankingTable(items: FullRankingItem[]): string {
   return `
     <section class="content-card">
       <h2>全量榜单列表</h2>
       <div class="table-wrap">
         <table>
-          <thead><tr><th>排名</th><th>机场</th><th>状态</th><th>分数</th><th>月付</th><th>报告</th></tr></thead>
+          <thead><tr><th>排名</th><th>机场</th><th>状态</th><th>分数</th><th>月付</th><th>服务能力</th><th>报告</th></tr></thead>
           <tbody>
             ${items.map((item) => `
               <tr>
@@ -753,6 +870,7 @@ function renderRankingTable(items: FullRankingItem[]): string {
                 <td>${escapeHtml(formatAirportStatusLabel(item.status))}</td>
                 <td>${item.score === null ? '-' : formatMetric(item.score)}</td>
                 <td>¥${formatMetric(item.plan_price_month)}</td>
+                <td>${escapeHtml(buildRankingCapabilitySummary(item))}</td>
                 <td>${item.report_url ? `<a href="${escapeAttribute(item.report_url)}">测评报告</a>` : '暂无报告'}</td>
               </tr>
             `).join('')}
@@ -786,6 +904,21 @@ function renderRiskTable(items: RiskMonitorItem[]): string {
       </div>
     </section>
   `;
+}
+
+function buildRankingCapabilitySummary(item: FullRankingItem): string {
+  const capabilities = item.capabilities;
+  if (!capabilities) {
+    return '结构化能力待补充';
+  }
+  const parts = [
+    capabilities.payment_methods.slice(0, 2).map((capability) => capability.label).join('/'),
+    capabilities.clients.slice(0, 2).map((capability) => capability.label).join('/'),
+    capabilities.regions.slice(0, 2).map((region) => region.label).join('/'),
+    capabilities.plan.supports_annual ? '年付' : '',
+    capabilities.telegram.has_group ? 'TG群' : '',
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(' · ') : '结构化能力待补充';
 }
 
 function renderInfoCard(title: string, body: string): string {
@@ -959,6 +1092,19 @@ const styles = `
   .metric div, .muted { color: #666; font-size: 13px; }
   .metric strong, .score { display: block; margin-top: 8px; font-size: 28px; font-weight: 900; }
   .content-card { border: 1px solid #e5e5e5; border-radius: 24px; padding: 26px; background: #fff; }
+  .ranking-filter-card { display: grid; gap: 18px; }
+  .ranking-search-form { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; }
+  .ranking-search-input,
+  .ranking-search-button { min-height: 46px; border-radius: 12px; font: inherit; }
+  .ranking-search-input { width: 100%; border: 1px solid #d4d4d4; padding: 0 14px; }
+  .ranking-search-button { border: 0; background: #111; color: #fff; font-weight: 900; cursor: pointer; }
+  .filter-group { display: grid; gap: 8px; }
+  .filter-group h3 { margin: 0; color: #404040; font-size: 14px; }
+  .filter-chip-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .filter-chip,
+  .filter-clear { display: inline-flex; min-height: 34px; align-items: center; border-radius: 999px; padding: 0 12px; border: 1px solid #e5e5e5; background: #fafafa; color: #404040; font-size: 13px; font-weight: 900; text-decoration: none; }
+  .filter-chip.active { border-color: #111; background: #111; color: #fff; }
+  .filter-clear { border-color: #fecdd3; background: #fff1f2; color: #be123c; }
   .report-page { width: min(1180px, calc(100vw - 32px)); padding-top: 16px; gap: 28px; }
   .report-anchor-target { scroll-margin-top: 144px; }
   .report-date-status { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; color: #94a3b8; font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
@@ -1094,6 +1240,12 @@ const styles = `
   th, td { text-align: left; border-bottom: 1px solid #eee; padding: 14px 10px; vertical-align: top; }
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #666; }
   @media (max-width: 900px) {
+    .page-main { width: min(100vw - 24px, 1180px); padding-top: 24px; gap: 20px; }
+    .hero, .content-card { border-radius: 18px; padding: 20px; }
+    h1 { font-size: 36px; line-height: 1.04; }
+    .ranking-search-form { grid-template-columns: 1fr; }
+    .filter-chip-row { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+    .filter-chip, .filter-clear { flex: 0 0 auto; }
     .report-hero { grid-template-columns: 1fr; padding: 22px; }
     .report-snapshot, .capability-grid, .score-grid, .report-info-grid, .report-info-panel dl { grid-template-columns: 1fr; }
     .score-card { padding: 22px; }

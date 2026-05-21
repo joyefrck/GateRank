@@ -4,6 +4,7 @@ import { Zap } from 'lucide-react';
 import { PUBLIC_SITE_BRAND_NAME } from '../../shared/publicBrand';
 import { type PublicNavigationKind } from '../../shared/publicNavigation';
 import { PUBLIC_TOP_NAV_STYLES, renderPublicTopNav } from '../../shared/publicTopNav';
+import { buildFullRankingQuery, EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../shared/fullRankingFilters';
 
 export type NavigationKind = PublicNavigationKind | 'docs';
 
@@ -12,6 +13,7 @@ export interface SeoConfig {
   description: string;
   keywords: string;
   canonicalPath: string;
+  robots?: string;
   structuredData?: Record<string, unknown> | Array<Record<string, unknown>>;
 }
 
@@ -46,8 +48,8 @@ export function buildHomeHref(date?: string): string {
   return `/${buildQuery({ date })}`;
 }
 
-export function buildFullRankingHref(date?: string, page = 1): string {
-  return `/rankings/all${buildQuery({
+export function buildFullRankingHref(date?: string, page = 1, filters: FullRankingFilters = EMPTY_FULL_RANKING_FILTERS): string {
+  return `/rankings/all${buildFullRankingQuery(filters, {
     date,
     page: page > 1 ? page : undefined,
   })}`;
@@ -115,7 +117,7 @@ export function usePageSeo(config: SeoConfig) {
     document.documentElement.lang = 'zh-CN';
     setNamedMeta('description', config.description);
     setNamedMeta('keywords', config.keywords);
-    setNamedMeta('robots', 'index,follow,max-image-preview:large');
+    setNamedMeta('robots', config.robots || 'index,follow,max-image-preview:large');
     setPropertyMeta('og:type', 'website');
     setPropertyMeta('og:site_name', PUBLIC_SITE_BRAND_NAME);
     setPropertyMeta('og:title', config.title);

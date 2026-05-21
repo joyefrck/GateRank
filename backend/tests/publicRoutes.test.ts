@@ -576,9 +576,10 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
         getHomePageView: async () => {
           throw new Error('not used');
         },
-        getFullRankingView: async (date: string, page: number, pageSize: number) => ({
+        getFullRankingView: async (date: string, page: number, pageSize: number, filters: any) => ({
           date,
           generated_at: '2026-03-23T10:00:00+08:00',
+          filters,
           page,
           page_size: pageSize,
           total: 35,
@@ -617,7 +618,7 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
   const server = app.listen(0);
   try {
     const port = (server.address() as AddressInfo).port;
-    const response = await fetch(`http://127.0.0.1:${port}/pages/full-ranking?date=2026-03-23&page=2`);
+    const response = await fetch(`http://127.0.0.1:${port}/pages/full-ranking?date=2026-03-23&page=2&payment=alipay&client=clash`);
     assert.equal(response.status, 200);
     assert.equal(
       response.headers.get('cache-control'),
@@ -629,11 +630,14 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
       total: number;
       total_pages: number;
       items: Array<{ rank: number; score: number; score_delta_vs_yesterday: { label: string; value: number | null } }>;
+      filters: { payment: string[]; client: string[] };
     };
     assert.equal(data.page, 2);
     assert.equal(data.page_size, 20);
     assert.equal(data.total, 35);
     assert.equal(data.total_pages, 2);
+    assert.deepEqual(data.filters.payment, ['alipay']);
+    assert.deepEqual(data.filters.client, ['clash']);
     assert.equal(data.items[0].rank, 21);
     assert.equal(data.items[0].score, 88.6);
     assert.deepEqual(data.items[0].score_delta_vs_yesterday, {

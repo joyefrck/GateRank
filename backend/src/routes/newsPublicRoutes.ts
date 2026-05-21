@@ -9,6 +9,7 @@ import { setPublicCacheHeaders } from '../utils/publicCache';
 import { getDateInTimezone } from '../utils/time';
 import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from '../../../shared/publishTokenDocs';
 import { PUBLIC_SEO_STATIC_LASTMOD } from '../../../shared/publicSeo';
+import { getIndexableFullRankingFilterPaths } from '../../../shared/fullRankingFilters';
 
 interface NewsPublicDeps {
   newsPublicService: NewsPublicService;
@@ -188,6 +189,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
     const urls = [
       '/',
       '/rankings/all',
+      ...getIndexableFullRankingFilterPaths(),
       '/methodology',
       '/apply',
       '/risk-monitor',
@@ -201,6 +203,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
     const staticLastmodByPath = {
       '/': dataLastmod,
       '/rankings/all': dataLastmod,
+      ...Object.fromEntries(getIndexableFullRankingFilterPaths().map((path) => [path, dataLastmod])),
       '/risk-monitor': dataLastmod,
       '/methodology': PUBLIC_SEO_STATIC_LASTMOD,
       '/apply': PUBLIC_SEO_STATIC_LASTMOD,

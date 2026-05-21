@@ -1,4 +1,10 @@
 import { PUBLIC_SITE_BRAND_NAME } from './publicBrand';
+import {
+  getFullRankingFilterCount,
+  getFullRankingSeoDecision,
+  hasFullRankingFilters,
+  type FullRankingFilters,
+} from './fullRankingFilters';
 
 export interface PublicSeoText {
   title: string;
@@ -141,7 +147,31 @@ export function buildHomeSeo(input?: {
 export function buildFullRankingSeo(input?: {
   dateLabel?: string;
   total?: number;
+  filters?: FullRankingFilters;
 }): PublicSeoText {
+  const decision = input?.filters ? getFullRankingSeoDecision(input.filters) : null;
+  if (decision?.primaryCategory && decision.primaryValue && decision.primaryLabel) {
+    const title = buildFullRankingFilteredTitle(decision.primaryCategory, decision.primaryLabel);
+    return {
+      title: `${title} | ${PUBLIC_SITE_BRAND_NAME}`,
+      description:
+        input && typeof input.total === 'number'
+          ? `${input.dateLabel || '今日'} ${title}收录 ${formatCount(input.total)} 个匹配机场，按公开展示分数排序，展示官网入口、状态、价格、试用、支付、客户端、节点地区和测评报告。`
+          : `${PUBLIC_SITE_BRAND_NAME} 提供${title}，帮助用户按支付方式、客户端类型、节点地区和线路能力筛选机场 VPN。`,
+      keywords: `机场榜GateRank,${decision.primaryLabel}机场,机场排名,机场推荐,机场测评,机场VPN,GateRank`,
+    };
+  }
+  if (input?.filters && hasFullRankingFilters(input.filters)) {
+    const count = getFullRankingFilterCount(input.filters);
+    return {
+      title: `机场筛选结果 | 搜索与分类筛选 | ${PUBLIC_SITE_BRAND_NAME}`,
+      description:
+        input && typeof input.total === 'number'
+          ? `${input.dateLabel || '今日'} 机场筛选结果命中 ${formatCount(input.total)} 个机场，当前使用 ${formatCount(count)} 个搜索或分类条件，覆盖支付方式、客户端类型、节点地区、线路、套餐和 Telegram 支持。`
+          : `${PUBLIC_SITE_BRAND_NAME} 全量榜单支持按搜索词、支付方式、客户端类型、节点地区、线路、套餐和 Telegram 支持筛选机场 VPN。`,
+      keywords: '机场榜GateRank,机场筛选,机场搜索,机场支付方式,机场客户端,机场节点地区,机场线路,GateRank',
+    };
+  }
   return {
     title: `全量机场榜单 | 全部已上线机场评分排名 | ${PUBLIC_SITE_BRAND_NAME}`,
     description:
@@ -150,6 +180,44 @@ export function buildFullRankingSeo(input?: {
         : `${PUBLIC_SITE_BRAND_NAME} 全量榜单按公开展示分数降序展示全部已上线机场，包含官网入口、状态、标签、月付价格、试用支持和测评报告入口。`,
     keywords: '机场榜GateRank,全量榜单,机场排名,机场排行榜,机场推荐,机场测评,机场官网,风险机场,GateRank',
   };
+}
+
+export function buildFullRankingHeading(filters?: FullRankingFilters): string {
+  const decision = filters ? getFullRankingSeoDecision(filters) : null;
+  if (decision?.primaryCategory && decision.primaryLabel && !hasComplexFullRankingFilters(filters)) {
+    return buildFullRankingFilteredTitle(decision.primaryCategory, decision.primaryLabel);
+  }
+  if (filters && hasFullRankingFilters(filters)) {
+    return '机场搜索与筛选结果';
+  }
+  return '机场排行榜：全量机场 VPN 评分排名';
+}
+
+function buildFullRankingFilteredTitle(category: string, label: string): string {
+  if (category === 'payment') {
+    return `${label}的机场 VPN 排名`;
+  }
+  if (category === 'client') {
+    return `${label}机场推荐`;
+  }
+  if (category === 'region') {
+    return `${label}机场排行榜`;
+  }
+  if (category === 'line') {
+    return `${label}机场排名`;
+  }
+  if (category === 'streaming') {
+    return `${label}机场推荐`;
+  }
+  return `${label}机场筛选`;
+}
+
+function hasComplexFullRankingFilters(filters: FullRankingFilters | undefined): boolean {
+  if (!filters) {
+    return false;
+  }
+  const decision = getFullRankingSeoDecision(filters);
+  return decision.primaryValue === null || getFullRankingFilterCount(filters) !== 1;
 }
 
 export function buildRiskMonitorSeo(input?: {

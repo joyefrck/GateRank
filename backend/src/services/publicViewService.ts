@@ -26,6 +26,7 @@ import {
 import { buildRiskReasonSummary } from '../utils/risk';
 import { buildTodayPickRows, isTodayPickEligible, type RankedAirportInput } from './rankingService';
 import { buildAirportReportPath, buildAirportSlugCandidate } from '../../../shared/publicSeo';
+import { EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../../shared/fullRankingFilters';
 
 type HomeSectionKey =
   | 'today_pick'
@@ -130,6 +131,7 @@ interface PublicViewDeps {
       date: string,
       page: number,
       pageSize: number,
+      filters?: FullRankingFilters,
     ): Promise<{
       total: number;
       items: FullRankingView['items'];
@@ -353,7 +355,12 @@ export class PublicViewService {
     };
   }
 
-  async getFullRankingView(date: string, page: number, pageSize: number): Promise<FullRankingView> {
+  async getFullRankingView(
+    date: string,
+    page: number,
+    pageSize: number,
+    filters: FullRankingFilters = EMPTY_FULL_RANKING_FILTERS,
+  ): Promise<FullRankingView> {
     const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
     const safePage = Math.max(1, page);
     const safePageSize = Math.max(1, pageSize);
@@ -361,11 +368,13 @@ export class PublicViewService {
       resolvedDate,
       safePage,
       safePageSize,
+      filters,
     );
 
     return {
       date: resolvedDate,
       generated_at: formatDateTimeInTimezoneIso(new Date(), SHANGHAI_TIMEZONE),
+      filters,
       page: safePage,
       page_size: safePageSize,
       total: result.total,
