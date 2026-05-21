@@ -37,6 +37,7 @@ import { createOutboundRoutes } from './routes/outboundRoutes';
 import { createPublishRoutes } from './routes/publishRoutes';
 import { createPublicPageRoutes } from './routes/publicPageRoutes';
 import { createNewsPublicRoutes } from './routes/newsPublicRoutes';
+import { createMachineReadableRoutes } from './routes/machineReadableRoutes';
 import { createPublicRoutes } from './routes/publicRoutes';
 import { createUserTelegramBotRoutes } from './routes/userTelegramBotRoutes';
 import { AccessTokenService } from './services/accessTokenService';
@@ -367,6 +368,12 @@ export async function createApp() {
       accessTokenService,
       auditRepository,
       newsMutationService,
+    }),
+  );
+
+  app.use(
+    createMachineReadableRoutes({
+      publicViewService,
     }),
   );
 

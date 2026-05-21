@@ -18,6 +18,16 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
     '/risk-monitor',
     '/risk-watch',
     '/sitemap.xml',
+    '/llms.txt',
+    '/llms-full.txt',
+    '/openapi.json',
+    '/.well-known/ai-plugin.json',
+    '/data/summary.json',
+    '/data/rankings.json',
+    '/data/risk-monitor.json',
+    '/data/summary.md',
+    '/data/rankings.md',
+    '/data/risk-monitor.md',
     '/publish-token-docs',
   ]) {
     const block = getLocationBlock(config, `= ${route}`);
