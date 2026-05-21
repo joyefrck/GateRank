@@ -1,0 +1,18 @@
+
+> react-example@0.0.0 server:dev
+> tsx watch backend/src/server.ts
+
+[server] backend listening on :8787
+[scheduler] task stability scheduled for 2026-05-21T16:00:00.000Z
+[scheduler] task performance scheduled for 2026-05-21T16:10:00.000Z
+[scheduler] task risk scheduled for 2026-05-21T16:20:00.000Z
+[scheduler] task aggregate_recompute scheduled for 2026-05-21T16:30:00.000Z
+[scheduler] task billing_listing_sync scheduled for 2026-05-21T19:00:00.000Z
+11:57:25 AM [tsx] change in ./backend/src/services/publicPageRenderer.ts Restarting...
+[server] received SIGTERM, shutting down
+c[server] backend listening on :8787
+[scheduler] task stability scheduled for 2026-05-21T16:00:00.000Z
+[scheduler] task performance scheduled for 2026-05-21T16:10:00.000Z
+[scheduler] task risk scheduled for 2026-05-21T16:20:00.000Z
+[scheduler] task aggregate_recompute scheduled for 2026-05-21T16:30:00.000Z
+[scheduler] task billing_listing_sync scheduled for 2026-05-21T19:00:00.000Z

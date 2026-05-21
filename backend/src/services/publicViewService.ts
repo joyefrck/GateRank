@@ -1,4 +1,6 @@
 import { NEW_AIRPORT_DAYS, SHANGHAI_TIMEZONE } from '../config/scoring';
+import { CLICK_CHARGE_AMOUNT } from '../config/billing';
+import type { PublicScoreVisibility } from '../repositories/applicantBillingRepository';
 import type {
   Airport,
   DailyMetrics,
@@ -127,25 +129,36 @@ interface PublicViewDeps {
         details?: Record<string, ScoreDetailValue>;
       }>>
     >;
-    getPublicFullRankingByDate(
-      date: string,
-      page: number,
-      pageSize: number,
-      filters?: FullRankingFilters,
-    ): Promise<{
-      total: number;
-      items: FullRankingView['items'];
-    }>;
-    getPublicRiskMonitorByDate?(
-      date: string,
-      page: number,
-      pageSize: number,
-    ): Promise<{
-      total: number;
-      items: RiskMonitorView['items'];
-    }>;
-  };
-  rankingRepository: {
+      getPublicFullRankingByDate(
+        date: string,
+        page: number,
+        pageSize: number,
+        filters?: FullRankingFilters,
+        clickChargeAmount?: number,
+      ): Promise<{
+        total: number;
+        items: FullRankingView['items'];
+      }>;
+      getPublicRiskMonitorByDate?(
+        date: string,
+        page: number,
+        pageSize: number,
+        clickChargeAmount?: number,
+      ): Promise<{
+        total: number;
+        items: RiskMonitorView['items'];
+      }>;
+    };
+    applicantBillingRepository?: {
+      getPublicScoreVisibilityByAirportIds?(
+        airportIds: number[],
+        clickChargeAmount?: number,
+      ): Promise<Map<number, PublicScoreVisibility>>;
+    };
+    marketingSettingsService?: {
+      getConfig(): Promise<{ click_charge_amount: number }>;
+    };
+    rankingRepository: {
     getLatestAvailableDate(onOrBefore: string): Promise<string | null>;
     getRanking(date: string, listType: RankingType): Promise<RankingItem[]>;
     getRanksForAirport(airportId: number, date: string): Promise<Partial<Record<RankingType, number>>>;
@@ -170,12 +183,14 @@ interface CardContext {
     p: number;
     c: number;
     r: number;
-    risk_penalty: number;
-    final_score: number;
-    display_score: number;
-    yesterday_display_score: number | null;
-    details: Record<string, ScoreDetailValue>;
-  };
+      risk_penalty: number;
+      final_score: number;
+      display_score: number | null;
+      score_hidden: boolean;
+      score_hidden_reason: 'insufficient_balance' | null;
+      yesterday_display_score: number | null;
+      details: Record<string, ScoreDetailValue>;
+    };
   metricsTrend30d: DailyMetrics[];
   scoreTrend30d: Array<{ date: string; final_score: number; display_score: number }>;
 }
@@ -227,13 +242,19 @@ const SECTION_CONFIG: Record<
   },
 };
 
+const DEFAULT_SCORE_VISIBILITY: PublicScoreVisibility = {
+  score_hidden: false,
+  score_hidden_reason: null,
+};
+
 export class PublicViewService {
   constructor(private readonly deps: PublicViewDeps) {}
 
-  async getHomePageView(date: string): Promise<HomePageView> {
-    const resolvedDate = (await this.deps.rankingRepository.getLatestAvailableDate(date)) || date;
-    const resolvedFromFallback = resolvedDate !== date;
-    const [
+    async getHomePageView(date: string): Promise<HomePageView> {
+      const resolvedDate = (await this.deps.rankingRepository.getLatestAvailableDate(date)) || date;
+      const resolvedFromFallback = resolvedDate !== date;
+      const clickChargeAmount = await this.getClickChargeAmount();
+      const [
       stats,
       fullRankingPreview,
       stable,
@@ -243,11 +264,13 @@ export class PublicViewService {
       riskMonitor,
     ] = await Promise.all([
       this.deps.statsRepository.getHomeStats(resolvedDate),
-      this.deps.scoreRepository.getPublicFullRankingByDate(
-        resolvedDate,
-        1,
-        SECTION_CONFIG.today_pick.limit,
-      ),
+        this.deps.scoreRepository.getPublicFullRankingByDate(
+          resolvedDate,
+          1,
+          SECTION_CONFIG.today_pick.limit,
+          EMPTY_FULL_RANKING_FILTERS,
+          clickChargeAmount,
+        ),
       this.deps.rankingRepository.getRanking(resolvedDate, 'stable'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'value'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'new'),
@@ -259,9 +282,10 @@ export class PublicViewService {
       this.deps.scoreRepository.getPublicRiskMonitorByDate
         ? this.deps.scoreRepository.getPublicRiskMonitorByDate(
             resolvedDate,
-            1,
-            SECTION_CONFIG.risk_alerts.limit,
-          )
+              1,
+              SECTION_CONFIG.risk_alerts.limit,
+              clickChargeAmount,
+            )
         : Promise.resolve({ total: 0, items: [] }),
     ]);
     const preloadedContexts = await this.preloadCardContexts(
@@ -271,10 +295,11 @@ export class PublicViewService {
         value,
         newest,
         latestApprovedApplicationAirports.map((airport) => ({ airport_id: airport.id })),
-      ),
-      resolvedDate,
-    );
-    const loadCardContext = this.createCardContextLoader(preloadedContexts);
+        ),
+        resolvedDate,
+        clickChargeAmount,
+      );
+    const loadCardContext = this.createCardContextLoader(preloadedContexts, clickChargeAmount);
     const [todayPickItems, stableItems, valueItems, newestItems, latestApprovedApplicationItems] = await Promise.all([
       this.buildHomeSectionItems('today_pick', fullRankingPreview.items, resolvedDate, loadCardContext),
       stable.length > 0
@@ -305,8 +330,8 @@ export class PublicViewService {
       stable.length === 0 ||
       value.length === 0 ||
       newEntryItems.length < SECTION_CONFIG.new_entries.limit
-        ? await this.buildFallbackHomeSections(resolvedDate, loadCardContext)
-        : null;
+          ? await this.buildFallbackHomeSections(resolvedDate, loadCardContext, clickChargeAmount)
+          : null;
     const finalNewEntryItems = mergeHomeSectionItems(
       SECTION_CONFIG.new_entries.limit,
       newEntryItems,
@@ -360,16 +385,18 @@ export class PublicViewService {
     page: number,
     pageSize: number,
     filters: FullRankingFilters = EMPTY_FULL_RANKING_FILTERS,
-  ): Promise<FullRankingView> {
-    const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
-    const safePage = Math.max(1, page);
-    const safePageSize = Math.max(1, pageSize);
-    const result = await this.deps.scoreRepository.getPublicFullRankingByDate(
-      resolvedDate,
-      safePage,
-      safePageSize,
-      filters,
-    );
+    ): Promise<FullRankingView> {
+      const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
+      const safePage = Math.max(1, page);
+      const safePageSize = Math.max(1, pageSize);
+      const clickChargeAmount = await this.getClickChargeAmount();
+      const result = await this.deps.scoreRepository.getPublicFullRankingByDate(
+        resolvedDate,
+        safePage,
+        safePageSize,
+        filters,
+        clickChargeAmount,
+      );
 
     return {
       date: resolvedDate,
@@ -383,16 +410,18 @@ export class PublicViewService {
     };
   }
 
-  async getRiskMonitorView(date: string, page: number, pageSize: number): Promise<RiskMonitorView> {
-    const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
-    const safePage = Math.max(1, page);
-    const safePageSize = Math.max(1, pageSize);
-    const result = this.deps.scoreRepository.getPublicRiskMonitorByDate
-      ? await this.deps.scoreRepository.getPublicRiskMonitorByDate(
-          resolvedDate,
-          safePage,
-          safePageSize,
-        )
+    async getRiskMonitorView(date: string, page: number, pageSize: number): Promise<RiskMonitorView> {
+      const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
+      const safePage = Math.max(1, page);
+      const safePageSize = Math.max(1, pageSize);
+      const clickChargeAmount = await this.getClickChargeAmount();
+      const result = this.deps.scoreRepository.getPublicRiskMonitorByDate
+        ? await this.deps.scoreRepository.getPublicRiskMonitorByDate(
+            resolvedDate,
+            safePage,
+            safePageSize,
+            clickChargeAmount,
+          )
       : { total: 0, items: [] };
 
     return {
@@ -409,10 +438,11 @@ export class PublicViewService {
     };
   }
 
-  async getReportView(airportId: number, date: string): Promise<ReportView | null> {
-    const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
-    const resolvedFromFallback = resolvedDate !== date;
-    const base = await this.loadCardContext(airportId, resolvedDate);
+    async getReportView(airportId: number, date: string): Promise<ReportView | null> {
+      const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
+      const resolvedFromFallback = resolvedDate !== date;
+      const clickChargeAmount = await this.getClickChargeAmount();
+      const base = await this.loadCardContext(airportId, resolvedDate, clickChargeAmount);
     if (!base) {
       return null;
     }
@@ -421,7 +451,7 @@ export class PublicViewService {
       this.deps.rankingRepository.getRanksForAirport(airportId, resolvedDate),
       this.deps.subscriptionNodeSnapshotRepository?.getLatestByAirport(airportId) ?? Promise.resolve(null),
     ]);
-    const todayRank = rawRanking.today ?? (await this.getTodayPickRankFromPublicRanking(airportId, resolvedDate));
+    const todayRank = rawRanking.today ?? (await this.getTodayPickRankFromPublicRanking(airportId, resolvedDate, clickChargeAmount));
     const ranking = {
       ...rawRanking,
       today: todayRank,
@@ -448,8 +478,10 @@ export class PublicViewService {
         type: summaryCard.type,
         name: summaryCard.name,
         tags: summaryCard.tags,
-        score: summaryCard.score,
-        stability_tier: summaryCard.stability_tier,
+          score: summaryCard.score,
+          score_hidden: summaryCard.score_hidden,
+          score_hidden_reason: summaryCard.score_hidden_reason,
+          stability_tier: summaryCard.stability_tier,
         details: summaryCard.details,
         conclusion: summaryCard.conclusion,
       },
@@ -465,7 +497,7 @@ export class PublicViewService {
         p: round2(base.score.p),
         c: round2(base.score.c),
         r: round2(base.score.r),
-        final_score: round2(base.score.display_score),
+          final_score: base.score.score_hidden ? null : round2(base.score.display_score ?? 0),
         risk_penalty: round2(base.score.risk_penalty),
         domain_penalty: getPenaltyValue(base.score.details, 'domain_penalty'),
         ssl_penalty: getPenaltyValue(base.score.details, 'ssl_penalty'),
@@ -484,7 +516,9 @@ export class PublicViewService {
         history_incidents: Number(base.metrics.history_incidents || 0),
       },
       trends: {
-        score_30d: base.scoreTrend30d.map((row) => ({ date: row.date, value: round2(row.display_score) })),
+          score_30d: base.score.score_hidden
+            ? []
+            : base.scoreTrend30d.map((row) => ({ date: row.date, value: round2(row.display_score) })),
         uptime_30d: base.metricsTrend30d
           .filter((row) => typeof row.uptime_percent_30d === 'number')
           .map((row) => ({ date: row.date, value: round2(row.uptime_percent_30d) })),
@@ -510,6 +544,28 @@ export class PublicViewService {
     return this.getReportView(airport.id, date);
   }
 
+  private async getClickChargeAmount(): Promise<number> {
+    if (!this.deps.marketingSettingsService) {
+      return CLICK_CHARGE_AMOUNT;
+    }
+    const config = await this.deps.marketingSettingsService.getConfig();
+    const amount = Number(config.click_charge_amount);
+    return Number.isFinite(amount) && amount > 0 ? amount : CLICK_CHARGE_AMOUNT;
+  }
+
+  private async getScoreVisibilityByAirportIds(
+    airportIds: number[],
+    clickChargeAmount: number,
+  ): Promise<Map<number, PublicScoreVisibility>> {
+    if (!this.deps.applicantBillingRepository?.getPublicScoreVisibilityByAirportIds) {
+      return new Map(airportIds.map((airportId) => [airportId, DEFAULT_SCORE_VISIBILITY]));
+    }
+    return this.deps.applicantBillingRepository.getPublicScoreVisibilityByAirportIds(
+      airportIds,
+      clickChargeAmount,
+    );
+  }
+
   private async buildHomeSectionItems(
     section: HomeSectionKey,
     rankingItems: Array<Pick<RankingItem, 'airport_id'>>,
@@ -530,17 +586,23 @@ export class PublicViewService {
       }),
     );
 
-    return items.filter((item): item is PublicCardItem => item !== null).slice(0, config.limit);
+    return items
+      .filter((item): item is PublicCardItem => item !== null)
+      .sort(comparePublicCardVisibility)
+      .slice(0, config.limit);
   }
 
   private async getTodayPickRankFromPublicRanking(
     airportId: number,
     date: string,
+    clickChargeAmount: number,
   ): Promise<number | undefined> {
     const { items } = await this.deps.scoreRepository.getPublicFullRankingByDate(
       date,
       1,
       SECTION_CONFIG.today_pick.limit,
+      EMPTY_FULL_RANKING_FILTERS,
+      clickChargeAmount,
     );
     const matchedItem = items.find((item) => item.airport_id === airportId);
     return matchedItem?.rank;
@@ -549,8 +611,15 @@ export class PublicViewService {
   private async buildFallbackHomeSections(
     date: string,
     loadCardContext: (airportId: number, targetDate: string) => Promise<CardContext | null>,
+    clickChargeAmount: number,
   ): Promise<Record<HomeSectionKey, PublicCardItem[]>> {
-    const { items } = await this.deps.scoreRepository.getPublicFullRankingByDate(date, 1, 100);
+    const { items } = await this.deps.scoreRepository.getPublicFullRankingByDate(
+      date,
+      1,
+      100,
+      EMPTY_FULL_RANKING_FILTERS,
+      clickChargeAmount,
+    );
     const contexts = (
       await Promise.all(items.map((item) => loadCardContext(item.airport_id, date)))
     ).filter((context): context is CardContext => context !== null);
@@ -586,6 +655,7 @@ export class PublicViewService {
 
   private createCardContextLoaderWithCache(
     cache: Map<string, Promise<CardContext | null>>,
+    clickChargeAmount: number,
   ): (airportId: number, date: string) => Promise<CardContext | null> {
     return (airportId: number, date: string) => {
       const key = `${airportId}:${date}`;
@@ -594,7 +664,7 @@ export class PublicViewService {
         return cached;
       }
 
-      const pending = this.loadCardContext(airportId, date);
+      const pending = this.loadCardContext(airportId, date, clickChargeAmount);
       cache.set(key, pending);
       return pending;
     };
@@ -602,17 +672,19 @@ export class PublicViewService {
 
   private createCardContextLoader(
     preloaded?: Map<string, CardContext | null>,
+    clickChargeAmount: number = CLICK_CHARGE_AMOUNT,
   ): (airportId: number, date: string) => Promise<CardContext | null> {
     const cache = new Map<string, Promise<CardContext | null>>();
     for (const [key, value] of preloaded || []) {
       cache.set(key, Promise.resolve(value));
     }
-    return this.createCardContextLoaderWithCache(cache);
+    return this.createCardContextLoaderWithCache(cache, clickChargeAmount);
   }
 
   private async preloadCardContexts(
     airportIds: number[],
     date: string,
+    clickChargeAmount: number,
   ): Promise<Map<string, CardContext | null>> {
     if (
       airportIds.length === 0 ||
@@ -636,6 +708,7 @@ export class PublicViewService {
       yesterdayDisplayScores,
       metricsTrendsById,
       scoreTrendsById,
+      scoreVisibilityById,
     ] = await Promise.all([
       this.deps.airportRepository.getByIds(uniqueAirportIds),
       this.deps.metricsRepository.getByAirportIdsAndDate(uniqueAirportIds, date),
@@ -643,6 +716,7 @@ export class PublicViewService {
       this.deps.scoreRepository.getPublicDisplayScoresByDate(uniqueAirportIds, yesterdayDate),
       this.deps.metricsRepository.getTrendsByAirportIds(uniqueAirportIds, trendStartDate, date),
       this.deps.scoreRepository.getTrendsByAirportIds(uniqueAirportIds, trendStartDate, date),
+      this.getScoreVisibilityByAirportIds(uniqueAirportIds, clickChargeAmount),
     ]);
 
     const contexts = new Map<string, CardContext | null>();
@@ -650,6 +724,7 @@ export class PublicViewService {
       const airport = airportsById.get(airportId) || null;
       const metrics = metricsById.get(airportId) || null;
       const score = scoresById.get(airportId) || null;
+      const scoreVisibility = scoreVisibilityById.get(airportId) || DEFAULT_SCORE_VISIBILITY;
       if (!airport || !metrics || !score || !airport.is_listed) {
         contexts.set(`${airportId}:${date}`, null);
         continue;
@@ -666,8 +741,10 @@ export class PublicViewService {
           r: score.r,
           risk_penalty: score.risk_penalty,
           final_score: score.final_score,
-          display_score: getDisplayScore(score),
-          yesterday_display_score: yesterdayDisplayScores.get(airportId) ?? null,
+          display_score: scoreVisibility.score_hidden ? null : getDisplayScore(score),
+          score_hidden: scoreVisibility.score_hidden,
+          score_hidden_reason: scoreVisibility.score_hidden_reason,
+          yesterday_display_score: scoreVisibility.score_hidden ? null : (yesterdayDisplayScores.get(airportId) ?? null),
           details: score.details || {},
         },
         metricsTrend30d: metricsTrendsById.get(airportId) || [],
@@ -682,16 +759,21 @@ export class PublicViewService {
     return contexts;
   }
 
-  private async loadCardContext(airportId: number, date: string): Promise<CardContext | null> {
+  private async loadCardContext(
+    airportId: number,
+    date: string,
+    clickChargeAmount: number = CLICK_CHARGE_AMOUNT,
+  ): Promise<CardContext | null> {
     const trendStartDate = dateDaysAgo(date, 29);
     const yesterdayDate = dateDaysAgo(date, 1);
-    const [airport, metrics, score, yesterdayDisplayScore, metricsTrend30d, scoreTrend30d] = await Promise.all([
+    const [airport, metrics, score, yesterdayDisplayScore, metricsTrend30d, scoreTrend30d, scoreVisibilityById] = await Promise.all([
       this.deps.airportRepository.getById(airportId),
       this.deps.metricsRepository.getByAirportAndDate(airportId, date),
       this.deps.scoreRepository.getByAirportAndDate(airportId, date),
       this.deps.scoreRepository.getPublicDisplayScoreByAirportAndDate(airportId, yesterdayDate),
       this.deps.metricsRepository.getTrend(airportId, trendStartDate, date),
       this.deps.scoreRepository.getTrend(airportId, trendStartDate, date),
+      this.getScoreVisibilityByAirportIds([airportId], clickChargeAmount),
     ]);
 
     if (!airport || !metrics || !score) {
@@ -701,6 +783,8 @@ export class PublicViewService {
     if (!airport.is_listed) {
       return null;
     }
+
+    const scoreVisibility = scoreVisibilityById.get(airportId) || DEFAULT_SCORE_VISIBILITY;
 
     return {
       airport,
@@ -712,8 +796,10 @@ export class PublicViewService {
         r: score.r,
         risk_penalty: score.risk_penalty,
         final_score: score.final_score,
-        display_score: getDisplayScore(score),
-        yesterday_display_score: yesterdayDisplayScore,
+        display_score: scoreVisibility.score_hidden ? null : getDisplayScore(score),
+        score_hidden: scoreVisibility.score_hidden,
+        score_hidden_reason: scoreVisibility.score_hidden_reason,
+        yesterday_display_score: scoreVisibility.score_hidden ? null : yesterdayDisplayScore,
         details: score.details || {},
       },
       metricsTrend30d,
@@ -733,7 +819,9 @@ export class PublicViewService {
       name: context.airport.name,
       website: context.airport.website,
       tags: context.airport.tags.slice(0, 3),
-      score: round2(context.score.display_score),
+      score: context.score.score_hidden ? null : round2(context.score.display_score ?? 0),
+      score_hidden: context.score.score_hidden,
+      score_hidden_reason: context.score.score_hidden_reason,
       score_delta_vs_yesterday: buildScoreDeltaView(
         context.score.display_score,
         context.score.yesterday_display_score,
@@ -749,11 +837,13 @@ export class PublicViewService {
     return items.map((item) => ({
       type: 'risk',
       airport_id: item.airport_id,
-      name: item.name,
-      website: item.website,
-      tags: item.tags.slice(0, 3),
-      score: round2(item.score ?? 0),
-      score_delta_vs_yesterday: item.score_delta_vs_yesterday,
+        name: item.name,
+        website: item.website,
+        tags: item.tags.slice(0, 3),
+        score: item.score_hidden ? null : round2(item.score ?? 0),
+        score_hidden: item.score_hidden,
+        score_hidden_reason: item.score_hidden_reason,
+        score_delta_vs_yesterday: item.score_delta_vs_yesterday,
       stability_tier: 'volatile',
       details: buildRiskMonitorCardDetails(item),
       conclusion: buildRiskMonitorConclusion(item),
@@ -1017,8 +1107,15 @@ function mergeHomeSectionItems(limit: number, ...groups: PublicCardItem[][]): Pu
   return items;
 }
 
+function comparePublicCardVisibility(left: PublicCardItem, right: PublicCardItem): number {
+  return Number(left.score_hidden) - Number(right.score_hidden);
+}
+
 function compareByDisplayScoreDesc(left: CardContext, right: CardContext): number {
-  return right.score.display_score - left.score.display_score;
+  return (
+    Number(left.score.score_hidden) - Number(right.score.score_hidden) ||
+    getSortableDisplayScore(right) - getSortableDisplayScore(left)
+  );
 }
 
 function compareByStabilityDesc(left: CardContext, right: CardContext): number {
@@ -1030,9 +1127,13 @@ function compareByStabilityDesc(left: CardContext, right: CardContext): number {
 }
 
 function compareByValueDesc(left: CardContext, right: CardContext): number {
-  const leftValueScore = left.score.display_score / Math.max(left.airport.plan_price_month || 1, 1);
-  const rightValueScore = right.score.display_score / Math.max(right.airport.plan_price_month || 1, 1);
+  const leftValueScore = getSortableDisplayScore(left) / Math.max(left.airport.plan_price_month || 1, 1);
+  const rightValueScore = getSortableDisplayScore(right) / Math.max(right.airport.plan_price_month || 1, 1);
   return rightValueScore - leftValueScore || compareByDisplayScoreDesc(left, right);
+}
+
+function getSortableDisplayScore(context: CardContext): number {
+  return context.score.display_score ?? Number.NEGATIVE_INFINITY;
 }
 
 function compareByRiskPriority(left: CardContext, right: CardContext): number {
@@ -1343,10 +1444,10 @@ function getDisplayScore(score: { final_score: number; details?: Record<string, 
   return Number.isFinite(totalScore) ? totalScore : score.final_score;
 }
 
-function buildScoreDeltaView(currentScore: number, yesterdayScore: number | null): ScoreDeltaView {
+function buildScoreDeltaView(currentScore: number | null, yesterdayScore: number | null): ScoreDeltaView {
   return {
     label: '对比昨天',
-    value: yesterdayScore === null ? null : round2(currentScore - yesterdayScore),
+    value: currentScore === null || yesterdayScore === null ? null : round2(currentScore - yesterdayScore),
   };
 }
 

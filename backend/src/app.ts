@@ -172,14 +172,16 @@ export async function createApp() {
     auditRepository,
   });
   await manualJobService.initialize();
-  const publicViewService = new PublicViewService({
-    airportRepository,
-    metricsRepository,
-    scoreRepository,
-    rankingRepository,
-    statsRepository,
-    subscriptionNodeSnapshotRepository,
-  });
+    const publicViewService = new PublicViewService({
+      airportRepository,
+      metricsRepository,
+      scoreRepository,
+      applicantBillingRepository,
+      marketingSettingsService,
+      rankingRepository,
+      statsRepository,
+      subscriptionNodeSnapshotRepository,
+    });
   const newsContentService = new NewsContentService();
   const newsCoverImageService = new NewsCoverImageService();
   const newsMutationService = new NewsMutationService({

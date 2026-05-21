@@ -27,8 +27,9 @@ test('SmtpSettingsService returns default view', async () => {
   assert.match(view.templates.application_reply.body, /\{\{portal_login_url\}\}/);
   assert.doesNotMatch(view.templates.application_reply.body, /回复本邮件|直接回复本邮件/);
   assert.match(view.templates.low_balance_warning.subject, /余额提醒/);
-  assert.match(view.templates.airport_auto_unlisted.subject, /下线提醒/);
-  assert.match(view.templates.airport_online.subject, /上线通知/);
+  assert.match(view.templates.airport_auto_unlisted.subject, /余额不足提醒/);
+  assert.match(view.templates.airport_online.subject, /余额恢复通知/);
+  assert.doesNotMatch(view.templates.airport_auto_unlisted.body, /下线|下架|恢复上线/);
 });
 
 test('SmtpSettingsService saves and masks password', async () => {

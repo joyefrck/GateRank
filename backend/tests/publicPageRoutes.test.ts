@@ -282,9 +282,9 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.doesNotMatch(okHtml, /星云机场 实际内容与 SEO 摘要/);
     assert.doesNotMatch(okHtml, /report-content-grid/);
     assert.match(okHtml, /report-content-summary/);
-    assert.match(okHtml, /星云机场 当前公开分数 98\.60\/100，状态为正常。本页汇总风险/);
+    assert.match(okHtml, /星云机场 当前公开总分98\.60\/100，状态为正常。本页汇总风险/);
     assert.doesNotMatch(okHtml, /星云机场 当前公开分数 98\.60\/100，状态为正常，官网为/);
-    assert.match(okHtml, /<span>分数 98\.60<\/span>/);
+    assert.match(okHtml, /<span>总分 98\.60\/100<\/span>/);
     assert.match(okHtml, /<span>状态 正常<\/span>/);
     assert.match(okHtml, /<span>风险惩罚 0<\/span>/);
     assert.match(okHtml, /<span>官网扣分 0<\/span>/);
@@ -301,7 +301,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /<summary>节点、客户端与解锁<\/summary>/);
     assert.match(okHtml, /<summary>Telegram 与售后<\/summary>/);
     assert.match(okHtml, /综合结论/);
-    assert.match(okHtml, /星云机场 当前 GateRank 公开分数为 98\.60\/100，状态为正常。本页把 星云机场 机场测评拆成评分/);
+    assert.match(okHtml, /星云机场 当前 GateRank 公开总分98\.60\/100，状态为正常。本页把 星云机场 机场测评拆成评分/);
     assert.doesNotMatch(okHtml, /星云机场 当前 GateRank 公开分数为 98\.60\/100，状态为正常，官网为/);
     assert.match(okHtml, /风险解读/);
     assert.match(okHtml, /稳定性与性能/);
@@ -362,7 +362,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.ok(description.length <= 180, `report description too long: ${description.length}`);
     assert.match(description, /星云机场/);
     assert.match(description, /机场测评/);
-    assert.match(description, /分数/);
+    assert.match(description, /总分/);
     assert.match(description, /状态/);
     assert.match(description, /风险/);
     assert.match(description, /官网/);

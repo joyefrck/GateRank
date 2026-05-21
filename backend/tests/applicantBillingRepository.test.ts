@@ -17,6 +17,7 @@ test('ApplicantBillingRepository.ensureSchema allows USDT recharge orders', asyn
   assert.ok(calls.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS applicant_recharge_orders')));
   assert.ok(calls.some((sql) => sql.includes("channel ENUM('alipay', 'wxpay', 'usdt') NOT NULL")));
   assert.ok(calls.some((sql) => sql.includes("MODIFY COLUMN channel ENUM('alipay', 'wxpay', 'usdt') NOT NULL")));
+  assert.ok(calls.some((sql) => sql.includes("billing_status ENUM('billed', 'duplicate', 'free', 'insufficient_balance', 'unlisted', 'no_wallet')")));
 });
 
 test('ApplicantBillingRepository.backfillLegacyAirportWallets creates missing application account and wallet links', async () => {
@@ -298,22 +299,27 @@ test('ApplicantBillingRepository.syncListingStatusByBalance reconciles listing a
 
   const result = await repository.syncListingStatusByBalance(0.6);
 
-  assert.deepEqual(result, {
-    checked: 5,
-    restored: 2,
-    unlisted: 1,
-    unchanged: 1,
-    skipped: 1,
-    notification_events: [],
-  });
+	  assert.deepEqual(result, {
+	    checked: 5,
+	    restored: 3,
+	    unlisted: 1,
+	    unchanged: 0,
+	    skipped: 1,
+	    notification_events: [],
+	  });
   assert.match(calls[1]!.sql!, /FROM applicant_wallets w/);
   assert.match(calls[1]!.sql!, /FOR UPDATE/);
-  assert.deepEqual(
-    calls.filter((call) => call.kind === 'execute').map((call) => call.params),
-    [[101], [30, 1], [1], [102], [2], [103], [30, 3], [3]],
-  );
-  assert.deepEqual(calls.map((call) => call.kind).slice(-2), ['commit', 'release']);
-});
+	  assert.deepEqual(
+	    calls.filter((call) => call.kind === 'execute').map((call) => call.params),
+	    [[101], [30, 1], [1], [2], [103], [30, 3], [3], [104]],
+	  );
+	  assert.ok(
+	    calls
+	      .filter((call) => call.kind === 'execute')
+	      .every((call) => !/SET is_listed = 0/.test(call.sql || '')),
+	  );
+	  assert.deepEqual(calls.map((call) => call.kind).slice(-2), ['commit', 'release']);
+	});
 
 test('ApplicantBillingRepository.syncListingStatusByBalance emits low balance notification once', async () => {
   const executes: Array<{ sql: string; params?: unknown[] }> = [];
@@ -355,6 +361,160 @@ test('ApplicantBillingRepository.syncListingStatusByBalance emits low balance no
     balance: 18.5,
     thresholdAmount: 30,
   });
-  assert.match(executes[0]!.sql, /low_balance_notified_at = NOW/);
-  assert.deepEqual(executes[0]!.params, [7]);
+	  assert.match(executes[0]!.sql, /low_balance_notified_at = NOW/);
+	  assert.deepEqual(executes[0]!.params, [7]);
+	});
+
+test('ApplicantBillingRepository.processOutboundClick allows free redirect when balance is insufficient', async () => {
+  const calls: Array<{ kind: 'query' | 'execute' | 'begin' | 'commit' | 'rollback' | 'release'; sql?: string; params?: unknown[] }> = [];
+  const connection = {
+    beginTransaction: async () => {
+      calls.push({ kind: 'begin' });
+    },
+    commit: async () => {
+      calls.push({ kind: 'commit' });
+    },
+    rollback: async () => {
+      calls.push({ kind: 'rollback' });
+    },
+    release: () => {
+      calls.push({ kind: 'release' });
+    },
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ kind: 'query', sql, params });
+      return [[{
+        airport_id: 5,
+        airport_name: 'Cloud Airport',
+        is_listed: 1,
+        applicant_email: 'owner@example.com',
+        applicant_account_id: 12,
+        application_id: 13,
+        wallet_id: 14,
+        balance: 0.4,
+        auto_unlisted_at: null,
+        low_balance_notified_at: null,
+      }]];
+    },
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ kind: 'execute', sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  };
+  const repository = new ApplicantBillingRepository({
+    getConnection: async () => connection,
+  } as never);
+
+  const result = await repository.processOutboundClick({
+    click_id: 'click-1',
+    airport_id: 5,
+    placement: 'full_ranking_item',
+    target_kind: 'website',
+    target_url: 'https://airport.example.com',
+    visitor_hash: 'visitor',
+    session_hash: 'session',
+    occurred_at: '2026-05-21 12:00:00',
+    event_date: '2026-05-21',
+    click_charge_amount: 1,
+  });
+
+  assert.equal(result.status, 'free');
+  assert.equal(result.billed_amount, 0);
+  assert.equal(result.balance_after, 0.4);
+  assert.deepEqual(result.notification_events, []);
+  assert.ok(calls.some((call) => /billing_status/.test(call.sql || '') && call.params?.includes('free')));
+  assert.ok(calls.every((call) => !call.params?.includes('insufficient_balance')));
+  assert.ok(calls.every((call) => !/SET auto_unlisted_at = COALESCE/.test(call.sql || '')));
+  assert.ok(calls.every((call) => !/SET is_listed = 0/.test(call.sql || '')));
+});
+
+test('ApplicantBillingRepository.processOutboundClick does not mark billing restriction after balance drops low', async () => {
+  const calls: Array<{ kind: 'query' | 'execute' | 'begin' | 'commit' | 'rollback' | 'release'; sql?: string; params?: unknown[] }> = [];
+  let queryCount = 0;
+  const connection = {
+    beginTransaction: async () => {
+      calls.push({ kind: 'begin' });
+    },
+    commit: async () => {
+      calls.push({ kind: 'commit' });
+    },
+    rollback: async () => {
+      calls.push({ kind: 'rollback' });
+    },
+    release: () => {
+      calls.push({ kind: 'release' });
+    },
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ kind: 'query', sql, params });
+      queryCount += 1;
+      if (queryCount === 1) {
+        return [[{
+          airport_id: 5,
+          airport_name: 'Cloud Airport',
+          is_listed: 1,
+          applicant_email: 'owner@example.com',
+          applicant_account_id: 12,
+          application_id: 13,
+          wallet_id: 14,
+          balance: 1.2,
+          auto_unlisted_at: null,
+          low_balance_notified_at: '2026-05-20 10:00:00',
+        }]];
+      }
+      return [[]];
+    },
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ kind: 'execute', sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  };
+  const repository = new ApplicantBillingRepository({
+    getConnection: async () => connection,
+  } as never);
+
+  const result = await repository.processOutboundClick({
+    click_id: 'click-2',
+    airport_id: 5,
+    placement: 'full_ranking_item',
+    target_kind: 'website',
+    target_url: 'https://airport.example.com',
+    visitor_hash: 'visitor',
+    session_hash: 'session',
+    occurred_at: '2026-05-21 12:00:00',
+    event_date: '2026-05-21',
+    click_charge_amount: 1,
+  });
+
+  assert.equal(result.status, 'billed');
+  assert.equal(result.balance_after, 0.2);
+  assert.deepEqual(result.notification_events, []);
+  assert.ok(calls.some((call) => /SET balance = \?/.test(call.sql || '') && call.params?.[0] === 0.2));
+  assert.ok(calls.every((call) => !/SET auto_unlisted_at = COALESCE/.test(call.sql || '')));
+});
+
+test('ApplicantBillingRepository.getPublicScoreVisibilityByAirportIds hides missing and insufficient wallets', async () => {
+  const repository = new ApplicantBillingRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      assert.match(sql, /FROM applicant_wallets/);
+      assert.deepEqual(params, [1, 2, 3]);
+      return [[
+        { airport_id: 1, balance: 0.5 },
+        { airport_id: 2, balance: 3 },
+      ]];
+    },
+  } as never);
+
+  const result = await repository.getPublicScoreVisibilityByAirportIds([1, 2, 3], 1);
+
+  assert.deepEqual(result.get(1), {
+    score_hidden: true,
+    score_hidden_reason: 'insufficient_balance',
+  });
+  assert.deepEqual(result.get(2), {
+    score_hidden: false,
+    score_hidden_reason: null,
+  });
+  assert.deepEqual(result.get(3), {
+    score_hidden: true,
+    score_hidden_reason: 'insufficient_balance',
+  });
 });

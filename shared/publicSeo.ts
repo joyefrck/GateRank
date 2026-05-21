@@ -21,7 +21,9 @@ export interface PublicReportSeoView {
     status: string;
   };
   summary_card: {
-    score: number;
+    score: number | null;
+    score_hidden?: boolean;
+    score_hidden_reason?: 'insufficient_balance' | null;
     conclusion: string;
   };
   ranking: {
@@ -36,7 +38,7 @@ export interface PublicReportSeoView {
     p: number;
     c: number;
     r: number;
-    final_score: number;
+    final_score: number | null;
     risk_penalty: number;
     domain_penalty: number;
     ssl_penalty: number;
@@ -245,7 +247,7 @@ export function buildReportSeo(input?: PublicReportSeoView): PublicSeoText {
       ? `${airportName} 测评报告 | ${PUBLIC_SITE_BRAND_NAME}`
       : `机场测评报告 | ${PUBLIC_SITE_BRAND_NAME}`,
     description:
-      input && airportName && typeof input.summary_card.score === 'number' && statusLabel
+      input && airportName && statusLabel
         ? buildReportDescription(input, airportName, statusLabel)
         : `${PUBLIC_SITE_BRAND_NAME} 测评报告页展示单个机场的榜单位置、评分拆解、关键指标与 30 天趋势。`,
     keywords: `${airportKeywords}机场榜GateRank,机场测评报告,机场评分,机场趋势,机场榜,机场推荐,机场官网,跑路风险,GateRank`,
@@ -253,7 +255,7 @@ export function buildReportSeo(input?: PublicReportSeoView): PublicSeoText {
 }
 
 function buildReportDescription(view: PublicReportSeoView, airportName: string, statusLabel: string): string {
-  const score = formatMetric(view.summary_card.score);
+  const score = formatPublicScoreText(view);
   const website = view.airport.website || '未收录';
   const riskText =
     view.airport.status === 'down'
@@ -263,7 +265,7 @@ function buildReportDescription(view: PublicReportSeoView, airportName: string, 
         : `风险惩罚 ${formatMetric(view.score_breakdown.risk_penalty)}`;
   const trendText = buildReportTrendText(view);
 
-  return `${airportName}机场测评：当前分数 ${score}，状态${statusLabel}，官网为 ${website}。报告结合${riskText}、${trendText}和稳定性数据，帮助判断${airportName}是否适合作为机场 VPN 选择。`;
+  return `${airportName}机场测评：当前公开总分${score}，状态${statusLabel}，官网为 ${website}。报告结合${riskText}、${trendText}和稳定性数据，帮助判断${airportName}是否适合作为机场 VPN 选择。`;
 }
 
 function buildReportTrendText(view: PublicReportSeoView): string {
@@ -291,7 +293,7 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
   return [
     {
       question: `${airportName}怎么样？`,
-      answer: `${airportName} 当前公开分数 ${formatMetric(view.summary_card.score)}，状态为${statusLabel}。GateRank 当前报告结论为：${view.summary_card.conclusion}`,
+      answer: `${airportName} 当前公开总分${formatPublicScoreText(view)}，状态为${statusLabel}。GateRank 当前报告结论为：${view.summary_card.conclusion}`,
     },
     {
       question: `${airportName}测评怎么看？`,
@@ -307,7 +309,7 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
     },
     {
       question: `${airportName}适合长期使用吗？`,
-      answer: `${airportName} 当前分数为 ${formatMetric(view.summary_card.score)}，稳定性评级为${formatStabilityTierLabel(view.metrics.stability_tier)}，健康记录 ${view.metrics.healthy_days_streak} 天。是否长期使用仍建议结合官网可达性、30 天趋势、套餐价格和风险扣分一起判断。`,
+      answer: `${airportName} 当前公开总分${formatPublicScoreText(view)}，稳定性评级为${formatStabilityTierLabel(view.metrics.stability_tier)}，健康记录 ${view.metrics.healthy_days_streak} 天。是否长期使用仍建议结合官网可达性、30 天趋势、套餐价格和风险扣分一起判断。`,
     },
     {
       question: `${airportName}风险主要来自哪里？`,
@@ -323,7 +325,7 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
 export function buildReportContentSections(view: PublicReportSeoView): PublicReportContentSection[] {
   const airportName = view.airport.name;
   const statusLabel = formatAirportStatusLabel(view.airport.status);
-  const score = formatMetric(view.summary_card.score);
+  const score = formatPublicScoreText(view);
   const trendText = buildReportTrendText(view);
   const scoreDeltaText = buildTrendDeltaText(view.trends.score_30d, '分');
   const uptimeTrendText = buildTrendDeltaText(view.trends.uptime_30d, '个百分点');
@@ -340,7 +342,7 @@ export function buildReportContentSections(view: PublicReportSeoView): PublicRep
   return [
     {
       title: '综合结论',
-      body: `${airportName} 当前 GateRank 公开分数为 ${score}/100，状态为${statusLabel}。本页把 ${airportName} 机场测评拆成评分、风险、稳定性、性能、套餐、节点和售后信息，适合在选择机场 VPN 前做事实核对。${view.summary_card.conclusion}`,
+      body: `${airportName} 当前 GateRank 公开总分${score}，状态为${statusLabel}。本页把 ${airportName} 机场测评拆成评分、风险、稳定性、性能、套餐、节点和售后信息，适合在选择机场 VPN 前做事实核对。${view.summary_card.conclusion}`,
       facts: [
         `数据日期 ${view.date}`,
         `30 天趋势${trendText.replace(/^30 天趋势/, '') || '持平'}`,
@@ -404,9 +406,9 @@ export function buildReportContentSummary(view: PublicReportSeoView): PublicRepo
   const airportName = view.airport.name;
   const statusLabel = formatAirportStatusLabel(view.airport.status);
   return {
-    body: `${airportName} 当前公开分数 ${formatMetric(view.summary_card.score)}/100，状态为${statusLabel}。本页汇总风险、稳定性、性能、套餐、节点和售后事实；详细解读已折叠保留，可展开核对。`,
+    body: `${airportName} 当前公开总分${formatPublicScoreText(view)}，状态为${statusLabel}。本页汇总风险、稳定性、性能、套餐、节点和售后事实；详细解读已折叠保留，可展开核对。`,
     chips: [
-      `分数 ${formatMetric(view.summary_card.score)}`,
+      `总分 ${formatPublicScoreText(view)}`,
       `状态 ${statusLabel}`,
       `风险惩罚 ${formatMetric(view.score_breakdown.risk_penalty)}`,
       `官网扣分 ${formatMetric(view.score_breakdown.domain_penalty)}`,
@@ -437,7 +439,7 @@ export function buildReportStructuredData(
         name: view.airport.name,
         url: view.airport.website,
         additionalProperty: [
-          buildPropertyValue('公开分数', formatMetric(view.summary_card.score)),
+          buildPropertyValue('公开总分', formatPublicScoreText(view)),
           buildPropertyValue('状态', formatAirportStatusLabel(view.airport.status)),
           buildPropertyValue('数据日期', view.date),
           buildPropertyValue('30天可用率', `${formatMetric(view.metrics.uptime_percent_30d)}%`),
@@ -647,7 +649,14 @@ function formatStabilityTierLabel(tier: string): string {
   return tier;
 }
 
-function buildScoreGradeText(score: number): string {
+function formatPublicScoreText(view: PublicReportSeoView): string {
+  return view.summary_card.score_hidden || view.summary_card.score === null
+    ? '暂不公开'
+    : `${formatMetric(view.summary_card.score)}/100`;
+}
+
+function buildScoreGradeText(score: number | null): string {
+  if (score === null) return '暂不公开';
   if (score >= 90) return '优秀';
   if (score >= 80) return '稳健';
   if (score >= 70) return '可观察';

@@ -296,7 +296,9 @@ export interface PublicCardItem {
   name: string;
   website: string;
   tags: string[];
-  score: number;
+  score: number | null;
+  score_hidden?: boolean;
+  score_hidden_reason?: 'insufficient_balance' | null;
   score_delta_vs_yesterday: ScoreDeltaView;
   stability_tier: StabilityTier;
   details: [PublicCardDetail, PublicCardDetail];
@@ -344,6 +346,8 @@ export interface FullRankingItem {
   airport_intro?: string | null;
   created_at: string;
   score: number | null;
+  score_hidden?: boolean;
+  score_hidden_reason?: 'insufficient_balance' | null;
   score_delta_vs_yesterday: ScoreDeltaView;
   score_date?: string | null;
   report_url?: string | null;
@@ -466,7 +470,7 @@ export interface ReportView {
     p: number;
     c: number;
     r: number;
-    final_score: number;
+    final_score: number | null;
     risk_penalty: number;
     domain_penalty: number;
     ssl_penalty: number;

@@ -10,6 +10,7 @@ import type {
 } from '../types/domain';
 import { buildRiskReasonSummary, deriveRiskReasonCodes } from '../utils/risk';
 import { formatDateOnly } from '../utils/time';
+import { CLICK_CHARGE_AMOUNT } from '../config/billing';
 import { buildAirportReportPath, buildAirportSlugCandidate } from '../../../shared/publicSeo';
 import {
   AIRPORT_CLIENT_FILTERS,
@@ -66,6 +67,7 @@ interface PublicFullRankingRow extends RowDataPacket {
   created_at: unknown;
   score_date: unknown;
   display_score: number | null;
+  score_hidden: number | boolean;
 }
 
 interface PublicDisplayScoreRow extends RowDataPacket {
@@ -87,6 +89,7 @@ interface PublicRiskMonitorRow extends RowDataPacket {
   created_at: unknown;
   score_date: unknown;
   display_score: number | null;
+  score_hidden: number | boolean;
   risk_penalty: number | null;
   details_json: unknown;
   domain_ok: number | null;
@@ -339,6 +342,7 @@ export class ScoreRepository {
     page: number,
     pageSize: number,
     filters: FullRankingFilters = EMPTY_FULL_RANKING_FILTERS,
+    clickChargeAmount: number = CLICK_CHARGE_AMOUNT,
   ): Promise<{ total: number; items: FullRankingItem[] }> {
     const safePage = Math.max(1, page);
     const safePageSize = Math.min(100, Math.max(1, pageSize));
@@ -378,8 +382,11 @@ export class ScoreRepository {
            CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.manual_total_score')) AS DECIMAL(10,2)),
            CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.total_score')) AS DECIMAL(10,2)),
            s.final_score
-         ) AS display_score
+         ) AS display_score,
+         (COALESCE(w.balance, 0) < ?) AS score_hidden
        FROM airports a
+       LEFT JOIN applicant_wallets w
+         ON w.airport_id = a.id
        LEFT JOIN (
          SELECT airport_id, MAX(date) AS score_date
            FROM airport_scores_daily
@@ -393,12 +400,13 @@ export class ScoreRepository {
       WHERE a.is_listed = 1
         ${rankingFilters.whereSql}
       ORDER BY
+        score_hidden ASC,
         CASE WHEN s.date IS NULL THEN 1 ELSE 0 END ASC,
         display_score DESC,
         a.created_at DESC,
         a.id ASC
       LIMIT ? OFFSET ?`,
-      [date, ...rankingFilters.params, safePageSize, offset],
+      [clickChargeAmount, date, ...rankingFilters.params, safePageSize, offset],
     );
 
     const yesterdayDate = shiftDateByDays(date, -1);
@@ -410,7 +418,8 @@ export class ScoreRepository {
     return {
       total: Number(totalRows[0]?.total || 0),
       items: rows.map((row, index) => {
-        const currentScore = row.display_score === null ? null : Number(row.display_score);
+        const scoreHidden = Boolean(row.score_hidden);
+        const currentScore = scoreHidden || row.display_score === null ? null : Number(row.display_score);
         const yesterdayScore = yesterdayDisplayScores.get(Number(row.airport_id));
 
         return {
@@ -426,6 +435,8 @@ export class ScoreRepository {
           airport_intro: row.airport_intro,
           created_at: formatDateOnly(row.created_at),
           score: currentScore,
+          score_hidden: scoreHidden,
+          score_hidden_reason: scoreHidden ? 'insufficient_balance' : null,
           score_delta_vs_yesterday: {
             label: '对比昨天',
             value:
@@ -445,6 +456,7 @@ export class ScoreRepository {
     date: string,
     page: number,
     pageSize: number,
+    clickChargeAmount: number = CLICK_CHARGE_AMOUNT,
   ): Promise<{ total: number; items: RiskMonitorItem[] }> {
     const safePage = Math.max(1, page);
     const safePageSize = Math.min(100, Math.max(1, pageSize));
@@ -476,18 +488,21 @@ export class ScoreRepository {
          a.created_at,
          s.date AS score_date,
          s.score_r,
-         COALESCE(
-           CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.manual_total_score')) AS DECIMAL(10,2)),
-           CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.total_score')) AS DECIMAL(10,2)),
-           s.final_score
-         ) AS display_score,
-         s.risk_penalty,
+           COALESCE(
+             CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.manual_total_score')) AS DECIMAL(10,2)),
+             CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.total_score')) AS DECIMAL(10,2)),
+             s.final_score
+           ) AS display_score,
+           (COALESCE(w.balance, 0) < ?) AS score_hidden,
+           s.risk_penalty,
          s.details_json,
          m.domain_ok,
          m.ssl_days_left,
          m.recent_complaints_count,
          m.history_incidents
-       FROM airports a
+      FROM airports a
+       LEFT JOIN applicant_wallets w
+         ON w.airport_id = a.id
        LEFT JOIN airport_scores_daily s
          ON s.airport_id = a.id
         AND s.date = (
@@ -506,13 +521,14 @@ export class ScoreRepository {
         )
       ORDER BY
         CASE WHEN a.status = 'down' THEN 0 ELSE 1 END ASC,
+        score_hidden ASC,
         CASE WHEN s.date IS NULL THEN 1 ELSE 0 END ASC,
         COALESCE(s.risk_penalty, -1) DESC,
         display_score DESC,
         a.created_at DESC,
         a.id ASC
       LIMIT ? OFFSET ?`,
-      [date, safePageSize, offset],
+      [clickChargeAmount, date, safePageSize, offset],
     );
 
     const yesterdayDate = shiftDateByDays(date, -1);
@@ -524,7 +540,8 @@ export class ScoreRepository {
     return {
       total: Number(totalRows[0]?.total || 0),
       items: rows.map((row, index) => {
-        const currentScore = row.display_score === null ? null : Number(row.display_score);
+        const scoreHidden = Boolean(row.score_hidden);
+        const currentScore = scoreHidden || row.display_score === null ? null : Number(row.display_score);
         const yesterdayScore = yesterdayDisplayScores.get(Number(row.airport_id));
         const details = safeJsonObject(row.details_json);
         const metrics = {
@@ -557,6 +574,8 @@ export class ScoreRepository {
           airport_intro: row.airport_intro,
           created_at: formatDateOnly(row.created_at),
           score: currentScore,
+          score_hidden: scoreHidden,
+          score_hidden_reason: scoreHidden ? 'insufficient_balance' : null,
           score_delta_vs_yesterday: {
             label: '对比昨天',
             value:

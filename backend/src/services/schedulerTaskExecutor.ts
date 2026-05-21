@@ -185,7 +185,7 @@ export class SchedulerTaskExecutor {
       result.notification_events,
       this.logger,
     );
-    const message = `欠费上架同步完成：检查 ${result.checked}，恢复上架 ${result.restored}，欠费下架 ${result.unlisted}，未变化 ${result.unchanged}，跳过 ${result.skipped}`;
+    const message = `余额展示同步完成：检查 ${result.checked}，恢复公开总分 ${result.restored}，总分暂不公开 ${result.unlisted}，未变化 ${result.unchanged}，跳过 ${result.skipped}`;
     return {
       status: 'succeeded',
       message,

@@ -7,7 +7,7 @@ export const LOW_BALANCE_WARNING_THRESHOLD = 30;
 export type BillingPaymentChannel = 'alipay' | 'wxpay' | 'usdt';
 export type BillingOrderStatus = 'created' | 'paid' | 'failed' | 'expired' | 'canceled';
 export type WalletTransactionType = 'recharge' | 'click_charge' | 'adjustment';
-export type ClickBillingStatus = 'billed' | 'duplicate' | 'insufficient_balance' | 'unlisted' | 'no_wallet';
+export type ClickBillingStatus = 'billed' | 'duplicate' | 'free' | 'insufficient_balance' | 'unlisted' | 'no_wallet';
 export type BillingMailNotificationType = 'low_balance_warning' | 'airport_auto_unlisted' | 'airport_online';
 
 export interface BillingMailNotificationEvent {
@@ -150,6 +150,7 @@ interface AirportOwnerRow extends RowDataPacket {
   application_id: number | null;
   wallet_id: number | null;
   balance: number | null;
+  auto_unlisted_at: string | null;
   low_balance_notified_at: string | null;
   applicant_email: string | null;
 }
@@ -207,6 +208,13 @@ export interface ProcessOutboundClickResult {
 export interface RechargeCreditResult {
   credited: boolean;
   notification_events: BillingMailNotificationEvent[];
+}
+
+export type PublicScoreHiddenReason = 'insufficient_balance';
+
+export interface PublicScoreVisibility {
+  score_hidden: boolean;
+  score_hidden_reason: PublicScoreHiddenReason | null;
 }
 
 export class ApplicantBillingRepository {
@@ -293,7 +301,7 @@ export class ApplicantBillingRepository {
         placement VARCHAR(64) NOT NULL,
         target_kind ENUM('website', 'subscription_url') NOT NULL,
         target_url VARCHAR(2048) NOT NULL,
-        billing_status ENUM('billed', 'duplicate', 'insufficient_balance', 'unlisted', 'no_wallet') NOT NULL,
+        billing_status ENUM('billed', 'duplicate', 'free', 'insufficient_balance', 'unlisted', 'no_wallet') NOT NULL,
         billed_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
         visitor_hash CHAR(64) NOT NULL,
         session_hash CHAR(64) NOT NULL,
@@ -303,6 +311,11 @@ export class ApplicantBillingRepository {
         INDEX idx_outbound_click_records_airport_visitor_time (airport_id, visitor_hash, occurred_at),
         INDEX idx_outbound_click_records_account_time (applicant_account_id, occurred_at DESC)
       )
+    `);
+
+    await this.pool.query(`
+      ALTER TABLE outbound_click_records
+        MODIFY COLUMN billing_status ENUM('billed', 'duplicate', 'free', 'insufficient_balance', 'unlisted', 'no_wallet') NOT NULL
     `);
 
     await this.ensureColumn('low_balance_notified_at', 'DATETIME NULL AFTER auto_unlisted_at');
@@ -593,10 +606,10 @@ export class ApplicantBillingRepository {
 
         const balance = Number(row.balance || 0);
         const isListed = Boolean(row.is_listed);
-        const isAutoUnlisted = Boolean(row.auto_unlisted_at);
+        const hasBillingRestriction = Boolean(row.auto_unlisted_at);
 
         if (balance >= minimumBalance) {
-          if (!isListed || isAutoUnlisted) {
+          if (hasBillingRestriction) {
             await connection.execute<ResultSetHeader>(
               `UPDATE airports
                   SET is_listed = 1
@@ -635,13 +648,20 @@ export class ApplicantBillingRepository {
           continue;
         }
 
-        if (isListed || !isAutoUnlisted) {
+        if (!isListed && hasBillingRestriction) {
           await connection.execute<ResultSetHeader>(
             `UPDATE airports
-                SET is_listed = 0
+                SET is_listed = 1
               WHERE id = ?`,
             [row.airport_id],
           );
+          result.restored += 1;
+          continue;
+        }
+
+        if (!isListed) {
+          result.unchanged += 1;
+        } else if (!hasBillingRestriction) {
           await connection.execute<ResultSetHeader>(
             `UPDATE applicant_wallets
                 SET auto_unlisted_at = COALESCE(auto_unlisted_at, NOW())
@@ -1162,6 +1182,7 @@ export class ApplicantBillingRepository {
            ap.id AS application_id,
            w.id AS wallet_id,
            w.balance,
+           DATE_FORMAT(w.auto_unlisted_at, '%Y-%m-%d %H:%i:%s') AS auto_unlisted_at,
            DATE_FORMAT(w.low_balance_notified_at, '%Y-%m-%d %H:%i:%s') AS low_balance_notified_at
          FROM airports a
          LEFT JOIN airport_applications ap ON ap.approved_airport_id = a.id
@@ -1199,6 +1220,7 @@ export class ApplicantBillingRepository {
         const wallet = await this.getWalletForAccount(connection, Number(owner.applicant_account_id));
         owner.wallet_id = wallet?.id || null;
         owner.balance = wallet ? Number(wallet.balance) : null;
+        owner.auto_unlisted_at = wallet?.auto_unlisted_at || null;
         owner.low_balance_notified_at = wallet?.low_balance_notified_at || null;
       }
 
@@ -1216,16 +1238,14 @@ export class ApplicantBillingRepository {
 
       const balance = Number(owner.balance || 0);
       if (balance < clickChargeAmount) {
-        await this.autoUnlistAirport(connection, Number(owner.wallet_id), input.airport_id);
-        await this.insertClick(connection, input, owner, 'insufficient_balance', 0);
-        pushBillingNotificationEvent(notificationEvents, 'airport_auto_unlisted', owner, balance);
+        await this.insertClick(connection, input, owner, 'free', 0);
         await connection.commit();
         return {
-          status: 'insufficient_balance',
+          status: 'free',
           billed_amount: 0,
           airport_name: owner.airport_name,
           balance_after: balance,
-          notification_events: notificationEvents,
+          notification_events: [],
         };
       }
 
@@ -1277,10 +1297,7 @@ export class ApplicantBillingRepository {
         ],
       );
 
-      if (nextBalance < clickChargeAmount) {
-        await this.autoUnlistAirport(connection, Number(owner.wallet_id), input.airport_id);
-        pushBillingNotificationEvent(notificationEvents, 'airport_auto_unlisted', owner, nextBalance);
-      } else if (nextBalance < LOW_BALANCE_WARNING_THRESHOLD && !owner.low_balance_notified_at) {
+      if (nextBalance < LOW_BALANCE_WARNING_THRESHOLD && !owner.low_balance_notified_at) {
         await connection.execute<ResultSetHeader>(
           `UPDATE applicant_wallets
               SET low_balance_notified_at = NOW()
@@ -1358,13 +1375,37 @@ export class ApplicantBillingRepository {
     );
   }
 
-  private async autoUnlistAirport(connection: PoolConnection, walletId: number, airportId: number): Promise<void> {
-    await connection.execute<ResultSetHeader>(
-      `UPDATE airports
-          SET is_listed = 0
-        WHERE id = ?`,
-      [airportId],
+  async getPublicScoreVisibilityByAirportIds(
+    airportIds: number[],
+    clickChargeAmount: number = CLICK_CHARGE_AMOUNT,
+  ): Promise<Map<number, PublicScoreVisibility>> {
+    const uniqueAirportIds = Array.from(new Set(airportIds.map((id) => Number(id)).filter(Number.isFinite)));
+    const result = new Map<number, PublicScoreVisibility>();
+    for (const airportId of uniqueAirportIds) {
+      result.set(airportId, { score_hidden: true, score_hidden_reason: 'insufficient_balance' });
+    }
+    if (uniqueAirportIds.length === 0) {
+      return result;
+    }
+
+    const placeholders = uniqueAirportIds.map(() => '?').join(', ');
+    const [rows] = await this.pool.query<Array<RowDataPacket & { airport_id: number; balance: number | null }>>(
+      `SELECT airport_id, balance
+         FROM applicant_wallets
+        WHERE airport_id IN (${placeholders})`,
+      uniqueAirportIds,
     );
+    for (const row of rows) {
+      const balance = Number(row.balance || 0);
+      result.set(Number(row.airport_id), balance < clickChargeAmount
+        ? { score_hidden: true, score_hidden_reason: 'insufficient_balance' }
+        : { score_hidden: false, score_hidden_reason: null });
+    }
+
+    return result;
+  }
+
+  private async markBillingRestricted(connection: PoolConnection, walletId: number): Promise<void> {
     await connection.execute<ResultSetHeader>(
       `UPDATE applicant_wallets
           SET auto_unlisted_at = COALESCE(auto_unlisted_at, NOW())

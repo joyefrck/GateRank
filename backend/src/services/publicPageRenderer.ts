@@ -277,12 +277,7 @@ export function renderReportPublicPage(siteUrl: string, view: ReportView, reques
             </div>
             <p><a class="primary-link" href="${escapeAttribute(view.airport.website)}" rel="nofollow noreferrer">访问官网</a></p>
           </div>
-          <aside class="score-card">
-            <div class="score-title">GateRank Score</div>
-            <div class="score-number">${escapeHtml(formatMetric(view.summary_card.score))}<span>/100</span></div>
-            <div class="score-bar"><i style="width:${Math.max(0, Math.min(100, view.summary_card.score))}%"></i></div>
-            <div class="score-grade">综合评级：${escapeHtml(formatScoreGrade(view.summary_card.score))}</div>
-          </aside>
+          ${renderReportScoreCard(view)}
         </section>
         ${renderReportContentSections(view)}
         <section id="report-snapshot" class="report-snapshot report-anchor-target">
@@ -290,7 +285,7 @@ export function renderReportPublicPage(siteUrl: string, view: ReportView, reques
           ${renderSnapshotCard('数据日期', view.date)}
           ${renderSnapshotCard('健康记录', `${view.metrics.healthy_days_streak} 天`)}
           ${renderSnapshotCard('稳定性', formatStabilityTier(view.metrics.stability_tier))}
-          ${renderSnapshotCard('风险惩罚', formatMetric(view.score_breakdown.risk_penalty))}
+        ${renderSnapshotCard('风险惩罚', formatMetric(view.score_breakdown.risk_penalty))}
         </section>
         ${renderReportSummary(view)}
         ${renderReportFaq(faqItems)}
@@ -379,7 +374,7 @@ function renderReportSummary(view: ReportView): string {
     <section id="report-trends" class="report-section report-anchor-target">
       <h2>30 天趋势</h2>
       <div class="metric-grid">
-        ${renderInfoCard('评分趋势', buildTrendSummary(view.trends.score_30d, '分'))}
+        ${renderInfoCard('评分趋势', view.summary_card.score_hidden ? '暂不公开' : buildTrendSummary(view.trends.score_30d, '分'))}
         ${renderInfoCard('可用率趋势', buildTrendSummary(view.trends.uptime_30d, '%'))}
         ${renderInfoCard('延迟趋势', buildTrendSummary(view.trends.latency_30d, ' ms'))}
         ${renderInfoCard('下载趋势', buildTrendSummary(view.trends.download_30d, ' Mbps'))}
@@ -393,7 +388,7 @@ function renderReportSummary(view: ReportView): string {
     </section>
     <section id="report-conclusion" class="report-section report-conclusion report-anchor-target">
       <h2>结论与建议</h2>
-      <p>本次评测数据显示 ${escapeHtml(view.airport.name)} 当前综合分为 ${escapeHtml(formatMetric(view.summary_card.score))} / 100，状态为 ${escapeHtml(formatAirportStatusLabel(view.airport.status))}，稳定性评级为 ${escapeHtml(formatStabilityTier(view.metrics.stability_tier))}。${escapeHtml(view.summary_card.conclusion)}</p>
+      <p>本次评测数据显示 ${escapeHtml(view.airport.name)} 当前公开总分${escapeHtml(formatPublicScoreText(view))}，状态为 ${escapeHtml(formatAirportStatusLabel(view.airport.status))}，稳定性评级为 ${escapeHtml(formatStabilityTier(view.metrics.stability_tier))}。${escapeHtml(view.summary_card.conclusion)}</p>
     </section>
   `;
 }
@@ -466,12 +461,33 @@ function formatReportRegionLabel(region: ReportView['capabilities']['regions'][n
   return parts.join(' · ');
 }
 
-function renderScoreMetric(label: string, value: number, tone: string): string {
+function renderReportScoreCard(view: ReportView): string {
+  if (view.summary_card.score_hidden || view.summary_card.score === null) {
+    return `
+      <aside class="score-card">
+        <div class="score-title">GateRank Score</div>
+        <div class="score-number">暂不公开</div>
+        <div class="score-grade">余额不足，公开总分暂不展示</div>
+      </aside>
+    `;
+  }
+  return `
+    <aside class="score-card">
+      <div class="score-title">GateRank Score</div>
+      <div class="score-number">${escapeHtml(formatMetric(view.summary_card.score))}<span>/100</span></div>
+      <div class="score-bar"><i style="width:${Math.max(0, Math.min(100, view.summary_card.score))}%"></i></div>
+      <div class="score-grade">综合评级：${escapeHtml(formatScoreGrade(view.summary_card.score))}</div>
+    </aside>
+  `;
+}
+
+function renderScoreMetric(label: string, value: number | null, tone: string): string {
+  const width = value === null ? 0 : Math.max(0, Math.min(100, value));
   return `
     <article class="score-metric ${escapeAttribute(tone)}">
       <div>${escapeHtml(label)}</div>
-      <strong>${escapeHtml(formatMetric(value))}</strong>
-      <i style="width:${Math.max(0, Math.min(100, value))}%"></i>
+      <strong>${escapeHtml(value === null ? '暂不公开' : formatMetric(value))}</strong>
+      <i style="width:${width}%"></i>
     </article>
   `;
 }
@@ -551,6 +567,12 @@ function formatOptionalCurrency(value: number | null | undefined): string {
 function normalizeExternalHref(value: string): string {
   const trimmed = value.trim();
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
+}
+
+function formatPublicScoreText(view: ReportView): string {
+  return view.summary_card.score_hidden || view.summary_card.score === null
+    ? '暂不公开'
+    : `${formatMetric(view.summary_card.score)} / 100`;
 }
 
 function formatScoreGrade(score: number): string {
@@ -747,7 +769,8 @@ function renderHomeSections(view: HomePageView): string {
 
 function renderAirportCard(item: {
   name: string;
-  score: number;
+  score: number | null;
+  score_hidden?: boolean;
   tags: string[];
   details: Array<{ label: string; value: string }>;
   conclusion: string;
@@ -755,10 +778,10 @@ function renderAirportCard(item: {
 }): string {
   const href = item.report_url || '#';
   return `
-    <article class="mini-card">
-      <h3><a href="${escapeAttribute(href)}">${escapeHtml(item.name)}</a></h3>
-      <div class="score">${formatMetric(item.score)}</div>
-      <p>${escapeHtml(item.conclusion)}</p>
+      <article class="mini-card">
+        <h3><a href="${escapeAttribute(href)}">${escapeHtml(item.name)}</a></h3>
+        <div class="score">${escapeHtml(formatPublicListScore(item))}</div>
+        <p>${escapeHtml(item.conclusion)}</p>
       <p class="muted">${item.tags.map(escapeHtml).join(' / ')}</p>
       <p class="muted">${item.details.map((detail) => `${escapeHtml(detail.label)}：${escapeHtml(detail.value)}`).join('；')}</p>
     </article>
@@ -850,7 +873,7 @@ function getSelectedFilterLabels(filters: FullRankingFilters): string[] {
     labels.push(filters.telegram ? '有 Telegram 群' : '无 Telegram 群');
   }
   if (filters.price_min !== null || filters.price_max !== null) {
-    labels.push(`价格：${filters.price_min ?? 0}-${filters.price_max ?? '不限'} 元`);
+    labels.push(`价格：${filters.price_min ?? '不限'}-${filters.price_max ?? '不限'} 元`);
   }
   return labels;
 }
@@ -868,7 +891,7 @@ function renderRankingTable(items: FullRankingItem[]): string {
                 <td>#${item.rank}</td>
                 <td><a href="${escapeAttribute(item.website)}" rel="nofollow noreferrer">${escapeHtml(item.name)}</a></td>
                 <td>${escapeHtml(formatAirportStatusLabel(item.status))}</td>
-                <td>${item.score === null ? '-' : formatMetric(item.score)}</td>
+                  <td>${escapeHtml(formatPublicListScore(item))}</td>
                 <td>¥${formatMetric(item.plan_price_month)}</td>
                 <td>${escapeHtml(buildRankingCapabilitySummary(item))}</td>
                 <td>${item.report_url ? `<a href="${escapeAttribute(item.report_url)}">测评报告</a>` : '暂无报告'}</td>
@@ -919,6 +942,10 @@ function buildRankingCapabilitySummary(item: FullRankingItem): string {
     capabilities.telegram.has_group ? 'TG群' : '',
   ].filter(Boolean);
   return parts.length > 0 ? parts.join(' · ') : '结构化能力待补充';
+}
+
+function formatPublicListScore(item: { score: number | null; score_hidden?: boolean }): string {
+  return item.score_hidden || item.score === null ? '暂不公开' : formatMetric(item.score);
 }
 
 function renderInfoCard(title: string, body: string): string {

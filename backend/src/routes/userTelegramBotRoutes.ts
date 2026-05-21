@@ -384,7 +384,7 @@ function formatTelegramListingStatus(wallet: ApplicantWalletView): string {
     return '已下架';
   }
   if (wallet.auto_unlisted_at) {
-    return '欠费下架';
+    return '总分暂不公开';
   }
   return '正常';
 }
@@ -669,6 +669,7 @@ function formatTransactionType(type: string): string {
 function formatClickStatus(status: string): string {
   if (status === 'billed') return '已扣费';
   if (status === 'duplicate') return '重复不扣费';
+  if (status === 'free') return '余额不足免费放行';
   if (status === 'insufficient_balance') return '余额不足';
   if (status === 'unlisted') return '未上架';
   if (status === 'no_wallet') return '无钱包';

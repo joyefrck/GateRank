@@ -407,30 +407,32 @@ function normalizeConfig(value: unknown): UserTelegramBotConfig {
 
 function getDefaultTemplates(): UserTelegramBotTemplateConfig {
   return {
-    low_balance_warning: {
-      enabled: true,
-      body: [
-        '余额提醒：{{airport_name}} 当前账户余额为 ¥{{current_balance}}，已低于 {{threshold_amount}} 元。',
-        '',
-        '为避免影响 GateRank 展示和跳转服务，建议及时充值。',
-      ].join('\n'),
-    },
-    airport_auto_unlisted: {
-      enabled: true,
-      body: [
-        '下线提醒：{{airport_name}} 因账户余额不足，已暂时从 GateRank 下线。',
-        '',
-        '当前余额：¥{{current_balance}}。充值后余额足够时，系统会自动恢复上线。',
-      ].join('\n'),
-    },
-    airport_online: {
-      enabled: true,
-      body: [
-        '上线通知：{{airport_name}} 已恢复上线。',
-        '',
-        '当前余额：¥{{current_balance}}，可以继续在 GateRank 正常展示并接收跳转访问。',
-      ].join('\n'),
-    },
+	    low_balance_warning: {
+	      enabled: true,
+	      body: [
+	        '余额提醒：{{airport_name}} 当前账户余额为 ¥{{current_balance}}，已低于 {{threshold_amount}} 元。',
+	        '',
+        '余额偏低可能影响公开总分展示和榜单排序，建议及时充值。',
+	      ].join('\n'),
+	    },
+	    airport_auto_unlisted: {
+	      enabled: true,
+	      body: [
+	        '余额不足提醒：{{airport_name}} 因账户余额不足，公开综合总分已暂不展示。',
+	        '',
+        '当前余额：¥{{current_balance}}。机场仍保留在 GateRank 并继续参与监测评分，官网跳转仍可正常访问，但榜单会排在余额正常机场之后。',
+	        '',
+	        '充值后余额达到单次点击费用以上，系统会自动恢复公开总分和正常排序。',
+	      ].join('\n'),
+	    },
+	    airport_online: {
+	      enabled: true,
+	      body: [
+	        '余额恢复通知：{{airport_name}} 已恢复可用状态。',
+	        '',
+        '当前余额：¥{{current_balance}}，公开综合总分和榜单排序已恢复正常。',
+	      ].join('\n'),
+	    },
     recharge_welcome: {
       enabled: true,
       body: [

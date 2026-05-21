@@ -65,10 +65,11 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
           has_trial: 1,
           airport_intro: 'Intro',
           created_at: new Date('2025-02-01T00:00:00.000Z'),
-          score_date: new Date('2026-03-24T00:00:00.000Z'),
-          display_score: 93.2,
-        },
-      ]];
+	          score_date: new Date('2026-03-24T00:00:00.000Z'),
+	          display_score: 93.2,
+	          score_hidden: 0,
+	        },
+	      ]];
     },
   } as never);
 
@@ -77,7 +78,9 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
   assert.equal(result.items.length, 1);
   assert.equal(result.items[0].rank, 21);
   assert.equal(result.items[0].status, 'risk');
-  assert.equal(result.items[0].score, 93.2);
+	  assert.equal(result.items[0].score, 93.2);
+	  assert.equal(result.items[0].score_hidden, false);
+	  assert.equal(result.items[0].score_hidden_reason, null);
   assert.deepEqual(result.items[0].score_delta_vs_yesterday, {
     label: '对比昨天',
     value: 2.1,
@@ -89,8 +92,10 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
   assert.ok(calls.some((call) => call.sql.includes("CASE WHEN s.date IS NULL THEN 1 ELSE 0 END ASC")));
   assert.ok(calls.some((call) => call.sql.includes('LEFT JOIN (')));
   assert.ok(calls.some((call) => call.sql.includes('MAX(date) AS score_date')));
-  assert.ok(calls.some((call) => call.sql.includes('latest_score.airport_id = a.id')));
-});
+	  assert.ok(calls.some((call) => call.sql.includes('latest_score.airport_id = a.id')));
+	  assert.ok(calls.some((call) => call.sql.includes('LEFT JOIN applicant_wallets w')));
+	  assert.ok(calls.some((call) => call.sql.includes('score_hidden ASC')));
+	});
 
 test('ScoreRepository.getPublicFullRankingByDate keeps airports without scores', async () => {
   const repository = new ScoreRepository({
@@ -113,9 +118,10 @@ test('ScoreRepository.getPublicFullRankingByDate keeps airports without scores',
           has_trial: 0,
           airport_intro: null,
           created_at: new Date('2025-02-01T00:00:00.000Z'),
-          score_date: null,
-          display_score: null,
-        },
+	          score_date: null,
+	          display_score: null,
+	          score_hidden: 0,
+	        },
       ]];
     },
   } as never);
@@ -130,6 +136,52 @@ test('ScoreRepository.getPublicFullRankingByDate keeps airports without scores',
   });
   assert.equal(result.items[0].score_date, null);
   assert.equal(result.items[0].report_url, null);
+});
+
+test('ScoreRepository.getPublicFullRankingByDate hides scores for insufficient-balance airports', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new ScoreRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql.includes('COUNT(*) AS total')) {
+        return [[{ total: 2 }]];
+      }
+      if (sql.includes('WHERE date = ?') && sql.includes('airport_id IN')) {
+        return [[{ airport_id: 9, display_score: 80 }]];
+      }
+      return [[
+        {
+          airport_id: 9,
+          name: 'Hidden Score Airport',
+          website: 'https://hidden.example.com',
+          status: 'normal',
+          tags_json: '[]',
+          founded_on: null,
+          plan_price_month: 20,
+          has_trial: 0,
+          airport_intro: null,
+          created_at: new Date('2025-02-01T00:00:00.000Z'),
+          score_date: new Date('2026-03-24T00:00:00.000Z'),
+          display_score: 99,
+          score_hidden: 1,
+        },
+      ]];
+    },
+  } as never);
+
+  const result = await repository.getPublicFullRankingByDate('2026-03-24', 1, 20);
+
+  assert.equal(result.items[0].score, null);
+  assert.equal(result.items[0].score_hidden, true);
+  assert.equal(result.items[0].score_hidden_reason, 'insufficient_balance');
+  assert.deepEqual(result.items[0].score_delta_vs_yesterday, {
+    label: '对比昨天',
+    value: null,
+  });
+  const rankingCall = calls.find((call) => call.sql.includes('ORDER BY'));
+  assert.ok(rankingCall);
+  assert.equal(rankingCall.params?.[0], 1);
+  assert.match(rankingCall.sql, /score_hidden ASC/);
 });
 
 test('ScoreRepository.getPublicFullRankingByDate applies search and structured filters', async () => {
@@ -169,9 +221,10 @@ test('ScoreRepository.getPublicFullRankingByDate applies search and structured f
           has_trial: 1,
           airport_intro: 'Intro',
           created_at: new Date('2025-02-01T00:00:00.000Z'),
-          score_date: new Date('2026-03-24T00:00:00.000Z'),
-          display_score: 95,
-        },
+	          score_date: new Date('2026-03-24T00:00:00.000Z'),
+	          display_score: 95,
+	          score_hidden: 0,
+	        },
       ]];
     },
   } as never);
@@ -200,7 +253,7 @@ test('ScoreRepository.getPublicFullRankingByDate applies search and structured f
   assert.match(rankingCall.sql, /JSON_UNQUOTE\(JSON_EXTRACT\(a\.airport_profile_json, '\$\.clients\.clash'\)\) = 'true'/);
   assert.match(rankingCall.sql, /\$\.regions\.hong_kong\.has_native_ip/);
   assert.match(rankingCall.sql, /\$\.regions\.hong_kong\.line_types/);
-  assert.deepEqual(rankingCall.params?.slice(1, 6), ['%filtered%', '%filtered%', '%filtered%', '%filtered%', 'alipay']);
+	  assert.deepEqual(rankingCall.params?.slice(2, 7), ['%filtered%', '%filtered%', '%filtered%', '%filtered%', 'alipay']);
   assert.ok(rankingCall.params?.includes('paypal'));
   assert.ok(rankingCall.params?.includes('iepl'));
   assert.ok(rankingCall.params?.includes(10));

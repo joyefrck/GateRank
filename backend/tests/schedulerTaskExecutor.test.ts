@@ -126,6 +126,6 @@ test('SchedulerTaskExecutor.runTask syncs billing listing status', async () => {
   assert.equal(syncedWithAmount, 0.6);
   assert.equal(result.detail.stage, 'billing_listing_sync');
   assert.equal(result.detail.restored, 1);
-  assert.match(result.message, /恢复上架 1/);
-  assert.match(result.message, /欠费下架 1/);
+  assert.match(result.message, /恢复公开总分 1/);
+  assert.match(result.message, /总分暂不公开 1/);
 });

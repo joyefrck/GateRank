@@ -5967,7 +5967,7 @@ function stubSchedulerService(): any {
       },
       {
         task_key: 'billing_listing_sync',
-        name: '欠费上架同步',
+        name: '余额展示同步',
         enabled: true,
         schedule_time: '03:00',
         timezone: 'Asia/Shanghai',
@@ -5976,7 +5976,7 @@ function stubSchedulerService(): any {
         updated_by: 'system',
         created_at: '2026-03-30T00:00:00+08:00',
         updated_at: '2026-03-30T00:00:00+08:00',
-        description: '欠费同步描述',
+        description: '余额同步描述',
         next_run_at: '2026-03-31T03:00:00+08:00',
         is_running: false,
         latest_run: null,

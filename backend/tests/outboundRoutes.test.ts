@@ -169,7 +169,7 @@ test('GET /outbound/airports/:id redirects subscription links without billing', 
   }
 });
 
-test('GET /outbound/airports/:id does not redirect when balance is insufficient', async () => {
+test('GET /outbound/airports/:id redirects when balance is insufficient', async () => {
   const app = express();
   app.use(
     createOutboundRoutes({
@@ -188,7 +188,7 @@ test('GET /outbound/airports/:id does not redirect when balance is insufficient'
       },
       applicantBillingRepository: {
         processOutboundClick: async () => ({
-          status: 'insufficient_balance',
+          status: 'free',
           billed_amount: 0,
           airport_name: 'Cloud Airport',
           balance_after: 0,
@@ -205,12 +205,12 @@ test('GET /outbound/airports/:id does not redirect when balance is insufficient'
       redirect: 'manual',
     });
 
-    assert.equal(response.status, 402);
-    assert.equal(response.headers.get('location'), null);
-    const body = await response.text();
-    assert.match(body, /暂不可访问/);
-    assert.doesNotMatch(body, /点击计费标准/);
-    assert.doesNotMatch(body, /¥1\.00 \/ 次/);
+    assert.equal(response.status, 302);
+    const location = response.headers.get('location') || '';
+    const redirected = new URL(location);
+    assert.equal(redirected.origin, 'https://airport.example.com');
+    assert.equal(redirected.searchParams.get('utm_source'), 'gaterank');
+    assert.equal(redirected.searchParams.get('utm_campaign'), 'paid_click');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

@@ -273,38 +273,40 @@ function getDefaultTemplates(): SmtpTemplateConfig {
     application_reply: {
       ...DEFAULT_APPLICATION_REPLY_TEMPLATE,
     },
-    low_balance_warning: {
-      enabled: true,
-      subject: 'GateRank 余额提醒 - {{airport_name}}',
-      body: [
-        '您好，{{airport_name}} 当前账户余额已低于 {{threshold_amount}} 元。',
-        '',
-        '为避免影响机场在 GateRank 的展示和跳转服务，建议您方便时及时完成充值。',
-        '',
-        '如已完成充值，请忽略本邮件。感谢您的理解与支持。',
-      ].join('\n'),
-    },
-    airport_auto_unlisted: {
-      enabled: true,
-      subject: 'GateRank 机场下线提醒 - {{airport_name}}',
-      body: [
-        '您好，{{airport_name}} 当前因账户余额不足，已暂时从 GateRank 下线。',
-        '',
-        '请您及时充值。余额足够后，系统会立即为该机场恢复上线。',
-        '',
-        '感谢您的理解与配合，如需协助请联系 GateRank 管理员。',
-      ].join('\n'),
-    },
-    airport_online: {
-      enabled: true,
-      subject: 'GateRank 机场上线通知 - {{airport_name}}',
-      body: [
-        '您好，{{airport_name}} 已经恢复上线。',
-        '',
-        '该机场现在可以继续在 GateRank 正常展示并接收跳转访问。',
-        '',
-        '感谢您对 GateRank 的支持。',
-      ].join('\n'),
+	    low_balance_warning: {
+	      enabled: true,
+	      subject: 'GateRank 余额提醒 - {{airport_name}}',
+	      body: [
+	        '您好，{{airport_name}} 当前账户余额已低于 {{threshold_amount}} 元。',
+	        '',
+        '余额偏低可能影响公开总分展示和榜单排序，建议您方便时及时完成充值。',
+	        '',
+	        '如已完成充值，请忽略本邮件。感谢您的理解与支持。',
+	      ].join('\n'),
+	    },
+	    airport_auto_unlisted: {
+	      enabled: true,
+	      subject: 'GateRank 余额不足提醒 - {{airport_name}}',
+	      body: [
+	        '您好，{{airport_name}} 当前因账户余额不足，公开综合总分已暂不展示。',
+	        '',
+        '机场仍会保留在 GateRank 并继续参与监测评分，官网跳转仍可正常访问，但公开榜单会排在余额正常机场之后。',
+	        '',
+	        '请您及时充值。余额恢复到单次点击费用以上后，系统会自动恢复公开总分和正常排序。',
+	        '',
+	        '感谢您的理解与配合，如需协助请联系 GateRank 管理员。',
+	      ].join('\n'),
+	    },
+	    airport_online: {
+	      enabled: true,
+	      subject: 'GateRank 余额恢复通知 - {{airport_name}}',
+	      body: [
+	        '您好，{{airport_name}} 当前余额已恢复到可用状态。',
+	        '',
+        '该机场的公开综合总分和榜单排序已恢复正常。',
+	        '',
+	        '感谢您对 GateRank 的支持。',
+	      ].join('\n'),
     },
   };
 }

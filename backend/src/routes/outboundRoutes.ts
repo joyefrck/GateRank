@@ -93,7 +93,7 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
         result.notification_events,
       );
 
-      if (result.status === 'insufficient_balance' || result.status === 'unlisted' || result.status === 'no_wallet') {
+      if (result.status === 'unlisted' || result.status === 'no_wallet') {
         res.status(402).send(renderUnavailablePage(`${airport.name} 当前暂不可访问`));
         return;
       }

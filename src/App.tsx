@@ -137,7 +137,9 @@ interface HomeCardItem {
   name: string;
   website: string;
   tags: string[];
-  score: number;
+  score: number | null;
+  score_hidden?: boolean;
+  score_hidden_reason?: 'insufficient_balance' | null;
   score_delta_vs_yesterday: ScoreDeltaView;
   stability_tier: StabilityTier;
   details: [CardDetail, CardDetail];
@@ -179,6 +181,8 @@ interface FullRankingItemResponse {
   airport_intro?: string | null;
   created_at: string;
   score: number | null;
+  score_hidden?: boolean;
+  score_hidden_reason?: 'insufficient_balance' | null;
   score_delta_vs_yesterday: ScoreDeltaView;
   score_date?: string | null;
   report_url?: string | null;
@@ -251,7 +255,9 @@ interface ReportViewResponse {
     type: CardType;
     name: string;
     tags: string[];
-    score: number;
+    score: number | null;
+    score_hidden?: boolean;
+    score_hidden_reason?: 'insufficient_balance' | null;
     stability_tier: StabilityTier;
     details: [CardDetail, CardDetail];
     conclusion: string;
@@ -268,7 +274,7 @@ interface ReportViewResponse {
     p: number;
     c: number;
     r: number;
-    final_score: number;
+    final_score: number | null;
     risk_penalty: number;
     domain_penalty: number;
     ssl_penalty: number;
@@ -354,7 +360,7 @@ interface CardProps {
   name: string;
   website?: string;
   tags: string[];
-  score: number;
+  score: number | null;
   scoreDeltaVsYesterday?: ScoreDeltaView;
   stabilityTier: StabilityTier;
   showStabilityTier?: boolean;
@@ -483,7 +489,7 @@ interface PortalClickView {
   placement: string;
   target_kind: string;
   target_url: string;
-  billing_status: 'billed' | 'duplicate' | 'insufficient_balance' | 'unlisted' | 'no_wallet';
+  billing_status: 'billed' | 'duplicate' | 'free' | 'insufficient_balance' | 'unlisted' | 'no_wallet';
   billed_amount: number;
   occurred_at: string;
 }
@@ -695,12 +701,15 @@ function formatReportTimeFromNow(
 
 function formatScoreLabel(value?: number | null): string {
   if (value === null || value === undefined) {
-    return '待评分';
+    return '暂不公开';
   }
   return formatMetric(value);
 }
 
-function formatScoreFixed2(value: number): string {
+function formatScoreFixed2(value: number | null): string {
+  if (value === null) {
+    return '暂不公开';
+  }
   return value.toFixed(2);
 }
 
@@ -1446,13 +1455,17 @@ function buildSelectedFullRankingFilterLabels(filters: FullRankingFilters): stri
   if (filters.lifetime !== null) labels.push(filters.lifetime ? '不限时套餐' : '无不限时套餐');
   if (filters.telegram !== null) labels.push(filters.telegram ? 'Telegram 群' : '无 Telegram 群');
   if (filters.price_min !== null || filters.price_max !== null) {
-    labels.push(`月付 ${filters.price_min ?? 0}-${filters.price_max ?? '不限'}`);
+    labels.push(`月付 ${filters.price_min ?? '不限'}-${filters.price_max ?? '不限'}`);
   }
   return labels;
 }
 
 function parsePriceInput(value: FormDataEntryValue | null): number | null {
-  const parsed = Number(String(value || '').trim());
+  const text = String(value || '').trim();
+  if (!text) {
+    return null;
+  }
+  const parsed = Number(text);
   return Number.isFinite(parsed) && parsed >= 0 ? Math.round(parsed * 100) / 100 : null;
 }
 
@@ -3567,6 +3580,15 @@ function ReportContentNarrative({ data }: { data: ReportViewResponse }) {
 }
 
 function ReportScoreCard({ data }: { data: ReportViewResponse }) {
+  if (data.summary_card.score_hidden || data.summary_card.score === null) {
+    return (
+      <aside className={`rounded-[8px] border border-slate-200 bg-white p-6 text-center shadow-sm ${reportCardInteractiveClass}`}>
+        <div className="text-sm font-black text-slate-800">GateRank Score</div>
+        <div className="mt-3 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">暂不公开</div>
+        <div className="mt-4 text-sm font-black text-amber-600">余额不足，公开总分暂不展示</div>
+      </aside>
+    );
+  }
   const score = Math.max(0, Math.min(100, data.summary_card.score));
   return (
     <aside className={`rounded-[8px] border border-slate-200 bg-white p-6 text-center shadow-sm ${reportCardInteractiveClass}`}>
@@ -3661,7 +3683,7 @@ function ReportTrendSection({ data }: { data: ReportViewResponse }) {
     <section id="report-trends" className="scroll-mt-36">
       <ReportSectionTitle title="30天趋势" />
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <ReportTrendCard title="评分趋势" points={data.trends.score_30d} color="#22c55e" />
+        <ReportTrendCard title="评分趋势" points={data.summary_card.score_hidden ? [] : data.trends.score_30d} color="#22c55e" hidden={data.summary_card.score_hidden} />
         <ReportTrendCard title="可用率趋势" points={data.trends.uptime_30d} color="#0ea5e9" suffix="%" />
         <ReportTrendCard title="延迟趋势 (ms)" points={data.trends.latency_30d} color="#64748b" suffix=" ms" />
         <ReportTrendCard title="下载速率趋势 (Mbps)" points={data.trends.download_30d} color="#f97316" suffix=" Mbps" />
@@ -3749,7 +3771,7 @@ function ReportConclusion({
     <section id="report-conclusion" className={`scroll-mt-36 rounded-[8px] border border-slate-200 bg-white p-5 ${reportCardInteractiveClass}`}>
       <ReportSectionTitle title="结论与建议" />
       <p className="mt-4 text-sm leading-7 text-slate-600">
-        本次评测数据显示 {data.airport.name} 当前综合分为 {formatMetric(data.summary_card.score)} / 100，
+        本次评测数据显示 {data.airport.name} 当前公开总分{formatReportPublicScore(data)}，
         状态为 {formatAirportStatus(data.airport.status)}，稳定性评级为 {getStabilityTierLabel(data.metrics.stability_tier)}。
         建议结合官网可达性、近期投诉、风险惩罚和 30 天趋势一起判断，不仅按单次测速决定是否长期使用。
       </p>
@@ -3922,18 +3944,18 @@ function ReportScoreMetric({
   color,
   suffix,
 }: {
-  key?: React.Key;
-  label: string;
-  value: number;
-  color: string;
-  suffix: string;
-}) {
-  const width = Math.max(0, Math.min(100, value));
-  return (
+    key?: React.Key;
+    label: string;
+    value: number | null;
+    color: string;
+    suffix: string;
+  }) {
+    const width = value === null ? 0 : Math.max(0, Math.min(100, value));
+    return (
     <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${reportCardInteractiveClass}`}>
       <div className="text-xs font-bold text-slate-500">{label}</div>
       <div className="mt-2 flex items-end justify-between gap-2">
-        <span className="text-2xl font-black text-slate-950">{formatMetric(value)}</span>
+          <span className="text-2xl font-black text-slate-950">{value === null ? '暂不公开' : formatMetric(value)}</span>
         {suffix ? <span className="text-sm font-black text-slate-400">{suffix}</span> : null}
       </div>
       <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
@@ -3970,11 +3992,13 @@ function ReportTrendCard({
   points,
   color,
   suffix = '',
+  hidden = false,
 }: {
   title: string;
   points: Array<{ date: string; value: number }>;
   color: string;
   suffix?: string;
+  hidden?: boolean;
 }) {
   const latest = points[points.length - 1];
   return (
@@ -3985,10 +4009,16 @@ function ReportTrendCard({
         <Sparkline points={points} color={color} fill />
       </div>
       <div className="mt-3 text-sm font-black text-slate-700">
-        最新：{latest ? `${formatMetric(latest.value)}${suffix}` : '暂无数据'}
+        最新：{hidden ? '暂不公开' : latest ? `${formatMetric(latest.value)}${suffix}` : '暂无数据'}
       </div>
     </div>
   );
+}
+
+function formatReportPublicScore(data: ReportViewResponse): string {
+  return data.summary_card.score_hidden || data.summary_card.score === null
+    ? '暂不公开'
+    : `${formatMetric(data.summary_card.score)} / 100`;
 }
 
 function Sparkline({
@@ -5553,7 +5583,7 @@ function PortalPage() {
   const renderClicksSection = () => (
     <PortalSectionCard
       title="访问记录"
-      description="这里展示从 GateRank 跳转到机场链接的服务端真实记录，包含扣费、重复点击和余额不足状态。"
+      description="这里展示从 GateRank 跳转到机场链接的服务端真实记录，包含扣费、重复点击和余额不足免费放行状态。"
     >
       <PortalDataTable
         title="最近点击"
@@ -5628,7 +5658,7 @@ function PortalPage() {
     return (
       <PortalSectionCard
         title="扣费说明"
-        description="这里说明点击余额的扣费规则、重复访问处理和余额不足时的展示状态。"
+        description="这里说明点击余额的扣费规则、重复访问处理和余额不足时的总分展示状态。"
         aside={<div className="rounded-full border border-amber-100 bg-amber-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-amber-700">Billing Rules</div>}
       >
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -5657,9 +5687,9 @@ function PortalPage() {
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
             <div>
-              <div className="text-sm font-black text-rose-900">余额不足与自动下架</div>
+              <div className="text-sm font-black text-rose-900">余额不足与总分展示</div>
               <div className="mt-2 text-sm leading-7 text-rose-800">
-                当余额不足以支付一次点击时，GateRank 不再放行跳转，并可能将机场标记为欠费下架。充值后余额恢复到单次点击价以上，可恢复可用状态。
+                当余额不足以支付一次点击时，官网跳转仍可正常访问且不会扣费；机场仍保留在 GateRank 并继续参与监测评分，但公开综合总分暂不展示，榜单会排在余额正常机场之后。充值后余额恢复到单次点击价以上，可自动恢复。
               </div>
             </div>
           </div>
@@ -6322,7 +6352,7 @@ function getPortalListingStatus(wallet: PortalWalletView): { label: string; tone
     return { label: '已下架', tone: 'amber' };
   }
   if (wallet.auto_unlisted_at) {
-    return { label: '欠费下架', tone: 'amber' };
+    return { label: '总分暂不公开', tone: 'amber' };
   }
   return { label: '正常', tone: 'green' };
 }
@@ -6394,6 +6424,8 @@ function formatClickBillingStatus(status: PortalClickView['billing_status']): st
       return '已扣费';
     case 'duplicate':
       return '24小时重复不扣费';
+    case 'free':
+      return '余额不足免费放行';
     case 'insufficient_balance':
       return '余额不足';
     case 'unlisted':

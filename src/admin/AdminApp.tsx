@@ -1070,10 +1070,10 @@ const USER_TELEGRAM_BOT_TEMPLATE_SCENARIOS: Record<
     sampleValues: Record<string, string>;
   }
 > = {
-  low_balance_warning: {
-    title: '用户余额不足30元',
-    trigger: '自动扣费或欠费同步发现余额低于 30 元且本轮尚未提醒时发送。',
-    description: '用于提醒已绑定 Telegram 的申请人余额偏低。',
+    low_balance_warning: {
+      title: '用户余额低于30元',
+      trigger: '自动扣费或余额同步发现余额低于 30 元且本轮尚未提醒时发送。',
+    description: '用于提醒已绑定 Telegram 的申请人余额偏低，可能影响公开总分展示和榜单排序。',
     variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
     sampleValues: {
       airport_name: '大象网络',
@@ -1083,10 +1083,10 @@ const USER_TELEGRAM_BOT_TEMPLATE_SCENARIOS: Record<
       site_name: 'GateRank',
     },
   },
-  airport_auto_unlisted: {
-    title: '机场被下线',
-    trigger: '机场因余额不足被系统自动下线后发送。',
-    description: '用于告知申请人机场已暂时停止展示和跳转。',
+    airport_auto_unlisted: {
+      title: '余额不足总分暂不公开',
+      trigger: '机场余额低于单次点击费用并首次进入余额展示限制时发送。',
+    description: '用于告知申请人机场仍保留在 GateRank，官网跳转仍可访问，但公开综合总分暂不展示，榜单排序会靠后。',
     variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
     sampleValues: {
       airport_name: '大象网络',
@@ -1096,10 +1096,10 @@ const USER_TELEGRAM_BOT_TEMPLATE_SCENARIOS: Record<
       site_name: 'GateRank',
     },
   },
-  airport_online: {
-    title: '机场被上线',
-    trigger: '机场余额足够并由系统自动恢复上线时发送。',
-    description: '用于通知申请人机场已经恢复展示和跳转。',
+    airport_online: {
+      title: '余额恢复总分公开',
+      trigger: '机场余额恢复到单次点击费用以上并解除余额展示限制时发送。',
+    description: '用于通知申请人公开综合总分和榜单排序已经恢复。',
     variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
     sampleValues: {
       airport_name: '大象网络',
@@ -1195,10 +1195,10 @@ const SMTP_TEMPLATE_SCENARIOS: Record<
       site_name: 'GateRank',
     },
   },
-  low_balance_warning: {
-    title: '余额低于30元提醒',
-    trigger: '自动扣费或欠费同步发现余额低于 30 元且本轮尚未提醒时发送。',
-    description: '用于提醒机场账户余额偏低，建议及时充值。',
+    low_balance_warning: {
+      title: '余额低于30元提醒',
+      trigger: '自动扣费或余额同步发现余额低于 30 元且本轮尚未提醒时发送。',
+    description: '用于提醒机场账户余额偏低，可能影响公开总分展示和榜单排序。',
     variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
     sampleValues: {
       airport_name: '大象网络',
@@ -1208,10 +1208,10 @@ const SMTP_TEMPLATE_SCENARIOS: Record<
       site_name: 'GateRank',
     },
   },
-  airport_auto_unlisted: {
-    title: '机场余额不足下线提醒',
-    trigger: '机场因余额不足被系统自动下线后发送。',
-    description: '用于告知机场已因余额不足暂时下线，余额足够后会自动上线。',
+    airport_auto_unlisted: {
+      title: '机场余额不足总分暂不公开提醒',
+      trigger: '机场余额低于单次点击费用并首次进入余额展示限制时发送。',
+    description: '用于告知机场仍保留在 GateRank，官网跳转仍可访问，但公开综合总分暂不展示，榜单排序会靠后。',
     variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
     sampleValues: {
       airport_name: '大象网络',
@@ -1221,10 +1221,10 @@ const SMTP_TEMPLATE_SCENARIOS: Record<
       site_name: 'GateRank',
     },
   },
-  airport_online: {
-    title: '机场上线通知',
-    trigger: '机场充值后余额足够并由系统自动恢复上线时发送。',
-    description: '用于通知机场已经恢复上线。',
+    airport_online: {
+      title: '机场余额恢复通知',
+      trigger: '机场充值后余额恢复到单次点击费用以上并解除余额展示限制时发送。',
+    description: '用于通知机场公开综合总分和榜单排序已经恢复。',
     variables: ['{{airport_name}}', '{{applicant_email}}', '{{current_balance}}', '{{threshold_amount}}', '{{site_name}}'],
     sampleValues: {
       airport_name: '大象网络',
@@ -1829,7 +1829,7 @@ function SchedulerPage() {
               <option value="performance">性能采集</option>
               <option value="risk">风险体检</option>
               <option value="aggregate_recompute">聚合重算</option>
-              <option value="billing_listing_sync">欠费上架同步</option>
+              <option value="billing_listing_sync">余额展示同步</option>
             </select>
             <input type="date" className="rounded border border-neutral-300 px-3 py-2 text-sm" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setRunPage(1); }} />
             <input type="date" className="rounded border border-neutral-300 px-3 py-2 text-sm" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setRunPage(1); }} />
@@ -3116,7 +3116,7 @@ function SystemSettingsPage() {
               : activeTab === 'payment_gateway'
                 ? '支付配置用于申请人后台下单和支付回调验签，商户号和密钥保存后立即生效。'
                 : activeTab === 'smtp'
-                  ? 'SMTP 配置用于发送申请、审批、余额和上下线提醒邮件。'
+                  ? 'SMTP 配置用于发送申请、审批、余额和总分展示状态提醒邮件。'
                   : activeTab === 'x_oauth'
                     ? 'X 登录配置用于申请人后台绑定和 X 一键登录，保存后立即生效。'
                 : activeTab === 'media_libraries'
@@ -4438,29 +4438,31 @@ function getDefaultSmtpTemplates(): SmtpTemplateMap {
       body: [
         '您好，{{airport_name}} 当前账户余额已低于 {{threshold_amount}} 元。',
         '',
-        '为避免影响机场在 GateRank 的展示和跳转服务，建议您方便时及时完成充值。',
+        '余额偏低可能影响公开总分展示和榜单排序，建议您方便时及时完成充值。',
         '',
         '如已完成充值，请忽略本邮件。感谢您的理解与支持。',
       ].join('\n'),
     },
     airport_auto_unlisted: {
       enabled: true,
-      subject: 'GateRank 机场下线提醒 - {{airport_name}}',
+      subject: 'GateRank 余额不足提醒 - {{airport_name}}',
       body: [
-        '您好，{{airport_name}} 当前因账户余额不足，已暂时从 GateRank 下线。',
+        '您好，{{airport_name}} 当前因账户余额不足，公开综合总分已暂不展示。',
         '',
-        '请您及时充值。余额足够后，系统会立即为该机场恢复上线。',
+        '机场仍会保留在 GateRank 并继续参与监测评分，官网跳转仍可正常访问，但公开榜单会排在余额正常机场之后。',
+        '',
+        '请您及时充值。余额恢复到单次点击费用以上后，系统会自动恢复公开总分和正常排序。',
         '',
         '感谢您的理解与配合，如需协助请联系 GateRank 管理员。',
       ].join('\n'),
     },
     airport_online: {
       enabled: true,
-      subject: 'GateRank 机场上线通知 - {{airport_name}}',
+      subject: 'GateRank 余额恢复通知 - {{airport_name}}',
       body: [
-        '您好，{{airport_name}} 已经恢复上线。',
+        '您好，{{airport_name}} 当前余额已恢复到可用状态。',
         '',
-        '该机场现在可以继续在 GateRank 正常展示并接收跳转访问。',
+        '该机场的公开综合总分和榜单排序已恢复正常。',
         '',
         '感谢您对 GateRank 的支持。',
       ].join('\n'),
@@ -4475,23 +4477,25 @@ function getDefaultUserTelegramBotTemplates(): UserTelegramBotTemplateMap {
       body: [
         '余额提醒：{{airport_name}} 当前账户余额为 ¥{{current_balance}}，已低于 {{threshold_amount}} 元。',
         '',
-        '为避免影响 GateRank 展示和跳转服务，建议及时充值。',
+        '余额偏低可能影响公开总分展示和榜单排序，建议及时充值。',
       ].join('\n'),
     },
     airport_auto_unlisted: {
       enabled: true,
       body: [
-        '下线提醒：{{airport_name}} 因账户余额不足，已暂时从 GateRank 下线。',
+        '余额不足提醒：{{airport_name}} 因账户余额不足，公开综合总分已暂不展示。',
         '',
-        '当前余额：¥{{current_balance}}。充值后余额足够时，系统会自动恢复上线。',
+        '当前余额：¥{{current_balance}}。机场仍保留在 GateRank 并继续参与监测评分，官网跳转仍可正常访问，但榜单会排在余额正常机场之后。',
+        '',
+        '充值后余额达到单次点击费用以上，系统会自动恢复公开总分和正常排序。',
       ].join('\n'),
     },
     airport_online: {
       enabled: true,
       body: [
-        '上线通知：{{airport_name}} 已恢复上线。',
+        '余额恢复通知：{{airport_name}} 已恢复可用状态。',
         '',
-        '当前余额：¥{{current_balance}}，可以继续在 GateRank 正常展示并接收跳转访问。',
+        '当前余额：¥{{current_balance}}，公开综合总分和榜单排序已恢复正常。',
       ].join('\n'),
     },
     recharge_welcome: {
@@ -4716,7 +4720,7 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
     <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
       <div>
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">邮件配置</div>
-        <p className="mt-1 text-sm text-neutral-500">用于发送申请、审批、余额和上下线提醒邮件。</p>
+        <p className="mt-1 text-sm text-neutral-500">用于发送申请、审批、余额和总分展示状态提醒邮件。</p>
       </div>
 
       {loading && <div className="text-sm text-neutral-500">加载中...</div>}
@@ -9287,7 +9291,7 @@ function formatSchedulerTaskLabel(taskKey: SchedulerTaskKey): string {
   if (taskKey === 'stability') return '稳定性采集';
   if (taskKey === 'performance') return '性能采集';
   if (taskKey === 'risk') return '风险体检';
-  if (taskKey === 'billing_listing_sync') return '欠费上架同步';
+  if (taskKey === 'billing_listing_sync') return '余额展示同步';
   return '聚合重算';
 }
 
