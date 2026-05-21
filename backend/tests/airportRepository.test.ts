@@ -245,6 +245,46 @@ test('AirportRepository.listByQuery supports application id keyword and listed f
   assert.deepEqual(calls[1]?.params, [0, '%#101%', '%#101%', '%#101%', 101, 20, 0]);
 });
 
+test('AirportRepository.listByQuery supports score and balance sorting before pagination', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new AirportRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql.includes('COUNT(*)')) {
+        return [[{ total: 0 }]];
+      }
+      return [[]];
+    },
+  } as never);
+
+  await repository.listByQuery({
+    page: 2,
+    pageSize: 10,
+    sortBy: 'score',
+    sortOrder: 'asc',
+    scoreDate: '2026-05-20',
+  });
+
+  assert.ok(calls[1]?.sql.includes('LEFT JOIN airport_scores_daily AS sort_score'));
+  assert.ok(calls[1]?.sql.includes('sort_score.date = ?'));
+  assert.ok(calls[1]?.sql.includes('ORDER BY COALESCE('));
+  assert.ok(calls[1]?.sql.includes('ASC, airports.id DESC'));
+  assert.deepEqual(calls[1]?.params, ['2026-05-20', 10, 10]);
+
+  calls.length = 0;
+  await repository.listByQuery({
+    page: 1,
+    pageSize: 20,
+    sortBy: 'balance',
+    sortOrder: 'desc',
+  });
+
+  assert.ok(calls[1]?.sql.includes('FROM applicant_wallets'));
+  assert.ok(calls[1]?.sql.includes('GROUP BY airport_id'));
+  assert.ok(calls[1]?.sql.includes('ORDER BY sort_wallet.wallet_balance IS NULL ASC, sort_wallet.wallet_balance DESC'));
+  assert.deepEqual(calls[1]?.params, [20, 0]);
+});
+
 test('AirportRepository.listLatestApprovedApplicationAirports reads paid reviewed listed airports by latest application time', async () => {
   const calls: Array<{ sql: string; params?: unknown[] }> = [];
   const repository = new AirportRepository({

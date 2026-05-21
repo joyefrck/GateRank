@@ -263,6 +263,134 @@ test('ApplicantBillingRepository.addWalletBalanceAdjustment creates internal wal
   assert.deepEqual(calls[10]!.params, [99, 88, 77, 5, 25.13, 25.13, 'req-1', '线下补款']);
 });
 
+test('ApplicantBillingRepository.addWalletBalanceAdjustment deducts from existing wallet', async () => {
+  const calls: Array<{ kind: 'query' | 'execute' | 'begin' | 'commit' | 'rollback' | 'release'; sql?: string; params?: unknown[] }> = [];
+
+  const connection = {
+    beginTransaction: async () => {
+      calls.push({ kind: 'begin' });
+    },
+    commit: async () => {
+      calls.push({ kind: 'commit' });
+    },
+    rollback: async () => {
+      calls.push({ kind: 'rollback' });
+    },
+    release: () => {
+      calls.push({ kind: 'release' });
+    },
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ kind: 'execute', sql, params });
+      return [{ affectedRows: 1 }];
+    },
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ kind: 'query', sql, params });
+      if (sql.includes('FROM applicant_wallets') && sql.includes('WHERE airport_id = ?')) {
+        return [[{
+          id: 99,
+          applicant_account_id: 88,
+          application_id: 77,
+          airport_id: 5,
+          balance: 50,
+          auto_unlisted_at: null,
+          created_at: '2026-05-09 10:00:00',
+          updated_at: '2026-05-09 10:00:00',
+        }]];
+      }
+      if (sql.includes('FROM applicant_wallets') && sql.includes('WHERE id = ?')) {
+        return [[{
+          id: 99,
+          applicant_account_id: 88,
+          application_id: 77,
+          airport_id: 5,
+          balance: 37.65,
+          auto_unlisted_at: null,
+          created_at: '2026-05-09 10:00:00',
+          updated_at: '2026-05-09 10:01:00',
+        }]];
+      }
+      return [[]];
+    },
+  };
+
+  const repository = new ApplicantBillingRepository({
+    getConnection: async () => connection,
+  } as never);
+
+  const wallet = await repository.addWalletBalanceAdjustment({
+    airport_id: 5,
+    amount: -12.345,
+    description: '后台扣减',
+    reference_id: 'req-2',
+  });
+
+  assert.equal(wallet?.id, 99);
+  assert.equal(wallet?.balance, 37.65);
+  assert.match(calls[2]!.sql!, /UPDATE applicant_wallets\s+SET balance = \?/);
+  assert.deepEqual(calls[2]!.params, [37.65, 99]);
+  assert.match(calls[3]!.sql!, /INSERT INTO applicant_wallet_transactions/);
+  assert.deepEqual(calls[3]!.params, [99, 88, 77, 5, -12.35, 37.65, 'req-2', '后台扣减']);
+  assert.deepEqual(calls.map((call) => call.kind).slice(-2), ['commit', 'release']);
+});
+
+test('ApplicantBillingRepository.addWalletBalanceAdjustment rejects deductions below zero', async () => {
+  const calls: Array<{ kind: 'query' | 'execute' | 'begin' | 'commit' | 'rollback' | 'release'; sql?: string; params?: unknown[] }> = [];
+
+  const connection = {
+    beginTransaction: async () => {
+      calls.push({ kind: 'begin' });
+    },
+    commit: async () => {
+      calls.push({ kind: 'commit' });
+    },
+    rollback: async () => {
+      calls.push({ kind: 'rollback' });
+    },
+    release: () => {
+      calls.push({ kind: 'release' });
+    },
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ kind: 'execute', sql, params });
+      return [{ affectedRows: 1 }];
+    },
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ kind: 'query', sql, params });
+      if (sql.includes('FROM applicant_wallets') && sql.includes('WHERE airport_id = ?')) {
+        return [[{
+          id: 99,
+          applicant_account_id: 88,
+          application_id: 77,
+          airport_id: 5,
+          balance: 10,
+          auto_unlisted_at: null,
+          created_at: '2026-05-09 10:00:00',
+          updated_at: '2026-05-09 10:00:00',
+        }]];
+      }
+      return [[]];
+    },
+  };
+
+  const repository = new ApplicantBillingRepository({
+    getConnection: async () => connection,
+  } as never);
+
+  await assert.rejects(
+    () => repository.addWalletBalanceAdjustment({
+      airport_id: 5,
+      amount: -10.01,
+      description: '后台扣减',
+      reference_id: 'req-3',
+    }),
+    (error: unknown) => typeof error === 'object'
+      && error !== null
+      && 'code' in error
+      && error.code === 'AIRPORT_WALLET_BALANCE_INSUFFICIENT',
+  );
+
+  assert.deepEqual(calls.map((call) => call.kind), ['begin', 'query', 'rollback', 'release']);
+});
+
 test('ApplicantBillingRepository.syncListingStatusByBalance reconciles listing and auto-unlisted flags', async () => {
   const calls: Array<{ kind: 'query' | 'execute' | 'begin' | 'commit' | 'rollback' | 'release'; sql?: string; params?: unknown[] }> = [];
   const connection = {

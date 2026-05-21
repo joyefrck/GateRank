@@ -367,6 +367,7 @@ interface CardProps {
   details: CardDetail[];
   conclusion: string;
   icon?: React.ReactNode;
+  reportHref?: string;
   onOpen?: () => void;
   onWebsiteClick?: () => void;
 }
@@ -798,6 +799,7 @@ const ConclusionCard = ({
   details,
   conclusion,
   icon,
+  reportHref,
   onOpen,
   onWebsiteClick,
 }: CardProps) => {
@@ -830,11 +832,12 @@ const ConclusionCard = ({
   const primaryButtonText = isHomeCompact ? '查看报告' : '查看完整报告';
   const websiteButtonText = isHomeCompact ? '官网' : '打开官网';
   const primaryButtonClass = isHomeCompact
-    ? 'w-full min-h-12 px-4 py-2.5 rounded-lg bg-neutral-900 text-white text-sm md:text-[15px] leading-none font-black uppercase tracking-[0.08em] flex items-center justify-center gap-2 hover:bg-neutral-800 transition-colors whitespace-nowrap cursor-pointer'
+    ? 'w-full min-h-12 px-4 py-2.5 rounded-lg bg-neutral-900 text-white text-sm leading-none font-black uppercase tracking-[0.08em] flex items-center justify-center gap-2 hover:bg-neutral-800 transition-colors whitespace-nowrap cursor-pointer'
     : 'w-full min-h-11 px-4 py-3 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 hover:bg-neutral-800 transition-colors mt-auto relative z-10 cursor-pointer';
   const websiteButtonClass = isHomeCompact
-    ? 'w-full min-h-12 px-4 py-2.5 rounded-lg bg-neutral-900 text-white text-sm md:text-[15px] leading-none font-black uppercase tracking-[0.08em] flex items-center justify-center gap-2 hover:bg-neutral-800 transition-colors whitespace-nowrap cursor-pointer'
+    ? 'w-full min-h-12 px-4 py-2.5 rounded-lg border border-neutral-200 bg-white text-neutral-700 text-sm leading-none font-black uppercase tracking-[0.08em] flex items-center justify-center gap-2 hover:border-neutral-300 hover:bg-neutral-50 hover:text-neutral-900 transition-colors whitespace-nowrap cursor-pointer'
     : 'w-full min-h-11 mt-3 px-4 py-3 rounded-lg bg-neutral-900 text-white text-[11px] md:text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-2.5 shadow-[0_14px_32px_rgba(17,17,17,0.18)] hover:bg-neutral-800 transition-colors relative z-10 cursor-pointer';
+  const websiteButtonStyle = isHomeCompact ? undefined : primaryCtaTextStyle;
 
   return (
     <motion.div
@@ -909,15 +912,26 @@ const ConclusionCard = ({
       </div>
 
       <div className={`${isHomeCompact && website ? 'grid grid-cols-2 gap-2' : 'space-y-3'} mt-auto relative z-10`}>
-        <button
-          type="button"
-          className={primaryButtonClass}
-          style={primaryCtaTextStyle}
-          onClick={onOpen}
-        >
-          {primaryButtonText}
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
+        {isHomeCompact && reportHref ? (
+          <a
+            href={reportHref}
+            className={primaryButtonClass}
+            style={primaryCtaTextStyle}
+          >
+            {primaryButtonText}
+            <ChevronRight className="w-3.5 h-3.5" />
+          </a>
+        ) : (
+          <button
+            type="button"
+            className={primaryButtonClass}
+            style={primaryCtaTextStyle}
+            onClick={onOpen}
+          >
+            {primaryButtonText}
+            <ChevronRight className="w-3.5 h-3.5" />
+          </button>
+        )}
         {website && (
           <a
             href={website}
@@ -925,7 +939,7 @@ const ConclusionCard = ({
             rel="noreferrer"
             onClick={onWebsiteClick}
             className={websiteButtonClass}
-            style={primaryCtaTextStyle}
+            style={websiteButtonStyle}
           >
             {websiteButtonText}
             <ExternalLink className="w-3.5 h-3.5" />
@@ -2584,7 +2598,7 @@ function HomePage({ date }: { date?: string }) {
                           showStabilityTier={false}
                           details={item.details}
                           conclusion={item.conclusion}
-                          onOpen={() => navigate(item.report_url)}
+                          reportHref={item.report_url}
                           onWebsiteClick={createTrackedOutboundClickHandler({
                             airportId: item.airport_id,
                             pageKind: 'home',

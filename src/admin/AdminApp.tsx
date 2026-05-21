@@ -12,12 +12,16 @@ import {
   Plus,
   Search,
   ArrowLeft,
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   ChevronLeft,
   ChevronRight,
   MousePointerClick,
   Trash2,
   X,
   Eye,
+  FileDown,
 } from 'lucide-react';
 import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
@@ -26,10 +30,14 @@ import { manualTotalScoreInputValue } from './scoreInput';
 
 type AirportStatus = 'normal' | 'risk' | 'down';
 type AirportListedFilter = '' | 'listed' | 'unlisted';
+type AirportListSortBy = '' | 'score' | 'balance';
+type AirportListSortOrder = 'asc' | 'desc';
 type AirportListQueryState = {
   keyword: string;
   status: '' | AirportStatus;
   isListed: AirportListedFilter;
+  sortBy: AirportListSortBy;
+  sortOrder: AirportListSortOrder;
   page: number;
 };
 type StabilityTier = 'stable' | 'minor_fluctuation' | 'volatile';
@@ -38,6 +46,7 @@ type AirportApplicationPaymentStatus = 'unpaid' | 'paid';
 type AirportApplicationDetailTab = 'basic' | 'review';
 type AirportEditTab = 'basic' | 'review' | 'account';
 type AirportEditorTab = 'basic' | 'review' | 'account' | 'plan' | 'telegram' | 'nodes' | 'clients' | 'import';
+type BalanceAdjustmentMode = 'add' | 'deduct';
 type AirportStreamingSupport =
   | 'netflix'
   | 'chatgpt'
@@ -1045,6 +1054,8 @@ const AIRPORT_BILLING_PAGE_SIZE = 20;
 const APPLICATIONS_PAGE_SIZE = 20;
 const AIRPORT_STATUS_FILTERS: AirportStatus[] = ['normal', 'risk', 'down'];
 const AIRPORT_LISTED_FILTERS: Exclude<AirportListedFilter, ''>[] = ['listed', 'unlisted'];
+const AIRPORT_LIST_SORT_BY_VALUES: Exclude<AirportListSortBy, ''>[] = ['score', 'balance'];
+const AIRPORT_LIST_SORT_ORDER_VALUES: AirportListSortOrder[] = ['asc', 'desc'];
 const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = [
   'applicant_credentials',
   'applicant_password_reset',
@@ -1244,6 +1255,50 @@ function getApiBase(): string {
   return '';
 }
 
+async function downloadFile(path: string, fallbackFilename: string): Promise<void> {
+  const response = await fetch(`${getApiBase()}${path}`, { credentials: 'include' });
+  if (response.status === 401) {
+    localStorage.removeItem(TOKEN_KEY);
+    if (window.location.pathname !== '/admin/login') {
+      window.history.pushState({}, '', '/admin/login');
+      window.dispatchEvent(new PopStateEvent('popstate'));
+    }
+    throw new Error('登录已过期，请重新登录');
+  }
+
+  if (!response.ok) {
+    const data = (await safeJson(response)) as { message?: string } | null;
+    throw new Error(data?.message || `请求失败: ${response.status}`);
+  }
+
+  const blob = await response.blob();
+  const filename = parseDownloadFilename(response.headers.get('Content-Disposition')) || fallbackFilename;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
+function parseDownloadFilename(contentDisposition: string | null): string | null {
+  if (!contentDisposition) {
+    return null;
+  }
+  const encodedMatch = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i);
+  if (encodedMatch?.[1]) {
+    try {
+      return decodeURIComponent(encodedMatch[1]);
+    } catch {
+      return encodedMatch[1];
+    }
+  }
+  const plainMatch = contentDisposition.match(/filename="([^"]+)"/i);
+  return plainMatch?.[1] || null;
+}
+
 async function apiFetch(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers || {});
   if (!headers.has('Content-Type') && init.body) {
@@ -1284,6 +1339,14 @@ function isAirportListedFilter(value: string | null): value is Exclude<AirportLi
   return AIRPORT_LISTED_FILTERS.includes(value as Exclude<AirportListedFilter, ''>);
 }
 
+function isAirportListSortBy(value: string | null): value is Exclude<AirportListSortBy, ''> {
+  return AIRPORT_LIST_SORT_BY_VALUES.includes(value as Exclude<AirportListSortBy, ''>);
+}
+
+function isAirportListSortOrder(value: string | null): value is AirportListSortOrder {
+  return AIRPORT_LIST_SORT_ORDER_VALUES.includes(value as AirportListSortOrder);
+}
+
 function parseAirportListPage(value: string | null): number {
   const page = Number(value);
   return Number.isInteger(page) && page > 0 ? page : 1;
@@ -1293,11 +1356,15 @@ function readAirportListQuery(search = window.location.search): AirportListQuery
   const params = new URLSearchParams(search);
   const status = params.get('status');
   const isListed = params.get('is_listed');
+  const sortBy = params.get('sort_by');
+  const sortOrder = params.get('sort_order');
 
   return {
     keyword: (params.get('keyword') || '').trim(),
     status: isAirportStatusFilter(status) ? status : '',
     isListed: isAirportListedFilter(isListed) ? isListed : '',
+    sortBy: isAirportListSortBy(sortBy) ? sortBy : '',
+    sortOrder: isAirportListSortOrder(sortOrder) ? sortOrder : 'desc',
     page: parseAirportListPage(params.get('page')),
   };
 }
@@ -1308,6 +1375,10 @@ function buildAirportListSearch(query: AirportListQueryState): string {
   if (keyword) params.set('keyword', keyword);
   if (query.status) params.set('status', query.status);
   if (query.isListed) params.set('is_listed', query.isListed);
+  if (query.sortBy) {
+    params.set('sort_by', query.sortBy);
+    params.set('sort_order', query.sortOrder);
+  }
   if (query.page > 1) params.set('page', String(query.page));
   const search = params.toString();
   return search ? `?${search}` : '';
@@ -5779,12 +5850,15 @@ function AirportsPage({
   const [keyword, setKeyword] = useState(initialListQuery.keyword);
   const [status, setStatus] = useState<'' | AirportStatus>(initialListQuery.status);
   const [isListed, setIsListed] = useState<AirportListedFilter>(initialListQuery.isListed);
+  const [sortBy, setSortBy] = useState<AirportListSortBy>(initialListQuery.sortBy);
+  const [sortOrder, setSortOrder] = useState<AirportListSortOrder>(initialListQuery.sortOrder);
   const [editing, setEditing] = useState<AirportFormState | null>(null);
   const [airportEditTab, setAirportEditTab] = useState<AirportEditTab>('basic');
   const [slugEditing, setSlugEditing] = useState(false);
   const [manualTagInput, setManualTagInput] = useState('');
   const [formError, setFormError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [balanceAdjustmentMode, setBalanceAdjustmentMode] = useState<BalanceAdjustmentMode>('add');
   const [balanceAmount, setBalanceAmount] = useState('');
   const [balanceDescription, setBalanceDescription] = useState('');
   const [balanceSaving, setBalanceSaving] = useState(false);
@@ -5796,6 +5870,10 @@ function AirportsPage({
   const [nodeProfile, setNodeProfile] = useState<AirportNodeProfileState>(EMPTY_AIRPORT_NODE_PROFILE);
   const [billingAirport, setBillingAirport] = useState<Airport | null>(null);
   const [billingTab, setBillingTab] = useState<BillingDetailTab>('recharge');
+  const [reportExportAirport, setReportExportAirport] = useState<Airport | null>(null);
+  const [reportExportYear, setReportExportYear] = useState(() => getCurrentShanghaiYearMonth().year);
+  const [reportExportingMonth, setReportExportingMonth] = useState<number | null>(null);
+  const [reportExportError, setReportExportError] = useState('');
   const [rechargeRecords, setRechargeRecords] = useState<PaginatedResponse<RechargeOrderRecord>>({
     page: 1,
     page_size: AIRPORT_BILLING_PAGE_SIZE,
@@ -5821,6 +5899,10 @@ function AirportsPage({
       if (queryState.keyword) query.set('keyword', queryState.keyword);
       if (queryState.status) query.set('status', queryState.status);
       if (queryState.isListed) query.set('is_listed', queryState.isListed);
+      if (queryState.sortBy) {
+        query.set('sort_by', queryState.sortBy);
+        query.set('sort_order', queryState.sortOrder);
+      }
       const data = (await apiFetch(`/api/v1/admin/airports?${query.toString()}`)) as {
         page: number;
         page_size: number;
@@ -5841,6 +5923,8 @@ function AirportsPage({
     keyword: keyword.trim(),
     status,
     isListed,
+    sortBy,
+    sortOrder,
     page: targetPage,
   });
 
@@ -5848,6 +5932,8 @@ function AirportsPage({
     setKeyword(queryState.keyword);
     setStatus(queryState.status);
     setIsListed(queryState.isListed);
+    setSortBy(queryState.sortBy);
+    setSortOrder(queryState.sortOrder);
     setPage(queryState.page);
     void fetchList(queryState);
   };
@@ -5869,6 +5955,7 @@ function AirportsPage({
     setAirportEditTab('basic');
     setSlugEditing(false);
     setManualTagInput(editing ? formatTagInput(editing.manual_tags) : '');
+    setBalanceAdjustmentMode('add');
     setBalanceAmount('');
     setBalanceDescription('');
     setBalanceError('');
@@ -5985,11 +6072,16 @@ function AirportsPage({
     }
   };
 
-  const addWalletBalance = async () => {
+  const adjustWalletBalance = async () => {
     if (!editing?.id) return;
-    const amount = Number(balanceAmount);
+    const amount = Number(Number(balanceAmount).toFixed(2));
     if (!Number.isFinite(amount) || amount <= 0) {
-      setBalanceError('请输入大于 0 的加款金额');
+      setBalanceError('请输入大于 0 的调整金额');
+      return;
+    }
+    const signedAmount = balanceAdjustmentMode === 'deduct' ? -amount : amount;
+    if (signedAmount < 0 && amount > Number(editing.wallet_balance || 0)) {
+      setBalanceError('扣减金额不能超过当前余额');
       return;
     }
 
@@ -6000,7 +6092,7 @@ function AirportsPage({
       const data = (await apiFetch(`/api/v1/admin/airports/${editing.id}/wallet/adjustments`, {
         method: 'POST',
         body: JSON.stringify({
-          amount,
+          amount: signedAmount,
           description: balanceDescription.trim() || null,
         }),
       })) as { wallet: { id: number; balance: number } };
@@ -6011,10 +6103,10 @@ function AirportsPage({
       });
       setBalanceAmount('');
       setBalanceDescription('');
-      setBalanceMessage('余额已添加');
+      setBalanceMessage(balanceAdjustmentMode === 'deduct' ? '余额已扣减' : '余额已添加');
       await fetchList(currentListQuery(page));
     } catch (err) {
-      setBalanceError(err instanceof Error ? err.message : '添加余额失败');
+      setBalanceError(err instanceof Error ? err.message : '调整余额失败');
     } finally {
       setBalanceSaving(false);
     }
@@ -6073,6 +6165,40 @@ function AirportsPage({
   const closeBillingDetail = () => {
     setBillingAirport(null);
     setBillingError('');
+  };
+
+  const openMonthlyReportExport = (airport: Airport) => {
+    setReportExportAirport(airport);
+    setReportExportYear(getCurrentShanghaiYearMonth().year);
+    setReportExportingMonth(null);
+    setReportExportError('');
+  };
+
+  const closeMonthlyReportExport = () => {
+    if (reportExportingMonth) {
+      return;
+    }
+    setReportExportAirport(null);
+    setReportExportError('');
+  };
+
+  const exportMonthlyReport = async (month: number) => {
+    if (!reportExportAirport || !isCompletedReportMonth(reportExportYear, month)) {
+      return;
+    }
+    setReportExportingMonth(month);
+    setReportExportError('');
+    try {
+      await downloadFile(
+        `/api/v1/admin/airports/${reportExportAirport.id}/monthly-report-markdown?year=${reportExportYear}&month=${month}`,
+        `GateRank-${reportExportAirport.id}-${reportExportYear}-${String(month).padStart(2, '0')}-monthly-report.md`,
+      );
+      setReportExportAirport(null);
+    } catch (err) {
+      setReportExportError(err instanceof Error ? err.message : '导出失败');
+    } finally {
+      setReportExportingMonth(null);
+    }
   };
 
   const fetchBillingDetail = async (tab: BillingDetailTab, targetPage: number) => {
@@ -6138,10 +6264,30 @@ function AirportsPage({
     event?.preventDefault();
     navigateToListQuery(currentListQuery(1));
   };
+  const changeSort = (nextSortBy: Exclude<AirportListSortBy, ''>) => {
+    const nextOrder = sortBy === nextSortBy && sortOrder === 'desc' ? 'asc' : 'desc';
+    const shouldClearSort = sortBy === nextSortBy && sortOrder === 'asc';
+    navigateToListQuery({
+      ...currentListQuery(1),
+      sortBy: shouldClearSort ? '' : nextSortBy,
+      sortOrder: shouldClearSort ? 'desc' : nextOrder,
+      page: 1,
+    });
+  };
   const activeBillingData = billingTab === 'recharge' ? rechargeRecords : consumptionRecords;
   const billingTotalPages = Math.max(1, Math.ceil(activeBillingData.total / AIRPORT_BILLING_PAGE_SIZE));
   const billingFirstItemNo = activeBillingData.total === 0 ? 0 : (activeBillingData.page - 1) * AIRPORT_BILLING_PAGE_SIZE + 1;
   const billingLastItemNo = Math.min(activeBillingData.total, activeBillingData.page * AIRPORT_BILLING_PAGE_SIZE);
+  const renderSortIcon = (targetSortBy: Exclude<AirportListSortBy, ''>) => {
+    if (sortBy !== targetSortBy) {
+      return <ArrowUpDown size={14} className="text-neutral-400" />;
+    }
+    return sortOrder === 'asc'
+      ? <ArrowUp size={14} className="text-neutral-900" />
+      : <ArrowDown size={14} className="text-neutral-900" />;
+  };
+  const currentYearMonth = getCurrentShanghaiYearMonth();
+  const reportMonthOptions = Array.from({ length: 12 }, (_, index) => index + 1);
 
   return (
     <div className="space-y-4">
@@ -6189,18 +6335,38 @@ function AirportsPage({
       {error && <div className="text-sm text-rose-600">{error}</div>}
       {loading ? <div className="text-sm text-neutral-500">加载中...</div> : (
         <div className="overflow-x-auto overscroll-x-contain rounded border border-neutral-200">
-          <table className="w-full min-w-[1280px] table-fixed text-sm">
+          <table className="w-full min-w-[1400px] table-fixed text-sm">
             <thead className="bg-neutral-50">
               <tr>
                 <th className="w-[8%] text-left px-4 py-3">申请 ID</th>
                 <th className="w-[15%] text-left px-4 py-3">名称</th>
-                <th className="w-[12%] text-left px-4 py-3">账户余额</th>
+                <th className="w-[12%] text-left px-4 py-3" aria-sort={sortBy === 'balance' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1.5 rounded px-1 text-left font-semibold text-neutral-900 hover:bg-neutral-100"
+                    title="按账户余额排序"
+                    onClick={() => changeSort('balance')}
+                  >
+                    <span>账户余额</span>
+                    {renderSortIcon('balance')}
+                  </button>
+                </th>
                 <th className="w-[10%] text-left px-4 py-3">已绑定 bot</th>
                 <th className="w-[7%] text-left px-4 py-3">状态</th>
                 <th className="w-[8%] text-left px-4 py-3 whitespace-nowrap">是否上架</th>
-                <th className="w-[6%] text-left px-4 py-3">总分</th>
+                <th className="w-[6%] text-left px-4 py-3" aria-sort={sortBy === 'score' ? (sortOrder === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                  <button
+                    type="button"
+                    className="inline-flex h-8 items-center gap-1.5 rounded px-1 text-left font-semibold text-neutral-900 hover:bg-neutral-100"
+                    title="按总分排序"
+                    onClick={() => changeSort('score')}
+                  >
+                    <span>总分</span>
+                    {renderSortIcon('score')}
+                  </button>
+                </th>
                 <th className="w-[22%] text-left px-4 py-3">标签</th>
-                <th className="sticky right-0 z-[2] w-[168px] min-w-[168px] text-left px-4 py-3 bg-neutral-100 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
+                <th className="sticky right-0 z-[2] w-[260px] min-w-[260px] text-left px-4 py-3 bg-neutral-100 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.18)]">
                   操作
                 </th>
               </tr>
@@ -6240,10 +6406,18 @@ function AirportsPage({
                   <td className="px-4 py-3">
                     <TagBadgeGroup tags={it.tags || []} size="sm" />
                   </td>
-                  <td className="sticky right-0 z-[1] w-[168px] min-w-[168px] px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.14)]">
+                  <td className="sticky right-0 z-[1] w-[260px] min-w-[260px] px-4 py-3 bg-neutral-50 border-l border-neutral-200 shadow-[-8px_0_16px_-12px_rgba(0,0,0,0.14)]">
                     <div className="inline-flex items-center justify-start gap-3 whitespace-nowrap">
                       <button className="underline" onClick={() => onEditAirport(it.id, buildAirportListSearch(currentListQuery()))}>数据中心</button>
                       <button className="underline" onClick={() => onOpenAirport(it.id, buildAirportListSearch(currentListQuery()))}>机场分</button>
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 underline"
+                        onClick={() => openMonthlyReportExport(it)}
+                      >
+                        <FileDown size={14} />
+                        导出报告
+                      </button>
                     </div>
                   </td>
                 </tr>
@@ -6278,6 +6452,89 @@ function AirportsPage({
           </button>
         </div>
       </div>
+
+      {reportExportAirport && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm">
+          <div className="flex w-full max-w-xl flex-col overflow-hidden rounded-[24px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)]">
+            <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <h3 className="text-xl font-bold tracking-tight">导出月度报告 - {reportExportAirport.name}</h3>
+                <p className="text-sm text-neutral-500">请选择已经完成的月份，系统会生成 Markdown 源码文件。</p>
+              </div>
+              <button
+                type="button"
+                className="w-10 h-10 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-900 disabled:opacity-40"
+                onClick={closeMonthlyReportExport}
+                disabled={Boolean(reportExportingMonth)}
+                aria-label="关闭导出报告弹窗"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-5 px-6 py-5">
+              <div className="flex items-center justify-between gap-3">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded border border-neutral-200 px-3 py-2 text-sm disabled:opacity-40"
+                  disabled={reportExportYear <= 2020 || Boolean(reportExportingMonth)}
+                  onClick={() => {
+                    setReportExportYear((value) => Math.max(2020, value - 1));
+                    setReportExportError('');
+                  }}
+                >
+                  <ChevronLeft size={14} />
+                  上一年
+                </button>
+                <div className="text-lg font-semibold text-neutral-900">{reportExportYear}</div>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 rounded border border-neutral-200 px-3 py-2 text-sm disabled:opacity-40"
+                  disabled={reportExportYear >= currentYearMonth.year || Boolean(reportExportingMonth)}
+                  onClick={() => {
+                    setReportExportYear((value) => Math.min(currentYearMonth.year, value + 1));
+                    setReportExportError('');
+                  }}
+                >
+                  下一年
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3 sm:grid-cols-4">
+                {reportMonthOptions.map((month) => {
+                  const completed = isCompletedReportMonth(reportExportYear, month);
+                  const exporting = reportExportingMonth === month;
+                  return (
+                    <button
+                      key={month}
+                      type="button"
+                      className={`rounded-lg border px-3 py-3 text-sm font-medium transition ${
+                        completed
+                          ? 'border-neutral-300 bg-white text-neutral-900 hover:border-neutral-900'
+                          : 'cursor-not-allowed border-neutral-200 bg-neutral-100 text-neutral-400'
+                      }`}
+                      disabled={!completed || Boolean(reportExportingMonth)}
+                      onClick={() => void exportMonthlyReport(month)}
+                      title={completed ? `导出 ${reportExportYear}-${String(month).padStart(2, '0')} 报告` : '当前月及未来月份不可导出'}
+                    >
+                      {exporting ? '导出中...' : `${month} 月`}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {reportExportError && (
+                <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {reportExportError}
+                </div>
+              )}
+              <div className="text-xs leading-6 text-neutral-500">
+                当前北京时间为 {today()}。当前月及未来月份尚未完成，必须等月份结束后才能导出。
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {billingAirport && (
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm">
@@ -6782,16 +7039,37 @@ function AirportsPage({
                 <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">余额管理</div>
-                    <p className="mt-1 text-sm text-neutral-500">为该机场绑定的申请人钱包添加余额。</p>
+                    <p className="mt-1 text-sm text-neutral-500">为该机场绑定的申请人钱包加余额或扣余额。</p>
                   </div>
                   <ReadField label="当前用户余额" value={formatMoneyOrDash(editing.wallet_balance)} />
                   {!editing.wallet_id && (
                     <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                      首次加款会自动为该机场创建内部钱包。
+                      当前还没有内部钱包；添加余额时会自动创建，扣减余额会被阻止。
                     </div>
                   )}
                   <div className="space-y-4">
-                    <FormField label="本次加款金额" hint="只支持增加余额，不能直接覆盖余额。">
+                    <FormField label="调整方式">
+                      <div className="inline-flex rounded-2xl border border-neutral-300 bg-white p-1">
+                        {[
+                          { key: 'add' as const, label: '加余额' },
+                          { key: 'deduct' as const, label: '扣余额' },
+                        ].map((item) => (
+                          <button
+                            key={item.key}
+                            type="button"
+                            className={`rounded-xl px-4 py-2 text-sm font-medium transition ${balanceAdjustmentMode === item.key ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:text-neutral-900'}`}
+                            onClick={() => {
+                              setBalanceAdjustmentMode(item.key);
+                              setBalanceError('');
+                              setBalanceMessage('');
+                            }}
+                          >
+                            {item.label}
+                          </button>
+                        ))}
+                      </div>
+                    </FormField>
+                    <FormField label="本次调整金额" hint="只支持按差额加减余额，不能直接覆盖余额。">
                       <input
                         className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
                         type="number"
@@ -6802,7 +7080,7 @@ function AirportsPage({
                         onChange={(e) => setBalanceAmount(e.target.value)}
                       />
                     </FormField>
-                    <FormField label="备注" hint="可选，不填写时系统会自动记录为后台加款。">
+                    <FormField label="备注" hint={`可选，不填写时系统会自动记录为${balanceAdjustmentMode === 'deduct' ? '后台扣减' : '后台加款'}。`}>
                       <input
                         className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
                         placeholder="例如：线下补款"
@@ -6816,9 +7094,9 @@ function AirportsPage({
                       type="button"
                       className="rounded-2xl bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
                       disabled={balanceSaving}
-                      onClick={() => void addWalletBalance()}
+                      onClick={() => void adjustWalletBalance()}
                     >
-                      {balanceSaving ? '添加中...' : '添加余额'}
+                      {balanceSaving ? '处理中...' : balanceAdjustmentMode === 'deduct' ? '扣减余额' : '添加余额'}
                     </button>
                   </div>
                   <div className="border-t border-neutral-200 pt-4">
@@ -6893,6 +7171,7 @@ function AirportEditorPage({
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [balanceAdjustmentMode, setBalanceAdjustmentMode] = useState<BalanceAdjustmentMode>('add');
   const [balanceAmount, setBalanceAmount] = useState('');
   const [balanceDescription, setBalanceDescription] = useState('');
   const [balanceSaving, setBalanceSaving] = useState(false);
@@ -6907,6 +7186,7 @@ function AirportEditorPage({
     let cancelled = false;
     setError('');
     setMessage('');
+    setBalanceAdjustmentMode('add');
     setBalanceAmount('');
     setBalanceDescription('');
     setBalanceError('');
@@ -7087,11 +7367,16 @@ function AirportEditorPage({
     }
   };
 
-  const addWalletBalance = async () => {
+  const adjustWalletBalance = async () => {
     if (!editing.id) return;
-    const amount = Number(balanceAmount);
+    const amount = Number(Number(balanceAmount).toFixed(2));
     if (!Number.isFinite(amount) || amount <= 0) {
-      setBalanceError('请输入大于 0 的加款金额');
+      setBalanceError('请输入大于 0 的调整金额');
+      return;
+    }
+    const signedAmount = balanceAdjustmentMode === 'deduct' ? -amount : amount;
+    if (signedAmount < 0 && amount > Number(editing.wallet_balance || 0)) {
+      setBalanceError('扣减金额不能超过当前余额');
       return;
     }
 
@@ -7102,7 +7387,7 @@ function AirportEditorPage({
       const data = (await apiFetch(`/api/v1/admin/airports/${editing.id}/wallet/adjustments`, {
         method: 'POST',
         body: JSON.stringify({
-          amount,
+          amount: signedAmount,
           description: balanceDescription.trim() || null,
         }),
       })) as { wallet: { id: number; balance: number } };
@@ -7113,9 +7398,9 @@ function AirportEditorPage({
       });
       setBalanceAmount('');
       setBalanceDescription('');
-      setBalanceMessage('余额已添加');
+      setBalanceMessage(balanceAdjustmentMode === 'deduct' ? '余额已扣减' : '余额已添加');
     } catch (err) {
-      setBalanceError(err instanceof Error ? err.message : '添加余额失败');
+      setBalanceError(err instanceof Error ? err.message : '调整余额失败');
     } finally {
       setBalanceSaving(false);
     }
@@ -7389,10 +7674,31 @@ function AirportEditorPage({
                 <ReadField label="当前用户余额" value={formatMoneyOrDash(editing.wallet_balance)} />
                 {!editing.wallet_id && (
                   <div className="rounded border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-                    首次加款会自动为该机场创建内部钱包。
+                    当前还没有内部钱包；添加余额时会自动创建，扣减余额会被阻止。
                   </div>
                 )}
-                <FormField label="本次加款金额" hint="只支持增加余额，不能直接覆盖余额。">
+                <FormField label="调整方式">
+                  <div className="inline-flex rounded border border-neutral-300 bg-white p-1">
+                    {[
+                      { key: 'add' as const, label: '加余额' },
+                      { key: 'deduct' as const, label: '扣余额' },
+                    ].map((item) => (
+                      <button
+                        key={item.key}
+                        type="button"
+                        className={`rounded px-4 py-2 text-sm font-medium transition ${balanceAdjustmentMode === item.key ? 'bg-neutral-900 text-white' : 'text-neutral-600 hover:text-neutral-900'}`}
+                        onClick={() => {
+                          setBalanceAdjustmentMode(item.key);
+                          setBalanceError('');
+                          setBalanceMessage('');
+                        }}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </FormField>
+                <FormField label="本次调整金额" hint="只支持按差额加减余额，不能直接覆盖余额。">
                   <input
                     className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
                     type="number"
@@ -7402,7 +7708,7 @@ function AirportEditorPage({
                     onChange={(e) => setBalanceAmount(e.target.value)}
                   />
                 </FormField>
-                <FormField label="备注" hint="可选，不填写时系统会自动记录为后台加款。">
+                <FormField label="备注" hint={`可选，不填写时系统会自动记录为${balanceAdjustmentMode === 'deduct' ? '后台扣减' : '后台加款'}。`}>
                   <input
                     className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
                     value={balanceDescription}
@@ -7415,9 +7721,9 @@ function AirportEditorPage({
                   type="button"
                   className="rounded bg-neutral-900 px-4 py-2.5 text-sm font-medium text-white disabled:opacity-50"
                   disabled={balanceSaving}
-                  onClick={() => void addWalletBalance()}
+                  onClick={() => void adjustWalletBalance()}
                 >
-                  {balanceSaving ? '添加中...' : '添加余额'}
+                  {balanceSaving ? '处理中...' : balanceAdjustmentMode === 'deduct' ? '扣减余额' : '添加余额'}
                 </button>
               </section>
               <section className="space-y-4 rounded border border-neutral-200 bg-neutral-50 p-4">
@@ -9402,6 +9708,16 @@ function today(): string {
     month: '2-digit',
     day: '2-digit',
   }).format(new Date());
+}
+
+function getCurrentShanghaiYearMonth(): { year: number; month: number } {
+  const [year, month] = today().split('-').map((part) => Number(part));
+  return { year, month };
+}
+
+function isCompletedReportMonth(year: number, month: number): boolean {
+  const current = getCurrentShanghaiYearMonth();
+  return year < current.year || (year === current.year && month < current.month);
 }
 
 function shiftDate(dateString: string, offsetDays: number): string {

@@ -31,6 +31,9 @@ const AIRPORT_PAYMENT_METHOD_VALUES: AirportPaymentMethod[] = [
   'unionpay',
 ];
 
+export type AirportListSortBy = 'score' | 'balance';
+export type AirportListSortOrder = 'asc' | 'desc';
+
 interface AirportRow extends RowDataPacket {
   id: number;
   application_id: number | null;
@@ -269,7 +272,16 @@ export class AirportRepository {
   }
 
   async listByQuery(
-    query: { keyword?: string; status?: AirportStatus; isListed?: boolean; page?: number; pageSize?: number },
+    query: {
+      keyword?: string;
+      status?: AirportStatus;
+      isListed?: boolean;
+      page?: number;
+      pageSize?: number;
+      sortBy?: AirportListSortBy;
+      sortOrder?: AirportListSortOrder;
+      scoreDate?: string | null;
+    },
   ): Promise<{ items: Airport[]; total: number }> {
     const page = Math.max(1, query.page || 1);
     const pageSize = Math.min(100, Math.max(1, query.pageSize || 20));
@@ -308,6 +320,23 @@ export class AirportRepository {
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const scoreJoin = query.sortBy === 'score' && query.scoreDate
+      ? `LEFT JOIN airport_scores_daily AS sort_score
+           ON sort_score.airport_id = airports.id
+          AND sort_score.date = ?`
+      : '';
+    const walletJoin = query.sortBy === 'balance'
+      ? `LEFT JOIN (
+           SELECT airport_id, MAX(balance) AS wallet_balance
+             FROM applicant_wallets
+            WHERE airport_id IS NOT NULL
+            GROUP BY airport_id
+         ) AS sort_wallet
+           ON sort_wallet.airport_id = airports.id`
+      : '';
+    const joinSql = [scoreJoin, walletJoin].filter(Boolean).join('\n');
+    const joinArgs = query.sortBy === 'score' && query.scoreDate ? [query.scoreDate] : [];
+    const orderSql = buildAirportListOrderSql(query.sortBy, query.sortOrder, Boolean(query.scoreDate));
     const [totalRows] = await this.pool.query<RowDataPacket[]>(
       `SELECT COUNT(*) AS total FROM airports ${whereSql}`,
       args,
@@ -382,10 +411,11 @@ export class AirportRepository {
          ) AS paid_application_fee,
          created_at
          FROM airports
+         ${joinSql}
          ${whereSql}
-        ORDER BY id DESC
+        ${orderSql}
         LIMIT ? OFFSET ?`,
-      [...args, pageSize, offset],
+      [...joinArgs, ...args, pageSize, offset],
     );
 
     return {
@@ -1131,6 +1161,26 @@ function parseApplicationIdKeyword(keyword: string): number | null {
   if (!match) return null;
   const value = Number(match[1]);
   return Number.isSafeInteger(value) && value > 0 ? value : null;
+}
+
+function buildAirportListOrderSql(
+  sortBy: AirportListSortBy | undefined,
+  sortOrder: AirportListSortOrder | undefined,
+  hasScoreDate: boolean,
+): string {
+  const direction = sortOrder === 'asc' ? 'ASC' : 'DESC';
+  if (sortBy === 'score' && hasScoreDate) {
+    const scoreExpression = `COALESCE(
+      CAST(JSON_UNQUOTE(JSON_EXTRACT(sort_score.details_json, '$.manual_total_score')) AS DECIMAL(10,2)),
+      CAST(JSON_UNQUOTE(JSON_EXTRACT(sort_score.details_json, '$.total_score')) AS DECIMAL(10,2)),
+      sort_score.final_score
+    )`;
+    return `ORDER BY ${scoreExpression} IS NULL ASC, ${scoreExpression} ${direction}, airports.id DESC`;
+  }
+  if (sortBy === 'balance') {
+    return `ORDER BY sort_wallet.wallet_balance IS NULL ASC, sort_wallet.wallet_balance ${direction}, airports.id DESC`;
+  }
+  return 'ORDER BY airports.id DESC';
 }
 
 function toDateString(value: string): string {

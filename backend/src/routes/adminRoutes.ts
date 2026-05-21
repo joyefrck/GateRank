@@ -18,6 +18,7 @@ import type { MarketingSettingsInput } from '../services/marketingSettingsServic
 import { SmtpSendError } from '../services/mailService';
 import type { PaymentGatewaySettingsInput } from '../services/paymentGatewaySettingsService';
 import type { SmtpSettingsInput, SmtpTemplateKey } from '../services/smtpSettingsService';
+import { buildMonthlyMarkdownReport } from '../services/monthlyMarkdownReportService';
 import {
   DEFAULT_USER_TELEGRAM_API_BASE,
   type UserTelegramBotTemplateKey,
@@ -30,6 +31,7 @@ import type {
   WalletTransactionType,
   WalletTransactionView,
 } from '../repositories/applicantBillingRepository';
+import type { AirportListSortBy, AirportListSortOrder } from '../repositories/airportRepository';
 import type { AccessTokenScope } from '../utils/accessToken';
 import { createRandomPassword, hashPassword } from '../utils/password';
 import type {
@@ -51,6 +53,7 @@ import type {
   SchedulerRunStatus,
   SchedulerTaskKey,
   StabilityTier,
+  ReportView,
   SubscriptionNodeSnapshot,
   SubscriptionNodeSnapshotInput,
   SubscriptionNodeSnapshotNode,
@@ -78,6 +81,9 @@ interface AdminDeps {
       isListed?: boolean;
       page?: number;
       pageSize?: number;
+      sortBy?: AirportListSortBy;
+      sortOrder?: AirportListSortOrder;
+      scoreDate?: string | null;
     }): Promise<{ items: unknown[]; total: number }>;
     getById(id: number): Promise<unknown | null>;
     create(input: {
@@ -280,7 +286,7 @@ interface AdminDeps {
   };
   publicViewService: {
     getHomePageView(date: string): Promise<unknown>;
-    getReportView(airportId: number, date: string): Promise<unknown | null>;
+    getReportView(airportId: number, date: string): Promise<ReportView | null>;
   };
   publicPageCache?: {
     clear(): void;
@@ -1272,8 +1278,22 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const keyword = optionalString(req.query.keyword);
       const status = req.query.status ? toStatus(req.query.status) : undefined;
       const isListed = req.query.is_listed ? toAirportListedFilter(req.query.is_listed) : undefined;
-      const result = await deps.airportRepository.listByQuery({ page, pageSize, keyword, status, isListed });
+      const sortBy = req.query.sort_by ? parseAirportListSortBy(req.query.sort_by) : undefined;
+      const sortOrder = sortBy ? parseSortOrder(req.query.sort_order) : undefined;
       const scoreRepository = deps.scoreRepository;
+      const scoreDate = scoreRepository.getLatestAvailableDate && scoreRepository.getPublicDisplayScoresByDate
+        ? await scoreRepository.getLatestAvailableDate(getDateInTimezone())
+        : null;
+      const result = await deps.airportRepository.listByQuery({
+        page,
+        pageSize,
+        keyword,
+        status,
+        isListed,
+        sortBy,
+        sortOrder,
+        scoreDate,
+      });
       const airports = result.items as Array<{ id?: number } & Record<string, unknown>>;
       let scoreMap = new Map<number, number>();
       let walletMap = new Map<number, { id: number; balance: number }>();
@@ -1281,10 +1301,9 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         .map((item) => Number(item.id))
         .filter((id) => Number.isInteger(id) && id > 0);
 
-      if (scoreRepository.getLatestAvailableDate && scoreRepository.getPublicDisplayScoresByDate) {
-        const latestDate = await scoreRepository.getLatestAvailableDate(getDateInTimezone());
-        if (latestDate && airportIds.length > 0) {
-          scoreMap = await scoreRepository.getPublicDisplayScoresByDate(airportIds, latestDate);
+      if (scoreRepository.getPublicDisplayScoresByDate) {
+        if (scoreDate && airportIds.length > 0) {
+          scoreMap = await scoreRepository.getPublicDisplayScoresByDate(airportIds, scoreDate);
         }
       }
       if (deps.applicantBillingRepository?.listWalletsByAirportIds && airportIds.length > 0) {
@@ -1570,8 +1589,8 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       }
 
       const payload = (req.body ?? {}) as Record<string, unknown>;
-      const amount = parsePositiveMoney(payload.amount, 'amount');
-      const description = optionalString(payload.description) || `后台加款 ¥${amount.toFixed(2)}`;
+      const amount = parseNonZeroMoney(payload.amount, 'amount');
+      const description = optionalString(payload.description) || formatAdminWalletAdjustmentDescription(amount);
       const wallet = await billingRepository.addWalletBalanceAdjustment({
         airport_id: airportId,
         amount,
@@ -1579,7 +1598,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         reference_id: req.requestId,
       });
       if (!wallet) {
-        throw new HttpError(409, 'AIRPORT_WALLET_NOT_FOUND', '该机场未绑定申请人钱包，不能添加余额');
+        throw new HttpError(409, 'AIRPORT_WALLET_NOT_FOUND', '该机场未绑定申请人钱包，不能调整余额');
       }
 
       await deps.auditRepository.log('adjust_airport_wallet_balance', actorFromReq(req), req.requestId, {
@@ -1589,6 +1608,10 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       });
       res.json({ airport_id: airportId, wallet });
     } catch (error) {
+      if (isCodedError(error, 'AIRPORT_WALLET_BALANCE_INSUFFICIENT')) {
+        next(new HttpError(409, 'AIRPORT_WALLET_BALANCE_INSUFFICIENT', '扣减金额不能超过当前余额'));
+        return;
+      }
       next(error);
     }
   });
@@ -2093,13 +2116,46 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       }
 
       res.json({
-        ...(report as Record<string, unknown>),
+        ...report,
         debug: {
           airport_id: airportId,
           date,
           preview_mode: 'admin',
         },
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/airports/:id/monthly-report-markdown', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const { year, month } = parseMonthlyReportPeriod(req.query.year, req.query.month);
+      if (!isCompletedReportMonth(year, month, getDateInTimezone())) {
+        throw new HttpError(400, 'BAD_REQUEST', '只能导出已经完成的月份报告');
+      }
+
+      const requestedDate = getMonthEndDate(year, month);
+      const report = await deps.publicViewService.getReportView(airportId, requestedDate);
+      if (!report || !isSameReportMonth(report.date, year, month)) {
+        throw new HttpError(404, 'REPORT_NOT_FOUND', `${year}-${pad2(month)} 暂无可导出的月度报告数据`);
+      }
+
+      const markdown = buildMonthlyMarkdownReport({
+        report,
+        year,
+        month,
+        requestedDate,
+      });
+      const filename = buildMonthlyReportFilename(report.airport.name, year, month);
+      const fallbackFilename = `GateRank-${airportId}-${year}-${pad2(month)}-monthly-report.md`;
+      res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${fallbackFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+      );
+      res.send(markdown);
     } catch (error) {
       next(error);
     }
@@ -2375,6 +2431,42 @@ function parseDate(value: unknown): string {
   return date;
 }
 
+function parseMonthlyReportPeriod(yearValue: unknown, monthValue: unknown): { year: number; month: number } {
+  const year = Number(yearValue);
+  const month = Number(monthValue);
+  if (!Number.isInteger(year) || year < 2020 || year > 2100) {
+    throw new HttpError(400, 'BAD_REQUEST', 'year must be an integer between 2020 and 2100');
+  }
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    throw new HttpError(400, 'BAD_REQUEST', 'month must be an integer between 1 and 12');
+  }
+  return { year, month };
+}
+
+function isCompletedReportMonth(year: number, month: number, currentDate: string): boolean {
+  const currentYear = Number(currentDate.slice(0, 4));
+  const currentMonth = Number(currentDate.slice(5, 7));
+  return year < currentYear || (year === currentYear && month < currentMonth);
+}
+
+function getMonthEndDate(year: number, month: number): string {
+  const endDate = new Date(Date.UTC(year, month, 0));
+  return endDate.toISOString().slice(0, 10);
+}
+
+function isSameReportMonth(date: string, year: number, month: number): boolean {
+  return date.slice(0, 7) === `${year}-${pad2(month)}`;
+}
+
+function buildMonthlyReportFilename(airportName: string, year: number, month: number): string {
+  const safeAirportName = airportName.trim().replace(/[\\/:*?"<>|\r\n]+/g, '-').replace(/\s+/g, '-');
+  return `GateRank-${safeAirportName || 'airport'}-${year}-${pad2(month)}-monthly-report.md`;
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
+
 function toAirportId(value: unknown): number {
   const num = Number(value);
   if (!Number.isInteger(num) || num <= 0) {
@@ -2422,6 +2514,24 @@ function parsePositiveMoney(value: unknown, fieldName: string): number {
     throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be positive number`);
   }
   return Math.round(num * 100) / 100;
+}
+
+function parseNonZeroMoney(value: unknown, fieldName: string): number {
+  const amount = Number(mustNumber(value, fieldName).toFixed(2));
+  if (amount === 0) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be non-zero number`);
+  }
+  return amount;
+}
+
+function formatAdminWalletAdjustmentDescription(amount: number): string {
+  return amount > 0
+    ? `后台加款 ¥${amount.toFixed(2)}`
+    : `后台扣减 ¥${Math.abs(amount).toFixed(2)}`;
+}
+
+function isCodedError(error: unknown, code: string): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && String(error.code) === code;
 }
 
 function parseManualTotalScore(value: unknown): number | null {
@@ -2510,6 +2620,14 @@ function parseMarketingAirportSortBy(
     return normalized;
   }
   throw new HttpError(400, 'BAD_REQUEST', 'sort_by must be ctr, clicks, impressions, or last_clicked_at');
+}
+
+function parseAirportListSortBy(value: unknown): AirportListSortBy {
+  const normalized = String(value || '').trim().toLowerCase();
+  if (normalized === 'score' || normalized === 'balance') {
+    return normalized;
+  }
+  throw new HttpError(400, 'BAD_REQUEST', 'sort_by must be score or balance');
 }
 
 function parseSortOrder(value: unknown): 'asc' | 'desc' {

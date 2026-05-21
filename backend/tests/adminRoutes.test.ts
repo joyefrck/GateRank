@@ -6,7 +6,7 @@ import { errorHandler, HttpError } from '../src/middleware/errorHandler';
 import { createAdminRoutes } from '../src/routes/adminRoutes';
 import { SmtpSendError } from '../src/services/mailService';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
-import type { PerformanceRunInput, ProbeSampleInput } from '../src/types/domain';
+import type { PerformanceRunInput, ProbeSampleInput, ReportView } from '../src/types/domain';
 
 test('POST /performance-runs stores run diagnostics and performance samples', async () => {
   const insertedSamples: ProbeSampleInput[] = [];
@@ -468,6 +468,9 @@ test('GET /airports returns list items with latest available total_score', async
     keyword?: string;
     status?: string;
     isListed?: boolean;
+    sortBy?: 'score' | 'balance';
+    sortOrder?: 'asc' | 'desc';
+    scoreDate?: string | null;
   }> = [];
   const app = express();
   app.use(express.json());
@@ -572,6 +575,7 @@ test('GET /airports returns list items with latest available total_score', async
     };
     assert.equal(capturedQueries[0]?.pageSize, 50);
     assert.equal(data.page_size, 50);
+    assert.equal(capturedQueries[0]?.scoreDate, '2026-03-30');
     assert.equal(data.items.length, 2);
     assert.equal(data.items[0]?.total_score, 88.6);
     assert.equal(data.items[1]?.total_score, null);
@@ -603,6 +607,17 @@ test('GET /airports returns list items with latest available total_score', async
     const unlistedResponse = await fetch(`http://127.0.0.1:${port}/airports?is_listed=unlisted`);
     assert.equal(unlistedResponse.status, 200);
     assert.equal(capturedQueries[3]?.isListed, false);
+
+    const scoreSortResponse = await fetch(`http://127.0.0.1:${port}/airports?sort_by=score&sort_order=asc`);
+    assert.equal(scoreSortResponse.status, 200);
+    assert.equal(capturedQueries[4]?.sortBy, 'score');
+    assert.equal(capturedQueries[4]?.sortOrder, 'asc');
+    assert.equal(capturedQueries[4]?.scoreDate, '2026-03-30');
+
+    const balanceSortResponse = await fetch(`http://127.0.0.1:${port}/airports?sort_by=balance&sort_order=desc`);
+    assert.equal(balanceSortResponse.status, 200);
+    assert.equal(capturedQueries[5]?.sortBy, 'balance');
+    assert.equal(capturedQueries[5]?.sortOrder, 'desc');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -654,7 +669,7 @@ test('GET /airports/:id returns wallet summary for account management', async ()
   }
 });
 
-test('POST /airports/:id/wallet/adjustments adds wallet balance and audits adjustment', async () => {
+test('POST /airports/:id/wallet/adjustments adjusts wallet balance and audits adjustment', async () => {
   const adjustments: Array<{ airport_id: number; amount: number; description: string; reference_id: string }> = [];
   const auditLogs: Array<{ action: string; actor: string; payload: unknown }> = [];
   const app = express();
@@ -672,7 +687,7 @@ test('POST /airports/:id/wallet/adjustments adds wallet balance and audits adjus
             applicant_account_id: 22,
             application_id: 33,
             airport_id: input.airport_id,
-            balance: 150.13,
+            balance: input.amount > 0 ? 150.13 : 87.65,
             auto_unlisted_at: null,
             created_at: '2026-05-04T10:00:00+08:00',
             updated_at: '2026-05-04T10:01:00+08:00',
@@ -729,6 +744,29 @@ test('POST /airports/:id/wallet/adjustments adds wallet balance and audits adjus
     const data = (await response.json()) as { wallet: { id: number; balance: number } };
     assert.equal(data.wallet.id, 11);
     assert.equal(data.wallet.balance, 150.13);
+
+    const deductResponse = await fetch(`http://127.0.0.1:${port}/airports/1/wallet/adjustments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({ amount: -12.345 }),
+    });
+
+    assert.equal(deductResponse.status, 200);
+    assert.equal(adjustments.length, 2);
+    assert.equal(adjustments[1]?.airport_id, 1);
+    assert.equal(adjustments[1]?.amount, -12.35);
+    assert.equal(adjustments[1]?.description, '后台扣减 ¥12.35');
+    assert.equal(auditLogs.length, 2);
+    assert.equal(auditLogs[1]?.action, 'adjust_airport_wallet_balance');
+    assert.deepEqual(auditLogs[1]?.payload, {
+      airport_id: 1,
+      amount: -12.35,
+      description: '后台扣减 ¥12.35',
+    });
+
+    const deductData = (await deductResponse.json()) as { wallet: { id: number; balance: number } };
+    assert.equal(deductData.wallet.id, 11);
+    assert.equal(deductData.wallet.balance, 87.65);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -777,7 +815,7 @@ test('POST /airports/:id/wallet/adjustments validates amount and missing wallet'
   const server = app.listen(0);
   try {
     const port = (server.address() as AddressInfo).port;
-    for (const amount of [0, -1, 'abc']) {
+    for (const amount of [0, 'abc']) {
       const response = await fetch(`http://127.0.0.1:${port}/airports/1/wallet/adjustments`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -796,6 +834,63 @@ test('POST /airports/:id/wallet/adjustments validates amount and missing wallet'
     const data = (await missingWalletResponse.json()) as { code: string };
     assert.equal(data.code, 'AIRPORT_WALLET_NOT_FOUND');
     assert.equal(adjustmentCalls, 1);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airports/:id/wallet/adjustments rejects excessive deductions', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      applicantBillingRepository: {
+        linkAirportByApplicationId: async () => undefined,
+        addWalletBalanceAdjustment: async () => {
+          const error = new Error('扣减金额不能超过当前余额') as Error & { code?: string };
+          error.code = 'AIRPORT_WALLET_BALANCE_INSUFFICIENT';
+          throw error;
+        },
+      },
+      probeSampleRepository: {
+        insertProbeSample: async () => 1,
+        insertPacketLossSample: async () => 1,
+        listProbeSamples: async () => [],
+        listLatestProbeSamples: async () => [],
+      },
+      performanceRunRepository: {
+        insert: async () => 1,
+        getLatestByAirportAndDate: async () => null,
+        getLatestByAirportBeforeDate: async () => null,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/wallet/adjustments`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: -10 }),
+    });
+    assert.equal(response.status, 409);
+    const data = (await response.json()) as { code: string; message: string };
+    assert.equal(data.code, 'AIRPORT_WALLET_BALANCE_INSUFFICIENT');
+    assert.equal(data.message, '扣减金额不能超过当前余额');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -5697,6 +5792,290 @@ test('PATCH /airports rejects unsupported streaming support values', async () =>
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });
+
+test('GET /airports/:id/monthly-report-markdown exports completed month markdown', async () => {
+  const period = getPreviousShanghaiMonthPeriod();
+  const requestedDates: string[] = [];
+  const app = createMonthlyReportMarkdownApp(async (_airportId, date) => {
+    requestedDates.push(date);
+    return createMonthlyReportView({ date: period.endDate });
+  });
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(
+      `http://127.0.0.1:${port}/airports/1/monthly-report-markdown?year=${period.year}&month=${period.month}`,
+    );
+    const body = await response.text();
+
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') || '', /text\/markdown/);
+    assert.match(response.headers.get('content-disposition') || '', /\.md/);
+    assert.deepEqual(requestedDates, [period.endDate]);
+    assert.match(body, new RegExp(`# GateRank 飞猫云 ${period.year}-${pad2(period.month)} 月度表现报告`));
+    assert.match(body, /## 一、执行摘要/);
+    assert.match(body, /综合分为 \*\*88\.50\*\*/);
+    assert.match(body, /稳定性 S/);
+    assert.match(body, /性能 P/);
+    assert.match(body, /风险面表现较好/);
+    assert.match(body, /产品能力与用户适配/);
+    assert.match(body, /GateRank 评分口径/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/monthly-report-markdown rejects current month', async () => {
+  const current = getCurrentShanghaiYearMonth();
+  let called = false;
+  const app = createMonthlyReportMarkdownApp(async () => {
+    called = true;
+    return null;
+  });
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(
+      `http://127.0.0.1:${port}/airports/1/monthly-report-markdown?year=${current.year}&month=${current.month}`,
+    );
+    const data = (await response.json()) as { code: string; message: string };
+
+    assert.equal(response.status, 400);
+    assert.equal(data.code, 'BAD_REQUEST');
+    assert.match(data.message, /已经完成的月份/);
+    assert.equal(called, false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/monthly-report-markdown rejects future month', async () => {
+  const future = getNextShanghaiMonthPeriod();
+  let called = false;
+  const app = createMonthlyReportMarkdownApp(async () => {
+    called = true;
+    return null;
+  });
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(
+      `http://127.0.0.1:${port}/airports/1/monthly-report-markdown?year=${future.year}&month=${future.month}`,
+    );
+    const data = (await response.json()) as { code: string; message: string };
+
+    assert.equal(response.status, 400);
+    assert.equal(data.code, 'BAD_REQUEST');
+    assert.match(data.message, /已经完成的月份/);
+    assert.equal(called, false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/monthly-report-markdown rejects fallback outside selected month', async () => {
+  const period = getPreviousShanghaiMonthPeriod();
+  const fallbackDate = getPreviousMonthEndDate(period.year, period.month);
+  const app = createMonthlyReportMarkdownApp(async () => createMonthlyReportView({ date: fallbackDate }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(
+      `http://127.0.0.1:${port}/airports/1/monthly-report-markdown?year=${period.year}&month=${period.month}`,
+    );
+    const data = (await response.json()) as { code: string; message: string };
+
+    assert.equal(response.status, 404);
+    assert.equal(data.code, 'REPORT_NOT_FOUND');
+    assert.match(data.message, /暂无可导出的月度报告数据/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+function createMonthlyReportMarkdownApp(
+  getReportView: (airportId: number, date: string) => Promise<ReportView | null>,
+) {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: {
+        ...stubPublicViewService(),
+        getReportView,
+      },
+    }),
+  );
+  app.use(errorHandler);
+  return app;
+}
+
+function createMonthlyReportView(input: { date: string }): ReportView {
+  return {
+    requested_date: input.date,
+    date: input.date,
+    resolved_from_fallback: false,
+    fallback_notice: null,
+    airport: {
+      id: 1,
+      slug: 'feimao-cloud',
+      name: '飞猫云',
+      website: 'https://feimao.example.com',
+      status: 'normal',
+      tags: ['稳定', '高性能'],
+    },
+    summary_card: {
+      type: 'stable',
+      name: '飞猫云',
+      tags: ['稳定', '高性能'],
+      score: 88.5,
+      score_hidden: false,
+      score_hidden_reason: null,
+      stability_tier: 'stable',
+      details: [
+        { label: '可用率', value: '99.95%' },
+        { label: '近期评分', value: '基本稳定' },
+      ],
+      conclusion: '近 30 天表现稳定，适合对外强调低波动和高可用优势。',
+    },
+    ranking: {
+      today_pick_rank: 2,
+      most_stable_rank: 1,
+      best_value_rank: 4,
+      new_entries_rank: null,
+      risk_alerts_rank: null,
+    },
+    score_breakdown: {
+      s: 92,
+      p: 86,
+      c: 78,
+      r: 96,
+      final_score: 88.5,
+      risk_penalty: 4,
+      domain_penalty: 0,
+      ssl_penalty: 0,
+      complaint_penalty: 0,
+      history_penalty: 0,
+    },
+    metrics: {
+      uptime_percent_30d: 99.95,
+      median_latency_ms: 68,
+      median_download_mbps: 128,
+      packet_loss_percent: 0.1,
+      stable_days_streak: 26,
+      healthy_days_streak: 30,
+      stability_tier: 'stable',
+      recent_complaints_count: 0,
+      history_incidents: 0,
+    },
+    trends: {
+      score_30d: [
+        { date: input.date.slice(0, 8) + '01', value: 86 },
+        { date: input.date, value: 88.5 },
+      ],
+      uptime_30d: [
+        { date: input.date.slice(0, 8) + '01', value: 99.8 },
+        { date: input.date, value: 99.95 },
+      ],
+      latency_30d: [
+        { date: input.date.slice(0, 8) + '01', value: 80 },
+        { date: input.date, value: 68 },
+      ],
+      download_30d: [
+        { date: input.date.slice(0, 8) + '01', value: 110 },
+        { date: input.date, value: 128 },
+      ],
+    },
+    capabilities: {
+      plan: {
+        supports_monthly: true,
+        supports_quarterly: true,
+        supports_half_yearly: true,
+        supports_annual: true,
+        lowest_monthly_price: 18,
+        lowest_annual_monthly_price: 12,
+        has_trial_plan: true,
+        has_lifetime_plan: false,
+      },
+      streaming: [{ key: 'netflix', label: 'Netflix' }],
+      payment_methods: [{ key: 'alipay', label: '支付宝' }],
+      telegram: {
+        items: [{ key: 'group', label: 'Telegram 群组' }],
+        has_group: true,
+        group_url: 'https://t.me/example',
+        has_channel: true,
+        channel_url: 'https://t.me/example_channel',
+        group_allows_speaking: true,
+        group_member_count: 1200,
+        recent_active_at: input.date,
+        has_customer_service_bot: true,
+        has_ticket_system: false,
+      },
+      clients: [{ key: 'clash', label: 'Clash' }],
+      import_methods: [{ key: 'subscription_link', label: '订阅链接' }],
+      regions: [
+        { key: 'hong_kong', label: '香港', node_count: 8, line_types: ['IEPL'], has_residential: false, has_native_ip: true },
+        { key: 'japan', label: '日本', node_count: 4, line_types: ['BGP'], has_residential: false, has_native_ip: false },
+        { key: 'singapore', label: '新加坡', node_count: 3, line_types: ['BGP'], has_residential: false, has_native_ip: false },
+      ],
+    },
+  };
+}
+
+function getCurrentShanghaiYearMonth(): { year: number; month: number } {
+  const today = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
+  const [year, month] = today.split('-').map((part) => Number(part));
+  return { year, month };
+}
+
+function getPreviousShanghaiMonthPeriod(): { year: number; month: number; endDate: string } {
+  const current = getCurrentShanghaiYearMonth();
+  const endDate = new Date(Date.UTC(current.year, current.month - 1, 0));
+  return {
+    year: endDate.getUTCFullYear(),
+    month: endDate.getUTCMonth() + 1,
+    endDate: endDate.toISOString().slice(0, 10),
+  };
+}
+
+function getNextShanghaiMonthPeriod(): { year: number; month: number } {
+  const current = getCurrentShanghaiYearMonth();
+  const next = new Date(Date.UTC(current.year, current.month, 1));
+  return {
+    year: next.getUTCFullYear(),
+    month: next.getUTCMonth() + 1,
+  };
+}
+
+function getPreviousMonthEndDate(year: number, month: number): string {
+  return new Date(Date.UTC(year, month - 1, 0)).toISOString().slice(0, 10);
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, '0');
+}
 
 function stubAirportRepository() {
   return {

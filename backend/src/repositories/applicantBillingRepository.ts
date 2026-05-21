@@ -521,6 +521,11 @@ export class ApplicantBillingRepository {
 
       const amount = roundMoney(input.amount);
       const nextBalance = roundMoney(Number(wallet.balance) + amount);
+      if (nextBalance < 0) {
+        const error = new Error('扣减金额不能超过当前余额') as Error & { code?: string };
+        error.code = 'AIRPORT_WALLET_BALANCE_INSUFFICIENT';
+        throw error;
+      }
       await connection.execute<ResultSetHeader>(
         `UPDATE applicant_wallets
             SET balance = ?
