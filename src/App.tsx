@@ -373,7 +373,7 @@ interface CardProps {
 }
 
 interface RouteState {
-  kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'risk_monitor' | 'methodology' | 'publish_token_docs';
+  kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'risk_monitor' | 'methodology' | 'publish_token_docs' | 'not_found';
   airportId?: number;
   airportSlug?: string;
   date?: string;
@@ -1151,7 +1151,7 @@ function parseRoute(): RouteState {
     };
   }
 
-  if (path === '/apply') {
+  if (path === '/apply' || path === '/apply/') {
     return {
       kind: 'apply',
       date: params.get('date') || undefined,
@@ -1207,9 +1207,15 @@ function parseRoute(): RouteState {
     };
   }
 
+  if (path === '/' || path === '') {
+    return {
+      kind: 'home',
+      date: params.get('date') || undefined,
+    };
+  }
+
   return {
-    kind: 'home',
-    date: params.get('date') || undefined,
+    kind: 'not_found',
   };
 }
 
@@ -6624,7 +6630,59 @@ export default function App() {
     return <RiskMonitorPage date={route.date} page={route.page} />;
   }
 
-  return <HomePage date={route.date} />;
+  if (route.kind === 'home') {
+    return <HomePage date={route.date} />;
+  }
+
+  return <NotFoundPage />;
+}
+
+function NotFoundPage() {
+  usePageSeo({
+    title: '页面不存在 | 机场榜GateRank',
+    description: '当前访问的 GateRank 页面不存在，请返回首页、全量榜单或跑路监测页面继续查看机场 VPN 测评与风险信息。',
+    keywords: 'GateRank,机场榜,404,页面不存在,机场VPN,机场测评',
+    canonicalPath: '/404',
+    robots: 'noindex,follow',
+  });
+
+  return (
+    <PageFrame active="home">
+      <main className="mx-auto flex min-h-[60vh] max-w-3xl flex-col justify-center px-4 py-24">
+        <div className="mb-5 inline-flex w-fit items-center gap-2 rounded-full border border-neutral-200 bg-neutral-50 px-4 py-2 text-xs font-black uppercase tracking-[0.24em] text-neutral-500">
+          <AlertTriangle className="h-4 w-4 text-amber-500" />
+          404 Not Found
+        </div>
+        <h1 className="text-3xl font-black tracking-normal text-neutral-950 md:text-5xl">页面不存在</h1>
+        <p className="mt-5 max-w-2xl text-base leading-8 text-neutral-600">
+          这个地址没有对应的公开页面。你可以返回首页查看今日推荐，或进入全量榜单和跑路监测继续筛选机场服务。
+        </p>
+        <div className="mt-10 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={() => navigate('/', { scrollToTop: true })}
+            className="inline-flex h-11 items-center justify-center rounded-lg bg-neutral-950 px-5 text-sm font-black text-white"
+          >
+            返回首页
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/rankings/all', { scrollToTop: true })}
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-neutral-200 bg-white px-5 text-sm font-black text-neutral-800"
+          >
+            全量榜单
+          </button>
+          <button
+            type="button"
+            onClick={() => navigate('/risk-monitor', { scrollToTop: true })}
+            className="inline-flex h-11 items-center justify-center rounded-lg border border-neutral-200 bg-white px-5 text-sm font-black text-neutral-800"
+          >
+            跑路监测
+          </button>
+        </div>
+      </main>
+    </PageFrame>
+  );
 }
 
 function RouteLoadingFallback() {
