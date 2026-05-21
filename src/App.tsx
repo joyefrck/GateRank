@@ -1326,7 +1326,7 @@ function FullRankingFilterPanel({ date, filters }: { date?: string; filters: Ful
         <FullRankingFilterGroup title="导入方式" category="import" options={AIRPORT_IMPORT_FILTERS} filters={filters} onChange={goToFilters} />
         <div>
           <div className="text-xs font-black uppercase tracking-[0.18em] text-neutral-400">套餐与社群</div>
-          <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+          <div className="mt-2 flex flex-wrap gap-2">
             {[
               ['trial', '支持试用', filters.trial],
               ['annual', '支持年付', filters.annual],
@@ -1336,7 +1336,7 @@ function FullRankingFilterPanel({ date, filters }: { date?: string; filters: Ful
               <button
                 key={String(key)}
                 type="button"
-                className={`inline-flex min-h-10 flex-none items-center rounded-full border px-3 text-sm font-black ${
+                className={`inline-flex min-h-10 max-w-full items-center rounded-full border px-3 text-sm font-black ${
                   value === true ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-600'
                 }`}
                 onClick={() => goToFilters(toggleBooleanFullRankingFilter(filters, key as 'trial' | 'annual' | 'lifetime' | 'telegram'))}
@@ -1367,14 +1367,14 @@ function FullRankingFilterGroup({
   return (
     <div>
       <div className="text-xs font-black uppercase tracking-[0.18em] text-neutral-400">{title}</div>
-      <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+      <div className="mt-2 flex flex-wrap gap-2">
         {options.map((option) => {
           const active = isFullRankingFilterActive(category, option.key, filters);
           return (
             <button
               key={option.key}
               type="button"
-              className={`inline-flex min-h-10 flex-none items-center rounded-full border px-3 text-sm font-black ${
+              className={`inline-flex min-h-10 max-w-full items-center rounded-full border px-3 text-sm font-black ${
                 active ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-600'
               }`}
               onClick={() => onChange(toggleFullRankingFilterValue(filters, category, option.key))}
