@@ -479,9 +479,9 @@ export function buildReportStructuredData(
 }
 
 export const METHODOLOGY_SEO: PublicSeoText = {
-  title: `测评方法 | 机场评分规则、权重与风险扣分说明 | ${PUBLIC_SITE_BRAND_NAME}`,
-  description: `${PUBLIC_SITE_BRAND_NAME} 测评方法页公开解释机场 VPN 评分规则，拆解稳定性、性能、价格、风险四个维度，以及时间衰减、风险扣分、数据采样和最终分数如何影响机场推荐与排名。`,
-  keywords: '机场榜GateRank,机场测评方法,机场测速标准,机场评分规则,机场推荐依据,VPN机场测评,机场榜,GateRank',
+  title: `机场测评方法 | 评分规则、测速标准、风险扣分与推荐依据 | ${PUBLIC_SITE_BRAND_NAME}`,
+  description: `${PUBLIC_SITE_BRAND_NAME} 方法页系统说明机场测评方法、机场评分规则与机场测速标准，拆解稳定性、性能、价格、风险扣分、阈值分段、时间衰减、每日重算和机场推荐依据，帮助理解机场 VPN 排名如何生成。`,
+  keywords: '机场榜GateRank,机场测评方法,机场评分规则,机场测速标准,机场推荐依据,机场VPN排名,VPN机场测评,风险扣分,时间衰减,GateRank',
 };
 
 export const APPLY_SEO: PublicSeoText = {

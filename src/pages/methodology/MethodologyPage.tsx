@@ -57,12 +57,15 @@ function formatNumber(value: number): string {
 }
 
 function buildStructuredData() {
-  return methodologyStructuredData.map((item, index) => {
-    if (index === 0) {
+  return methodologyStructuredData.map((item) => {
+    if (item['@type'] === 'TechArticle') {
       return {
         ...item,
         url: buildAbsoluteUrl(buildMethodologyHref()),
       };
+    }
+    if (item['@type'] !== 'BreadcrumbList') {
+      return item;
     }
     return {
       ...item,
@@ -99,7 +102,7 @@ function SectionHeading({
         <span className="text-neutral-300">{index}</span>
         <span>{subtitle}</span>
       </div>
-      <h2 className="mt-4 text-3xl md:text-4xl font-black tracking-tight text-neutral-900">{title}</h2>
+      <h2 className="mt-4 text-3xl md:text-4xl font-black text-neutral-900">{title}</h2>
     </div>
   );
 }
@@ -120,22 +123,22 @@ export function MethodologyPage() {
       <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-14 md:pb-20 space-y-16 md:space-y-24">
         <motion.section
           {...sectionMotion}
-          className="relative overflow-hidden rounded-[36px] border border-neutral-200 bg-[linear-gradient(135deg,#faf7f2_0%,#ffffff_48%,#f3f4f6_100%)] px-6 py-8 md:px-10 md:py-12 text-neutral-900 shadow-[0_24px_70px_rgba(15,23,42,0.08)]"
+          className="relative overflow-hidden rounded-3xl border border-neutral-200 bg-[linear-gradient(135deg,#f8fafc_0%,#ffffff_52%,#f4f4f5_100%)] px-6 py-8 md:px-10 md:py-12 text-neutral-900 shadow-[0_20px_58px_rgba(15,23,42,0.07)]"
         >
-          <div className="absolute inset-0 opacity-100" style={{ backgroundImage: 'radial-gradient(circle at 14% 18%, rgba(245,158,11,0.12), transparent 24%), radial-gradient(circle at 74% 16%, rgba(14,165,233,0.1), transparent 22%), radial-gradient(circle at 84% 78%, rgba(16,185,129,0.09), transparent 22%)' }} />
-          <div className="absolute inset-x-8 bottom-8 top-8 hidden rounded-[30px] border border-white/70 bg-white/35 blur-3xl md:block" />
-          <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1.05fr)_420px] lg:items-start">
+          <div className="absolute inset-0 opacity-100" style={{ backgroundImage: 'linear-gradient(rgba(15,23,42,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.035) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
+          <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-start">
             <div>
               <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/90 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-600 shadow-sm backdrop-blur">
                 <BrainCircuit className="h-3.5 w-3.5" />
                 {PUBLIC_SITE_BRAND_NAME} Methodology
               </div>
-              <h1 className="mt-5 max-w-4xl text-4xl md:text-5xl lg:text-[58px] font-black leading-[0.95] tracking-tight text-neutral-900">
-                我们不是拍脑袋推荐
-                <span className="block text-neutral-400">而是按四个维度每天计算机场评分</span>
+              <h1 className="mt-5 max-w-4xl text-[clamp(2.35rem,4.2vw,3.5rem)] font-black leading-[1.04] text-neutral-950">
+                <span className="block whitespace-nowrap sm:inline">GateRank</span>
+                <span className="block sm:inline"> 机场评分方法</span>
+                <span className="block text-neutral-500">四维模型生成推荐依据</span>
               </h1>
               <p className="mt-5 max-w-3xl text-sm md:text-base leading-7 text-neutral-600">
-                这个页面公开说明 {PUBLIC_SITE_BRAND_NAME} 的机场测评方法、评分规则和风险扣分逻辑。你能直接看到总分怎么拆、风险怎么压分、历史数据为什么不会被立刻清空。
+                本页系统说明 {PUBLIC_SITE_BRAND_NAME} 的机场测评方法、评分规则、测速标准和风险扣分逻辑。你可以直接看到总分如何拆解、风险如何压分、历史数据为什么保留，以及每日榜单为什么会变化。
               </p>
               <div className="mt-8 flex flex-wrap gap-3">
                 <button
@@ -148,29 +151,29 @@ export function MethodologyPage() {
                 </button>
                 <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/85 px-5 py-3 text-sm font-black text-neutral-600 shadow-sm backdrop-blur">
                   <BadgeInfo className="h-4 w-4" />
-                  公式、权重、扣分口径全部公开
+                  <span className="whitespace-nowrap">公式、权重、扣分口径公开</span>
                 </div>
               </div>
               <div className="mt-10 grid gap-3 sm:grid-cols-3">
                 {heroStats.map((item) => (
-                  <div key={item.label} className="rounded-2xl border border-neutral-200 bg-white/90 p-4 shadow-sm backdrop-blur">
+                  <div key={item.label} className="rounded-2xl border border-neutral-200 bg-white/92 p-4 shadow-sm backdrop-blur">
                     <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">{item.label}</div>
-                    <div className="mt-2 text-2xl font-black text-neutral-900">{item.value}</div>
+                    <div className="mt-2 whitespace-nowrap text-[clamp(1.05rem,1.7vw,1.45rem)] font-black text-neutral-900">{item.value}</div>
                     <div className="mt-2 text-sm leading-6 text-neutral-600">{item.note}</div>
                   </div>
                 ))}
               </div>
             </div>
 
-            <div className="rounded-[30px] border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#f3f4f6_100%)] p-5 md:p-6 shadow-[0_20px_60px_rgba(15,23,42,0.08)]">
-              <div className="flex items-center justify-between gap-4">
+            <div className="rounded-3xl border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 md:p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
+              <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">Final Score</div>
-                  <div className="mt-2 text-3xl md:text-4xl font-black text-neutral-900">0.4S + 0.3P + 0.2C + 0.1R</div>
+                  <div className="mt-2 whitespace-normal text-[clamp(1.5rem,2.2vw,1.8rem)] font-black text-neutral-900 sm:whitespace-nowrap">0.4S + 0.3P + 0.2C + 0.1R</div>
                 </div>
-                <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-right shadow-sm">
+                <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-left shadow-sm">
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">核心原则</div>
-                  <div className="mt-1 text-sm font-medium text-neutral-700">不是单一测速榜</div>
+                  <div className="mt-1 whitespace-nowrap text-sm font-medium text-neutral-700">不是单一测速榜</div>
                 </div>
               </div>
               <div className="mt-6 space-y-4">
@@ -202,31 +205,33 @@ export function MethodologyPage() {
         <motion.section {...sectionMotion}>
           <SectionHeading {...sectionTitles.formula} />
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="rounded-[30px] border border-neutral-200 bg-white p-6 md:p-8 shadow-[0_18px_60px_rgba(0,0,0,0.04)]">
+            <div className="rounded-3xl border border-neutral-200 bg-white p-6 md:p-8 shadow-[0_16px_48px_rgba(0,0,0,0.04)]">
               <div className="text-sm md:text-base leading-8 text-neutral-600">
-                先理解一件事：{PUBLIC_SITE_BRAND_NAME} 的机场评分不是“谁跑得快谁第一”，而是把<span className="font-black text-neutral-900">稳定性、性能、价格、风险</span>四个维度拼成一个最终分。
+                {PUBLIC_SITE_BRAND_NAME} 的机场评分不是“谁跑得快谁第一”，而是把
+                <span className="font-black text-neutral-900">稳定性、性能、价格、风险</span>
+                四个维度放进同一套可解释模型。
               </div>
               <div className="mt-6 grid gap-4 md:grid-cols-4">
                 {totalScoreParts.map((item) => (
-                  <div key={item.key} className={`rounded-3xl border p-4 ${item.softClass}`}>
+                  <div key={item.key} className={`rounded-2xl border p-4 ${item.softClass}`}>
                     <div className="text-[11px] uppercase tracking-[0.18em] font-black">{item.label}</div>
-                    <div className="mt-2 text-xl font-black">{item.title}</div>
-                    <div className="mt-3 text-sm leading-6">占总分 {item.percent}%</div>
+                    <div className="mt-2 whitespace-nowrap text-xl font-black">{item.title}</div>
+                    <div className="mt-3 whitespace-nowrap text-sm leading-6">占总分 {item.percent}%</div>
                   </div>
                 ))}
               </div>
-              <div className="mt-6 rounded-[28px] bg-neutral-950 px-5 py-6 text-white">
+              <div className="mt-6 rounded-3xl bg-neutral-950 px-5 py-6 text-white">
                 <div className="text-[11px] uppercase tracking-[0.18em] font-black text-white/50">公开主公式</div>
-                <div className="mt-3 text-2xl md:text-[32px] font-black tracking-tight leading-tight">
+                <div className="mt-3 break-words text-2xl md:text-[32px] font-black leading-tight sm:whitespace-nowrap">
                   FinalScore = 0.4S + 0.3P + 0.2C + 0.1R
                 </div>
                 <p className="mt-4 text-sm leading-7 text-white/68">
-                  前三项是加分维度，最后一项是“把风险重新拉回来”的安全阀。这样做的结果是，快但危险的机场不会轻易靠单项数据冲榜。
+                  前三项衡量表现与价值，风险项作为独立约束进入总分。这样可以避免高性能或低价格掩盖基础信任问题。
                 </p>
               </div>
             </div>
 
-            <div className="rounded-[30px] border border-neutral-200 bg-neutral-50 p-6 md:p-8">
+            <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-6 md:p-8">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-neutral-900 text-white">
                   <ChartColumnBig className="h-5 w-5" />
@@ -238,15 +243,15 @@ export function MethodologyPage() {
               </div>
               <div className="mt-6 space-y-4">
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                  <div className="text-sm font-black text-neutral-900">一次高速截图不能说明长期稳定</div>
-                  <p className="mt-2 text-sm leading-6 text-neutral-600">我们用中位值、波动系数和稳定天数，把短期高光与长期表现区分开。</p>
+                  <div className="text-sm font-black text-neutral-900">单次高速截图不能代表长期表现</div>
+                  <p className="mt-2 text-sm leading-6 text-neutral-600">中位值、波动系数和稳定天数会把短期高光与持续质量区分开。</p>
                 </div>
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                  <div className="text-sm font-black text-neutral-900">低价也不能自动上榜</div>
-                  <p className="mt-2 text-sm leading-6 text-neutral-600">价格只占一部分，还要看速度价格比和基础风险，避免“便宜但不可靠”。</p>
+                  <div className="text-sm font-black text-neutral-900">低价不能绕过质量约束</div>
+                  <p className="mt-2 text-sm leading-6 text-neutral-600">价格只占一部分，还要看速度价格比、试用支持和基础风险。</p>
                 </div>
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                  <div className="text-sm font-black text-neutral-900">有风险要显式压分</div>
+                  <div className="text-sm font-black text-neutral-900">风险必须显式进入模型</div>
                   <p className="mt-2 text-sm leading-6 text-neutral-600">域名异常、证书问题、投诉和历史异常都会形成可解释的惩罚项。</p>
                 </div>
               </div>
@@ -260,18 +265,18 @@ export function MethodologyPage() {
             {dimensionCards.map((item) => (
               <section
                 key={item.code}
-                className={`rounded-[30px] border bg-[linear-gradient(180deg,var(--tw-gradient-from),var(--tw-gradient-to))] p-6 md:p-8 ${item.borderClass} ${item.accentClass}`}
+                className={`rounded-3xl border bg-[linear-gradient(180deg,var(--tw-gradient-from),var(--tw-gradient-to))] p-6 md:p-8 ${item.borderClass} ${item.accentClass}`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div>
                     <div className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${item.badgeClass}`}>
                       {item.code}
                     </div>
-                    <h3 className="mt-4 text-2xl font-black tracking-tight text-neutral-900">{item.title}</h3>
+                    <h3 className="mt-4 text-2xl font-black text-neutral-900">{item.title}</h3>
                     <p className="mt-3 text-sm leading-7 text-neutral-600">{item.summary}</p>
                   </div>
                 </div>
-                <div className="mt-5 rounded-3xl border border-neutral-200 bg-white px-4 py-4 text-sm font-black leading-7 text-neutral-900">
+                <div className="mt-5 break-words rounded-2xl border border-neutral-200 bg-white px-4 py-4 text-sm font-black leading-7 text-neutral-900 lg:whitespace-nowrap">
                   {item.formula}
                 </div>
                 <div className="mt-5 space-y-3">
@@ -289,12 +294,12 @@ export function MethodologyPage() {
         <motion.section {...sectionMotion}>
           <SectionHeading {...sectionTitles.risk} />
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="rounded-[32px] border border-rose-200 bg-[linear-gradient(180deg,rgba(244,63,94,0.06),rgba(255,255,255,1))] p-6 md:p-8">
+            <div className="rounded-3xl border border-rose-200 bg-[linear-gradient(180deg,rgba(244,63,94,0.06),rgba(255,255,255,1))] p-6 md:p-8">
               <div className="grid gap-4 md:grid-cols-4">
                 {riskPenaltyFlow.map((item, index) => (
                   <div key={item.label} className="relative rounded-3xl border border-rose-100 bg-white p-4">
                     <div className="text-[11px] font-black uppercase tracking-[0.18em] text-rose-500">Step {index + 1}</div>
-                    <div className="mt-2 text-lg font-black text-neutral-900">{item.label}</div>
+                    <div className="mt-2 whitespace-nowrap text-lg font-black text-neutral-900">{item.label}</div>
                     <div className="mt-3 text-sm leading-6 text-neutral-600">{item.detail}</div>
                     <div className="mt-4 inline-flex rounded-full bg-rose-500 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-white">
                       扣 {item.penalty}
@@ -307,16 +312,16 @@ export function MethodologyPage() {
                   </div>
                 ))}
               </div>
-              <div className="mt-6 rounded-[28px] border border-rose-200 bg-neutral-950 p-5 text-white">
+              <div className="mt-6 rounded-3xl border border-rose-200 bg-neutral-950 p-5 text-white">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/50">Risk Output</div>
-                <div className="mt-3 text-2xl md:text-3xl font-black">R = 100 - RiskPenalty</div>
+                <div className="mt-3 break-words text-2xl md:text-3xl font-black sm:whitespace-nowrap">R = 100 - RiskPenalty</div>
                 <p className="mt-3 text-sm leading-7 text-white/70">
-                  风险项不是“给一个模糊印象分”，而是把可解释的异常转换为明确扣分。这样用户能知道自己到底是在为哪种风险买单。
+                  风险项不是模糊印象分，而是把可解释的异常转换为明确扣分，便于追踪风险来源。
                 </p>
               </div>
             </div>
 
-            <div className="rounded-[32px] border border-neutral-200 bg-neutral-50 p-6 md:p-8">
+            <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-6 md:p-8">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-500 text-white">
                   <ShieldAlert className="h-5 w-5" />
@@ -330,7 +335,7 @@ export function MethodologyPage() {
                 <p>如果把风险揉进其他维度，用户会很难分辨“是慢，还是不可信”。</p>
                 <p>单列风险分后，一眼就能知道某个机场是因为速度掉分，还是因为域名、证书、投诉或历史异常掉分。</p>
                 <p className="rounded-2xl border border-neutral-200 bg-white px-4 py-4 font-medium text-neutral-900">
-                  这也是页面更有说服力的关键：不给模糊印象，只给能追溯的扣分原因。
+                  这让分数具备可追溯性：用户可以区分速度下降、价格不匹配和信任风险。
                 </p>
               </div>
             </div>
@@ -340,41 +345,41 @@ export function MethodologyPage() {
         <motion.section {...sectionMotion}>
           <SectionHeading {...sectionTitles.decay} />
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="rounded-[32px] border border-neutral-200 bg-white p-6 md:p-8">
-              <div className="rounded-[28px] border border-neutral-200 bg-neutral-50 p-5 md:p-6">
+            <div className="rounded-3xl border border-neutral-200 bg-white p-6 md:p-8">
+              <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-5 md:p-6">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">先看关系，再看公式</div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <div className="rounded-2xl border border-neutral-200 bg-white p-4">
                     <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-300">Step 1</div>
-                    <div className="mt-2 text-lg font-black text-neutral-900">先算当天综合分</div>
+                    <div className="mt-2 whitespace-nowrap text-lg font-black text-neutral-900">先算当天综合分</div>
                     <div className="mt-2 text-sm leading-6 text-neutral-600">
                       CurrentScore = 0.4S + 0.3P + 0.2C + 0.1R
                     </div>
                   </div>
                   <div className="rounded-2xl border border-neutral-200 bg-white p-4">
                     <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-300">Step 2</div>
-                    <div className="mt-2 text-lg font-black text-neutral-900">再用 w 算历史分</div>
+                    <div className="mt-2 whitespace-nowrap text-lg font-black text-neutral-900">再用 w 算历史分</div>
                     <div className="mt-2 text-sm leading-6 text-neutral-600">
                       `w` 只参与 HistoricalScore，越近的历史分权重越高。
                     </div>
                   </div>
                   <div className="rounded-2xl border border-neutral-200 bg-white p-4">
                     <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-300">Step 3</div>
-                    <div className="mt-2 text-lg font-black text-neutral-900">最后合成最终分</div>
+                    <div className="mt-2 whitespace-nowrap text-lg font-black text-neutral-900">最后合成最终分</div>
                     <div className="mt-2 text-sm leading-6 text-neutral-600">
                       FinalScore = 0.7 × CurrentScore + 0.3 × HistoricalScore
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="rounded-[28px] border border-neutral-200 bg-neutral-950 p-5 text-white">
+              <div className="rounded-3xl border border-neutral-200 bg-neutral-950 p-5 text-white">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/50">Decay Formula</div>
-                <div className="mt-3 text-2xl md:text-3xl font-black">w = exp(-0.1 × days_diff)</div>
+                <div className="mt-3 break-words text-2xl md:text-3xl font-black sm:whitespace-nowrap">w = exp(-0.1 × days_diff)</div>
                 <p className="mt-3 text-sm leading-7 text-white/70">
                   越新的数据权重越高，但历史分数不会被瞬间清零。这里的 `w` 只用于计算 HistoricalScore，不会直接乘在当天综合分外面。
                 </p>
               </div>
-              <div className="mt-6 rounded-[28px] border border-neutral-200 bg-neutral-50 p-5">
+              <div className="mt-6 rounded-3xl border border-neutral-200 bg-neutral-50 p-5">
                 <div className="text-sm font-black text-neutral-900">桥接关系</div>
                 <p className="mt-3 text-sm leading-7 text-neutral-600">
                   很多人第一次看会误以为 `w` 是直接修正总分。不是。{PUBLIC_SITE_BRAND_NAME} 的做法是：
@@ -396,7 +401,7 @@ export function MethodologyPage() {
               </div>
             </div>
 
-            <div className="rounded-[32px] border border-neutral-200 bg-neutral-50 p-6 md:p-8">
+            <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-6 md:p-8">
               <div className="flex items-center gap-3">
                 <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-neutral-900 text-white">
                   <Clock3 className="h-5 w-5" />
@@ -410,7 +415,7 @@ export function MethodologyPage() {
                 <p>只看当天，会让一次活动测速或一次短时故障把榜单拉得过于极端。</p>
                 <p>引入时间衰减后，最近表现最重要，但长期表现仍然会保留“记忆”，更接近真实使用体验。</p>
                 <p className="rounded-2xl border border-neutral-200 bg-white px-4 py-4 font-medium text-neutral-900">
-                  这也是 {PUBLIC_SITE_BRAND_NAME} 不做“今日跑分秀”的原因。
+                  这让每日推荐更接近长期使用体验，而不是单日跑分展示。
                 </p>
               </div>
             </div>
@@ -424,7 +429,7 @@ export function MethodologyPage() {
               <div className="flex items-center justify-between gap-4">
                 <div>
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">Demo Airport</div>
-                  <div className="mt-2 text-2xl font-black tracking-tight text-neutral-900">{exampleCase.input.airportName}</div>
+                  <div className="mt-2 text-2xl font-black text-neutral-900">{exampleCase.input.airportName}</div>
                 </div>
                 <div className="rounded-full bg-neutral-900 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white">
                   虚拟案例
@@ -473,7 +478,7 @@ export function MethodologyPage() {
             {trustPrinciples.map((item, index) => (
               <div key={item.title} className="rounded-[30px] border border-neutral-200 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)]">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-300">0{index + 1}</div>
-                <div className="mt-4 text-xl font-black tracking-tight text-neutral-900">{item.title}</div>
+                <div className="mt-4 text-xl font-black text-neutral-900">{item.title}</div>
                 <p className="mt-3 text-sm leading-7 text-neutral-600">{item.description}</p>
               </div>
             ))}
@@ -490,7 +495,7 @@ export function MethodologyPage() {
                     <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-neutral-900 text-white">
                       <HelpCircle className="h-4 w-4" />
                     </div>
-                    <span className="text-base md:text-lg font-black tracking-tight text-neutral-900">{item.question}</span>
+                    <span className="text-base md:text-lg font-black text-neutral-900">{item.question}</span>
                   </div>
                   <div className="rounded-full border border-neutral-200 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400 transition group-open:text-neutral-900">
                     展开
@@ -510,14 +515,14 @@ export function MethodologyPage() {
                   <ShieldCheck className="h-3.5 w-3.5" />
                   Methodology Note
                 </div>
-                <h2 className="mt-4 text-2xl md:text-4xl font-black tracking-tight">结论先行：我们更在意“长期可信”，而不是“一次看起来很猛”。</h2>
+                <h2 className="mt-4 text-2xl md:text-4xl font-black">结论先行：长期可信，比单次高性能样本更重要。</h2>
                 <p className="mt-4 max-w-3xl text-sm md:text-base leading-7 text-white/70">
                   这就是 {PUBLIC_SITE_BRAND_NAME} 的机场评分规则。你可以先看榜单，再回到这里理解每一分是怎么来的；如果某个机场分数异常，你也能快速判断它是慢、贵，还是有真实风险。
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => navigate(buildHomeHref())}
+                onClick={() => navigate(buildHomeHref(), { scrollToTop: true })}
                 className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-neutral-900 transition-transform hover:-translate-y-0.5"
               >
                 回到榜单

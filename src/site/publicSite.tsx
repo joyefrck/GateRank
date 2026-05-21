@@ -146,9 +146,14 @@ export function usePageSeo(config: SeoConfig) {
   }, [config]);
 }
 
-export function navigate(to: string) {
+export function navigate(to: string, options: { scrollToTop?: boolean } = {}) {
   window.history.pushState({}, '', to);
   window.dispatchEvent(new PopStateEvent('popstate'));
+  if (options.scrollToTop) {
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
+    });
+  }
 }
 
 export function PageFrame({

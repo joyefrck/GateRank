@@ -583,6 +583,24 @@ function formatScoreGrade(score: number): string {
 }
 
 export function renderMethodologyPublicPage(siteUrl: string): string {
+  const methodologyFaq = [
+    {
+      question: '低价机场一定高分吗？',
+      answer: '不会。价格只占总分 20%，还要结合速度价格比、试用支持、稳定性、性能和风险表现。',
+    },
+    {
+      question: '测速快就一定推荐吗？',
+      answer: '不会。性能占总分 30%，如果可用率、波动或风险项偏弱，最终分数仍会被拉低。',
+    },
+    {
+      question: '为什么要保留历史分数？',
+      answer: '时间衰减让近期表现优先，同时保留长期样本，避免一次短时故障或一次活动测速过度影响榜单。',
+    },
+    {
+      question: '风险分低代表已经跑路了吗？',
+      answer: '不一定。风险分用于提示域名、证书、投诉或历史异常等信任信号，需要结合状态和趋势继续观察。',
+    },
+  ];
   return renderPublicDocument({
     siteUrl,
     canonicalPath: PUBLIC_SEO_PATHS.methodology,
@@ -594,34 +612,81 @@ export function renderMethodologyPublicPage(siteUrl: string): string {
         '@type': 'TechArticle',
         headline: METHODOLOGY_SEO.title,
         description: METHODOLOGY_SEO.description,
-        about: ['机场测评方法', '机场测速标准', '机场评分规则', '风险扣分'],
+        about: ['机场测评方法', '机场测速标准', '机场评分规则', '风险扣分', '时间衰减', '机场推荐依据'],
       },
       buildBreadcrumbJsonLd(siteUrl, [
         ['今日推荐', '/'],
         ['测评方法', PUBLIC_SEO_PATHS.methodology],
       ]),
+      {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: methodologyFaq.map((item) => ({
+          '@type': 'Question',
+          name: item.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: item.answer,
+          },
+        })),
+      },
     ],
     body: `
       <main class="page-main">
         <section class="hero">
           <div class="eyebrow">测评方法</div>
-          <h1>机场测评方法：评分规则、测速标准与风险扣分</h1>
+          <h1>机场测评方法：评分规则、测速标准、风险扣分与推荐依据</h1>
           <p>${escapeHtml(METHODOLOGY_SEO.description)}</p>
           <div class="metric-grid">
             ${renderMetric('评分维度', '4')}
-            ${renderMetric('稳定性权重', '40%')}
-            ${renderMetric('性能权重', '30%')}
+            ${renderMetric('主公式', '0.4S + 0.3P + 0.2C + 0.1R')}
+            ${renderMetric('更新频率', '每日重算')}
             ${renderMetric('价格 / 风险', '20% / 10%')}
           </div>
         </section>
         <section class="content-card">
-          <h2>总公式</h2>
-          <p>最终分 = 0.4 × 稳定性 S + 0.3 × 性能 P + 0.2 × 价格 C + 0.1 × 风险 R，并叠加时间衰减与风险扣分。</p>
+          <h2>总公式与评分目标</h2>
+          <p>最终分 = 0.4 × 稳定性 S + 0.3 × 性能 P + 0.2 × 价格 C + 0.1 × 风险 R。GateRank 用这套固定权重生成每日机场推荐，目标是让稳定性、性能、价格和信任风险在同一框架内被解释。</p>
           <div class="card-grid">
-            ${renderInfoCard('稳定性 S', '看可用率、波动分档和连续健康天数，不让一次偶然测速决定全局。')}
-            ${renderInfoCard('性能 P', '看中位延迟、下载速率和丢包，兼顾快与稳。')}
-            ${renderInfoCard('价格 C', '看月付、试用和速度价格比，防止“便宜但不值”。')}
-            ${renderInfoCard('风险 R', '看域名、SSL、投诉和历史异常，防止“快但危险”。')}
+            ${renderInfoCard('稳定性 S · 40%', '综合可用率、稳健波动值 effective_latency_cv 和连续健康天数，降低偶发测速对结论的影响。')}
+            ${renderInfoCard('性能 P · 30%', '使用中位延迟、下载速率和丢包率，衡量真实连接体验而非单次峰值。')}
+            ${renderInfoCard('价格 C · 20%', '结合月付价格、试用支持和速度价格比，校正低价与高价的价值差异。')}
+            ${renderInfoCard('风险 R · 10%', '纳入域名、SSL、投诉与历史异常，避免高性能样本掩盖信任风险。')}
+          </div>
+        </section>
+        <section class="content-card">
+          <h2>四个维度的子项公式</h2>
+          <p>子项评分采用阈值分段和线性插值，并截断到 0 到 100。日期越近，历史样本权重越高。</p>
+          <div class="card-grid">
+            ${renderInfoCard('稳定性公式', 'S = 0.5 × UptimeScore + 0.3 × StabilityScore + 0.2 × StreakScore。')}
+            ${renderInfoCard('性能公式', 'P = 0.4 × LatencyScore + 0.4 × SpeedScore + 0.2 × LossScore。')}
+            ${renderInfoCard('价格公式', 'C = 0.6 × PriceScore + 0.2 × TrialScore + 0.2 × ValueScore。')}
+            ${renderInfoCard('风险公式', 'R = 100 - RiskPenalty。风险扣分来自域名、SSL、近期投诉和历史异常。')}
+          </div>
+        </section>
+        <section class="content-card">
+          <h2>风险扣分如何进入排名</h2>
+          <p>风险不是模糊印象分，而是可解释的扣分口径。域名异常记 30 分，SSL 未知或临期按 5 / 10 / 20 / 30 分分段，近期投诉每条 3 分且最高 15 分，历史异常每次 10 分且最高 30 分。</p>
+          <div class="card-grid">
+            ${renderInfoCard('域名异常', 'domain_ok = false 时直接扣 30 分，避免不可访问站点依靠历史性能维持高分。')}
+            ${renderInfoCard('SSL 风险', '证书未知、临期或过期会逐级扣分，用于提示基础设施维护风险。')}
+            ${renderInfoCard('近期投诉', 'recent_complaints_count × 3，最高扣 15 分，反映近期用户反馈。')}
+            ${renderInfoCard('历史异常', 'history_incidents × 10，最高扣 30 分，保留长期信任记录。')}
+          </div>
+        </section>
+        <section class="content-card">
+          <h2>时间衰减与每日重算</h2>
+          <p>GateRank 先计算当天综合分 CurrentScore，再用 w = exp(-0.1 × days_diff) 计算历史衰减分，最后按 FinalScore = 0.7 × CurrentScore + 0.3 × HistoricalScore 合成最终分。这样近期数据优先，但历史表现不会被瞬间清空。</p>
+          <div class="card-grid">
+            ${renderInfoCard('当前分', 'CurrentScore 直接来自稳定性、性能、价格和风险四个维度。')}
+            ${renderInfoCard('历史分', 'HistoricalScore 使用时间衰减权重，越近的历史样本影响越高。')}
+            ${renderInfoCard('最终分', 'FinalScore 按 70% 当前分和 30% 历史分合成，兼顾即时变化与长期可信度。')}
+          </div>
+        </section>
+        <section class="content-card">
+          <h2>常见问题</h2>
+          <div class="card-grid">
+            ${methodologyFaq.map((item) => renderInfoCard(item.question, item.answer)).join('')}
           </div>
         </section>
       </main>

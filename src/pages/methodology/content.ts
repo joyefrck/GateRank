@@ -35,8 +35,8 @@ export const methodologySeo = METHODOLOGY_SEO;
 
 export const heroStats = [
   { label: '评分维度', value: '4', note: '稳定性 / 性能 / 价格 / 风险' },
-  { label: '主公式', value: '0.4 + 0.3 + 0.2 + 0.1', note: '权重公开写死，不靠人工拍板' },
-  { label: '更新频率', value: '每日', note: '最近数据权重更高，历史数据继续保留' },
+  { label: '主公式', value: 'S / P / C / R', note: '0.4 / 0.3 / 0.2 / 0.1 权重' },
+  { label: '更新频率', value: '每日重算', note: '近期样本优先，历史表现保留' },
 ] as const;
 
 export const totalScoreParts = [
@@ -46,7 +46,7 @@ export const totalScoreParts = [
     title: '稳定性',
     weight: SCORE_WEIGHTS.final.s,
     percent: 40,
-    description: '看可用率、波动分档和连续健康天数，不让一次偶然测速决定全局。',
+    description: '综合可用率、稳健波动值和连续健康天数，降低偶发测速对结论的影响。',
     accentClass: 'bg-emerald-500',
     softClass: 'bg-emerald-50 border-emerald-200 text-emerald-800',
   },
@@ -56,7 +56,7 @@ export const totalScoreParts = [
     title: '性能',
     weight: SCORE_WEIGHTS.final.p,
     percent: 30,
-    description: '看中位延迟、下载速率和丢包，兼顾快与稳。',
+    description: '使用中位延迟、下载速率和丢包率，衡量真实连接体验而非单次峰值。',
     accentClass: 'bg-sky-500',
     softClass: 'bg-sky-50 border-sky-200 text-sky-800',
   },
@@ -66,7 +66,7 @@ export const totalScoreParts = [
     title: '价格',
     weight: SCORE_WEIGHTS.final.c,
     percent: 20,
-    description: '看月付、试用和速度价格比，防止“便宜但不值”。',
+    description: '结合月付价格、试用支持和速度价格比，校正低价与高价的价值差异。',
     accentClass: 'bg-amber-500',
     softClass: 'bg-amber-50 border-amber-200 text-amber-800',
   },
@@ -76,7 +76,7 @@ export const totalScoreParts = [
     title: '风险',
     weight: SCORE_WEIGHTS.final.r,
     percent: 10,
-    description: '看域名、SSL、投诉和历史异常，防止“快但危险”。',
+    description: '纳入域名、SSL、投诉与历史异常，避免高性能样本掩盖信任风险。',
     accentClass: 'bg-rose-500',
     softClass: 'bg-rose-50 border-rose-200 text-rose-800',
   },
@@ -86,12 +86,12 @@ export const dimensionCards = [
   {
     code: 'S',
     title: '稳定性',
-    summary: '优先回答“这个机场能不能稳定用”。',
+    summary: '判断机场是否具备持续可用、波动可控的基础质量。',
     formula: 'S = 0.5 × UptimeScore + 0.3 × StabilityScore + 0.2 × StreakScore',
     bullets: [
-      'UptimeScore 由当日或 30 天可用率换算，95% 以下迅速失分。',
-      'StabilityScore 由稳健波动值 effective_latency_cv 计算，低延迟线路会做 10ms 均值地板保护。',
-      '首页把单日状态拆成稳定 / 轻微波动 / 异常波动三档，只有异常波动才会打断连续健康记录。',
+      'UptimeScore 由当日或 30 天可用率换算，低于 95% 后快速失分。',
+      'StabilityScore 使用稳健波动值 effective_latency_cv，并对低延迟样本做 10ms 均值地板保护。',
+      '单日状态分为稳定 / 轻微波动 / 异常波动，只有异常波动会打断连续健康记录。',
       'StreakScore 使用连续健康天数计算，30 天封顶。',
     ],
     accentClass: 'from-emerald-500/12 to-white',
@@ -101,12 +101,12 @@ export const dimensionCards = [
   {
     code: 'P',
     title: '性能',
-    summary: '回答“这个机场在真实使用里够不够快”。',
+    summary: '衡量连接响应、吞吐能力和传输质量的综合表现。',
     formula: 'P = 0.4 × LatencyScore + 0.4 × SpeedScore + 0.2 × LossScore',
     bullets: [
-      'LatencyScore 用中位延迟计算，避免极端值污染结果。',
-      'SpeedScore 用中位下载速率计算，不奖励偶发尖峰。',
-      'LossScore 关注丢包率，稳定传输比跑分更重要。',
+      'LatencyScore 使用中位延迟，削弱极端样本对测速结论的污染。',
+      'SpeedScore 使用中位下载速率，不把偶发峰值等同于长期性能。',
+      'LossScore 关注丢包率，让传输稳定性进入性能维度。',
     ],
     accentClass: 'from-sky-500/12 to-white',
     borderClass: 'border-sky-200',
@@ -115,12 +115,12 @@ export const dimensionCards = [
   {
     code: 'C',
     title: '价格',
-    summary: '回答“这个机场值不值这个价”。',
+    summary: '把价格、试用门槛和速度价格比放在同一价值框架内。',
     formula: 'C = 0.6 × PriceScore + 0.2 × TrialScore + 0.2 × ValueScore',
     bullets: [
-      'PriceScore 对低月付更友好，但不会让超低价自动登顶。',
+      'PriceScore 对低月付更友好，但不会让低价脱离稳定性和风险独立登顶。',
       'TrialScore 只在支持试用时给满分，降低首次决策门槛。',
-      'ValueScore 看速度价格比，让“贵但快”和“便宜但慢”都被校正。',
+      'ValueScore 使用速度价格比，让高价高性能和低价低性能都得到校正。',
     ],
     accentClass: 'from-amber-500/12 to-white',
     borderClass: 'border-amber-200',
@@ -129,12 +129,12 @@ export const dimensionCards = [
   {
     code: 'R',
     title: '风险',
-    summary: '回答“这个机场有没有明显的信任问题”。',
+    summary: '把可解释的信任风险转化为独立扣分信号。',
     formula: 'R = 100 - RiskPenalty',
     bullets: [
-      '域名异常直接重罚，不让失联站点靠速度冲高分。',
-      'SSL 到期或未知会逐级扣分，优先提醒基础设施问题。',
-      '近期投诉和历史异常会累计惩罚，但都设上限避免无限放大。',
+      '域名异常直接重罚，避免失联或不可访问站点依靠历史性能维持高分。',
+      'SSL 未知、临期或过期会逐级扣分，提示基础设施维护风险。',
+      '近期投诉和历史异常会累计惩罚，并通过封顶机制避免无限放大。',
     ],
     accentClass: 'from-rose-500/12 to-white',
     borderClass: 'border-rose-200',
@@ -144,7 +144,7 @@ export const dimensionCards = [
 
 export const riskPenaltyFlow = [
   { label: '域名异常', detail: 'domain_ok = false', penalty: '30 分' },
-  { label: 'SSL 风险', detail: '未知 / 即将过期 / 已过期', penalty: '5 / 10 / 20 / 30 分' },
+  { label: 'SSL 风险', detail: '未知 / 临期 / 已过期', penalty: '5 / 10 / 20 / 30 分' },
   { label: '近期投诉', detail: 'recent_complaints_count × 3', penalty: '最高 15 分' },
   { label: '历史异常', detail: 'history_incidents × 10', penalty: '最高 30 分' },
 ] as const;
@@ -157,30 +157,30 @@ export const decayTimeline = [1, 7, 14, 30].map((days) => ({
 export const trustPrinciples = [
   {
     title: '公式公开',
-    description: '权重、阈值、风险扣分都在代码里写明，不靠人工临时改口径。',
+    description: '总分权重、子项公式、阈值分段和风险扣分规则均按固定口径执行。',
   },
   {
     title: '每日重算',
-    description: '分数会随着当天采样更新，不让过期高光数据长期占便宜。',
+    description: '分数随采样数据每日更新，近期表现优先，历史表现保留权重。',
   },
   {
     title: '风险单列',
-    description: '速度再快，如果域名、证书或投诉有问题，也会被明确压分。',
+    description: '域名、证书、投诉和历史异常独立呈现，便于区分性能问题与信任问题。',
   },
   {
     title: '反单指标偏见',
-    description: '不是看一次测速谁最快，而是看稳定、性能、价格、风险是否均衡。',
+    description: '不以单次测速、单一低价或单日状态决定推荐，优先观察多维均衡性。',
   },
 ] as const;
 
 export const methodologyFaq = [
   {
     question: '低价机场一定高分吗？',
-    answer: '不会。价格只占总分的一部分，而且还要结合速度价格比和试用支持；如果稳定性、性能或风险很差，低价也救不了总分。',
+    answer: '不会。价格只占总分 20%，还要结合速度价格比和试用支持；如果稳定性、性能或风险表现较弱，低价不会单独决定推荐位置。',
   },
   {
     question: '测速快就一定推荐吗？',
-    answer: '不会。性能只占 30%，如果可用率差、波动大或风险项明显，最终分数仍然会被拉低。',
+    answer: '不会。性能占总分 30%，中位延迟、下载速率和丢包率只是其中一组信号；当可用率、波动或风险项明显偏弱时，最终分数仍会被拉低。',
   },
   {
     question: '首页的“波动天数”是不是等于登录失败天数？',
@@ -188,11 +188,19 @@ export const methodologyFaq = [
   },
   {
     question: '为什么新机场可能排不高？',
-    answer: '因为历史样本不足，时间衰减后的最终分会更保守；这是为了避免新机场靠短期表现直接冲榜。',
+    answer: '因为历史样本不足时，时间衰减后的最终分会更保守。GateRank 会让近期表现被及时反映，但不会让短期样本直接覆盖长期可信度。',
   },
   {
     question: '风险分低代表已经跑路了吗？',
-    answer: '不一定。风险分是在提示潜在信任问题；只有在状态、域名和历史异常进一步恶化时，才会进入更强预警。',
+    answer: '不一定。风险分低代表域名、证书、投诉或历史异常等信号需要关注；只有状态、可访问性和历史记录进一步恶化时，才会进入更强风险预警。',
+  },
+  {
+    question: 'GateRank 的机场推荐依据是什么？',
+    answer: '推荐依据来自稳定性、性能、价格、风险四个维度的综合评分，并结合每日重算和历史时间衰减。页面展示的是评分口径，不是付费推广排序。',
+  },
+  {
+    question: '为什么要使用阈值分段和线性插值？',
+    answer: '阈值分段用于定义“优秀”和“较差”的边界，线性插值用于处理边界之间的连续变化。这样比简单二元判断更平滑，也更适合长期榜单。',
   },
 ] as const;
 
@@ -436,7 +444,7 @@ export const methodologyStructuredData = [
     '@type': 'TechArticle',
     headline: methodologySeo.title,
     description: methodologySeo.description,
-    about: ['机场测评方法', '机场评分规则', '风险扣分'],
+    about: ['机场测评方法', '机场评分规则', '机场测速标准', '风险扣分', '时间衰减', '机场推荐依据'],
   },
   {
     '@context': 'https://schema.org',
@@ -453,5 +461,17 @@ export const methodologyStructuredData = [
         name: '测评方法',
       },
     ],
+  },
+  {
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: methodologyFaq.map((item) => ({
+      '@type': 'Question',
+      name: item.question,
+      acceptedAnswer: {
+        '@type': 'Answer',
+        text: item.answer,
+      },
+    })),
   },
 ] as const;

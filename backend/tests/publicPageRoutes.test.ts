@@ -18,7 +18,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
     const checks = [
       ['/', /<h1>机场榜：机场 VPN 推荐与可靠性榜单<\/h1>/, /机场 VPN 推荐、科学上网机场测评与可靠性榜单/],
       ['/rankings/all', /<h1>机场排行榜：全量机场 VPN 评分排名<\/h1>/, /全量机场榜单 \| 全部已上线机场评分排名/],
-      ['/methodology', /<h1>机场测评方法：评分规则、测速标准与风险扣分<\/h1>/, /机场测评方法/],
+      ['/methodology', /<h1>机场测评方法：评分规则、测速标准、风险扣分与推荐依据<\/h1>/, /机场测评方法/],
       ['/apply', /<h1>申请入驻 GateRank 机场测试<\/h1>/, /申请入驻测试/],
       ['/risk-monitor', /<h1>跑路机场监测：高风险机场名单与机场跑路预警<\/h1>/, /跑路监测 \| 已跑路与风险观察机场列表/],
     ] as const;
@@ -55,7 +55,7 @@ test('core SEO descriptions include expanded search context', async () => {
   try {
     const port = (server.address() as AddressInfo).port;
     const checks = [
-      ['/methodology', /机场 VPN 评分规则/, /数据采样/],
+      ['/methodology', /机场评分规则/, /每日重算/],
       ['/apply', /官网地址/, /自动测速接入/],
       ['/risk-monitor', /跑路机场监测页/, /高风险机场 VPN 服务/],
     ] as const;
@@ -69,6 +69,33 @@ test('core SEO descriptions include expanded search context', async () => {
       assert.match(description, firstPattern);
       assert.match(description, secondPattern);
     }
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /methodology includes expanded methodology SEO body and FAQ structured data', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/methodology`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+
+    assert.match(html, /总公式与评分目标/);
+    assert.match(html, /0\.4 × 稳定性 S \+ 0\.3 × 性能 P \+ 0\.2 × 价格 C \+ 0\.1 × 风险 R/);
+    assert.match(html, /四个维度的子项公式/);
+    assert.match(html, /S = 0\.5 × UptimeScore \+ 0\.3 × StabilityScore \+ 0\.2 × StreakScore/);
+    assert.match(html, /风险扣分如何进入排名/);
+    assert.match(html, /recent_complaints_count × 3/);
+    assert.match(html, /时间衰减与每日重算/);
+    assert.match(html, /w = exp\(-0\.1 × days_diff\)/);
+    assert.match(html, /低价机场一定高分吗？/);
+    assert.match(html, /"@type":"FAQPage"/);
+    assert.match(html, /机场推荐依据/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
