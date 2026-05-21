@@ -579,7 +579,7 @@ export class PublicViewService {
         if (!context) {
           return null;
         }
-        if (section === 'new_entries' && context.airport.status === 'down') {
+        if (section === 'new_entries' && !isVisibleNewEntryContext(context)) {
           return null;
         }
         return this.buildCard(section, context, date);
@@ -628,7 +628,7 @@ export class PublicViewService {
     const byStable = [...contexts].sort(compareByStabilityDesc);
     const byValue = [...contexts].sort(compareByValueDesc);
     const byNew = [...contexts]
-      .filter((context) => isNewAirportContext(context, date))
+      .filter((context) => isNewAirportContext(context, date) && isVisibleNewEntryContext(context))
       .sort(compareByNewAirportEntryDesc);
     const byRisk = [...contexts]
       .filter((context) => isRiskAlertContext(context))
@@ -1165,6 +1165,10 @@ function isRiskAlertContext(context: CardContext): boolean {
 
 function isNewAirportContext(context: CardContext, date: string): boolean {
   return context.airport.tags.includes('新入榜') || diffDays(context.airport.created_at, date) < NEW_AIRPORT_DAYS;
+}
+
+function isVisibleNewEntryContext(context: CardContext): boolean {
+  return context.airport.status !== 'down' && !context.score.score_hidden;
 }
 
 function compareByNewAirportEntryDesc(left: CardContext, right: CardContext): number {

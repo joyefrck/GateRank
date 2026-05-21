@@ -396,6 +396,18 @@ test('PublicViewService.getHomePageView limits new entries to listed active airp
         items: [],
       }),
     },
+    applicantBillingRepository: {
+      getPublicScoreVisibilityByAirportIds: async (ids: number[]) => {
+        const visibility = new Map<number, { score_hidden: boolean; score_hidden_reason: 'insufficient_balance' | null }>();
+        for (const id of ids) {
+          visibility.set(id, {
+            score_hidden: id === 2,
+            score_hidden_reason: id === 2 ? 'insufficient_balance' : null,
+          });
+        }
+        return visibility;
+      },
+    },
     rankingRepository: {
       getLatestAvailableDate: async () => '2026-03-24',
       getRanking: async (_date: string, listType: 'today' | 'stable' | 'value' | 'new' | 'risk') => (
@@ -414,13 +426,13 @@ test('PublicViewService.getHomePageView limits new entries to listed active airp
 
   const result = await service.getHomePageView('2026-03-24');
 
-  assert.deepEqual(result.sections.new_entries.items.map((item) => item.airport_id), [1, 2, 3, 4, 5, 6]);
+  assert.deepEqual(result.sections.new_entries.items.map((item) => item.airport_id), [1, 3, 4, 5, 6, 7]);
   assert.equal(result.sections.new_entries.items.length, 6);
-  assert.ok(result.sections.new_entries.items.every((item) => item.airport_id !== 8 && item.airport_id !== 9));
+  assert.ok(result.sections.new_entries.items.every((item) => item.airport_id !== 2 && item.airport_id !== 8 && item.airport_id !== 9));
 });
 
 test('PublicViewService.getHomePageView prioritizes latest approved application airports in new entries', async () => {
-  const airportIds = Array.from({ length: 10 }, (_, index) => index + 1);
+  const airportIds = Array.from({ length: 11 }, (_, index) => index + 1);
   const airportsById = new Map(
     airportIds.map((id) => [
       id,
@@ -433,7 +445,7 @@ test('PublicViewService.getHomePageView prioritizes latest approved application 
         plan_price_month: 12,
         has_trial: true,
         tags: ['新入榜'],
-        created_at: `2026-03-${String(20 - id).padStart(2, '0')}`,
+        created_at: id === 11 ? '2026-03-19' : `2026-03-${String(20 - id).padStart(2, '0')}`,
       },
     ]),
   );
@@ -500,7 +512,7 @@ test('PublicViewService.getHomePageView prioritizes latest approved application 
         const airport = airportsById.get(id);
         return airport ? [[id, airport]] : [];
       })),
-      listLatestApprovedApplicationAirports: async () => [7, 8, 9, 10].flatMap((id) => {
+      listLatestApprovedApplicationAirports: async () => [11, 7, 8, 9, 10].flatMap((id) => {
         const airport = airportsById.get(id);
         return airport ? [airport] : [];
       }),
@@ -545,6 +557,18 @@ test('PublicViewService.getHomePageView prioritizes latest approved application 
         items: [],
       }),
     },
+    applicantBillingRepository: {
+      getPublicScoreVisibilityByAirportIds: async (ids: number[]) => {
+        const visibility = new Map<number, { score_hidden: boolean; score_hidden_reason: 'insufficient_balance' | null }>();
+        for (const id of ids) {
+          visibility.set(id, {
+            score_hidden: id === 11,
+            score_hidden_reason: id === 11 ? 'insufficient_balance' : null,
+          });
+        }
+        return visibility;
+      },
+    },
     rankingRepository: {
       getLatestAvailableDate: async () => '2026-03-24',
       getRanking: async (_date: string, listType: 'today' | 'stable' | 'value' | 'new' | 'risk') => (
@@ -568,6 +592,7 @@ test('PublicViewService.getHomePageView prioritizes latest approved application 
   assert.ok(result.sections.new_entries.items.every((item) => item.airport_id !== 8));
   assert.ok(result.sections.new_entries.items.every((item) => item.airport_id !== 9));
   assert.ok(result.sections.new_entries.items.every((item) => item.airport_id !== 10));
+  assert.ok(result.sections.new_entries.items.every((item) => item.airport_id !== 11));
 });
 
 test('PublicViewService.getHomePageView builds fallback cards from public scores when rankings are empty', async () => {
@@ -700,6 +725,132 @@ test('PublicViewService.getHomePageView builds fallback cards from public scores
   });
   assert.equal(result.sections.today_pick.items[0].stability_tier, 'stable');
   assert.equal(result.sections.most_stable.items.length, 1);
+});
+
+test('PublicViewService.getHomePageView fallback new entries skips hidden scores', async () => {
+  const airportsById = new Map([1, 2, 3].map((id) => [
+    id,
+    {
+      id,
+      name: `Airport ${id}`,
+      website: `https://airport-${id}.example.com`,
+      status: 'normal' as const,
+      is_listed: true,
+      plan_price_month: 12,
+      has_trial: true,
+      tags: ['新入榜'],
+      created_at: `2026-03-${22 - id}`,
+    },
+  ]));
+  const scoresById = new Map([1, 2, 3].map((id) => [
+    id,
+    {
+      airport_id: id,
+      date: '2026-03-24',
+      s: 80,
+      p: 80,
+      c: 80,
+      r: 95,
+      risk_penalty: 0,
+      score: 90 - id,
+      recent_score: 90 - id,
+      historical_score: 90 - id,
+      final_score: 90 - id,
+      details: { total_score: 90 - id },
+    },
+  ]));
+  const fullRankingItems = [1, 2, 3].map((id, index) => ({
+    airport_id: id,
+    rank: index + 1,
+    name: `Airport ${id}`,
+    website: `https://airport-${id}.example.com`,
+    status: 'normal' as const,
+    tags: ['新入榜'],
+    founded_on: '2024-01-01',
+    plan_price_month: 12,
+    has_trial: true,
+    airport_intro: `Airport ${id} intro`,
+    created_at: `2026-03-${22 - id}`,
+    score: 90 - id,
+    score_delta_vs_yesterday: { label: '对比昨天', value: 1 },
+    report_url: `/airports/airport-${id}`,
+  }));
+
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async (id: number) => airportsById.get(id) || null,
+    },
+    metricsRepository: {
+      getByAirportAndDate: async (airportId: number) => ({
+        airport_id: airportId,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 5,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 0,
+        history_incidents: 0,
+      }),
+      getTrend: async (airportId: number) => [{
+        airport_id: airportId,
+        date: '2026-03-24',
+        uptime_percent_30d: 99.9,
+        median_latency_ms: 52,
+        median_download_mbps: 88,
+        packet_loss_percent: 0,
+        stable_days_streak: 5,
+        domain_ok: true,
+        ssl_days_left: 120,
+        recent_complaints_count: 0,
+        history_incidents: 0,
+      }],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async (airportId: number) => scoresById.get(airportId) || null,
+      getPublicDisplayScoreByAirportAndDate: async (airportId: number) => scoresById.get(airportId)?.final_score ?? null,
+      getTrend: async (airportId: number) => {
+        const score = scoresById.get(airportId);
+        return score ? [score] : [];
+      },
+      getPublicFullRankingByDate: async () => ({
+        total: fullRankingItems.length,
+        items: fullRankingItems,
+      }),
+    },
+    applicantBillingRepository: {
+      getPublicScoreVisibilityByAirportIds: async (ids: number[]) => {
+        const visibility = new Map<number, { score_hidden: boolean; score_hidden_reason: 'insufficient_balance' | null }>();
+        for (const id of ids) {
+          visibility.set(id, {
+            score_hidden: id === 2,
+            score_hidden_reason: id === 2 ? 'insufficient_balance' : null,
+          });
+        }
+        return visibility;
+      },
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 3,
+        realtime_tests: 8,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  const result = await service.getHomePageView('2026-03-24');
+
+  assert.deepEqual(result.sections.new_entries.items.map((item) => item.airport_id), [1, 3]);
+  assert.ok(result.sections.new_entries.items.every((item) => item.score_hidden !== true));
 });
 
 test('PublicViewService.getHomePageView fallback today picks follow relaxed filters and score ordering', async () => {
