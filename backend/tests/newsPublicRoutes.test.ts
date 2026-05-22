@@ -378,7 +378,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
     );
     const xml = await response.text();
     const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) || [];
-    assert.equal(urlBlocks.length, 55);
+    assert.equal(urlBlocks.length, 56);
     urlBlocks.forEach((block) => {
       assert.match(block, /<lastmod>[^<]+<\/lastmod>/);
     });
@@ -390,6 +390,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/risk-monitor<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/methodology<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/apply<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/for-ai<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/publish-token-docs<\/loc>\n    <lastmod>2026-03-29T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/airports\/nebula<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>\n    <lastmod>2026-03-28T18:00:00\+08:00<\/lastmod>/);

@@ -8,12 +8,15 @@ import {
   buildRiskMonitorData,
   buildSummaryData,
   renderAirportMarkdown,
+  renderDataIndexMarkdown,
   renderLlmsFullTxt,
   renderLlmsTxt,
   renderRankingsMarkdown,
+  renderRobotsTxt,
   renderRiskMonitorMarkdown,
   renderSummaryMarkdown,
 } from '../services/machineReadableRenderer';
+import { renderForAiPublicPage } from '../services/publicPageRenderer';
 
 interface MachineReadableDeps {
   publicViewService: {
@@ -28,6 +31,10 @@ const MACHINE_READABLE_PAGE_SIZE = 100;
 
 export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
   const router = Router();
+
+  router.get('/robots.txt', (req, res) => {
+    sendText(res, 'text/plain; charset=utf-8', renderRobotsTxt(getSiteOrigin(req)));
+  });
 
   router.get('/openapi.json', (_req, res) => {
     res.status(404).json({
@@ -71,6 +78,28 @@ export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
     } catch (error) {
       console.error('[machine-readable] failed to render llms-full.txt', { error, requestId: req.requestId || 'unknown' });
       sendText(res.status(500), 'text/plain; charset=utf-8', 'GateRank llms-full.txt 暂时无法生成');
+    }
+  });
+
+  router.get('/for-ai', async (req, res) => {
+    try {
+      const siteUrl = getSiteOrigin(req);
+      const summary = await getSummary(deps, siteUrl);
+      setPublicCacheHeaders(res);
+      res.status(200).type('html').send(renderForAiPublicPage(siteUrl, summary));
+    } catch (error) {
+      console.error('[machine-readable] failed to render for-ai page', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).type('html').send('GateRank for AI 页面暂时无法生成');
+    }
+  });
+
+  router.get('/data', async (req, res) => {
+    try {
+      const summary = await getSummary(deps, getSiteOrigin(req));
+      sendText(res, 'text/markdown; charset=utf-8', renderDataIndexMarkdown(summary));
+    } catch (error) {
+      console.error('[machine-readable] failed to render data index', { error, requestId: req.requestId || 'unknown' });
+      sendText(res.status(500), 'text/plain; charset=utf-8', 'GateRank data index 暂时无法生成');
     }
   });
 

@@ -1,0 +1,17 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+
+test('React full ranking report action remains a crawlable anchor', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+  const panelStart = source.indexOf('操作入口');
+  assert.notEqual(panelStart, -1);
+  const panelEnd = source.indexOf('</MarketingImpressionWrapper>', panelStart);
+  assert.notEqual(panelEnd, -1);
+  const fullRankingActionPanel = source.slice(panelStart, panelEnd);
+
+  assert.match(fullRankingActionPanel, /href=\{item\.report_url\}/);
+  assert.match(fullRankingActionPanel, /data-event="ranking_report_click"/);
+  assert.doesNotMatch(fullRankingActionPanel, /navigate\(item\.report_url\)/);
+});

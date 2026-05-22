@@ -28,6 +28,49 @@ test('GET /llms.txt and /llms-full.txt return plain text AI entrypoints', async 
   }
 });
 
+test('GET /robots.txt returns explicit crawl policy and content signals', async () => {
+  const { baseUrl, close } = await startMachineReadableServer();
+  try {
+    const response = await fetch(`${baseUrl}/robots.txt`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') || '', /text\/plain; charset=utf-8/);
+    assert.equal(
+      response.headers.get('cache-control'),
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+    );
+    const body = await response.text();
+    assert.match(body, /^User-agent: \*/m);
+    assert.match(body, /^Allow: \/$/m);
+    assert.match(body, new RegExp(`^Sitemap: ${baseUrl.replace(/\//g, '\\/')}/sitemap\\.xml$`, 'm'));
+    assert.match(body, /^Content-Signal: search=yes, ai-input=yes, ai-train=no$/m);
+  } finally {
+    await close();
+  }
+});
+
+test('GET /for-ai returns an indexable HTML guide for AI applications', async () => {
+  const { baseUrl, close } = await startMachineReadableServer();
+  try {
+    const response = await fetch(`${baseUrl}/for-ai`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') || '', /text\/html/);
+    assert.equal(
+      response.headers.get('cache-control'),
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+    );
+    const html = await response.text();
+    assert.match(html, /<h1>GateRank for AI：机场榜数据、引用方式与机器可读入口<\/h1>/);
+    assert.match(html, /<meta name="robots" content="index,follow,max-image-preview:large"/);
+    assert.match(html, new RegExp(`<link rel="canonical" href="${baseUrl.replace(/\//g, '\\/')}/for-ai"`));
+    assert.match(html, /\/data\/summary\.json/);
+    assert.match(html, /\/data\/rankings\.json/);
+    assert.match(html, /\/data\/risk-monitor\.json/);
+    assert.match(html, /\/sitemap\.xml/);
+  } finally {
+    await close();
+  }
+});
+
 test('GET /openapi.json and /.well-known/ai-plugin.json return JSON 404 instead of HTML fallback', async () => {
   const { baseUrl, close } = await startMachineReadableServer();
   try {
@@ -125,6 +168,15 @@ test('GET /data/*.json returns stable public machine-readable fields', async () 
 test('GET /data/*.md and /airports/:slug.md return Markdown facts and citations', async () => {
   const { baseUrl, close } = await startMachineReadableServer();
   try {
+    const dataIndexResponse = await fetch(`${baseUrl}/data`);
+    assert.equal(dataIndexResponse.status, 200);
+    assert.match(dataIndexResponse.headers.get('content-type') || '', /text\/markdown; charset=utf-8/);
+    const dataIndexMarkdown = await dataIndexResponse.text();
+    assert.match(dataIndexMarkdown, /^# 机场榜GateRank machine-readable data/m);
+    assert.match(dataIndexMarkdown, /summary\.json/);
+    assert.match(dataIndexMarkdown, /rankings\.json/);
+    assert.match(dataIndexMarkdown, /risk-monitor\.json/);
+
     const summaryResponse = await fetch(`${baseUrl}/data/summary.md`);
     assert.equal(summaryResponse.status, 200);
     assert.match(summaryResponse.headers.get('content-type') || '', /text\/markdown; charset=utf-8/);
@@ -157,6 +209,37 @@ test('GET /data/*.md and /airports/:slug.md return Markdown facts and citations'
     assert.doesNotMatch(await missingResponse.text(), /<!doctype html/i);
   } finally {
     await close();
+  }
+});
+
+test('mounted machine-readable routes do not fall through to app 404 fallback', async () => {
+  const app = express();
+  app.use(createMachineReadableRoutes({ publicViewService: createPublicViewServiceStub() }));
+  app.use((_req, res) => {
+    res.status(404).json({ error: { code: 'APP_NOT_FOUND' } });
+  });
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    for (const path of [
+      '/robots.txt',
+      '/llms.txt',
+      '/llms-full.txt',
+      '/for-ai',
+      '/data',
+      '/data/summary.json',
+      '/data/rankings.json',
+      '/data/risk-monitor.json',
+      '/data/rankings.md',
+      '/data/risk-monitor.md',
+    ]) {
+      const response = await fetch(`${baseUrl}${path}`);
+      assert.notEqual(response.status, 404, path);
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });
 

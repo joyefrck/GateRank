@@ -2,3 +2,8 @@ User-agent: *
 Allow: /
 
 Sitemap: http://localhost:3000/sitemap.xml
+
+# Content signals
+# GateRank allows search indexing and AI retrieval/grounding.
+# GateRank does not grant permission for model training unless separately authorized.
+Content-Signal: search=yes, ai-input=yes, ai-train=no

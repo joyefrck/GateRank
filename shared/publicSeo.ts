@@ -122,6 +122,7 @@ export const PUBLIC_SEO_PATHS = {
   methodology: '/methodology',
   apply: '/apply',
   riskMonitor: '/risk-monitor',
+  forAi: '/for-ai',
 } as const;
 
 export const PUBLIC_SEO_STATIC_LASTMOD = '2026-05-17T00:00:00+08:00';

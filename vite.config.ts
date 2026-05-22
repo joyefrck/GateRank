@@ -22,6 +22,7 @@ function emitSeoAssets(siteUrl: string): Plugin {
         ['/methodology', PUBLIC_SEO_STATIC_LASTMOD],
         ['/apply', PUBLIC_SEO_STATIC_LASTMOD],
         ['/risk-monitor', PUBLIC_SEO_STATIC_LASTMOD],
+        ['/for-ai', PUBLIC_SEO_STATIC_LASTMOD],
         ['/publish-token-docs', PUBLISH_TOKEN_DOCS_LAST_UPDATED],
         ...DEFAULT_NEWS_CATEGORIES.map((item) => [`/news/category/${item.slug}`, PUBLIC_SEO_STATIC_LASTMOD] as const),
         ...DEFAULT_NEWS_TOPICS.map((item) => [`/news/topic/${item.slug}`, PUBLIC_SEO_STATIC_LASTMOD] as const),
@@ -40,6 +41,11 @@ ${urls.map(([pathname, lastmod]) => `  <url>
 Allow: /
 
 Sitemap: ${normalizedSiteUrl}/sitemap.xml
+
+# Content signals
+# GateRank allows search indexing and AI retrieval/grounding.
+# GateRank does not grant permission for model training unless separately authorized.
+Content-Signal: search=yes, ai-input=yes, ai-train=no
 `;
 
       this.emitFile({

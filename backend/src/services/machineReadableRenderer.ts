@@ -228,6 +228,50 @@ export function renderLlmsFullTxt(siteUrl: string, summary: PublicSummaryData, r
   ].join('\n');
 }
 
+export function renderRobotsTxt(siteUrl: string): string {
+  return [
+    'User-agent: *',
+    'Allow: /',
+    '',
+    `Sitemap: ${siteUrl}/sitemap.xml`,
+    '',
+    '# Content signals',
+    '# GateRank allows search indexing and AI retrieval/grounding.',
+    '# GateRank does not grant permission for model training unless separately authorized.',
+    'Content-Signal: search=yes, ai-input=yes, ai-train=no',
+    '',
+  ].join('\n');
+}
+
+export function renderDataIndexMarkdown(summary: PublicSummaryData): string {
+  return [
+    `# ${summary.site} machine-readable data`,
+    '',
+    `${summary.site} provides public machine-readable entrypoints for AI retrieval, grounding, citation, and search indexing.`,
+    '',
+    '## JSON',
+    '',
+    `- summary.json: ${summary.data_files.summary_json}`,
+    `- rankings.json: ${summary.data_files.rankings_json}`,
+    `- risk-monitor.json: ${summary.data_files.risk_monitor_json}`,
+    '',
+    '## Markdown',
+    '',
+    `- summary.md: ${summary.data_files.summary_markdown}`,
+    `- rankings.md: ${summary.data_files.rankings_markdown}`,
+    `- risk-monitor.md: ${summary.data_files.risk_monitor_markdown}`,
+    '',
+    '## Citation',
+    '',
+    `- General rankings: ${summary.core_pages.rankings}`,
+    `- Risk monitoring: ${summary.core_pages.risk_monitor}`,
+    `- Sitemap: ${summary.url.replace(/\/$/, '')}/sitemap.xml`,
+    '',
+    `> ${summary.disclaimer}`,
+    '',
+  ].join('\n');
+}
+
 export function renderSummaryMarkdown(summary: PublicSummaryData): string {
   return [
     `# ${summary.site} 数据摘要`,

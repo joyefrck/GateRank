@@ -206,6 +206,10 @@
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
+    <loc>http://localhost:3000/for-ai</loc>
+    <lastmod>2026-05-17T00:00:00+08:00</lastmod>
+  </url>
+  <url>
     <loc>http://localhost:3000/publish-token-docs</loc>
     <lastmod>2026-03-29T00:00:00+08:00</lastmod>
   </url>

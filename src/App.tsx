@@ -2898,19 +2898,21 @@ function FullRankingPage({
                             打开官网
                             <ExternalLink className="w-3.5 h-3.5" />
                           </a>
-                          <button
-                            type="button"
-                            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-700 transition hover:border-neutral-900 hover:text-neutral-900 disabled:cursor-not-allowed disabled:border-neutral-100 disabled:bg-neutral-50 disabled:text-neutral-400"
-                            disabled={!item.report_url}
-                            onClick={() => {
-                              if (item.report_url) {
-                                navigate(item.report_url);
-                              }
-                            }}
-                          >
-                            {item.report_url ? '查看测评报告' : '暂无测评报告'}
-                            {item.report_url && <ChevronRight className="w-3.5 h-3.5" />}
-                          </button>
+                          {item.report_url ? (
+                            <a
+                              href={item.report_url}
+                              data-event="ranking_report_click"
+                              data-airport-id={item.airport_id}
+                              className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-700 transition hover:border-neutral-900 hover:text-neutral-900"
+                            >
+                              查看测评报告
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </a>
+                          ) : (
+                            <span className="inline-flex min-h-12 cursor-not-allowed items-center justify-center gap-2 rounded-2xl border border-neutral-100 bg-neutral-50 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">
+                              暂无测评报告
+                            </span>
+                          )}
                         </div>
                         </article>
                       </MarketingImpressionWrapper>
