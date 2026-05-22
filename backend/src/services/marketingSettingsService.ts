@@ -7,12 +7,22 @@ export interface MarketingSettingsInput {
   application_fee_amount?: number;
   click_charge_amount?: number;
   admin_telegram_username?: string | null;
+  home_section_limits?: Partial<HomeSectionLimits>;
+}
+
+export interface HomeSectionLimits {
+  today_pick: number;
+  most_stable: number;
+  best_value: number;
+  new_entries: number;
+  risk_alerts: number;
 }
 
 export interface MarketingSettingsView {
   application_fee_amount: number;
   click_charge_amount: number;
   admin_telegram_username: string | null;
+  home_section_limits: HomeSectionLimits;
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -21,6 +31,7 @@ export interface MarketingBillingConfig {
   application_fee_amount: number;
   click_charge_amount: number;
   admin_telegram_username: string | null;
+  home_section_limits: HomeSectionLimits;
 }
 
 interface MarketingSettingsServiceOptions {
@@ -35,6 +46,21 @@ const PAYMENT_GATEWAY_SETTING_KEY = 'payment_gateway';
 
 export const DEFAULT_MARKETING_APPLICATION_FEE_AMOUNT = APPLICATION_FEE_AMOUNT;
 export const DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT = CLICK_CHARGE_AMOUNT;
+export const DEFAULT_HOME_SECTION_LIMITS: HomeSectionLimits = {
+  today_pick: 3,
+  most_stable: 3,
+  best_value: 3,
+  new_entries: 6,
+  risk_alerts: 1,
+};
+
+const HOME_SECTION_LIMIT_KEYS: Array<keyof HomeSectionLimits> = [
+  'today_pick',
+  'most_stable',
+  'best_value',
+  'new_entries',
+  'risk_alerts',
+];
 
 export class MarketingSettingsService {
   private readonly systemSettingRepository?: MarketingSettingsServiceOptions['systemSettingRepository'];
@@ -73,6 +99,10 @@ export class MarketingSettingsService {
         input.admin_telegram_username === undefined
           ? base.admin_telegram_username
           : normalizeTelegramUsername(input.admin_telegram_username),
+      home_section_limits:
+        input.home_section_limits === undefined
+          ? base.home_section_limits
+          : normalizeHomeSectionLimits(input.home_section_limits, base.home_section_limits, true),
     };
 
     await this.systemSettingRepository.upsert(MARKETING_BILLING_SETTING_KEY, nextConfig, updatedBy);
@@ -125,6 +155,7 @@ function getBaseDefaults(): MarketingBillingConfig {
     application_fee_amount: DEFAULT_MARKETING_APPLICATION_FEE_AMOUNT,
     click_charge_amount: DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT,
     admin_telegram_username: null,
+    home_section_limits: { ...DEFAULT_HOME_SECTION_LIMITS },
   };
 }
 
@@ -140,6 +171,11 @@ function normalizeConfig(value: unknown, defaults: MarketingBillingConfig): Mark
       defaults.click_charge_amount,
     ),
     admin_telegram_username: normalizeStoredTelegramUsername(record.admin_telegram_username),
+    home_section_limits: normalizeHomeSectionLimits(
+      record.home_section_limits,
+      defaults.home_section_limits,
+      false,
+    ),
   };
 }
 
@@ -179,6 +215,40 @@ function normalizeStoredTelegramUsername(value: unknown): string | null {
   } catch {
     return null;
   }
+}
+
+function normalizeHomeSectionLimits(
+  value: unknown,
+  defaults: HomeSectionLimits,
+  strict: boolean,
+): HomeSectionLimits {
+  const record = toObject(value);
+  const result = { ...defaults };
+
+  for (const key of HOME_SECTION_LIMIT_KEYS) {
+    if (record[key] === undefined) {
+      continue;
+    }
+    result[key] = normalizeHomeSectionLimit(record[key], `home_section_limits.${key}`, result[key], strict);
+  }
+
+  return result;
+}
+
+function normalizeHomeSectionLimit(
+  value: unknown,
+  fieldName: string,
+  fallback: number,
+  strict: boolean,
+): number {
+  const limit = Number(value);
+  if (!Number.isInteger(limit) || limit < 1 || limit > 12) {
+    if (strict) {
+      throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be an integer between 1 and 12`);
+    }
+    return fallback;
+  }
+  return limit;
 }
 
 function toObject(value: unknown): Record<string, unknown> {

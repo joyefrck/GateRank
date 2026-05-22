@@ -57,6 +57,132 @@ test('PublicViewService.getHomePageView falls back to latest ranking date', asyn
   ]);
 });
 
+test('PublicViewService.getHomePageView uses configured home section limits for source queries', async () => {
+  const fullRankingPageSizes: number[] = [];
+  const approvedApplicationLimits: number[] = [];
+  const riskPageSizes: number[] = [];
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => null,
+      listLatestApprovedApplicationAirports: async (limit: number) => {
+        approvedApplicationLimits.push(limit);
+        return [];
+      },
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => null,
+      getTrend: async () => [],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => null,
+      getPublicDisplayScoreByAirportAndDate: async () => null,
+      getTrend: async () => [],
+      getPublicFullRankingByDate: async (_date: string, _page: number, pageSize: number) => {
+        fullRankingPageSizes.push(pageSize);
+        return {
+          total: 0,
+          items: [],
+        };
+      },
+      getPublicRiskMonitorByDate: async (_date: string, _page: number, pageSize: number) => {
+        riskPageSizes.push(pageSize);
+        return {
+          total: 0,
+          items: [],
+        };
+      },
+    },
+    marketingSettingsService: {
+      getConfig: async () => ({
+        click_charge_amount: 1,
+        home_section_limits: {
+          today_pick: 4,
+          most_stable: 5,
+          best_value: 6,
+          new_entries: 7,
+          risk_alerts: 2,
+        },
+      }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 3,
+        realtime_tests: 12,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  await service.getHomePageView('2026-03-24');
+
+  assert.equal(fullRankingPageSizes[0], 4);
+  assert.equal(approvedApplicationLimits[0], 7);
+  assert.equal(riskPageSizes[0], 2);
+});
+
+test('PublicViewService.getHomePageView defaults home section limits without marketing settings', async () => {
+  const fullRankingPageSizes: number[] = [];
+  const approvedApplicationLimits: number[] = [];
+  const riskPageSizes: number[] = [];
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => null,
+      listLatestApprovedApplicationAirports: async (limit: number) => {
+        approvedApplicationLimits.push(limit);
+        return [];
+      },
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => null,
+      getTrend: async () => [],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => null,
+      getPublicDisplayScoreByAirportAndDate: async () => null,
+      getTrend: async () => [],
+      getPublicFullRankingByDate: async (_date: string, _page: number, pageSize: number) => {
+        fullRankingPageSizes.push(pageSize);
+        return {
+          total: 0,
+          items: [],
+        };
+      },
+      getPublicRiskMonitorByDate: async (_date: string, _page: number, pageSize: number) => {
+        riskPageSizes.push(pageSize);
+        return {
+          total: 0,
+          items: [],
+        };
+      },
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 3,
+        realtime_tests: 12,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+  });
+
+  await service.getHomePageView('2026-03-24');
+
+  assert.equal(fullRankingPageSizes[0], 3);
+  assert.equal(approvedApplicationLimits[0], 6);
+  assert.equal(riskPageSizes[0], 1);
+});
+
 test('PublicViewService.getFullRankingView falls back to latest score date', async () => {
   const requestedDates: string[] = [];
   const service = new PublicViewService({

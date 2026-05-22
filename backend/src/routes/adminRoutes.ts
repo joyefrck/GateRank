@@ -14,7 +14,7 @@ import {
   DEFAULT_MEDIA_LIBRARY_TIMEOUT_MS,
   type MediaLibrarySettingsInput,
 } from '../services/mediaLibrarySettingsService';
-import type { MarketingSettingsInput } from '../services/marketingSettingsService';
+import type { HomeSectionLimits, MarketingSettingsInput } from '../services/marketingSettingsService';
 import { SmtpSendError } from '../services/mailService';
 import type { PaymentGatewaySettingsInput } from '../services/paymentGatewaySettingsService';
 import type { SmtpSettingsInput, SmtpTemplateKey } from '../services/smtpSettingsService';
@@ -317,6 +317,7 @@ interface AdminDeps {
       application_fee_amount: number;
       click_charge_amount: number;
       admin_telegram_username?: string | null;
+      home_section_limits?: HomeSectionLimits;
     }>;
   };
   smtpSettingsService?: {
@@ -624,6 +625,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         req.requestId,
         input,
       );
+      deps.publicPageCache?.clear();
       res.json(result);
     } catch (error) {
       next(error);
@@ -2816,6 +2818,36 @@ function parseMarketingSettingsPayload(
       payload.admin_telegram_username === undefined
         ? undefined
         : optionalString(payload.admin_telegram_username),
+    home_section_limits:
+      payload.home_section_limits === undefined
+        ? undefined
+        : parseHomeSectionLimitsPayload(payload.home_section_limits),
+  };
+}
+
+function parseHomeSectionLimitsPayload(payload: unknown): MarketingSettingsInput['home_section_limits'] {
+  const record = toPlainObject(payload, 'home_section_limits');
+  return {
+    today_pick:
+      record.today_pick === undefined
+        ? undefined
+        : mustNumber(record.today_pick, 'home_section_limits.today_pick'),
+    most_stable:
+      record.most_stable === undefined
+        ? undefined
+        : mustNumber(record.most_stable, 'home_section_limits.most_stable'),
+    best_value:
+      record.best_value === undefined
+        ? undefined
+        : mustNumber(record.best_value, 'home_section_limits.best_value'),
+    new_entries:
+      record.new_entries === undefined
+        ? undefined
+        : mustNumber(record.new_entries, 'home_section_limits.new_entries'),
+    risk_alerts:
+      record.risk_alerts === undefined
+        ? undefined
+        : mustNumber(record.risk_alerts, 'home_section_limits.risk_alerts'),
   };
 }
 

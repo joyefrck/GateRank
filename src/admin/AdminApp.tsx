@@ -788,6 +788,13 @@ interface MarketingSettingsView {
   application_fee_amount: number;
   click_charge_amount: number;
   admin_telegram_username: string | null;
+  home_section_limits: {
+    today_pick: number;
+    most_stable: number;
+    best_value: number;
+    new_entries: number;
+    risk_alerts: number;
+  };
   updated_at: string | null;
   updated_by: string | null;
 }
@@ -796,6 +803,13 @@ interface MarketingSettingsFormState {
   application_fee_amount: string;
   click_charge_amount: string;
   admin_telegram_username: string;
+  home_section_limits: {
+    today_pick: string;
+    most_stable: string;
+    best_value: string;
+    new_entries: string;
+    risk_alerts: string;
+  };
 }
 
 interface SmtpSettingsView {
@@ -3035,6 +3049,22 @@ function MarketingTrendChart({
   );
 }
 
+const homeSectionLimitFields = [
+  { key: 'today_pick', label: '今日推荐' },
+  { key: 'most_stable', label: '长期稳定' },
+  { key: 'best_value', label: '性价比' },
+  { key: 'new_entries', label: '新入榜' },
+  { key: 'risk_alerts', label: '风险预警' },
+] as const;
+
+const defaultHomeSectionLimitForm = {
+  today_pick: '3',
+  most_stable: '3',
+  best_value: '3',
+  new_entries: '6',
+  risk_alerts: '1',
+};
+
 function MarketingSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -3045,6 +3075,7 @@ function MarketingSettingsPage() {
     application_fee_amount: '300',
     click_charge_amount: '1',
     admin_telegram_username: '',
+    home_section_limits: defaultHomeSectionLimitForm,
   });
 
   const applyView = (view: MarketingSettingsView) => {
@@ -3053,6 +3084,13 @@ function MarketingSettingsPage() {
       application_fee_amount: String(view.application_fee_amount || 300),
       click_charge_amount: String(view.click_charge_amount || 1),
       admin_telegram_username: view.admin_telegram_username ? `@${view.admin_telegram_username}` : '',
+      home_section_limits: {
+        today_pick: String(view.home_section_limits?.today_pick || 3),
+        most_stable: String(view.home_section_limits?.most_stable || 3),
+        best_value: String(view.home_section_limits?.best_value || 3),
+        new_entries: String(view.home_section_limits?.new_entries || 6),
+        risk_alerts: String(view.home_section_limits?.risk_alerts || 1),
+      },
     });
   };
 
@@ -3084,6 +3122,13 @@ function MarketingSettingsPage() {
           application_fee_amount: Number(form.application_fee_amount),
           click_charge_amount: Number(form.click_charge_amount),
           admin_telegram_username: form.admin_telegram_username,
+          home_section_limits: {
+            today_pick: Number(form.home_section_limits.today_pick),
+            most_stable: Number(form.home_section_limits.most_stable),
+            best_value: Number(form.home_section_limits.best_value),
+            new_entries: Number(form.home_section_limits.new_entries),
+            risk_alerts: Number(form.home_section_limits.risk_alerts),
+          },
         }),
       })) as MarketingSettingsView;
       applyView(data);
@@ -3120,6 +3165,10 @@ function MarketingSettingsPage() {
               <ReadField label="当前入驻费用" value={settings ? `¥${settings.application_fee_amount}` : '-'} />
               <ReadField label="当前点击费用" value={settings ? `¥${settings.click_charge_amount} / 次` : '-'} />
               <ReadField label="系统管理员 Telegram" value={settings?.admin_telegram_username ? `@${settings.admin_telegram_username}` : '-'} />
+              <ReadField
+                label="首页模块数量"
+                value={settings ? homeSectionLimitFields.map((item) => `${item.label} ${settings.home_section_limits[item.key]}`).join(' / ') : '-'}
+              />
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3151,6 +3200,36 @@ function MarketingSettingsPage() {
                   placeholder="@gaterank_admin"
                 />
               </FormField>
+            </div>
+
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-bold text-neutral-900">首页模块显示数量</h3>
+                <p className="mt-1 text-xs text-neutral-500">控制公开首页五个榜单板块各自展示的卡片数量，范围 1-12。</p>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                {homeSectionLimitFields.map((item) => (
+                  <div key={item.key}>
+                    <FormField label={item.label}>
+                      <input
+                        className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                        type="number"
+                        min="1"
+                        max="12"
+                        step="1"
+                        value={form.home_section_limits[item.key]}
+                        onChange={(e) => setForm({
+                          ...form,
+                          home_section_limits: {
+                            ...form.home_section_limits,
+                            [item.key]: e.target.value,
+                          },
+                        })}
+                      />
+                    </FormField>
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="flex justify-end">

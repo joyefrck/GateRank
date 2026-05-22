@@ -27,6 +27,7 @@ import {
 } from '../utils/time';
 import { buildRiskReasonSummary } from '../utils/risk';
 import { buildTodayPickRows, isTodayPickEligible, type RankedAirportInput } from './rankingService';
+import { DEFAULT_HOME_SECTION_LIMITS, type HomeSectionLimits } from './marketingSettingsService';
 import { buildAirportReportPath, buildAirportSlugCandidate } from '../../../shared/publicSeo';
 import { EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../../shared/fullRankingFilters';
 
@@ -156,7 +157,10 @@ interface PublicViewDeps {
       ): Promise<Map<number, PublicScoreVisibility>>;
     };
     marketingSettingsService?: {
-      getConfig(): Promise<{ click_charge_amount: number }>;
+      getConfig(): Promise<{
+        click_charge_amount: number;
+        home_section_limits?: Partial<HomeSectionLimits>;
+      }>;
     };
     rankingRepository: {
     getLatestAvailableDate(onOrBefore: string): Promise<string | null>;
@@ -253,7 +257,9 @@ export class PublicViewService {
     async getHomePageView(date: string): Promise<HomePageView> {
       const resolvedDate = (await this.deps.rankingRepository.getLatestAvailableDate(date)) || date;
       const resolvedFromFallback = resolvedDate !== date;
-      const clickChargeAmount = await this.getClickChargeAmount();
+      const marketingConfig = await this.getMarketingConfig();
+      const clickChargeAmount = marketingConfig.click_charge_amount;
+      const sectionLimits = marketingConfig.home_section_limits;
       const [
       stats,
       fullRankingPreview,
@@ -267,7 +273,7 @@ export class PublicViewService {
         this.deps.scoreRepository.getPublicFullRankingByDate(
           resolvedDate,
           1,
-          SECTION_CONFIG.today_pick.limit,
+          sectionLimits.today_pick,
           EMPTY_FULL_RANKING_FILTERS,
           clickChargeAmount,
         ),
@@ -276,14 +282,14 @@ export class PublicViewService {
       this.deps.rankingRepository.getRanking(resolvedDate, 'new'),
       this.deps.airportRepository.listLatestApprovedApplicationAirports
         ? this.deps.airportRepository.listLatestApprovedApplicationAirports(
-            SECTION_CONFIG.new_entries.limit,
+            sectionLimits.new_entries,
           )
         : Promise.resolve([]),
       this.deps.scoreRepository.getPublicRiskMonitorByDate
         ? this.deps.scoreRepository.getPublicRiskMonitorByDate(
             resolvedDate,
               1,
-              SECTION_CONFIG.risk_alerts.limit,
+              sectionLimits.risk_alerts,
               clickChargeAmount,
             )
         : Promise.resolve({ total: 0, items: [] }),
@@ -301,15 +307,15 @@ export class PublicViewService {
       );
     const loadCardContext = this.createCardContextLoader(preloadedContexts, clickChargeAmount);
     const [todayPickItems, stableItems, valueItems, newestItems, latestApprovedApplicationItems] = await Promise.all([
-      this.buildHomeSectionItems('today_pick', fullRankingPreview.items, resolvedDate, loadCardContext),
+      this.buildHomeSectionItems('today_pick', fullRankingPreview.items, resolvedDate, loadCardContext, sectionLimits),
       stable.length > 0
-        ? this.buildHomeSectionItems('most_stable', stable, resolvedDate, loadCardContext)
+        ? this.buildHomeSectionItems('most_stable', stable, resolvedDate, loadCardContext, sectionLimits)
         : Promise.resolve([]),
       value.length > 0
-        ? this.buildHomeSectionItems('best_value', value, resolvedDate, loadCardContext)
+        ? this.buildHomeSectionItems('best_value', value, resolvedDate, loadCardContext, sectionLimits)
         : Promise.resolve([]),
       newest.length > 0
-        ? this.buildHomeSectionItems('new_entries', newest, resolvedDate, loadCardContext)
+        ? this.buildHomeSectionItems('new_entries', newest, resolvedDate, loadCardContext, sectionLimits)
         : Promise.resolve([]),
       latestApprovedApplicationAirports.length > 0
         ? this.buildHomeSectionItems(
@@ -317,11 +323,12 @@ export class PublicViewService {
             latestApprovedApplicationAirports.map((airport) => ({ airport_id: airport.id })),
             resolvedDate,
             loadCardContext,
+            sectionLimits,
           )
         : Promise.resolve([]),
     ]);
     const newEntryItems = mergeHomeSectionItems(
-      SECTION_CONFIG.new_entries.limit,
+      sectionLimits.new_entries,
       latestApprovedApplicationItems,
       newestItems,
     );
@@ -329,11 +336,11 @@ export class PublicViewService {
       todayPickItems.length === 0 ||
       stable.length === 0 ||
       value.length === 0 ||
-      newEntryItems.length < SECTION_CONFIG.new_entries.limit
-          ? await this.buildFallbackHomeSections(resolvedDate, loadCardContext, clickChargeAmount)
+      newEntryItems.length < sectionLimits.new_entries
+          ? await this.buildFallbackHomeSections(resolvedDate, loadCardContext, clickChargeAmount, sectionLimits)
           : null;
     const finalNewEntryItems = mergeHomeSectionItems(
-      SECTION_CONFIG.new_entries.limit,
+      sectionLimits.new_entries,
       newEntryItems,
       fallbackSections?.new_entries ?? [],
     );
@@ -441,7 +448,8 @@ export class PublicViewService {
     async getReportView(airportId: number, date: string): Promise<ReportView | null> {
       const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
       const resolvedFromFallback = resolvedDate !== date;
-      const clickChargeAmount = await this.getClickChargeAmount();
+      const marketingConfig = await this.getMarketingConfig();
+      const clickChargeAmount = marketingConfig.click_charge_amount;
       const base = await this.loadCardContext(airportId, resolvedDate, clickChargeAmount);
     if (!base) {
       return null;
@@ -451,7 +459,12 @@ export class PublicViewService {
       this.deps.rankingRepository.getRanksForAirport(airportId, resolvedDate),
       this.deps.subscriptionNodeSnapshotRepository?.getLatestByAirport(airportId) ?? Promise.resolve(null),
     ]);
-    const todayRank = rawRanking.today ?? (await this.getTodayPickRankFromPublicRanking(airportId, resolvedDate, clickChargeAmount));
+    const todayRank = rawRanking.today ?? (await this.getTodayPickRankFromPublicRanking(
+      airportId,
+      resolvedDate,
+      clickChargeAmount,
+      marketingConfig.home_section_limits.today_pick,
+    ));
     const ranking = {
       ...rawRanking,
       today: todayRank,
@@ -545,12 +558,25 @@ export class PublicViewService {
   }
 
   private async getClickChargeAmount(): Promise<number> {
+    return (await this.getMarketingConfig()).click_charge_amount;
+  }
+
+  private async getMarketingConfig(): Promise<{
+    click_charge_amount: number;
+    home_section_limits: HomeSectionLimits;
+  }> {
     if (!this.deps.marketingSettingsService) {
-      return CLICK_CHARGE_AMOUNT;
+      return {
+        click_charge_amount: CLICK_CHARGE_AMOUNT,
+        home_section_limits: { ...DEFAULT_HOME_SECTION_LIMITS },
+      };
     }
     const config = await this.deps.marketingSettingsService.getConfig();
     const amount = Number(config.click_charge_amount);
-    return Number.isFinite(amount) && amount > 0 ? amount : CLICK_CHARGE_AMOUNT;
+    return {
+      click_charge_amount: Number.isFinite(amount) && amount > 0 ? amount : CLICK_CHARGE_AMOUNT,
+      home_section_limits: normalizeHomeSectionLimits(config.home_section_limits),
+    };
   }
 
   private async getScoreVisibilityByAirportIds(
@@ -571,8 +597,8 @@ export class PublicViewService {
     rankingItems: Array<Pick<RankingItem, 'airport_id'>>,
     date: string,
     loadCardContext: (airportId: number, targetDate: string) => Promise<CardContext | null>,
+    sectionLimits: HomeSectionLimits,
   ): Promise<PublicCardItem[]> {
-    const config = SECTION_CONFIG[section];
     const items = await Promise.all(
       rankingItems.map(async (item) => {
         const context = await loadCardContext(item.airport_id, date);
@@ -589,18 +615,19 @@ export class PublicViewService {
     return items
       .filter((item): item is PublicCardItem => item !== null)
       .sort(comparePublicCardVisibility)
-      .slice(0, config.limit);
+      .slice(0, sectionLimits[section]);
   }
 
   private async getTodayPickRankFromPublicRanking(
     airportId: number,
     date: string,
     clickChargeAmount: number,
+    todayPickLimit: number = DEFAULT_HOME_SECTION_LIMITS.today_pick,
   ): Promise<number | undefined> {
     const { items } = await this.deps.scoreRepository.getPublicFullRankingByDate(
       date,
       1,
-      SECTION_CONFIG.today_pick.limit,
+      todayPickLimit,
       EMPTY_FULL_RANKING_FILTERS,
       clickChargeAmount,
     );
@@ -612,6 +639,7 @@ export class PublicViewService {
     date: string,
     loadCardContext: (airportId: number, targetDate: string) => Promise<CardContext | null>,
     clickChargeAmount: number,
+    sectionLimits: HomeSectionLimits,
   ): Promise<Record<HomeSectionKey, PublicCardItem[]>> {
     const { items } = await this.deps.scoreRepository.getPublicFullRankingByDate(
       date,
@@ -636,19 +664,19 @@ export class PublicViewService {
 
     return {
       today_pick: byScore
-        .slice(0, SECTION_CONFIG.today_pick.limit)
+        .slice(0, sectionLimits.today_pick)
         .map((context) => this.buildCard('today_pick', context, date)),
       most_stable: byStable
-        .slice(0, SECTION_CONFIG.most_stable.limit)
+        .slice(0, sectionLimits.most_stable)
         .map((context) => this.buildCard('most_stable', context, date)),
       best_value: byValue
-        .slice(0, SECTION_CONFIG.best_value.limit)
+        .slice(0, sectionLimits.best_value)
         .map((context) => this.buildCard('best_value', context, date)),
       new_entries: byNew
-        .slice(0, SECTION_CONFIG.new_entries.limit)
+        .slice(0, sectionLimits.new_entries)
         .map((context) => this.buildCard('new_entries', context, date)),
       risk_alerts: byRisk
-        .slice(0, SECTION_CONFIG.risk_alerts.limit)
+        .slice(0, sectionLimits.risk_alerts)
         .map((context) => this.buildCard('risk_alerts', context, date)),
     };
   }
@@ -1109,6 +1137,22 @@ function mergeHomeSectionItems(limit: number, ...groups: PublicCardItem[][]): Pu
 
 function comparePublicCardVisibility(left: PublicCardItem, right: PublicCardItem): number {
   return Number(left.score_hidden) - Number(right.score_hidden);
+}
+
+function normalizeHomeSectionLimits(value: Partial<HomeSectionLimits> | undefined): HomeSectionLimits {
+  const limits = { ...DEFAULT_HOME_SECTION_LIMITS };
+  if (!value) {
+    return limits;
+  }
+
+  for (const key of Object.keys(limits) as Array<keyof HomeSectionLimits>) {
+    const next = Number(value[key]);
+    if (Number.isInteger(next) && next >= 1 && next <= 12) {
+      limits[key] = next;
+    }
+  }
+
+  return limits;
 }
 
 function compareByDisplayScoreDesc(left: CardContext, right: CardContext): number {

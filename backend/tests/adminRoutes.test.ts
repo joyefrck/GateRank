@@ -4511,6 +4511,13 @@ test('GET /marketing/settings returns billing settings', async () => {
         application_fee_amount: 288,
         click_charge_amount: 1.5,
         admin_telegram_username: 'gaterank_admin',
+        home_section_limits: {
+          today_pick: 6,
+          most_stable: 4,
+          best_value: 5,
+          new_entries: 8,
+          risk_alerts: 2,
+        },
       }),
     }),
   );
@@ -4524,10 +4531,18 @@ test('GET /marketing/settings returns billing settings', async () => {
       application_fee_amount: number;
       click_charge_amount: number;
       admin_telegram_username: string | null;
+      home_section_limits: Record<string, number>;
     };
     assert.equal(data.application_fee_amount, 288);
     assert.equal(data.click_charge_amount, 1.5);
     assert.equal(data.admin_telegram_username, 'gaterank_admin');
+    assert.deepEqual(data.home_section_limits, {
+      today_pick: 6,
+      most_stable: 4,
+      best_value: 5,
+      new_entries: 8,
+      risk_alerts: 2,
+    });
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -4536,6 +4551,7 @@ test('GET /marketing/settings returns billing settings', async () => {
 test('PATCH /marketing/settings updates billing settings and writes audit log', async () => {
   const updates: Array<Record<string, unknown>> = [];
   const audits: Array<Record<string, unknown>> = [];
+  let publicCacheClears = 0;
   const app = express();
   app.use(express.json());
   app.use(
@@ -4575,9 +4591,15 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
             application_fee_amount: input.application_fee_amount,
             click_charge_amount: input.click_charge_amount,
             admin_telegram_username: input.admin_telegram_username ?? null,
+            home_section_limits: input.home_section_limits,
             updated_at: '2026-05-10 08:10:00',
             updated_by: updatedBy,
           };
+        },
+      },
+      publicPageCache: {
+        clear: () => {
+          publicCacheClears += 1;
         },
       },
     }),
@@ -4593,6 +4615,13 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
         application_fee_amount: 399.99,
         click_charge_amount: 2.5,
         admin_telegram_username: '@gaterank_admin',
+        home_section_limits: {
+          today_pick: 6,
+          most_stable: 4,
+          best_value: 5,
+          new_entries: 8,
+          risk_alerts: 2,
+        },
       }),
     });
     assert.equal(response.status, 200);
@@ -4600,6 +4629,13 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
       application_fee_amount: 399.99,
       click_charge_amount: 2.5,
       admin_telegram_username: '@gaterank_admin',
+      home_section_limits: {
+        today_pick: 6,
+        most_stable: 4,
+        best_value: 5,
+        new_entries: 8,
+        risk_alerts: 2,
+      },
       updatedBy: 'tester',
     }]);
     assert.equal(audits.length, 1);
@@ -4608,7 +4644,15 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
       application_fee_amount: 399.99,
       click_charge_amount: 2.5,
       admin_telegram_username: '@gaterank_admin',
+      home_section_limits: {
+        today_pick: 6,
+        most_stable: 4,
+        best_value: 5,
+        new_entries: 8,
+        risk_alerts: 2,
+      },
     });
+    assert.equal(publicCacheClears, 1);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -6247,14 +6291,35 @@ function stubMarketingSettingsService(config: {
   application_fee_amount: number;
   click_charge_amount: number;
   admin_telegram_username?: string | null;
+  home_section_limits?: {
+    today_pick: number;
+    most_stable: number;
+    best_value: number;
+    new_entries: number;
+    risk_alerts: number;
+  };
 } = {
   application_fee_amount: 300,
   click_charge_amount: 1,
   admin_telegram_username: null,
+  home_section_limits: {
+    today_pick: 3,
+    most_stable: 3,
+    best_value: 3,
+    new_entries: 6,
+    risk_alerts: 1,
+  },
 }) {
   const normalizedConfig = {
     ...config,
     admin_telegram_username: config.admin_telegram_username ?? null,
+    home_section_limits: config.home_section_limits ?? {
+      today_pick: 3,
+      most_stable: 3,
+      best_value: 3,
+      new_entries: 6,
+      risk_alerts: 1,
+    },
   };
   return {
     getAdminSettings: async () => ({
@@ -6266,10 +6331,20 @@ function stubMarketingSettingsService(config: {
       application_fee_amount?: number;
       click_charge_amount?: number;
       admin_telegram_username?: string | null;
+      home_section_limits?: {
+        today_pick?: number;
+        most_stable?: number;
+        best_value?: number;
+        new_entries?: number;
+        risk_alerts?: number;
+      };
     }, updatedBy: string) => ({
       application_fee_amount: input.application_fee_amount ?? normalizedConfig.application_fee_amount,
       click_charge_amount: input.click_charge_amount ?? normalizedConfig.click_charge_amount,
       admin_telegram_username: input.admin_telegram_username ?? normalizedConfig.admin_telegram_username,
+      home_section_limits: input.home_section_limits
+        ? { ...normalizedConfig.home_section_limits, ...input.home_section_limits }
+        : normalizedConfig.home_section_limits,
       updated_at: '2026-05-10 08:10:00',
       updated_by: updatedBy,
     }),
