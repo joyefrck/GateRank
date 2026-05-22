@@ -143,7 +143,7 @@ function createDeps(overrides: Record<string, unknown> = {}) {
       }),
     },
     marketingSettingsService: {
-      getConfig: async () => ({ click_charge_amount: 0.6 }),
+      getConfig: async () => ({ click_charge_amount: 0.6, recharge_amounts: [100, 300, 500, 1000] }),
     },
     ...overrides,
   };
@@ -609,7 +609,11 @@ test('user telegram webhook sends recharge inline keyboard from command menu ent
     return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
   };
   try {
-    await withServer(createDeps(), async (port) => {
+    await withServer(createDeps({
+      marketingSettingsService: {
+        getConfig: async () => ({ click_charge_amount: 0.6, recharge_amounts: [200, 800] }),
+      },
+    }), async (port) => {
       const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -632,8 +636,12 @@ test('user telegram webhook sends recharge inline keyboard from command menu ent
     inline_keyboard: Array<Array<{ text: string; callback_data: string }>>;
   };
   assert.deepEqual(replyMarkup.inline_keyboard[0], [
-    { text: '¥100 支付宝', callback_data: 'gr_recharge:100:alipay' },
-    { text: '¥100 微信', callback_data: 'gr_recharge:100:wxpay' },
+    { text: '¥200 支付宝', callback_data: 'gr_recharge:200:alipay' },
+    { text: '¥200 微信', callback_data: 'gr_recharge:200:wxpay' },
+  ]);
+  assert.deepEqual(replyMarkup.inline_keyboard[1], [
+    { text: '¥800 支付宝', callback_data: 'gr_recharge:800:alipay' },
+    { text: '¥800 微信', callback_data: 'gr_recharge:800:wxpay' },
   ]);
 });
 
@@ -779,6 +787,9 @@ test('user telegram webhook creates recharge order from callback', async () => {
           return 1;
         },
       },
+      marketingSettingsService: {
+        getConfig: async () => ({ click_charge_amount: 0.6, recharge_amounts: [250] }),
+      },
     }), async (port) => {
       const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
         method: 'POST',
@@ -786,6 +797,51 @@ test('user telegram webhook creates recharge order from callback', async () => {
         body: JSON.stringify({
           callback_query: {
             id: 'cb-1',
+            data: 'gr_recharge:250:alipay',
+            message: { chat: { id: 84 } },
+            from: { id: 42, username: 'owner' },
+          },
+        }),
+      });
+      assert.equal(response.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+
+  assert.deepEqual(createdOrders, [{ amount: 250, channel: 'alipay' }]);
+  assert.ok(telegramCalls.some((call) => call.url.endsWith('/answerCallbackQuery')));
+  assert.ok(telegramCalls.some((call) => String(call.body.text || '').includes('https://pay.example.com/order')));
+});
+
+test('user telegram webhook rejects recharge callback amount outside marketing settings', async () => {
+  const createdOrders: Array<{ amount: number; channel: string }> = [];
+  const telegramCalls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url: string | URL | Request, init?: RequestInit) => {
+    telegramCalls.push({ url: String(url), body: JSON.parse(String(init?.body || '{}')) });
+    return new Response(JSON.stringify({ ok: true, result: {} }), { status: 200 });
+  };
+
+  try {
+    await withServer(createDeps({
+      applicantBillingRepository: {
+        ...createDeps().applicantBillingRepository,
+        createRechargeOrder: async (input: { amount: number; channel: string }) => {
+          createdOrders.push({ amount: input.amount, channel: input.channel });
+          return 1;
+        },
+      },
+      marketingSettingsService: {
+        getConfig: async () => ({ click_charge_amount: 0.6, recharge_amounts: [250] }),
+      },
+    }), async (port) => {
+      const response = await originalFetch(`http://127.0.0.1:${port}/api/v1/telegram/user-bot/webhook/secret-token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          callback_query: {
+            id: 'cb-stale-amount',
             data: 'gr_recharge:100:alipay',
             message: { chat: { id: 84 } },
             from: { id: 42, username: 'owner' },
@@ -798,9 +854,9 @@ test('user telegram webhook creates recharge order from callback', async () => {
     globalThis.fetch = originalFetch;
   }
 
-  assert.deepEqual(createdOrders, [{ amount: 100, channel: 'alipay' }]);
+  assert.deepEqual(createdOrders, []);
   assert.ok(telegramCalls.some((call) => call.url.endsWith('/answerCallbackQuery')));
-  assert.ok(telegramCalls.some((call) => String(call.body.text || '').includes('https://pay.example.com/order')));
+  assert.ok(telegramCalls.some((call) => String(call.body.text || '').includes('充值选项无效')));
 });
 
 test('user telegram webhook rejects stale epay recharge callback when epay switch is disabled', async () => {

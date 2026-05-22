@@ -1,4 +1,4 @@
-import { APPLICATION_FEE_AMOUNT, CLICK_CHARGE_AMOUNT } from '../config/billing';
+import { APPLICATION_FEE_AMOUNT, CLICK_CHARGE_AMOUNT, RECHARGE_AMOUNTS } from '../config/billing';
 import { HttpError } from '../middleware/errorHandler';
 import type { SystemSettingRecord } from '../repositories/systemSettingRepository';
 import { formatDateTimeInTimezoneIso } from '../utils/time';
@@ -6,6 +6,7 @@ import { formatDateTimeInTimezoneIso } from '../utils/time';
 export interface MarketingSettingsInput {
   application_fee_amount?: number;
   click_charge_amount?: number;
+  recharge_amounts?: number[];
   admin_telegram_username?: string | null;
   home_section_limits?: Partial<HomeSectionLimits>;
 }
@@ -21,6 +22,7 @@ export interface HomeSectionLimits {
 export interface MarketingSettingsView {
   application_fee_amount: number;
   click_charge_amount: number;
+  recharge_amounts: number[];
   admin_telegram_username: string | null;
   home_section_limits: HomeSectionLimits;
   updated_at: string | null;
@@ -30,6 +32,7 @@ export interface MarketingSettingsView {
 export interface MarketingBillingConfig {
   application_fee_amount: number;
   click_charge_amount: number;
+  recharge_amounts: number[];
   admin_telegram_username: string | null;
   home_section_limits: HomeSectionLimits;
 }
@@ -46,6 +49,7 @@ const PAYMENT_GATEWAY_SETTING_KEY = 'payment_gateway';
 
 export const DEFAULT_MARKETING_APPLICATION_FEE_AMOUNT = APPLICATION_FEE_AMOUNT;
 export const DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT = CLICK_CHARGE_AMOUNT;
+export const DEFAULT_MARKETING_RECHARGE_AMOUNTS = [...RECHARGE_AMOUNTS];
 export const DEFAULT_HOME_SECTION_LIMITS: HomeSectionLimits = {
   today_pick: 3,
   most_stable: 3,
@@ -95,6 +99,10 @@ export class MarketingSettingsService {
         input.click_charge_amount === undefined
           ? base.click_charge_amount
           : normalizePositiveAmount(input.click_charge_amount, 'click_charge_amount'),
+      recharge_amounts:
+        input.recharge_amounts === undefined
+          ? base.recharge_amounts
+          : normalizeRechargeAmounts(input.recharge_amounts, base.recharge_amounts, true),
       admin_telegram_username:
         input.admin_telegram_username === undefined
           ? base.admin_telegram_username
@@ -154,6 +162,7 @@ function getBaseDefaults(): MarketingBillingConfig {
   return {
     application_fee_amount: DEFAULT_MARKETING_APPLICATION_FEE_AMOUNT,
     click_charge_amount: DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT,
+    recharge_amounts: [...DEFAULT_MARKETING_RECHARGE_AMOUNTS],
     admin_telegram_username: null,
     home_section_limits: { ...DEFAULT_HOME_SECTION_LIMITS },
   };
@@ -169,6 +178,11 @@ function normalizeConfig(value: unknown, defaults: MarketingBillingConfig): Mark
     click_charge_amount: normalizeStoredAmount(
       record.click_charge_amount,
       defaults.click_charge_amount,
+    ),
+    recharge_amounts: normalizeRechargeAmounts(
+      record.recharge_amounts,
+      defaults.recharge_amounts,
+      false,
     ),
     admin_telegram_username: normalizeStoredTelegramUsername(record.admin_telegram_username),
     home_section_limits: normalizeHomeSectionLimits(
@@ -193,6 +207,44 @@ function normalizePositiveAmount(value: unknown, fieldName: string): number {
     throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be greater than 0`);
   }
   return Number(amount.toFixed(2));
+}
+
+function normalizeRechargeAmounts(value: unknown, fallback: number[], strict: boolean): number[] {
+  if (!Array.isArray(value)) {
+    if (strict) {
+      throw new HttpError(400, 'BAD_REQUEST', 'recharge_amounts must be an array');
+    }
+    return [...fallback];
+  }
+
+  const amounts: number[] = [];
+  const seen = new Set<number>();
+  for (const item of value) {
+    const amount = Number(item);
+    if (!Number.isInteger(amount) || amount <= 0) {
+      if (strict) {
+        throw new HttpError(400, 'BAD_REQUEST', 'recharge_amounts must contain positive integer amounts');
+      }
+      return [...fallback];
+    }
+    if (seen.has(amount)) {
+      if (strict) {
+        throw new HttpError(400, 'BAD_REQUEST', 'recharge_amounts must be unique');
+      }
+      return [...fallback];
+    }
+    seen.add(amount);
+    amounts.push(amount);
+  }
+
+  if (amounts.length < 1 || amounts.length > 8) {
+    if (strict) {
+      throw new HttpError(400, 'BAD_REQUEST', 'recharge_amounts must contain 1 to 8 amounts');
+    }
+    return [...fallback];
+  }
+
+  return amounts.sort((a, b) => a - b);
 }
 
 function normalizeTelegramUsername(value: unknown): string | null {

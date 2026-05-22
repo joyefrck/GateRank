@@ -787,6 +787,7 @@ interface PaymentGatewaySettingsFormState {
 interface MarketingSettingsView {
   application_fee_amount: number;
   click_charge_amount: number;
+  recharge_amounts: number[];
   admin_telegram_username: string | null;
   home_section_limits: {
     today_pick: number;
@@ -802,6 +803,7 @@ interface MarketingSettingsView {
 interface MarketingSettingsFormState {
   application_fee_amount: string;
   click_charge_amount: string;
+  recharge_amounts: string[];
   admin_telegram_username: string;
   home_section_limits: {
     today_pick: string;
@@ -3065,6 +3067,8 @@ const defaultHomeSectionLimitForm = {
   risk_alerts: '1',
 };
 
+const defaultRechargeAmountForm = ['100', '300', '500', '1000'];
+
 function MarketingSettingsPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -3074,15 +3078,20 @@ function MarketingSettingsPage() {
   const [form, setForm] = useState<MarketingSettingsFormState>({
     application_fee_amount: '300',
     click_charge_amount: '1',
+    recharge_amounts: defaultRechargeAmountForm,
     admin_telegram_username: '',
     home_section_limits: defaultHomeSectionLimitForm,
   });
 
   const applyView = (view: MarketingSettingsView) => {
+    const rechargeAmounts = Array.isArray(view.recharge_amounts) && view.recharge_amounts.length > 0
+      ? view.recharge_amounts
+      : defaultRechargeAmountForm.map(Number);
     setSettings(view);
     setForm({
       application_fee_amount: String(view.application_fee_amount || 300),
       click_charge_amount: String(view.click_charge_amount || 1),
+      recharge_amounts: rechargeAmounts.map((amount) => String(amount)),
       admin_telegram_username: view.admin_telegram_username ? `@${view.admin_telegram_username}` : '',
       home_section_limits: {
         today_pick: String(view.home_section_limits?.today_pick || 3),
@@ -3121,6 +3130,7 @@ function MarketingSettingsPage() {
         body: JSON.stringify({
           application_fee_amount: Number(form.application_fee_amount),
           click_charge_amount: Number(form.click_charge_amount),
+          recharge_amounts: form.recharge_amounts.map((amount) => Number(amount)),
           admin_telegram_username: form.admin_telegram_username,
           home_section_limits: {
             today_pick: Number(form.home_section_limits.today_pick),
@@ -3140,74 +3150,171 @@ function MarketingSettingsPage() {
     }
   };
 
+  const updateRechargeAmount = (index: number, value: string) => {
+    setForm({
+      ...form,
+      recharge_amounts: form.recharge_amounts.map((amount, currentIndex) => (
+        currentIndex === index ? value : amount
+      )),
+    });
+  };
+
+  const addRechargeAmount = () => {
+    if (form.recharge_amounts.length >= 8) {
+      setError('充值金额最多配置 8 个选项');
+      return;
+    }
+    setError('');
+    setForm({
+      ...form,
+      recharge_amounts: [...form.recharge_amounts, ''],
+    });
+  };
+
+  const removeRechargeAmount = (index: number) => {
+    if (form.recharge_amounts.length <= 1) {
+      setError('至少保留 1 个充值金额');
+      return;
+    }
+    setError('');
+    setForm({
+      ...form,
+      recharge_amounts: form.recharge_amounts.filter((_, currentIndex) => currentIndex !== index),
+    });
+  };
+
+  const resetRechargeAmounts = () => {
+    setError('');
+    setForm({
+      ...form,
+      recharge_amounts: defaultRechargeAmountForm,
+    });
+  };
+
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-lg font-bold">营销模块</h2>
-          <p className="mt-1 text-sm text-neutral-500">配置入驻费用和 GateRank 外链每次有效点击扣费，保存后仅影响新订单和新点击。</p>
+          <p className="mt-1 text-sm text-neutral-500">统一配置入驻费用、点击扣费、充值选项、首页展示和申请人联系入口。</p>
         </div>
         <button className="px-3 py-2 rounded border text-sm" onClick={() => void fetchSettings()} disabled={loading || saving}>
           刷新
         </button>
       </div>
 
-      <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
+      <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-6">
         {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
         {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
         {loading && <div className="text-sm text-neutral-500">加载中...</div>}
 
         {!loading && (
           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
-              <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
-              <ReadField label="当前入驻费用" value={settings ? `¥${settings.application_fee_amount}` : '-'} />
-              <ReadField label="当前点击费用" value={settings ? `¥${settings.click_charge_amount} / 次` : '-'} />
-              <ReadField label="系统管理员 Telegram" value={settings?.admin_telegram_username ? `@${settings.admin_telegram_username}` : '-'} />
-              <ReadField
-                label="首页模块数量"
-                value={settings ? homeSectionLimitFields.map((item) => `${item.label} ${settings.home_section_limits[item.key]}`).join(' / ') : '-'}
-              />
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField label="入驻费用 (元)" hint="申请人后台新建入驻支付订单时使用。">
-                <input
-                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={form.application_fee_amount}
-                  onChange={(e) => setForm({ ...form, application_fee_amount: e.target.value })}
-                />
-              </FormField>
-              <FormField label="每次点击费用 (元)" hint="GateRank 到机场官网的每次有效跳转扣费。">
-                <input
-                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                  type="number"
-                  min="0.01"
-                  step="0.01"
-                  value={form.click_charge_amount}
-                  onChange={(e) => setForm({ ...form, click_charge_amount: e.target.value })}
-                />
-              </FormField>
-              <FormField label="系统管理员 Telegram" hint="支持 @username / username / t.me/username，申请人后台会用它打开 Telegram 客户端。">
-                <input
-                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                  value={form.admin_telegram_username}
-                  onChange={(e) => setForm({ ...form, admin_telegram_username: e.target.value })}
-                  placeholder="@gaterank_admin"
-                />
-              </FormField>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <h3 className="text-sm font-bold text-neutral-900">首页模块显示数量</h3>
-                <p className="mt-1 text-xs text-neutral-500">控制公开首页五个榜单板块各自展示的卡片数量，范围 1-12。</p>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+                <div className="text-xs font-medium text-neutral-500">费用规则</div>
+                <div className="mt-2 text-sm font-bold text-neutral-950">
+                  {settings ? `入驻 ¥${settings.application_fee_amount} / 点击 ¥${settings.click_charge_amount}` : '-'}
+                </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+                <div className="text-xs font-medium text-neutral-500">充值选项</div>
+                <div className="mt-2 text-sm font-bold text-neutral-950">
+                  {settings?.recharge_amounts?.length ? settings.recharge_amounts.map((amount) => `¥${amount}`).join(' / ') : '-'}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+                <div className="text-xs font-medium text-neutral-500">最近更新</div>
+                <div className="mt-2 text-sm font-bold text-neutral-950">{formatDateTimeInBeijing(settings?.updated_at)}</div>
+                <div className="mt-1 text-xs text-neutral-500">操作人：{valueOrDash(settings?.updated_by)}</div>
+              </div>
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+                <div className="text-xs font-medium text-neutral-500">联系方式</div>
+                <div className="mt-2 text-sm font-bold text-neutral-950">
+                  {settings?.admin_telegram_username ? `@${settings.admin_telegram_username}` : '-'}
+                </div>
+              </div>
+            </div>
+
+            <MarketingSettingsSection
+              title="费用规则"
+              description="控制新入驻订单和 GateRank 外链有效点击扣费，已创建订单不回写金额。"
+            >
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <FormField label="入驻费用 (元)" hint="申请人后台新建入驻支付订单时使用。">
+                  <input
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={form.application_fee_amount}
+                    onChange={(e) => setForm({ ...form, application_fee_amount: e.target.value })}
+                  />
+                </FormField>
+                <FormField label="每次点击费用 (元)" hint="GateRank 到机场官网的每次有效跳转扣费。">
+                  <input
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={form.click_charge_amount}
+                    onChange={(e) => setForm({ ...form, click_charge_amount: e.target.value })}
+                  />
+                </FormField>
+              </div>
+            </MarketingSettingsSection>
+
+            <MarketingSettingsSection
+              title="充值选项"
+              description="申请人后台和 Telegram Bot 的充值按钮使用同一组金额，最多 8 个，保存后按金额从小到大展示。"
+            >
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                {form.recharge_amounts.map((amount, index) => (
+                  <div key={index} className="flex gap-2">
+                    <input
+                      className="min-w-0 flex-1 rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      type="number"
+                      min="1"
+                      step="1"
+                      value={amount}
+                      placeholder="100"
+                      onChange={(e) => updateRechargeAmount(index, e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="rounded-2xl border border-neutral-200 px-3 py-2 text-sm text-neutral-500 hover:bg-neutral-50 disabled:opacity-50"
+                      onClick={() => removeRechargeAmount(index)}
+                      disabled={form.recharge_amounts.length <= 1}
+                    >
+                      删除
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="rounded-2xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                  onClick={addRechargeAmount}
+                  disabled={form.recharge_amounts.length >= 8}
+                >
+                  添加金额
+                </button>
+                <button
+                  type="button"
+                  className="rounded-2xl border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+                  onClick={resetRechargeAmounts}
+                >
+                  恢复默认 100 / 300 / 500 / 1000
+                </button>
+              </div>
+            </MarketingSettingsSection>
+
+            <MarketingSettingsSection
+              title="首页展示"
+              description="控制公开首页五个榜单板块各自展示的卡片数量，范围 1-12。"
+            >
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                 {homeSectionLimitFields.map((item) => (
                   <div key={item.key}>
                     <FormField label={item.label}>
@@ -3230,7 +3337,21 @@ function MarketingSettingsPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </MarketingSettingsSection>
+
+            <MarketingSettingsSection
+              title="联系方式"
+              description="申请人后台会用这里的 Telegram 用户名打开管理员会话。"
+            >
+              <FormField label="系统管理员 Telegram" hint="支持 @username / username / t.me/username。">
+                <input
+                  className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900 md:max-w-md"
+                  value={form.admin_telegram_username}
+                  onChange={(e) => setForm({ ...form, admin_telegram_username: e.target.value })}
+                  placeholder="@gaterank_admin"
+                />
+              </FormField>
+            </MarketingSettingsSection>
 
             <div className="flex justify-end">
               <button
@@ -3246,6 +3367,28 @@ function MarketingSettingsPage() {
         )}
       </section>
     </div>
+  );
+}
+
+function MarketingSettingsSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="space-y-4 border-t border-neutral-200 pt-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-bold text-neutral-950">{title}</h3>
+          <p className="mt-1 text-xs leading-5 text-neutral-500">{description}</p>
+        </div>
+      </div>
+      {children}
+    </section>
   );
 }
 

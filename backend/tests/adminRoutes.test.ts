@@ -4510,6 +4510,7 @@ test('GET /marketing/settings returns billing settings', async () => {
       marketingSettingsService: stubMarketingSettingsService({
         application_fee_amount: 288,
         click_charge_amount: 1.5,
+        recharge_amounts: [50, 150, 300],
         admin_telegram_username: 'gaterank_admin',
         home_section_limits: {
           today_pick: 6,
@@ -4530,11 +4531,13 @@ test('GET /marketing/settings returns billing settings', async () => {
     const data = (await response.json()) as {
       application_fee_amount: number;
       click_charge_amount: number;
+      recharge_amounts: number[];
       admin_telegram_username: string | null;
       home_section_limits: Record<string, number>;
     };
     assert.equal(data.application_fee_amount, 288);
     assert.equal(data.click_charge_amount, 1.5);
+    assert.deepEqual(data.recharge_amounts, [50, 150, 300]);
     assert.equal(data.admin_telegram_username, 'gaterank_admin');
     assert.deepEqual(data.home_section_limits, {
       today_pick: 6,
@@ -4614,6 +4617,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
       body: JSON.stringify({
         application_fee_amount: 399.99,
         click_charge_amount: 2.5,
+        recharge_amounts: [120, 80, 240],
         admin_telegram_username: '@gaterank_admin',
         home_section_limits: {
           today_pick: 6,
@@ -4628,6 +4632,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
     assert.deepEqual(updates, [{
       application_fee_amount: 399.99,
       click_charge_amount: 2.5,
+      recharge_amounts: [120, 80, 240],
       admin_telegram_username: '@gaterank_admin',
       home_section_limits: {
         today_pick: 6,
@@ -4643,6 +4648,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
     assert.deepEqual(audits[0].payload, {
       application_fee_amount: 399.99,
       click_charge_amount: 2.5,
+      recharge_amounts: [120, 80, 240],
       admin_telegram_username: '@gaterank_admin',
       home_section_limits: {
         today_pick: 6,
@@ -6290,6 +6296,7 @@ function stubManualJobService() {
 function stubMarketingSettingsService(config: {
   application_fee_amount: number;
   click_charge_amount: number;
+  recharge_amounts?: number[];
   admin_telegram_username?: string | null;
   home_section_limits?: {
     today_pick: number;
@@ -6301,6 +6308,7 @@ function stubMarketingSettingsService(config: {
 } = {
   application_fee_amount: 300,
   click_charge_amount: 1,
+  recharge_amounts: [100, 300, 500, 1000],
   admin_telegram_username: null,
   home_section_limits: {
     today_pick: 3,
@@ -6312,6 +6320,7 @@ function stubMarketingSettingsService(config: {
 }) {
   const normalizedConfig = {
     ...config,
+    recharge_amounts: config.recharge_amounts ?? [100, 300, 500, 1000],
     admin_telegram_username: config.admin_telegram_username ?? null,
     home_section_limits: config.home_section_limits ?? {
       today_pick: 3,
@@ -6330,6 +6339,7 @@ function stubMarketingSettingsService(config: {
     updateAdminSettings: async (input: {
       application_fee_amount?: number;
       click_charge_amount?: number;
+      recharge_amounts?: number[];
       admin_telegram_username?: string | null;
       home_section_limits?: {
         today_pick?: number;
@@ -6341,6 +6351,7 @@ function stubMarketingSettingsService(config: {
     }, updatedBy: string) => ({
       application_fee_amount: input.application_fee_amount ?? normalizedConfig.application_fee_amount,
       click_charge_amount: input.click_charge_amount ?? normalizedConfig.click_charge_amount,
+      recharge_amounts: input.recharge_amounts ?? normalizedConfig.recharge_amounts,
       admin_telegram_username: input.admin_telegram_username ?? normalizedConfig.admin_telegram_username,
       home_section_limits: input.home_section_limits
         ? { ...normalizedConfig.home_section_limits, ...input.home_section_limits }

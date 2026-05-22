@@ -180,6 +180,7 @@ interface PortalDeps {
     getConfig(): Promise<{
       application_fee_amount: number;
       click_charge_amount?: number;
+      recharge_amounts?: number[];
       admin_telegram_username?: string | null;
     }>;
   };
@@ -506,7 +507,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const marketingConfig = await getMarketingBillingConfig(deps);
       res.json({
         wallet: await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id),
-        recharge_amounts: RECHARGE_AMOUNTS,
+        recharge_amounts: marketingConfig.recharge_amounts,
         click_price: marketingConfig.click_charge_amount,
       });
     } catch (error) {
@@ -538,7 +539,8 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       }
       const payload = toPlainObject(req.body ?? {}, 'body');
       const channel = toPaymentChannel(payload.channel);
-      const amount = toRechargeAmount(payload.amount);
+      const marketingConfig = await getMarketingBillingConfig(deps);
+      const amount = toRechargeAmount(payload.amount, marketingConfig.recharge_amounts);
       await requirePaymentChannelAvailable(deps, channel);
       await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id);
       const outTradeNo = `grr_${account.id}_${Date.now()}_${randomUUID().slice(0, 8)}`;
@@ -1041,7 +1043,7 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
     payment_methods: paymentMethods,
     click_price: Number(marketingConfig.click_charge_amount),
     admin_telegram_username: marketingConfig.admin_telegram_username,
-    recharge_amounts: RECHARGE_AMOUNTS,
+    recharge_amounts: marketingConfig.recharge_amounts,
     wallet,
     telegram_bot: telegramBot,
   };
@@ -1084,19 +1086,25 @@ async function buildTelegramBotView(deps: PortalDeps, applicantAccountId: number
 async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
   application_fee_amount: number;
   click_charge_amount: number;
+  recharge_amounts: number[];
   admin_telegram_username: string | null;
 }> {
   if (!deps.marketingSettingsService) {
     return {
       application_fee_amount: APPLICATION_FEE_AMOUNT,
       click_charge_amount: CLICK_CHARGE_AMOUNT,
+      recharge_amounts: [...RECHARGE_AMOUNTS],
       admin_telegram_username: null,
     };
   }
   const config = await deps.marketingSettingsService.getConfig();
+  const rechargeAmounts = Array.isArray(config.recharge_amounts) && config.recharge_amounts.length > 0
+    ? config.recharge_amounts.map(Number).filter((amount) => Number.isInteger(amount) && amount > 0)
+    : [...RECHARGE_AMOUNTS];
   return {
     application_fee_amount: Number(config.application_fee_amount || APPLICATION_FEE_AMOUNT),
     click_charge_amount: Number(config.click_charge_amount || CLICK_CHARGE_AMOUNT),
+    recharge_amounts: rechargeAmounts.length > 0 ? rechargeAmounts : [...RECHARGE_AMOUNTS],
     admin_telegram_username: config.admin_telegram_username ?? null,
   };
 }
@@ -1425,10 +1433,10 @@ function getNotificationSuccessResponse(channel: PaymentGatewayChannel): string 
   return channel === 'usdt' ? 'ok' : 'success';
 }
 
-function toRechargeAmount(value: unknown): number {
+function toRechargeAmount(value: unknown, allowedAmounts: number[]): number {
   const amount = Number(value);
-  if (!RECHARGE_AMOUNTS.includes(amount as (typeof RECHARGE_AMOUNTS)[number])) {
-    throw new HttpError(400, 'BAD_REQUEST', `amount must be one of ${RECHARGE_AMOUNTS.join('|')}`);
+  if (!allowedAmounts.includes(amount)) {
+    throw new HttpError(400, 'BAD_REQUEST', `amount must be one of ${allowedAmounts.join('|')}`);
   }
   return amount;
 }

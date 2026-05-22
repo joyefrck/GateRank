@@ -72,6 +72,7 @@ interface UserTelegramBotDeps {
   marketingSettingsService?: {
     getConfig(): Promise<{
       click_charge_amount?: number;
+      recharge_amounts?: number[];
     }>;
   };
 }
@@ -291,7 +292,8 @@ async function handleCallbackQuery(
   const [, amountText, channelText] = data.split(':');
   const amount = Number(amountText);
   const channel = toPaymentChannelOrNull(channelText);
-  if (!RECHARGE_AMOUNTS.includes(amount as (typeof RECHARGE_AMOUNTS)[number]) || !channel) {
+  const billingConfig = await getBillingConfig(deps);
+  if (!billingConfig.recharge_amounts.includes(amount) || !channel) {
     await sendTelegramMessage(config, chatId, '充值选项无效，请重新发送 /recharge。');
     return;
   }
@@ -454,7 +456,10 @@ async function sendRechargeOptions(
   config: UserTelegramBotConfig,
   chatId: string,
 ): Promise<void> {
-  const methods = await getAvailablePaymentMethods(deps);
+  const [methods, billingConfig] = await Promise.all([
+    getAvailablePaymentMethods(deps),
+    getBillingConfig(deps),
+  ]);
   if (methods.length === 0) {
     await sendTelegramMessage(config, chatId, '当前支付渠道尚未配置，请稍后再试或联系管理员。');
     return;
@@ -464,7 +469,7 @@ async function sendRechargeOptions(
     chatId,
     '请选择充值金额和支付渠道：',
     {
-      inline_keyboard: RECHARGE_AMOUNTS.map((amount) => methods.map((channel) => ({
+      inline_keyboard: billingConfig.recharge_amounts.map((amount) => methods.map((channel) => ({
         text: `¥${amount} ${formatPaymentChannel(channel)}`,
         callback_data: `${RECHARGE_CALLBACK_PREFIX}${amount}:${channel}`,
       }))),
@@ -540,12 +545,21 @@ async function createTelegramRechargeOrder(
   );
 }
 
-async function getBillingConfig(deps: UserTelegramBotDeps): Promise<{ click_charge_amount: number }> {
+async function getBillingConfig(deps: UserTelegramBotDeps): Promise<{
+  click_charge_amount: number;
+  recharge_amounts: number[];
+}> {
   if (!deps.marketingSettingsService) {
-    return { click_charge_amount: CLICK_CHARGE_AMOUNT };
+    return { click_charge_amount: CLICK_CHARGE_AMOUNT, recharge_amounts: [...RECHARGE_AMOUNTS] };
   }
   const config = await deps.marketingSettingsService.getConfig();
-  return { click_charge_amount: Number(config.click_charge_amount || CLICK_CHARGE_AMOUNT) };
+  const rechargeAmounts = Array.isArray(config.recharge_amounts) && config.recharge_amounts.length > 0
+    ? config.recharge_amounts.map(Number).filter((amount) => Number.isInteger(amount) && amount > 0)
+    : [...RECHARGE_AMOUNTS];
+  return {
+    click_charge_amount: Number(config.click_charge_amount || CLICK_CHARGE_AMOUNT),
+    recharge_amounts: rechargeAmounts.length > 0 ? rechargeAmounts : [...RECHARGE_AMOUNTS],
+  };
 }
 
 async function getAvailablePaymentMethods(deps: UserTelegramBotDeps): Promise<PaymentGatewayChannel[]> {

@@ -316,6 +316,7 @@ interface AdminDeps {
     getConfig(): Promise<{
       application_fee_amount: number;
       click_charge_amount: number;
+      recharge_amounts?: number[];
       admin_telegram_username?: string | null;
       home_section_limits?: HomeSectionLimits;
     }>;
@@ -2814,6 +2815,10 @@ function parseMarketingSettingsPayload(
       payload.click_charge_amount === undefined
         ? undefined
         : mustNumber(payload.click_charge_amount, 'click_charge_amount'),
+    recharge_amounts:
+      payload.recharge_amounts === undefined
+        ? undefined
+        : parseRechargeAmountsPayload(payload.recharge_amounts),
     admin_telegram_username:
       payload.admin_telegram_username === undefined
         ? undefined
@@ -2823,6 +2828,13 @@ function parseMarketingSettingsPayload(
         ? undefined
         : parseHomeSectionLimitsPayload(payload.home_section_limits),
   };
+}
+
+function parseRechargeAmountsPayload(payload: unknown): number[] {
+  if (!Array.isArray(payload)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'recharge_amounts must be array');
+  }
+  return payload.map((value, index) => mustNumber(value, `recharge_amounts.${index}`));
 }
 
 function parseHomeSectionLimitsPayload(payload: unknown): MarketingSettingsInput['home_section_limits'] {
