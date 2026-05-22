@@ -120,6 +120,42 @@ test('GET /rankings/all includes ranking items and report links in raw HTML', as
   }
 });
 
+test('GET /rankings/all requests the full public page size and exposes more than 20 report links', async () => {
+  const calls: Array<{ page: number; pageSize: number }> = [];
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: {
+      ...createPublicViewServiceStub(),
+      getFullRankingView: async (_date: string, page: number, pageSize: number, filters): Promise<FullRankingView> => {
+        calls.push({ page, pageSize });
+        return {
+          ...buildFullRankingViewWithAirportCount(25),
+          page,
+          page_size: pageSize,
+          filters,
+        };
+      },
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/all?date=2026-03-23&page=1`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls, [{ page: 1, pageSize: 100 }]);
+
+    const html = await response.text();
+    const reportLinks = new Set(
+      Array.from(html.matchAll(/href="(\/airports\/airport-\d+)">测评报告/g), (match) => match[1]),
+    );
+    assert.equal(reportLinks.size, 25);
+    assert.ok(reportLinks.size > 20);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('public data routes embed initial payload for React takeover', async () => {
   const app = express();
   app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
@@ -443,6 +479,22 @@ function extractMetaDescription(html: string): string {
   const matched = html.match(/<meta name="description" content="([^"]+)"/);
   assert.ok(matched, 'meta description missing');
   return matched[1];
+}
+
+function buildFullRankingViewWithAirportCount(count: number): FullRankingView {
+  return {
+    ...fullRankingView,
+    total: count,
+    total_pages: 1,
+    items: Array.from({ length: count }, (_, index) => ({
+      ...fullRankingView.items[0],
+      airport_id: index + 1,
+      rank: index + 1,
+      name: `测试机场 ${index + 1}`,
+      website: `https://airport-${index + 1}.example.com`,
+      report_url: `/airports/airport-${index + 1}`,
+    })),
+  };
 }
 
 const homeView: HomePageView = {

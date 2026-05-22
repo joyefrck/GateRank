@@ -345,10 +345,10 @@ export function renderRiskMonitorMarkdown(data: PublicRiskMonitorData): string {
   ].join('\n');
 }
 
-export function renderAirportMarkdown(siteUrl: string, view: ReportView): string {
+export function renderAirportMarkdown(siteUrl: string, view: ReportView, mainRank: number | null | undefined): string {
   const score = formatNullableScore(view.summary_card.score);
   const trend = summarizeTrend(view.trends.score_30d);
-  const rank = firstRank(view);
+  const rank = formatMainRank(mainRank);
   return [
     `# ${view.airport.name} 事实卡`,
     '',
@@ -426,15 +426,8 @@ function slugFromReportUrl(reportUrl: string | null | undefined): string | null 
   return matched ? decodeURIComponent(matched[1]) : null;
 }
 
-function firstRank(view: ReportView): string {
-  const ranks = [
-    view.ranking.today_pick_rank,
-    view.ranking.most_stable_rank,
-    view.ranking.best_value_rank,
-    view.ranking.new_entries_rank,
-    view.ranking.risk_alerts_rank,
-  ].filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
-  return ranks.length > 0 ? `#${Math.min(...ranks)}` : '未入榜';
+function formatMainRank(rank: number | null | undefined): string {
+  return typeof rank === 'number' && Number.isFinite(rank) ? `#${rank}` : '未入榜';
 }
 
 function summarizeTrend(points: Array<{ date: string; value: number }>): string {

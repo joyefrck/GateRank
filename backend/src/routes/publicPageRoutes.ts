@@ -34,6 +34,8 @@ interface PublicPageDeps {
   pageCache?: TimedPromiseCache;
 }
 
+const FULL_RANKING_PUBLIC_PAGE_SIZE = 100;
+
 export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   const router = Router();
   const pageCache = deps.pageCache || createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
@@ -66,11 +68,11 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       }
       const renderDate = requestedDate || getDateInTimezone();
       const view = await pageCache.getOrLoad(
-        `full-ranking:${renderDate}:${page}:20:${JSON.stringify(filters)}`,
+        `full-ranking:${renderDate}:${page}:${FULL_RANKING_PUBLIC_PAGE_SIZE}:${JSON.stringify(filters)}`,
         () => deps.publicViewService.getFullRankingView(
           renderDate,
           page,
-          20,
+          FULL_RANKING_PUBLIC_PAGE_SIZE,
           filters,
         ),
       );

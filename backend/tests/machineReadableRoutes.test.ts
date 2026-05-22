@@ -132,7 +132,7 @@ test('GET /data/*.json returns stable public machine-readable fields', async () 
     };
     assert.equal(rankings.total, 1);
     assert.deepEqual(rankings.items[0], {
-      rank: 1,
+      rank: 2,
       name: '星云机场',
       slug: 'nebula',
       status: 'normal',
@@ -186,7 +186,7 @@ test('GET /data/*.md and /airports/:slug.md return Markdown facts and citations'
     assert.equal(rankingsResponse.status, 200);
     const rankingsMarkdown = await rankingsResponse.text();
     assert.match(rankingsMarkdown, /^# 机场榜GateRank 全量机场榜单/m);
-    assert.match(rankingsMarkdown, /\| 1 \| 星云机场 \| 正常 \| 98\.6 \| ¥18 \| 支付宝、USDT-TRC20 \| Clash、Shadowrocket \| 香港 \| \/airports\/nebula \|/);
+    assert.match(rankingsMarkdown, /\| 2 \| 星云机场 \| 正常 \| 98\.6 \| ¥18 \| 支付宝、USDT-TRC20 \| Clash、Shadowrocket \| 香港 \| \/airports\/nebula \|/);
 
     const riskResponse = await fetch(`${baseUrl}/data/risk-monitor.md`);
     assert.equal(riskResponse.status, 200);
@@ -199,6 +199,7 @@ test('GET /data/*.md and /airports/:slug.md return Markdown facts and citations'
     assert.doesNotMatch(airportMarkdown, /<!doctype html/i);
     assert.match(airportMarkdown, /^# 星云机场 事实卡/m);
     assert.match(airportMarkdown, /- GateRank 公开评分：98\.6\/100/);
+    assert.match(airportMarkdown, /- 当前排名：#2/);
     assert.match(airportMarkdown, /- 支持支付方式：支付宝、USDT-TRC20/);
     assert.match(airportMarkdown, /- 节点地区：香港 6 节点 IEPL/);
     assert.match(airportMarkdown, /https:\/\/nebula\.example\.com/);
@@ -294,7 +295,7 @@ const fullRankingView: FullRankingView = {
   items: [
     {
       airport_id: 7,
-      rank: 1,
+      rank: 2,
       name: '星云机场',
       website: 'https://nebula.example.com',
       status: 'normal',

@@ -178,7 +178,15 @@ export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
         sendText(res.status(404), 'text/plain; charset=utf-8', 'GateRank airport markdown not found');
         return;
       }
-      sendText(res, 'text/markdown; charset=utf-8', renderAirportMarkdown(getSiteOrigin(req), view));
+      const siteUrl = getSiteOrigin(req);
+      const rankingsView = await deps.publicViewService.getFullRankingView(view.date, 1, MACHINE_READABLE_PAGE_SIZE);
+      const rankings = buildRankingsData(siteUrl, rankingsView);
+      const rankMap = new Map(
+        rankings.items
+          .filter((item) => item.slug)
+          .map((item) => [item.slug as string, item.rank]),
+      );
+      sendText(res, 'text/markdown; charset=utf-8', renderAirportMarkdown(siteUrl, view, rankMap.get(view.airport.slug)));
     } catch (error) {
       console.error('[machine-readable] failed to render airport md', { error, requestId: req.requestId || 'unknown' });
       sendText(res.status(500), 'text/plain; charset=utf-8', 'GateRank airport markdown 暂时无法生成');
