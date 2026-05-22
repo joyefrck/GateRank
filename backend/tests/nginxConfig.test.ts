@@ -48,7 +48,7 @@ test('nginx reserves SPA fallback only for admin and portal entry routes', async
   const config = await readFile(path.join(process.cwd(), 'nginx.conf'), 'utf8');
 
   assert.match(getLocationBlock(config, '= /admin'), /try_files\s+\/index\.html\s+=404;/);
-  assert.match(getLocationBlock(config, '^~ /admin/'), /try_files\s+\$uri\s+\$uri\/\s+\/index\.html;/);
+  assert.match(getLocationBlock(config, '^~ /admin/'), /try_files\s+\/index\.html\s+=404;/);
   assert.match(getLocationBlock(config, '= /portal'), /try_files\s+\/index\.html\s+=404;/);
   assert.match(getLocationBlock(config, '= /portal/'), /try_files\s+\/index\.html\s+=404;/);
 });
