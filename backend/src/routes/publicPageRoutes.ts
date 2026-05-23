@@ -18,6 +18,10 @@ import {
   renderRiskMonitorPublicPage,
 } from '../services/publicPageRenderer';
 import {
+  resolvePublicFrontendAssets,
+  type PublicFrontendAssets,
+} from '../services/frontendAssets';
+import {
   buildFullRankingPath,
   parseFullRankingFilters,
   type FullRankingFilters,
@@ -32,6 +36,7 @@ interface PublicPageDeps {
     getReportViewBySlug?(slug: string, date: string): Promise<ReportView | null>;
   };
   pageCache?: TimedPromiseCache;
+  frontendAssets?: PublicFrontendAssets;
 }
 
 const FULL_RANKING_PUBLIC_PAGE_SIZE = 100;
@@ -39,6 +44,7 @@ const FULL_RANKING_PUBLIC_PAGE_SIZE = 100;
 export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   const router = Router();
   const pageCache = deps.pageCache || createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
+  const frontendAssets = deps.frontendAssets || resolvePublicFrontendAssets();
 
   router.get('/', async (req, res) => {
     const siteUrl = getSiteOrigin(req);
@@ -50,10 +56,10 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         () => deps.publicViewService.getHomePageView(renderDate),
       );
       setPublicCacheHeaders(res);
-      res.status(200).type('html').send(renderHomePublicPage(siteUrl, view, requestedDate));
+      res.status(200).type('html').send(renderHomePublicPage(siteUrl, view, requestedDate, frontendAssets));
     } catch (error) {
       console.error('[public-page] failed to render home page', { error, requestId: req.requestId || 'unknown' });
-      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '首页加载失败'));
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '首页加载失败', frontendAssets));
     }
   });
 
@@ -77,10 +83,17 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         ),
       );
       setPublicCacheHeaders(res);
-      res.status(200).type('html').send(renderFullRankingPublicPage(siteUrl, view, requestedDate, page, filters));
+      res.status(200).type('html').send(renderFullRankingPublicPage(
+        siteUrl,
+        view,
+        requestedDate,
+        page,
+        filters,
+        frontendAssets,
+      ));
     } catch (error) {
       console.error('[public-page] failed to render full ranking page', { error, requestId: req.requestId || 'unknown' });
-      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '全量榜单加载失败'));
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '全量榜单加载失败', frontendAssets));
     }
   });
 
@@ -102,10 +115,10 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         ),
       );
       setPublicCacheHeaders(res);
-      res.status(200).type('html').send(renderRiskMonitorPublicPage(siteUrl, view, requestedDate, page));
+      res.status(200).type('html').send(renderRiskMonitorPublicPage(siteUrl, view, requestedDate, page, frontendAssets));
     } catch (error) {
       console.error('[public-page] failed to render risk monitor page', { error, requestId: req.requestId || 'unknown' });
-      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '跑路监测加载失败'));
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '跑路监测加载失败', frontendAssets));
     }
   });
 
@@ -117,13 +130,13 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   router.get('/methodology', (_req, res) => {
     const siteUrl = getSiteOrigin(_req);
     setPublicCacheHeaders(res);
-    res.status(200).type('html').send(renderMethodologyPublicPage(siteUrl));
+    res.status(200).type('html').send(renderMethodologyPublicPage(siteUrl, frontendAssets));
   });
 
   router.get('/apply', (_req, res) => {
     const siteUrl = getSiteOrigin(_req);
     setPublicCacheHeaders(res);
-    res.status(200).type('html').send(renderApplyPublicPage(siteUrl));
+    res.status(200).type('html').send(renderApplyPublicPage(siteUrl, frontendAssets));
   });
 
   router.get('/airports/:slug', async (req, res) => {
@@ -135,15 +148,15 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         requestedDate || getDateInTimezone(),
       );
       if (!view) {
-        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '报告不存在'));
+        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '报告不存在', frontendAssets));
         return;
       }
 
       setPublicCacheHeaders(res);
-      res.status(200).type('html').send(renderReportPublicPage(siteUrl, view, requestedDate));
+      res.status(200).type('html').send(renderReportPublicPage(siteUrl, view, requestedDate, frontendAssets));
     } catch (error) {
       console.error('[public-page] failed to render airport report page', { error, requestId: req.requestId || 'unknown' });
-      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '报告加载失败'));
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '报告加载失败', frontendAssets));
     }
   });
 
@@ -152,14 +165,14 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     try {
       const airportId = toPositiveInt(req.params.id, 0);
       if (!airportId) {
-        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '报告不存在'));
+        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '报告不存在', frontendAssets));
         return;
       }
 
       const requestedDate = parseDateQuery(req.query.date);
       const view = await deps.publicViewService.getReportView(airportId, requestedDate || getDateInTimezone());
       if (!view) {
-        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '报告不存在'));
+        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '报告不存在', frontendAssets));
         return;
       }
 
@@ -168,7 +181,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       return;
     } catch (error) {
       console.error('[public-page] failed to render report page', { error, requestId: req.requestId || 'unknown' });
-      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '报告加载失败'));
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '报告加载失败', frontendAssets));
     }
   });
 

@@ -51,6 +51,10 @@ test('nginx reserves SPA fallback only for admin and portal entry routes', async
   assert.match(getLocationBlock(config, '^~ /admin/'), /try_files\s+\/index\.html\s+=404;/);
   assert.match(getLocationBlock(config, '= /portal'), /try_files\s+\/index\.html\s+=404;/);
   assert.match(getLocationBlock(config, '= /portal/'), /try_files\s+\/index\.html\s+=404;/);
+  assert.match(getLocationBlock(config, '= /admin'), /Cache-Control\s+"no-cache"/);
+  assert.match(getLocationBlock(config, '^~ /admin/'), /Cache-Control\s+"no-cache"/);
+  assert.match(getLocationBlock(config, '= /portal'), /Cache-Control\s+"no-cache"/);
+  assert.match(getLocationBlock(config, '= /portal/'), /Cache-Control\s+"no-cache"/);
 });
 
 test('nginx proxies API routes and returns hard 404 for unknown public paths', async () => {
@@ -61,6 +65,18 @@ test('nginx proxies API routes and returns hard 404 for unknown public paths', a
   const catchAll = getLocationBlock(config, '/');
   assert.match(catchAll, /return\s+404;/);
   assert.doesNotMatch(catchAll, /\/index\.html/);
+});
+
+test('nginx serves hashed assets with immutable cache and keeps SPA entry revalidated', async () => {
+  const config = await readFile(path.join(process.cwd(), 'nginx.conf'), 'utf8');
+
+  const assets = getLocationBlock(config, '^~ /assets/');
+  assert.match(assets, /expires\s+1y;/);
+  assert.match(assets, /Cache-Control\s+"public, max-age=31536000, immutable"/);
+
+  const indexHtml = getLocationBlock(config, '= /index.html');
+  assert.match(indexHtml, /expires\s+-1;/);
+  assert.match(indexHtml, /Cache-Control\s+"no-cache"/);
 });
 
 function getLocationBlock(config: string, selector: string): string {

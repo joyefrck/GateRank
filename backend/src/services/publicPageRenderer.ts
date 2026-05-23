@@ -10,7 +10,6 @@ import type { PublicSummaryData } from './machineReadableRenderer';
 import {
   APPLY_SEO,
   METHODOLOGY_SEO,
-  PUBLIC_FRONTEND_ASSETS,
   PUBLIC_SEO_PATHS,
   buildFullRankingHeading,
   buildFullRankingSeo,
@@ -28,6 +27,10 @@ import {
   type PublicSeoText,
 } from '../../../shared/publicSeo';
 import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
+import {
+  FALLBACK_PUBLIC_FRONTEND_ASSETS,
+  type PublicFrontendAssets,
+} from './frontendAssets';
 import { getCapabilityIcon, type CapabilityIconCategory, type CapabilityIconData } from '../../../shared/capabilityIcons';
 import {
   AIRPORT_CLIENT_FILTERS,
@@ -58,6 +61,7 @@ interface RenderOptions {
   status?: number;
   robots?: string;
   initialData?: PublicInitialData;
+  frontendAssets?: PublicFrontendAssets;
 }
 
 interface PublicInitialData {
@@ -82,7 +86,12 @@ const reportAnchorSections = [
   { id: 'report-conclusion', label: '结论建议' },
 ];
 
-export function renderHomePublicPage(siteUrl: string, view: HomePageView, requestedDate?: string): string {
+export function renderHomePublicPage(
+  siteUrl: string,
+  view: HomePageView,
+  requestedDate?: string,
+  frontendAssets?: PublicFrontendAssets,
+): string {
   const seo = buildHomeSeo({
     dateLabel: view.date,
     monitoredAirports: view.hero.monitored_airports,
@@ -117,6 +126,7 @@ export function renderHomePublicPage(siteUrl: string, view: HomePageView, reques
       params: { date: requestedDate ?? null },
       payload: view,
     },
+    frontendAssets,
     body: `
       <main class="page-main">
         <section class="hero">
@@ -142,6 +152,7 @@ export function renderFullRankingPublicPage(
   requestedDate: string | undefined,
   requestedPage: number,
   filters: FullRankingFilters = view.filters || EMPTY_FULL_RANKING_FILTERS,
+  frontendAssets?: PublicFrontendAssets,
 ): string {
   const page = view.page || requestedPage || 1;
   const seo = buildFullRankingSeo({ dateLabel: view.date, total: view.total, filters });
@@ -175,6 +186,7 @@ export function renderFullRankingPublicPage(
       },
       payload: view,
     },
+    frontendAssets,
     body: `
       <main class="page-main">
         <section class="hero hero-dark">
@@ -200,6 +212,7 @@ export function renderRiskMonitorPublicPage(
   view: RiskMonitorView,
   requestedDate: string | undefined,
   requestedPage: number,
+  frontendAssets?: PublicFrontendAssets,
 ): string {
   const page = view.page || requestedPage || 1;
   const seo = buildRiskMonitorSeo({ dateLabel: view.date, total: view.total });
@@ -229,6 +242,7 @@ export function renderRiskMonitorPublicPage(
       },
       payload: view,
     },
+    frontendAssets,
     body: `
       <main class="page-main">
         <section class="hero hero-risk">
@@ -248,7 +262,12 @@ export function renderRiskMonitorPublicPage(
   });
 }
 
-export function renderReportPublicPage(siteUrl: string, view: ReportView, requestedDate?: string): string {
+export function renderReportPublicPage(
+  siteUrl: string,
+  view: ReportView,
+  requestedDate?: string,
+  frontendAssets?: PublicFrontendAssets,
+): string {
   const seo = buildReportSeo(view);
   const canonicalPath = buildAirportReportPath(view.airport.slug);
   const faqItems = buildReportFaqItems(view);
@@ -259,6 +278,7 @@ export function renderReportPublicPage(siteUrl: string, view: ReportView, reques
     seo,
     active: 'rankings',
     jsonLd: buildReportStructuredData(siteUrl, canonicalPath, seo, view),
+    frontendAssets,
     body: `
       <main id="report-top" class="page-main report-page">
         ${renderReportFixedNav()}
@@ -583,7 +603,7 @@ function formatScoreGrade(score: number): string {
   return '高风险';
 }
 
-export function renderMethodologyPublicPage(siteUrl: string): string {
+export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: PublicFrontendAssets): string {
   const methodologyFaq = [
     {
       question: '低价机场一定高分吗？',
@@ -632,6 +652,7 @@ export function renderMethodologyPublicPage(siteUrl: string): string {
         })),
       },
     ],
+    frontendAssets,
     body: `
       <main class="page-main">
         <section class="hero">
@@ -695,7 +716,7 @@ export function renderMethodologyPublicPage(siteUrl: string): string {
   });
 }
 
-export function renderApplyPublicPage(siteUrl: string): string {
+export function renderApplyPublicPage(siteUrl: string, frontendAssets?: PublicFrontendAssets): string {
   return renderPublicDocument({
     siteUrl,
     canonicalPath: PUBLIC_SEO_PATHS.apply,
@@ -708,6 +729,7 @@ export function renderApplyPublicPage(siteUrl: string): string {
       description: APPLY_SEO.description,
       url: `${siteUrl}${PUBLIC_SEO_PATHS.apply}`,
     },
+    frontendAssets,
     body: `
       <main class="page-main">
         <section class="hero">
@@ -728,7 +750,11 @@ export function renderApplyPublicPage(siteUrl: string): string {
   });
 }
 
-export function renderForAiPublicPage(siteUrl: string, summary: PublicSummaryData): string {
+export function renderForAiPublicPage(
+  siteUrl: string,
+  summary: PublicSummaryData,
+  frontendAssets?: PublicFrontendAssets,
+): string {
   const canonicalPath = PUBLIC_SEO_PATHS.forAi;
   const seo = {
     title: `GateRank for AI：机场榜数据、引用方式与机器可读入口 | ${PUBLIC_SITE_BRAND_NAME}`,
@@ -763,6 +789,7 @@ export function renderForAiPublicPage(siteUrl: string, summary: PublicSummaryDat
         ],
       },
     ],
+    frontendAssets,
     body: `
       <main class="page-main">
         <section class="hero">
@@ -819,7 +846,12 @@ export function renderForAiPublicPage(siteUrl: string, summary: PublicSummaryDat
   });
 }
 
-export function renderPublicHtmlError(siteUrl: string, status: number, message: string): string {
+export function renderPublicHtmlError(
+  siteUrl: string,
+  status: number,
+  message: string,
+  frontendAssets?: PublicFrontendAssets,
+): string {
   return renderPublicDocument({
     siteUrl,
     status,
@@ -831,6 +863,7 @@ export function renderPublicHtmlError(siteUrl: string, status: number, message: 
     },
     active: 'home',
     jsonLd: {},
+    frontendAssets,
     body: `
       <main class="page-main">
         <section class="hero">
@@ -845,6 +878,7 @@ export function renderPublicHtmlError(siteUrl: string, status: number, message: 
 
 function renderPublicDocument(options: RenderOptions): string {
   const canonicalUrl = `${options.siteUrl}${options.canonicalPath}`;
+  const frontendAssets = options.frontendAssets || FALLBACK_PUBLIC_FRONTEND_ASSETS;
   const initialDataScript = options.initialData
     ? `\n    <script id="__GATERANK_INITIAL_DATA__" type="application/json">${escapeJsonScript(options.initialData)}</script>`
     : '';
@@ -866,7 +900,7 @@ function renderPublicDocument(options: RenderOptions): string {
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeAttribute(options.seo.title)}" />
     <meta name="twitter:description" content="${escapeAttribute(options.seo.description)}" />
-    <link rel="stylesheet" href="${PUBLIC_FRONTEND_ASSETS.stylesheet}" />
+    <link rel="stylesheet" href="${escapeAttribute(frontendAssets.stylesheet)}" />
     <style>${styles}</style>
     <script type="application/ld+json">${JSON.stringify(options.jsonLd)}</script>
   </head>
@@ -879,7 +913,7 @@ function renderPublicDocument(options: RenderOptions): string {
       </div>
     </div>
     ${initialDataScript}
-    <script type="module" src="${PUBLIC_FRONTEND_ASSETS.script}"></script>
+    <script type="module" src="${escapeAttribute(frontendAssets.script)}"></script>
   </body>
 </html>`;
 }

@@ -17,6 +17,10 @@ import {
   renderSummaryMarkdown,
 } from '../services/machineReadableRenderer';
 import { renderForAiPublicPage } from '../services/publicPageRenderer';
+import {
+  resolvePublicFrontendAssets,
+  type PublicFrontendAssets,
+} from '../services/frontendAssets';
 
 interface MachineReadableDeps {
   publicViewService: {
@@ -25,12 +29,14 @@ interface MachineReadableDeps {
     getRiskMonitorView(date: string, page: number, pageSize: number): Promise<RiskMonitorView>;
     getReportViewBySlug?(slug: string, date: string): Promise<ReportView | null>;
   };
+  frontendAssets?: PublicFrontendAssets;
 }
 
 const MACHINE_READABLE_PAGE_SIZE = 100;
 
 export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
   const router = Router();
+  const frontendAssets = deps.frontendAssets || resolvePublicFrontendAssets();
 
   router.get('/robots.txt', (req, res) => {
     sendText(res, 'text/plain; charset=utf-8', renderRobotsTxt(getSiteOrigin(req)));
@@ -86,7 +92,7 @@ export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
       const siteUrl = getSiteOrigin(req);
       const summary = await getSummary(deps, siteUrl);
       setPublicCacheHeaders(res);
-      res.status(200).type('html').send(renderForAiPublicPage(siteUrl, summary));
+      res.status(200).type('html').send(renderForAiPublicPage(siteUrl, summary, frontendAssets));
     } catch (error) {
       console.error('[machine-readable] failed to render for-ai page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send('GateRank for AI 页面暂时无法生成');

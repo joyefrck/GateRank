@@ -127,11 +127,6 @@ export const PUBLIC_SEO_PATHS = {
 
 export const PUBLIC_SEO_STATIC_LASTMOD = '2026-05-17T00:00:00+08:00';
 
-export const PUBLIC_FRONTEND_ASSETS = {
-  script: '/assets/index.js?v=20260515-ranking-url-clean',
-  stylesheet: '/assets/index.css?v=20260515-methodology-fast',
-} as const;
-
 export function buildHomeSeo(input?: {
   dateLabel?: string;
   monitoredAirports?: number;

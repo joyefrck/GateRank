@@ -75,18 +75,7 @@ export default defineConfig(({mode}) => {
       },
     },
     build: {
-      rollupOptions: {
-        output: {
-          entryFileNames: 'assets/[name].js',
-          assetFileNames: (assetInfo) => {
-            const name = assetInfo.names?.[0] || assetInfo.name || '';
-            if (name.endsWith('.css')) {
-              return 'assets/[name][extname]';
-            }
-            return 'assets/[name]-[hash][extname]';
-          },
-        },
-      },
+      manifest: true,
     },
     server: {
       // HMR is disabled in AI Studio via DISABLE_HMR env var.

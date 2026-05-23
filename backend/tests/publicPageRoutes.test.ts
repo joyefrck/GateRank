@@ -6,9 +6,17 @@ import { createPublicPageRoutes } from '../src/routes/publicPageRoutes';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../src/types/domain';
 import { getDateInTimezone } from '../src/utils/time';
 
+const TEST_FRONTEND_ASSETS = {
+  script: '/assets/index-CkG9aP2q.js',
+  stylesheet: '/assets/index-BzS9fL3m.css',
+};
+
 test('public SEO routes return crawlable HTML with unique head and H1 content', async () => {
   const app = express();
-  app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
 
   const server = app.listen(0);
   try {
@@ -37,7 +45,8 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\//);
       assert.match(html, h1Pattern);
       assert.match(html, /<script type="application\/ld\+json">/);
-      assert.match(html, /<script type="module" src="\/assets\/index\.js\?v=20260515-ranking-url-clean"><\/script>/);
+      assert.match(html, /<link rel="stylesheet" href="\/assets\/index-BzS9fL3m\.css" \/>/);
+      assert.match(html, /<script type="module" src="\/assets\/index-CkG9aP2q\.js"><\/script>/);
       assert.match(html, /\.topbar nav a\.active \{ background: #fff1f2; color: #e11d48;/);
       assert.match(html, /\.topbar nav a\.apply-link \{ background: #111111; color: #fff;/);
       assert.match(html, /\.topbar nav a\.apply-link\.active \{ background: #111111; color: #fff;/);
