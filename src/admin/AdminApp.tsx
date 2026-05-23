@@ -8995,7 +8995,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
   const openPerformanceNodeSelection = async () => {
     setPerformanceNodeSelectionError('');
     const data = performanceNodeSelection || await loadPerformanceNodeSelection();
-    setPerformanceNodeSelectionDraft(data?.selected_keys || []);
+    setPerformanceNodeSelectionDraft(filterPerformanceNodeKeys(data?.selected_keys || [], data?.nodes || []));
     setPerformanceNodeSelectionOpen(true);
   };
 
@@ -9012,12 +9012,16 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
     setPerformanceNodeSelectionError('');
     setMessage('');
     try {
+      const selectedKeys = filterPerformanceNodeKeys(
+        performanceNodeSelectionDraft,
+        performanceNodeSelection?.nodes || [],
+      );
       await apiFetch(`/api/v1/admin/airports/${airportId}/performance-node-selection`, {
         method: 'PATCH',
-        body: JSON.stringify({ selected_keys: performanceNodeSelectionDraft }),
+        body: JSON.stringify({ selected_keys: selectedKeys }),
       });
       const next = await loadPerformanceNodeSelection();
-      setPerformanceNodeSelectionDraft(next?.selected_keys || []);
+      setPerformanceNodeSelectionDraft(filterPerformanceNodeKeys(next?.selected_keys || [], next?.nodes || []));
       setPerformanceNodeSelectionOpen(false);
       setMessage((next?.selected_keys || []).length > 0 ? '性能测试节点配置已保存' : '已恢复默认性能测试节点规则');
     } catch (err) {
@@ -9724,6 +9728,11 @@ function ManualJobActionCard({
       </div>
     </div>
   );
+}
+
+function filterPerformanceNodeKeys(keys: string[], nodes: PerformanceNodeSelectionNode[]): string[] {
+  const availableKeys = new Set(nodes.map((node) => node.key));
+  return keys.filter((key) => availableKeys.has(key));
 }
 
 function TotalScoreField({

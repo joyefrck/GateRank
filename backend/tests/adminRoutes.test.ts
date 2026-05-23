@@ -276,7 +276,10 @@ test('GET and PATCH /airports/:id/performance-node-selection expose sanitized ca
       performanceNodePreferenceRepository: {
         getByAirport: async () => ({
           airport_id: 9,
-          selected_nodes: [{ key: nodeKey, name: 'HK-1', region: 'HK', type: 'trojan' }],
+          selected_nodes: [
+            { key: nodeKey, name: 'HK-1', region: 'HK', type: 'trojan' },
+            { key: 'stale-node-key', name: 'Old node', region: 'JP', type: 'vless' },
+          ],
           updated_by: 'admin',
           updated_at: '2026-05-13T12:40:00+08:00',
         }),

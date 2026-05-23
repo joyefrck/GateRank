@@ -1848,7 +1848,10 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         getPerformanceNodePreferenceRepository(deps).getByAirport(airportId),
       ]);
       const candidates = snapshot ? buildPerformanceNodeSelectionCandidates(snapshot.nodes) : [];
-      const selectedKeys = (preference?.selected_nodes || []).map((node) => node.key);
+      const candidateKeys = new Set(candidates.map((node) => node.key));
+      const selectedKeys = (preference?.selected_nodes || [])
+        .map((node) => node.key)
+        .filter((key) => candidateKeys.has(key));
 
       res.json({
         airport_id: airportId,
