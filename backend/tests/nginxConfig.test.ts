@@ -14,6 +14,7 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
     '/',
     '/rankings/all',
     '/methodology',
+    '/deals',
     '/apply',
     '/risk-monitor',
     '/risk-watch',
@@ -42,6 +43,7 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
   assert.match(getLocationBlock(config, '/airports/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.match(getLocationBlock(config, '/reports/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.match(getLocationBlock(config, '/news'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
+  assert.match(getLocationBlock(config, '= /deals/'), /proxy_pass\s+http:\/\/gaterank-api:8787\/deals\/;/);
 });
 
 test('nginx reserves SPA fallback only for admin and portal entry routes', async () => {
