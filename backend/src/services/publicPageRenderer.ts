@@ -13,6 +13,7 @@ import {
   PUBLIC_SEO_PATHS,
   buildFullRankingHeading,
   buildFullRankingSeo,
+  buildDealsSeo,
   buildHomeSeo,
   buildQuery,
   buildAirportReportPath,
@@ -26,6 +27,7 @@ import {
   formatMetric,
   type PublicSeoText,
 } from '../../../shared/publicSeo';
+import type { AirportDealView } from '../../../shared/airportAds';
 import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
 import {
   FALLBACK_PUBLIC_FRONTEND_ASSETS,
@@ -55,7 +57,7 @@ interface RenderOptions {
   siteUrl: string;
   canonicalPath: string;
   seo: PublicSeoText;
-  active: 'home' | 'rankings' | 'risk' | 'methodology' | 'apply' | 'forAi';
+  active: 'home' | 'rankings' | 'deals' | 'risk' | 'methodology' | 'apply' | 'forAi';
   jsonLd: unknown;
   body: string;
   status?: number;
@@ -65,7 +67,7 @@ interface RenderOptions {
 }
 
 interface PublicInitialData {
-  kind: 'home' | 'full_ranking' | 'risk_monitor';
+  kind: 'home' | 'full_ranking' | 'risk_monitor' | 'deals';
   params: {
     date?: string | null;
     page?: number | null;
@@ -257,6 +259,70 @@ export function renderRiskMonitorPublicPage(
           </div>
         </section>
         ${renderRiskTable(view.items)}
+      </main>
+    `,
+  });
+}
+
+export function renderDealsPublicPage(
+  siteUrl: string,
+  deals: AirportDealView[],
+  frontendAssets?: PublicFrontendAssets,
+): string {
+  const seo = buildDealsSeo({ activeDeals: deals.length });
+  const canonicalPath = PUBLIC_SEO_PATHS.deals;
+  return renderPublicDocument({
+    siteUrl,
+    canonicalPath,
+    seo,
+    active: 'deals',
+    jsonLd: [
+      buildCollectionPageJsonLd(siteUrl, canonicalPath, seo),
+      buildBreadcrumbJsonLd(siteUrl, [
+        ['今日推荐', '/'],
+        ['活动优惠', canonicalPath],
+      ]),
+      {
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        itemListElement: deals.map((deal, index) => ({
+          '@type': 'ListItem',
+          position: index + 1,
+          url: `${siteUrl}${deal.report_url}`,
+          name: deal.airport_name,
+        })),
+      },
+    ],
+    initialData: {
+      kind: 'deals',
+      params: {},
+      payload: { items: deals, total: deals.length },
+    },
+    frontendAssets,
+    body: `
+      <main class="page-main">
+        <section class="hero">
+          <div class="eyebrow">DEALS &amp; COUPONS</div>
+          <h1>活动优惠专区</h1>
+          <p>${escapeHtml(seo.description)}</p>
+          <div class="metric-grid">
+            ${renderMetric('广告位', `${deals.length}/6`)}
+            ${renderMetric('免费试用', `${deals.filter((deal) => deal.supports_trial).length}+`)}
+            ${renderMetric('支持 USDT', `${deals.filter((deal) => deal.supports_usdt).length}+`)}
+            ${renderMetric('更新频率', 'Daily Update')}
+          </div>
+        </section>
+        <section class="content-card">
+          <div class="eyebrow">重要说明</div>
+          <h2>优惠信息不影响 GateRank Score</h2>
+          <p class="muted">本页用于展示机场服务商投放的优惠活动与优惠码，不代表 GateRank 测评推荐。请结合测评报告、风险记录与自身需求独立判断。</p>
+        </section>
+        <section class="content-card">
+          <h2>机场优惠卡片</h2>
+          <div class="card-grid">
+            ${deals.length > 0 ? deals.map(renderDealMiniCard).join('') : '<p class="muted">当前暂无上架广告活动。</p>'}
+          </div>
+        </section>
       </main>
     `,
   });
@@ -925,6 +991,7 @@ function renderTopbar(active: RenderOptions['active']): string {
       <nav>
         <a class="${active === 'home' ? 'active' : ''}" href="/">今日推荐</a>
         <a class="${active === 'rankings' ? 'active' : ''}" href="/rankings/all">全量榜单</a>
+        <a class="${active === 'deals' ? 'active' : ''}" href="/deals">活动优惠</a>
         <a class="${active === 'risk' ? 'active' : ''}" href="/risk-monitor">跑路监测</a>
         <a class="${active === 'methodology' ? 'active' : ''}" href="/methodology">测评方法</a>
         <a href="/news">News</a>
@@ -977,6 +1044,26 @@ function renderAirportCard(item: {
       <p class="muted">${item.details.map((detail) => `${escapeHtml(detail.label)}：${escapeHtml(detail.value)}`).join('；')}</p>
     </article>
   `;
+}
+
+function renderDealMiniCard(deal: AirportDealView): string {
+  return `
+    <article class="mini-card">
+      <div class="eyebrow">广告</div>
+      <h3><a href="${escapeAttribute(deal.report_url)}">${escapeHtml(deal.airport_name)}</a></h3>
+      <p><strong>优惠码：</strong>${escapeHtml(deal.coupon_code)}</p>
+      <p><strong>折扣说明：</strong>${escapeHtml(deal.discount_description)}</p>
+      <p><strong>适用套餐：</strong>${escapeHtml(deal.applicable_plan)}</p>
+      <p><strong>活动时间：</strong>${escapeHtml(formatDateOnly(deal.starts_at))} ～ ${escapeHtml(formatDateOnly(deal.ends_at))}</p>
+      <p class="muted">试用：${deal.supports_trial ? '支持' : '不支持'} · USDT：${deal.supports_usdt ? '支持' : '不支持'} · 流媒体：${deal.supports_streaming ? '支持' : '不支持'} · AI：${deal.supports_ai ? '支持' : '不支持'}</p>
+      <p><a href="${escapeAttribute(deal.report_url)}">查看测评</a> · <a href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow noreferrer noopener">访问官网</a></p>
+      <p class="muted">本活动不影响 GateRank Score。</p>
+    </article>
+  `;
+}
+
+function formatDateOnly(value: string): string {
+  return value.slice(0, 10);
 }
 
 function renderFullRankingFilters(filters: FullRankingFilters): string {

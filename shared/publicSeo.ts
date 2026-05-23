@@ -119,6 +119,7 @@ export interface PublicReportContentSummary {
 export const PUBLIC_SEO_PATHS = {
   home: '/',
   fullRanking: '/rankings/all',
+  deals: '/deals',
   methodology: '/methodology',
   apply: '/apply',
   riskMonitor: '/risk-monitor',
@@ -229,6 +230,19 @@ export function buildRiskMonitorSeo(input?: {
         ? `${input.dateLabel || '今日'} ${PUBLIC_SITE_BRAND_NAME} 跑路机场监测页收录 ${formatCount(input.total)} 个已确认跑路、风险观察与异常波动机场，结合评分变化、官网状态、测速数据和风险标签，帮助用户避开高风险机场 VPN 服务。`
         : `${PUBLIC_SITE_BRAND_NAME} 跑路机场监测页汇总已确认跑路、风险观察与异常波动机场，结合评分变化、官网状态、测速数据与风险标签，帮助用户避开高风险机场 VPN 服务。`,
     keywords: '机场榜GateRank,跑路监测,风险观察,机场风险,高风险机场,已跑路机场,GateRank',
+  };
+}
+
+export function buildDealsSeo(input?: {
+  activeDeals?: number;
+}): PublicSeoText {
+  return {
+    title: `活动优惠专区 | 机场优惠码、限时折扣与免费试用 | ${PUBLIC_SITE_BRAND_NAME}`,
+    description:
+      typeof input?.activeDeals === 'number'
+        ? `${PUBLIC_SITE_BRAND_NAME} 活动优惠专区当前展示 ${formatCount(input.activeDeals)} 个机场广告活动，聚合优惠码、限时折扣、免费试用与新用户优惠。优惠信息不影响 GateRank Score 与榜单排序。`
+        : `${PUBLIC_SITE_BRAND_NAME} 活动优惠专区聚合机场服务商发布的优惠码、限时折扣、免费试用与新用户活动。优惠信息不影响 GateRank Score 与榜单排序。`,
+    keywords: '机场优惠码,机场活动,机场折扣,机场免费试用,机场广告,GateRank活动优惠,机场榜GateRank',
   };
 }
 

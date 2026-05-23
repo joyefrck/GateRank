@@ -19,6 +19,7 @@ function emitSeoAssets(siteUrl: string): Plugin {
         ['/', PUBLIC_SEO_STATIC_LASTMOD],
         ['/rankings/all', PUBLIC_SEO_STATIC_LASTMOD],
         ...getIndexableFullRankingFilterPaths().map((pathname) => [pathname, PUBLIC_SEO_STATIC_LASTMOD] as const),
+        ['/deals', PUBLIC_SEO_STATIC_LASTMOD],
         ['/methodology', PUBLIC_SEO_STATIC_LASTMOD],
         ['/apply', PUBLIC_SEO_STATIC_LASTMOD],
         ['/risk-monitor', PUBLIC_SEO_STATIC_LASTMOD],

@@ -518,11 +518,12 @@ export type MarketingPageKind =
   | 'full_ranking'
   | 'risk_monitor'
   | 'report'
+  | 'deals'
   | 'methodology'
   | 'news'
   | 'apply'
   | 'publish_token_docs';
-export type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header';
+export type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header' | 'deal_card';
 export type MarketingTargetKind = 'website' | 'subscription_url';
 
 export interface MarketingTrendPoint {

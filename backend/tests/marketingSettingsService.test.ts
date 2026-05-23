@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  DEFAULT_AIRPORT_AD_MONTHLY_PRICE,
   DEFAULT_HOME_SECTION_LIMITS,
   DEFAULT_MARKETING_APPLICATION_FEE_AMOUNT,
   DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT,
@@ -40,6 +41,7 @@ test('MarketingSettingsService returns defaults when no settings exist', async (
 
   assert.equal(view.application_fee_amount, DEFAULT_MARKETING_APPLICATION_FEE_AMOUNT);
   assert.equal(view.click_charge_amount, DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT);
+  assert.equal(view.airport_ad_monthly_price, DEFAULT_AIRPORT_AD_MONTHLY_PRICE);
   assert.deepEqual(view.recharge_amounts, DEFAULT_MARKETING_RECHARGE_AMOUNTS);
   assert.equal(view.admin_telegram_username, null);
   assert.deepEqual(view.home_section_limits, DEFAULT_HOME_SECTION_LIMITS);
@@ -57,18 +59,20 @@ test('MarketingSettingsService falls back to legacy payment gateway application 
 
   assert.equal(view.application_fee_amount, 88.89);
   assert.equal(view.click_charge_amount, DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT);
+  assert.equal(view.airport_ad_monthly_price, DEFAULT_AIRPORT_AD_MONTHLY_PRICE);
   assert.deepEqual(view.recharge_amounts, DEFAULT_MARKETING_RECHARGE_AMOUNTS);
   assert.equal(view.admin_telegram_username, null);
   assert.deepEqual(view.home_section_limits, DEFAULT_HOME_SECTION_LIMITS);
 });
 
-test('MarketingSettingsService saves application, click fees, recharge amounts, Telegram username and home section limits under marketing billing key', async () => {
+test('MarketingSettingsService saves application, click fees, ad monthly price, recharge amounts, Telegram username and home section limits under marketing billing key', async () => {
   const { records, repository } = createSettingsRepository();
   const service = new MarketingSettingsService({ systemSettingRepository: repository });
 
   const view = await service.updateAdminSettings({
     application_fee_amount: 288.235,
     click_charge_amount: 1.256,
+    airport_ad_monthly_price: 1288.884,
     recharge_amounts: [500, 100, 300],
     admin_telegram_username: 'https://t.me/GateRank_Admin',
     home_section_limits: {
@@ -82,6 +86,7 @@ test('MarketingSettingsService saves application, click fees, recharge amounts, 
 
   assert.equal(view.application_fee_amount, 288.24);
   assert.equal(view.click_charge_amount, 1.26);
+  assert.equal(view.airport_ad_monthly_price, 1288.88);
   assert.deepEqual(view.recharge_amounts, [100, 300, 500]);
   assert.equal(view.admin_telegram_username, 'GateRank_Admin');
   assert.deepEqual(view.home_section_limits, {
@@ -94,6 +99,7 @@ test('MarketingSettingsService saves application, click fees, recharge amounts, 
   assert.deepEqual(records.get('marketing_billing'), {
     application_fee_amount: 288.24,
     click_charge_amount: 1.26,
+    airport_ad_monthly_price: 1288.88,
     recharge_amounts: [100, 300, 500],
     admin_telegram_username: 'GateRank_Admin',
     home_section_limits: {
@@ -120,6 +126,7 @@ test('MarketingSettingsService keeps default home section limits for legacy mark
 
   assert.equal(view.application_fee_amount, 288);
   assert.equal(view.click_charge_amount, 1.5);
+  assert.equal(view.airport_ad_monthly_price, DEFAULT_AIRPORT_AD_MONTHLY_PRICE);
   assert.deepEqual(view.recharge_amounts, DEFAULT_MARKETING_RECHARGE_AMOUNTS);
   assert.deepEqual(view.home_section_limits, DEFAULT_HOME_SECTION_LIMITS);
 });
@@ -157,6 +164,16 @@ test('MarketingSettingsService rejects non-positive amounts on update', async ()
       const next = error as { code?: string; message?: string };
       assert.equal(next.code, 'BAD_REQUEST');
       assert.match(String(next.message || ''), /click_charge_amount/);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () => service.updateAdminSettings({ airport_ad_monthly_price: -1 }, 'admin'),
+    (error: unknown) => {
+      const next = error as { code?: string; message?: string };
+      assert.equal(next.code, 'BAD_REQUEST');
+      assert.match(String(next.message || ''), /airport_ad_monthly_price/);
       return true;
     },
   );

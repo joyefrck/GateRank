@@ -20,6 +20,7 @@ import { buildPortalLoginUrl } from '../utils/siteUrl';
 import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { AirportApplicationReviewStatus, AirportStatus } from '../types/domain';
 import { parseFullRankingFilters, type FullRankingFilters } from '../../../shared/fullRankingFilters';
+import type { AirportDealView } from '../../../shared/airportAds';
 
 interface PublicDeps {
   airportRepository: {
@@ -53,6 +54,9 @@ interface PublicDeps {
   };
   applicantBillingRepository?: {
     ensureWalletForAccount(applicantAccountId: number, applicationId: number): Promise<unknown>;
+  };
+  airportAdCampaignRepository?: {
+    listActiveDeals(): Promise<AirportDealView[]>;
   };
   applicationNotificationService?: {
     notifyNewAirportApplication(input: {
@@ -113,6 +117,7 @@ const MARKETING_PAGE_KINDS: MarketingPageKind[] = [
   'full_ranking',
   'risk_monitor',
   'report',
+  'deals',
   'methodology',
   'news',
   'apply',
@@ -123,6 +128,7 @@ const MARKETING_PLACEMENTS: MarketingPlacement[] = [
   'full_ranking_item',
   'risk_monitor_item',
   'report_header',
+  'deal_card',
 ];
 const MARKETING_TARGET_KINDS: MarketingTargetKind[] = ['website', 'subscription_url'];
 export function createPublicRoutes(deps: PublicDeps): Router {
@@ -137,6 +143,22 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       setPublicCacheHeaders(res);
       res.json({
         application_fee_amount: Number(config.application_fee_amount || APPLICATION_FEE_AMOUNT),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/pages/deals', async (_req, res, next) => {
+    try {
+      if (!deps.airportAdCampaignRepository) {
+        throw new Error('airportAdCampaignRepository is not configured');
+      }
+      const deals = await pageCache.getOrLoad('deals:active', () => deps.airportAdCampaignRepository!.listActiveDeals());
+      setPublicCacheHeaders(res);
+      res.json({
+        items: deals,
+        total: deals.length,
       });
     } catch (error) {
       next(error);

@@ -71,6 +71,35 @@ function createMockApplicantAccount(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function createMockAirportDeal(overrides: Record<string, unknown> = {}) {
+  return {
+    campaign_id: 99,
+    airport_id: 11,
+    airport_name: '星云机场',
+    airport_slug: 'nebula',
+    website: 'https://nebula.example.com',
+    report_url: '/airports/nebula',
+    coupon_code: 'NEW220',
+    discount_title: '新用户优惠',
+    discount_description: '新用户首单 8 折',
+    applicable_plan: '月付 / 季付',
+    starts_at: '2026-05-24T10:00:00+08:00',
+    ends_at: '2026-06-24T10:00:00+08:00',
+    purchased_months: 1,
+    billed_amount: 1000,
+    is_stackable: false,
+    refund_supported: true,
+    supports_trial: true,
+    supports_usdt: true,
+    supports_streaming: true,
+    supports_ai: true,
+    low_price_plan: true,
+    discount_percent: 20,
+    created_at: '2026-05-24T10:00:00+08:00',
+    ...overrides,
+  };
+}
+
 test('GET /portal/me returns marketing billing fees', async () => {
   process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
   const app = express();
@@ -169,6 +198,137 @@ test('GET /portal/me returns marketing billing fees', async () => {
   }
 });
 
+test('GET /portal/me exposes remaining ad slots based on active campaign count', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount({ application_id: 7 }),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({
+          id: 7,
+          name: '小米',
+          website: 'https://www.xiaomi.com',
+          websites: ['https://www.xiaomi.com'],
+          approved_airport_id: 11,
+          review_status: 'reviewed',
+          payment_status: 'paid',
+          payment_amount: 100,
+          applicant_email: 'user@example.com',
+          applicant_telegram: '@xiaomi',
+          founded_on: '2025-01-01',
+          airport_intro: 'intro',
+          created_at: '2026-04-18 10:00:00',
+        }),
+        markPaid: async () => true,
+      },
+      airportRepository: {
+        getById: async () => ({
+          id: 11,
+          slug: 'xiaomi',
+          name: '小米',
+          website: 'https://www.xiaomi.com',
+          websites: ['https://www.xiaomi.com'],
+          status: 'normal',
+          is_listed: true,
+          plan_price_month: 18,
+          has_trial: true,
+          tags: [],
+          created_at: '2026-04-18T10:00:00+08:00',
+        }),
+        update: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository({
+        ensureWalletForAccount: async () => ({
+          id: 1,
+          applicant_account_id: 1,
+          application_id: 7,
+          airport_id: 11,
+          airport_is_listed: true,
+          balance: 95.2,
+          auto_unlisted_at: null,
+          created_at: '2026-04-18T10:00:00+08:00',
+          updated_at: '2026-04-18T10:00:00+08:00',
+        }),
+      }),
+      airportAdCampaignRepository: {
+        getPortalStatus: async (_airportId, monthlyPrice) => ({
+          active_campaign: createMockAirportDeal({ airport_name: '小米' }),
+          campaigns: [{
+            ...createMockAirportDeal({ airport_name: '小米' }),
+            status: 'active',
+            status_label: '投放中',
+            is_active: true,
+          }],
+          remaining_slots: 5,
+          slot_limit: 6,
+          monthly_price: monthlyPrice ?? 1000,
+          low_balance_warning_threshold: 100,
+          allowed_months: [1, 2, 3, 6, 12],
+        }),
+        purchase: async () => {
+          throw new Error('not used');
+        },
+        update: async () => {
+          throw new Error('not used');
+        },
+        cancel: async () => {
+          throw new Error('not used');
+        },
+      },
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: { getConfig: async () => ({ epay: { enabled: true } }) },
+      marketingSettingsService: {
+        getConfig: async () => ({
+          application_fee_amount: 300,
+          click_charge_amount: 1,
+          airport_ad_monthly_price: 1288.88,
+        }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = (await response.json()) as { ad_status: { remaining_slots: number; slot_limit: number; monthly_price: number; campaigns: unknown[] } };
+
+    assert.equal(response.status, 200);
+    assert.equal(data.ad_status.remaining_slots, 5);
+    assert.equal(data.ad_status.slot_limit, 6);
+    assert.equal(data.ad_status.monthly_price, 1288.88);
+    assert.equal(data.ad_status.campaigns.length, 1);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /portal/wallet returns configured recharge amounts', async () => {
   process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
   const app = express();
@@ -227,6 +387,544 @@ test('GET /portal/wallet returns configured recharge amounts', async () => {
     const data = (await response.json()) as { recharge_amounts: number[]; click_price: number };
     assert.deepEqual(data.recharge_amounts, [120, 240]);
     assert.equal(data.click_price, 2.5);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/ad-campaign purchases another campaign when the same airport already has an active ad', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+
+  let purchaseInput: Record<string, unknown> | null = null;
+  let cacheCleared = false;
+  app.use(createPortalRoutes({
+    applicantAccountRepository: {
+      getById: async () => createMockApplicantAccount({ application_id: 7 }),
+      updatePassword: async () => true,
+    },
+    airportApplicationRepository: {
+      getById: async () => ({
+        id: 7,
+        name: '星云机场',
+        website: 'https://nebula.example.com',
+        websites: ['https://nebula.example.com'],
+        approved_airport_id: 11,
+        review_status: 'reviewed',
+        payment_status: 'paid',
+        payment_amount: 100,
+        applicant_email: 'user@example.com',
+        applicant_telegram: '@nebula',
+        founded_on: '2025-01-01',
+        airport_intro: 'intro',
+        created_at: '2026-04-18 10:00:00',
+      }),
+      markPaid: async () => true,
+    },
+    airportRepository: {
+      getById: async () => ({
+        id: 11,
+        slug: 'nebula',
+        name: '星云机场',
+        website: 'https://nebula.example.com',
+        websites: ['https://nebula.example.com'],
+        status: 'normal',
+        is_listed: true,
+        plan_price_month: 18,
+        has_trial: true,
+        tags: [],
+        created_at: '2026-04-18T10:00:00+08:00',
+      }),
+      update: async () => true,
+    },
+    applicationPaymentOrderRepository: {
+      create: async () => 1,
+      getLatestByApplicationId: async () => null,
+      getByOutTradeNo: async () => null,
+      markPaid: async () => true,
+      expireOpenOrdersByApplicationId: async () => 0,
+    },
+    applicantBillingRepository: createMockBillingRepository({
+      getWalletByAccountId: async () => ({
+        id: 1,
+        applicant_account_id: 1,
+        application_id: 7,
+        airport_id: 11,
+        balance: 500,
+        auto_unlisted_at: null,
+        created_at: '2026-04-18T10:00:00+08:00',
+        updated_at: '2026-04-18T10:00:00+08:00',
+      }),
+    }),
+    airportAdCampaignRepository: {
+      getPortalStatus: async (_airportId, monthlyPrice) => ({
+        active_campaign: createMockAirportDeal(),
+        campaigns: [],
+        remaining_slots: 5,
+        slot_limit: 6,
+        monthly_price: monthlyPrice ?? 1000,
+        low_balance_warning_threshold: 100,
+        allowed_months: [1, 2, 3, 6, 12],
+      }),
+      purchase: async (input) => {
+        purchaseInput = input;
+        return createMockAirportDeal({
+          airport_id: input.airport_id,
+          coupon_code: input.coupon_code,
+          discount_title: input.discount_title,
+          discount_description: input.discount_description,
+          applicable_plan: input.applicable_plan,
+          purchased_months: input.months,
+          is_stackable: input.is_stackable,
+          refund_supported: input.refund_supported,
+          discount_percent: input.discount_percent,
+        });
+      },
+      update: async () => {
+        throw new Error('not used');
+      },
+      cancel: async () => {
+        throw new Error('not used');
+      },
+    },
+    applicantPortalAuthService: {
+      login: async () => {
+        throw new Error('not used');
+      },
+    },
+    paymentGatewaySettingsService: { getConfig: async () => ({ epay: { enabled: true } }) },
+    marketingSettingsService: {
+      getConfig: async () => ({
+        application_fee_amount: 300,
+        click_charge_amount: 1,
+        airport_ad_monthly_price: 1288.88,
+      }),
+    },
+    paymentGatewayService: {
+      createOrder: async () => {
+        throw new Error('not used');
+      },
+      verifyNotificationPayload: async () => true,
+    },
+    publicPageCache: {
+      clear: () => {
+        cacheCleared = true;
+      },
+    },
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/ad-campaign`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        months: 1,
+        coupon_code: 'NEW220',
+        discount_title: '新用户优惠',
+        discount_description: '新用户首单 8 折',
+        applicable_plan: '月付 / 季付',
+        is_stackable: false,
+        refund_supported: true,
+        discount_percent: 20,
+      }),
+    });
+    const data = (await response.json()) as { campaign: { campaign_id: number }; ad_status: { remaining_slots: number; slot_limit: number } };
+    assert.equal(response.status, 201);
+    assert.equal(data.campaign.campaign_id, 99);
+    assert.equal(data.ad_status.remaining_slots, 5);
+    assert.equal(data.ad_status.slot_limit, 6);
+    assert.equal(purchaseInput?.airport_id, 11);
+    assert.equal(purchaseInput?.applicant_account_id, 1);
+    assert.equal(purchaseInput?.application_id, 7);
+    assert.equal(purchaseInput?.monthly_price, 1288.88);
+    assert.equal(purchaseInput?.coupon_code, 'NEW220');
+    assert.equal(cacheCleared, true);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /portal/ad-campaign/:campaignId edits an active campaign without extending or charging', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+
+  let updateInput: Record<string, unknown> | null = null;
+  let cacheCleared = false;
+  app.use(createPortalRoutes({
+    applicantAccountRepository: {
+      getById: async () => createMockApplicantAccount({ application_id: 7 }),
+      updatePassword: async () => true,
+    },
+    airportApplicationRepository: {
+      getById: async () => ({
+        id: 7,
+        name: '星云机场',
+        website: 'https://nebula.example.com',
+        websites: ['https://nebula.example.com'],
+        approved_airport_id: 11,
+        review_status: 'reviewed',
+        payment_status: 'paid',
+        payment_amount: 100,
+        applicant_email: 'user@example.com',
+        applicant_telegram: '@nebula',
+        founded_on: '2025-01-01',
+        airport_intro: 'intro',
+        created_at: '2026-04-18 10:00:00',
+      }),
+      markPaid: async () => true,
+    },
+    applicationPaymentOrderRepository: {
+      create: async () => 1,
+      getLatestByApplicationId: async () => null,
+      getByOutTradeNo: async () => null,
+      markPaid: async () => true,
+      expireOpenOrdersByApplicationId: async () => 0,
+    },
+    applicantBillingRepository: createMockBillingRepository({
+      getWalletByAccountId: async () => ({
+        id: 1,
+        applicant_account_id: 1,
+        application_id: 7,
+        airport_id: 11,
+        balance: 500,
+        auto_unlisted_at: null,
+        created_at: '2026-04-18T10:00:00+08:00',
+        updated_at: '2026-04-18T10:00:00+08:00',
+      }),
+    }),
+    airportAdCampaignRepository: {
+      getPortalStatus: async (_airportId, monthlyPrice) => ({
+        active_campaign: createMockAirportDeal(),
+        campaigns: [],
+        remaining_slots: 6,
+        slot_limit: 6,
+        monthly_price: monthlyPrice ?? 1000,
+        low_balance_warning_threshold: 100,
+        allowed_months: [1, 2, 3, 6, 12],
+      }),
+      purchase: async () => {
+        throw new Error('not used');
+      },
+      update: async (input) => {
+        updateInput = input;
+        return createMockAirportDeal({
+          campaign_id: input.campaign_id,
+          coupon_code: input.coupon_code,
+          discount_title: input.discount_title,
+          discount_description: input.discount_description,
+          applicable_plan: input.applicable_plan,
+          is_stackable: input.is_stackable,
+          refund_supported: input.refund_supported,
+          discount_percent: input.discount_percent,
+        });
+      },
+      cancel: async () => {
+        throw new Error('not used');
+      },
+    },
+    applicantPortalAuthService: {
+      login: async () => {
+        throw new Error('not used');
+      },
+    },
+    paymentGatewaySettingsService: { getConfig: async () => ({ epay: { enabled: true } }) },
+    marketingSettingsService: {
+      getConfig: async () => ({
+        application_fee_amount: 300,
+        click_charge_amount: 1,
+        airport_ad_monthly_price: 1288.88,
+      }),
+    },
+    paymentGatewayService: {
+      createOrder: async () => {
+        throw new Error('not used');
+      },
+      verifyNotificationPayload: async () => true,
+    },
+    publicPageCache: {
+      clear: () => {
+        cacheCleared = true;
+      },
+    },
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/ad-campaign/99`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        extend_months: 0,
+        coupon_code: 'EDIT550',
+        discount_title: '修改文案',
+        discount_description: '只改说明',
+        applicable_plan: '所有套餐',
+        is_stackable: true,
+        refund_supported: false,
+        discount_percent: 15,
+      }),
+    });
+    const data = (await response.json()) as { campaign: { coupon_code: string } };
+    assert.equal(response.status, 200);
+    assert.equal(data.campaign.coupon_code, 'EDIT550');
+    assert.equal(updateInput?.campaign_id, 99);
+    assert.equal(updateInput?.extend_months, 0);
+    assert.equal(updateInput?.monthly_price, 1288.88);
+    assert.equal(updateInput?.airport_id, 11);
+    assert.equal(updateInput?.applicant_account_id, 1);
+    assert.equal(cacheCleared, true);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /portal/ad-campaign/:campaignId forwards extension months for paid renewal', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+
+  let updateInput: Record<string, unknown> | null = null;
+  app.use(createPortalRoutes({
+    applicantAccountRepository: {
+      getById: async () => createMockApplicantAccount({ application_id: 7 }),
+      updatePassword: async () => true,
+    },
+    airportApplicationRepository: {
+      getById: async () => ({
+        id: 7,
+        name: '星云机场',
+        website: 'https://nebula.example.com',
+        websites: ['https://nebula.example.com'],
+        approved_airport_id: 11,
+        review_status: 'reviewed',
+        payment_status: 'paid',
+        payment_amount: 100,
+        applicant_email: 'user@example.com',
+        applicant_telegram: '@nebula',
+        founded_on: '2025-01-01',
+        airport_intro: 'intro',
+        created_at: '2026-04-18 10:00:00',
+      }),
+      markPaid: async () => true,
+    },
+    applicationPaymentOrderRepository: {
+      create: async () => 1,
+      getLatestByApplicationId: async () => null,
+      getByOutTradeNo: async () => null,
+      markPaid: async () => true,
+      expireOpenOrdersByApplicationId: async () => 0,
+    },
+    applicantBillingRepository: createMockBillingRepository(),
+    airportAdCampaignRepository: {
+      getPortalStatus: async (_airportId, monthlyPrice) => ({
+        active_campaign: createMockAirportDeal(),
+        campaigns: [],
+        remaining_slots: 6,
+        slot_limit: 6,
+        monthly_price: monthlyPrice ?? 1000,
+        low_balance_warning_threshold: 100,
+        allowed_months: [1, 2, 3, 6, 12],
+      }),
+      purchase: async () => {
+        throw new Error('not used');
+      },
+      update: async (input) => {
+        updateInput = input;
+        return createMockAirportDeal({
+          campaign_id: input.campaign_id,
+          purchased_months: 2,
+          billed_amount: 2000,
+        });
+      },
+      cancel: async () => {
+        throw new Error('not used');
+      },
+    },
+    applicantPortalAuthService: {
+      login: async () => {
+        throw new Error('not used');
+      },
+    },
+    paymentGatewaySettingsService: { getConfig: async () => ({ epay: { enabled: true } }) },
+    marketingSettingsService: {
+      getConfig: async () => ({
+        application_fee_amount: 300,
+        click_charge_amount: 1,
+        airport_ad_monthly_price: 1288.88,
+      }),
+    },
+    paymentGatewayService: {
+      createOrder: async () => {
+        throw new Error('not used');
+      },
+      verifyNotificationPayload: async () => true,
+    },
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/ad-campaign/99`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        extend_months: 1,
+        coupon_code: 'NEW220',
+        discount_title: '续投',
+        discount_description: '延长一个月',
+        applicable_plan: '月付',
+        is_stackable: false,
+        refund_supported: true,
+        discount_percent: 20,
+      }),
+    });
+    assert.equal(response.status, 200);
+    assert.equal(updateInput?.extend_months, 1);
+    assert.equal(updateInput?.monthly_price, 1288.88);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/ad-campaign/:campaignId/cancel marks campaign canceled without refund', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+
+  let cancelInput: Record<string, unknown> | null = null;
+  let cacheCleared = false;
+  app.use(createPortalRoutes({
+    applicantAccountRepository: {
+      getById: async () => createMockApplicantAccount({ application_id: 7 }),
+      updatePassword: async () => true,
+    },
+    airportApplicationRepository: {
+      getById: async () => ({
+        id: 7,
+        name: '星云机场',
+        website: 'https://nebula.example.com',
+        websites: ['https://nebula.example.com'],
+        approved_airport_id: 11,
+        review_status: 'reviewed',
+        payment_status: 'paid',
+        payment_amount: 100,
+        applicant_email: 'user@example.com',
+        applicant_telegram: '@nebula',
+        founded_on: '2025-01-01',
+        airport_intro: 'intro',
+        created_at: '2026-04-18 10:00:00',
+      }),
+      markPaid: async () => true,
+    },
+    applicationPaymentOrderRepository: {
+      create: async () => 1,
+      getLatestByApplicationId: async () => null,
+      getByOutTradeNo: async () => null,
+      markPaid: async () => true,
+      expireOpenOrdersByApplicationId: async () => 0,
+    },
+    applicantBillingRepository: createMockBillingRepository({
+      getWalletByAccountId: async () => ({
+        id: 1,
+        applicant_account_id: 1,
+        application_id: 7,
+        airport_id: 11,
+        balance: 500,
+        auto_unlisted_at: null,
+        created_at: '2026-04-18T10:00:00+08:00',
+        updated_at: '2026-04-18T10:00:00+08:00',
+      }),
+    }),
+    airportAdCampaignRepository: {
+      getPortalStatus: async () => ({
+        active_campaign: null,
+        campaigns: [{
+          ...createMockAirportDeal({ campaign_id: 99 }),
+          status: 'canceled',
+          status_label: '已下架',
+          is_active: false,
+        }],
+        remaining_slots: 6,
+        slot_limit: 6,
+        monthly_price: 1000,
+        low_balance_warning_threshold: 100,
+        allowed_months: [1, 2, 3, 6, 12],
+      }),
+      purchase: async () => {
+        throw new Error('not used');
+      },
+      update: async () => {
+        throw new Error('not used');
+      },
+      cancel: async (input) => {
+        cancelInput = input;
+        return true;
+      },
+    },
+    applicantPortalAuthService: {
+      login: async () => {
+        throw new Error('not used');
+      },
+    },
+    paymentGatewaySettingsService: { getConfig: async () => ({ epay: { enabled: true } }) },
+    paymentGatewayService: {
+      createOrder: async () => {
+        throw new Error('not used');
+      },
+      verifyNotificationPayload: async () => true,
+    },
+    publicPageCache: {
+      clear: () => {
+        cacheCleared = true;
+      },
+    },
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/ad-campaign/99/cancel`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const data = (await response.json()) as {
+      ad_status: { remaining_slots: number; campaigns: Array<{ status: string; status_label: string; is_active: boolean }> };
+      wallet: { balance: number };
+    };
+
+    assert.equal(response.status, 200);
+    assert.equal(cancelInput?.campaign_id, 99);
+    assert.equal(cancelInput?.airport_id, 11);
+    assert.equal(cancelInput?.applicant_account_id, 1);
+    assert.equal(cancelInput?.application_id, 7);
+    assert.equal(cacheCleared, true);
+    assert.equal(data.wallet.balance, 500);
+    assert.equal(data.ad_status.remaining_slots, 6);
+    assert.equal(data.ad_status.campaigns[0].status, 'canceled');
+    assert.equal(data.ad_status.campaigns[0].status_label, '已下架');
+    assert.equal(data.ad_status.campaigns[0].is_active, false);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

@@ -325,6 +325,7 @@ interface AdminDeps {
     getConfig(): Promise<{
       application_fee_amount: number;
       click_charge_amount: number;
+      airport_ad_monthly_price?: number;
       recharge_amounts?: number[];
       admin_telegram_username?: string | null;
       home_section_limits?: HomeSectionLimits;
@@ -2917,6 +2918,10 @@ function parseMarketingSettingsPayload(
       payload.click_charge_amount === undefined
         ? undefined
         : mustNumber(payload.click_charge_amount, 'click_charge_amount'),
+    airport_ad_monthly_price:
+      payload.airport_ad_monthly_price === undefined
+        ? undefined
+        : mustNumber(payload.airport_ad_monthly_price, 'airport_ad_monthly_price'),
     recharge_amounts:
       payload.recharge_amounts === undefined
         ? undefined

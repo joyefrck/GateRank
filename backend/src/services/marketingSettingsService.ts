@@ -2,10 +2,12 @@ import { APPLICATION_FEE_AMOUNT, CLICK_CHARGE_AMOUNT, RECHARGE_AMOUNTS } from '.
 import { HttpError } from '../middleware/errorHandler';
 import type { SystemSettingRecord } from '../repositories/systemSettingRepository';
 import { formatDateTimeInTimezoneIso } from '../utils/time';
+import { AIRPORT_AD_MONTHLY_PRICE } from '../../../shared/airportAds';
 
 export interface MarketingSettingsInput {
   application_fee_amount?: number;
   click_charge_amount?: number;
+  airport_ad_monthly_price?: number;
   recharge_amounts?: number[];
   admin_telegram_username?: string | null;
   home_section_limits?: Partial<HomeSectionLimits>;
@@ -22,6 +24,7 @@ export interface HomeSectionLimits {
 export interface MarketingSettingsView {
   application_fee_amount: number;
   click_charge_amount: number;
+  airport_ad_monthly_price: number;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
   home_section_limits: HomeSectionLimits;
@@ -32,6 +35,7 @@ export interface MarketingSettingsView {
 export interface MarketingBillingConfig {
   application_fee_amount: number;
   click_charge_amount: number;
+  airport_ad_monthly_price: number;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
   home_section_limits: HomeSectionLimits;
@@ -49,6 +53,7 @@ const PAYMENT_GATEWAY_SETTING_KEY = 'payment_gateway';
 
 export const DEFAULT_MARKETING_APPLICATION_FEE_AMOUNT = APPLICATION_FEE_AMOUNT;
 export const DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT = CLICK_CHARGE_AMOUNT;
+export const DEFAULT_AIRPORT_AD_MONTHLY_PRICE = AIRPORT_AD_MONTHLY_PRICE;
 export const DEFAULT_MARKETING_RECHARGE_AMOUNTS = [...RECHARGE_AMOUNTS];
 export const DEFAULT_HOME_SECTION_LIMITS: HomeSectionLimits = {
   today_pick: 3,
@@ -99,6 +104,10 @@ export class MarketingSettingsService {
         input.click_charge_amount === undefined
           ? base.click_charge_amount
           : normalizePositiveAmount(input.click_charge_amount, 'click_charge_amount'),
+      airport_ad_monthly_price:
+        input.airport_ad_monthly_price === undefined
+          ? base.airport_ad_monthly_price
+          : normalizePositiveAmount(input.airport_ad_monthly_price, 'airport_ad_monthly_price'),
       recharge_amounts:
         input.recharge_amounts === undefined
           ? base.recharge_amounts
@@ -162,6 +171,7 @@ function getBaseDefaults(): MarketingBillingConfig {
   return {
     application_fee_amount: DEFAULT_MARKETING_APPLICATION_FEE_AMOUNT,
     click_charge_amount: DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT,
+    airport_ad_monthly_price: DEFAULT_AIRPORT_AD_MONTHLY_PRICE,
     recharge_amounts: [...DEFAULT_MARKETING_RECHARGE_AMOUNTS],
     admin_telegram_username: null,
     home_section_limits: { ...DEFAULT_HOME_SECTION_LIMITS },
@@ -178,6 +188,10 @@ function normalizeConfig(value: unknown, defaults: MarketingBillingConfig): Mark
     click_charge_amount: normalizeStoredAmount(
       record.click_charge_amount,
       defaults.click_charge_amount,
+    ),
+    airport_ad_monthly_price: normalizeStoredAmount(
+      record.airport_ad_monthly_price,
+      defaults.airport_ad_monthly_price,
     ),
     recharge_amounts: normalizeRechargeAmounts(
       record.recharge_amounts,

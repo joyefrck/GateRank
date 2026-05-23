@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../types/domain';
+import type { AirportDealView } from '../../../shared/airportAds';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { getDateInTimezone } from '../utils/time';
 import {
@@ -10,6 +11,7 @@ import {
 } from '../utils/publicCache';
 import {
   renderApplyPublicPage,
+  renderDealsPublicPage,
   renderFullRankingPublicPage,
   renderHomePublicPage,
   renderMethodologyPublicPage,
@@ -34,6 +36,9 @@ interface PublicPageDeps {
     getRiskMonitorView(date: string, page: number, pageSize: number): Promise<RiskMonitorView>;
     getReportView(airportId: number, date: string): Promise<ReportView | null>;
     getReportViewBySlug?(slug: string, date: string): Promise<ReportView | null>;
+  };
+  airportAdCampaignRepository?: {
+    listActiveDeals(): Promise<AirportDealView[]>;
   };
   pageCache?: TimedPromiseCache;
   frontendAssets?: PublicFrontendAssets;
@@ -119,6 +124,24 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     } catch (error) {
       console.error('[public-page] failed to render risk monitor page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '跑路监测加载失败', frontendAssets));
+    }
+  });
+
+  router.get('/deals', async (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    try {
+      if (!deps.airportAdCampaignRepository) {
+        throw new Error('airportAdCampaignRepository is not configured');
+      }
+      const deals = await pageCache.getOrLoad(
+        'deals:active',
+        () => deps.airportAdCampaignRepository!.listActiveDeals(),
+      );
+      setPublicCacheHeaders(res);
+      res.status(200).type('html').send(renderDealsPublicPage(siteUrl, deals, frontendAssets));
+    } catch (error) {
+      console.error('[public-page] failed to render deals page', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '活动优惠加载失败', frontendAssets));
     }
   });
 

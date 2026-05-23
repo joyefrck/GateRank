@@ -4,6 +4,7 @@ import { AddressInfo } from 'node:net';
 import express from 'express';
 import { createPublicPageRoutes } from '../src/routes/publicPageRoutes';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../src/types/domain';
+import type { AirportDealView } from '../../shared/airportAds';
 import { getDateInTimezone } from '../src/utils/time';
 
 const TEST_FRONTEND_ASSETS = {
@@ -78,6 +79,37 @@ test('core SEO descriptions include expanded search context', async () => {
       assert.match(description, firstPattern);
       assert.match(description, secondPattern);
     }
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /deals returns crawlable advertising deal HTML', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    airportAdCampaignRepository: {
+      listActiveDeals: async () => [createDealView(1), createDealView(2)],
+    },
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/deals`, { headers: { host: `127.0.0.1:${port}` } });
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') || '', /text\/html/);
+    const html = await response.text();
+    assert.match(html, /<h1>活动优惠专区<\/h1>/);
+    assert.match(html, /活动优惠专区 \| 机场优惠码、限时折扣与免费试用/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/deals"/);
+    assert.match(html, /星云机场/);
+    assert.match(html, /优惠码/);
+    assert.match(html, /NEW220/);
+    assert.match(html, /href="https:\/\/www\.nebula\.example\.com" target="_blank" rel="nofollow noreferrer noopener">访问官网/);
+    assert.doesNotMatch(html, /href="www\.nebula\.example\.com"/);
+    assert.match(html, /"kind":"deals"/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -488,6 +520,34 @@ function extractMetaDescription(html: string): string {
   const matched = html.match(/<meta name="description" content="([^"]+)"/);
   assert.ok(matched, 'meta description missing');
   return matched[1];
+}
+
+function createDealView(id: number): AirportDealView {
+  return {
+    campaign_id: id,
+    airport_id: id,
+    airport_name: id === 1 ? '星云机场' : '极光机场',
+    airport_slug: id === 1 ? 'nebula' : 'aurora',
+    website: id === 1 ? 'www.nebula.example.com' : `https://airport-${id}.example.com`,
+    report_url: id === 1 ? '/airports/nebula' : '/airports/aurora',
+    coupon_code: id === 1 ? 'NEW220' : 'FLASH30',
+    discount_title: '新用户优惠',
+    discount_description: '新用户首单 8 折，部分月付套餐可用',
+    applicable_plan: '月付 / 季付',
+    starts_at: '2026-05-24T10:00:00+08:00',
+    ends_at: '2026-06-24T10:00:00+08:00',
+    purchased_months: 1,
+    billed_amount: 1000,
+    is_stackable: false,
+    refund_supported: false,
+    supports_trial: true,
+    supports_usdt: true,
+    supports_streaming: true,
+    supports_ai: true,
+    low_price_plan: true,
+    discount_percent: 20,
+    created_at: '2026-05-24T10:00:00+08:00',
+  };
 }
 
 function buildFullRankingViewWithAirportCount(count: number): FullRankingView {

@@ -6,7 +6,7 @@ export const LOW_BALANCE_WARNING_THRESHOLD = 30;
 
 export type BillingPaymentChannel = 'alipay' | 'wxpay' | 'usdt';
 export type BillingOrderStatus = 'created' | 'paid' | 'failed' | 'expired' | 'canceled';
-export type WalletTransactionType = 'recharge' | 'click_charge' | 'adjustment';
+export type WalletTransactionType = 'recharge' | 'click_charge' | 'ad_campaign_charge' | 'adjustment';
 export type ClickBillingStatus = 'billed' | 'duplicate' | 'free' | 'insufficient_balance' | 'unlisted' | 'no_wallet';
 export type BillingMailNotificationType = 'low_balance_warning' | 'airport_auto_unlisted' | 'airport_online';
 
@@ -274,7 +274,7 @@ export class ApplicantBillingRepository {
         applicant_account_id BIGINT UNSIGNED NOT NULL,
         application_id BIGINT UNSIGNED NOT NULL,
         airport_id BIGINT UNSIGNED NULL,
-        transaction_type ENUM('recharge', 'click_charge', 'adjustment') NOT NULL,
+        transaction_type ENUM('recharge', 'click_charge', 'ad_campaign_charge', 'adjustment') NOT NULL,
         amount DECIMAL(10,2) NOT NULL,
         balance_after DECIMAL(10,2) NOT NULL,
         reference_type VARCHAR(64) NULL,
@@ -316,6 +316,10 @@ export class ApplicantBillingRepository {
     await this.pool.query(`
       ALTER TABLE outbound_click_records
         MODIFY COLUMN billing_status ENUM('billed', 'duplicate', 'free', 'insufficient_balance', 'unlisted', 'no_wallet') NOT NULL
+    `);
+    await this.pool.query(`
+      ALTER TABLE applicant_wallet_transactions
+        MODIFY COLUMN transaction_type ENUM('recharge', 'click_charge', 'ad_campaign_charge', 'adjustment') NOT NULL
     `);
 
     await this.ensureColumn('low_balance_notified_at', 'DATETIME NULL AFTER auto_unlisted_at');

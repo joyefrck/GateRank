@@ -45,6 +45,12 @@ import { PORTAL_AUTH_COOKIE, clearAuthCookie, setAuthCookie } from '../utils/aut
 import type { UpdateAirportInput } from '../repositories/airportRepository';
 import type { Airport, AirportPaymentMethod, AirportProfile, AirportStreamingSupport } from '../types/domain';
 import { createDefaultAirportProfile, normalizeAirportProfile, parseAirportProfilePayload } from '../utils/airportProfile';
+import {
+  AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD,
+  AIRPORT_AD_MONTHLY_PRICE,
+  type AirportDealView,
+  type PortalAirportAdStatus,
+} from '../../../shared/airportAds';
 
 interface PortalDeps {
   applicantAccountRepository: {
@@ -155,6 +161,44 @@ interface PortalDeps {
       pageSize?: number,
     ): Promise<PaginatedBillingRecords<ApplicantClickView>>;
   };
+  airportAdCampaignRepository?: {
+    getPortalStatus(airportId: number | null, monthlyPrice?: number): Promise<PortalAirportAdStatus>;
+    purchase(input: {
+      airport_id: number;
+      applicant_account_id: number;
+      application_id: number;
+      months: number;
+      monthly_price: number;
+      coupon_code: string;
+      discount_title: string;
+      discount_description: string;
+      applicable_plan: string;
+      is_stackable: boolean;
+      refund_supported: boolean;
+      discount_percent: number | null;
+    }): Promise<AirportDealView>;
+    update(input: {
+      campaign_id: number;
+      airport_id: number;
+      applicant_account_id: number;
+      application_id: number;
+      extend_months: number;
+      monthly_price: number;
+      coupon_code: string;
+      discount_title: string;
+      discount_description: string;
+      applicable_plan: string;
+      is_stackable: boolean;
+      refund_supported: boolean;
+      discount_percent: number | null;
+    }): Promise<AirportDealView>;
+    cancel(input: {
+      campaign_id: number;
+      airport_id: number;
+      applicant_account_id: number;
+      application_id: number;
+    }): Promise<boolean>;
+  };
   applicantPortalAuthService: {
     login(email: string, password: string): Promise<{
       token: string;
@@ -194,6 +238,7 @@ interface PortalDeps {
     getConfig(): Promise<{
       application_fee_amount: number;
       click_charge_amount?: number;
+      airport_ad_monthly_price?: number;
       recharge_amounts?: number[];
       admin_telegram_username?: string | null;
     }>;
@@ -542,6 +587,171 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         wallet: await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id),
         recharge_amounts: marketingConfig.recharge_amounts,
         click_price: marketingConfig.click_charge_amount,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/portal/ad-campaign', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      const application = await requireApplication(deps, account.application_id);
+      const airportId = Number(application.approved_airport_id || 0) || null;
+      const marketingConfig = await getMarketingBillingConfig(deps);
+      res.json(await requireAirportAdCampaignRepository(deps).getPortalStatus(
+        airportId,
+        marketingConfig.airport_ad_monthly_price,
+      ));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/ad-campaign', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      if (account.must_change_password) {
+        throw new HttpError(409, 'PASSWORD_CHANGE_REQUIRED', '首次登录后必须先修改密码');
+      }
+      const application = await requireApplication(deps, account.application_id);
+      if (application.payment_status !== 'paid' || application.review_status !== 'reviewed') {
+        throw new HttpError(409, 'AIRPORT_AD_APPLICATION_NOT_READY', '申请通过并支付后才能投放广告');
+      }
+      const airportId = Number(application.approved_airport_id || 0);
+      if (!airportId) {
+        throw new HttpError(409, 'AIRPORT_AD_AIRPORT_NOT_APPROVED', '当前申请尚未绑定已审核机场');
+      }
+      if (deps.airportRepository?.getById) {
+        const airport = await deps.airportRepository.getById(airportId);
+        if (!airport) {
+          throw new HttpError(404, 'AIRPORT_NOT_FOUND', '机场不存在');
+        }
+      }
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const months = mustAdMonths(payload.months);
+      const marketingConfig = await getMarketingBillingConfig(deps);
+      const discountPercent = payload.discount_percent === undefined || payload.discount_percent === null || payload.discount_percent === ''
+        ? null
+        : mustDiscountPercent(payload.discount_percent);
+      const campaign = await requireAirportAdCampaignRepository(deps).purchase({
+        airport_id: airportId,
+        applicant_account_id: account.id,
+        application_id: account.application_id,
+        months,
+        monthly_price: marketingConfig.airport_ad_monthly_price,
+        coupon_code: mustBoundedString(payload.coupon_code, 'coupon_code', 64),
+        discount_title: mustBoundedString(payload.discount_title, 'discount_title', 128),
+        discount_description: mustBoundedString(payload.discount_description, 'discount_description', 800),
+        applicable_plan: mustBoundedString(payload.applicable_plan, 'applicable_plan', 128),
+        is_stackable: Boolean(payload.is_stackable),
+        refund_supported: Boolean(payload.refund_supported),
+        discount_percent: discountPercent,
+      });
+      deps.publicPageCache?.clear();
+      res.status(201).json({
+        campaign,
+        ad_status: await requireAirportAdCampaignRepository(deps).getPortalStatus(
+          airportId,
+          marketingConfig.airport_ad_monthly_price,
+        ),
+        wallet: await deps.applicantBillingRepository.getWalletByAccountId(account.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/portal/ad-campaign/:campaignId', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      if (account.must_change_password) {
+        throw new HttpError(409, 'PASSWORD_CHANGE_REQUIRED', '首次登录后必须先修改密码');
+      }
+      const application = await requireApplication(deps, account.application_id);
+      if (application.payment_status !== 'paid' || application.review_status !== 'reviewed') {
+        throw new HttpError(409, 'AIRPORT_AD_APPLICATION_NOT_READY', '申请通过并支付后才能修改广告');
+      }
+      const airportId = Number(application.approved_airport_id || 0);
+      if (!airportId) {
+        throw new HttpError(409, 'AIRPORT_AD_AIRPORT_NOT_APPROVED', '当前申请尚未绑定已审核机场');
+      }
+      const campaignId = Number(req.params.campaignId);
+      if (!Number.isInteger(campaignId) || campaignId <= 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'campaignId must be positive integer');
+      }
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const extendMonths = mustAdExtendMonths(payload.extend_months);
+      const marketingConfig = await getMarketingBillingConfig(deps);
+      const discountPercent = payload.discount_percent === undefined || payload.discount_percent === null || payload.discount_percent === ''
+        ? null
+        : mustDiscountPercent(payload.discount_percent);
+      const campaign = await requireAirportAdCampaignRepository(deps).update({
+        campaign_id: campaignId,
+        airport_id: airportId,
+        applicant_account_id: account.id,
+        application_id: account.application_id,
+        extend_months: extendMonths,
+        monthly_price: marketingConfig.airport_ad_monthly_price,
+        coupon_code: mustBoundedString(payload.coupon_code, 'coupon_code', 64),
+        discount_title: mustBoundedString(payload.discount_title, 'discount_title', 128),
+        discount_description: mustBoundedString(payload.discount_description, 'discount_description', 800),
+        applicable_plan: mustBoundedString(payload.applicable_plan, 'applicable_plan', 128),
+        is_stackable: Boolean(payload.is_stackable),
+        refund_supported: Boolean(payload.refund_supported),
+        discount_percent: discountPercent,
+      });
+      deps.publicPageCache?.clear();
+      res.json({
+        campaign,
+        ad_status: await requireAirportAdCampaignRepository(deps).getPortalStatus(
+          airportId,
+          marketingConfig.airport_ad_monthly_price,
+        ),
+        wallet: await deps.applicantBillingRepository.getWalletByAccountId(account.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/ad-campaign/:campaignId/cancel', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      if (account.must_change_password) {
+        throw new HttpError(409, 'PASSWORD_CHANGE_REQUIRED', '首次登录后必须先修改密码');
+      }
+      const application = await requireApplication(deps, account.application_id);
+      if (application.payment_status !== 'paid' || application.review_status !== 'reviewed') {
+        throw new HttpError(409, 'AIRPORT_AD_APPLICATION_NOT_READY', '申请通过并支付后才能下架广告');
+      }
+      const airportId = Number(application.approved_airport_id || 0);
+      if (!airportId) {
+        throw new HttpError(409, 'AIRPORT_AD_AIRPORT_NOT_APPROVED', '当前申请尚未绑定已审核机场');
+      }
+      const campaignId = Number(req.params.campaignId);
+      if (!Number.isInteger(campaignId) || campaignId <= 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'campaignId must be positive integer');
+      }
+
+      await requireAirportAdCampaignRepository(deps).cancel({
+        campaign_id: campaignId,
+        airport_id: airportId,
+        applicant_account_id: account.id,
+        application_id: account.application_id,
+      });
+      const marketingConfig = await getMarketingBillingConfig(deps);
+      deps.publicPageCache?.clear();
+      res.json({
+        ad_status: await requireAirportAdCampaignRepository(deps).getPortalStatus(
+          airportId,
+          marketingConfig.airport_ad_monthly_price,
+        ),
+        wallet: await deps.applicantBillingRepository.getWalletByAccountId(account.id),
       });
     } catch (error) {
       next(error);
@@ -1081,6 +1291,21 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
     buildTelegramBotView(deps, account.id),
   ]);
   const portalApplication = await resolvePortalApplicationView(deps, application);
+  const approvedAirportId = Number(portalApplication.approved_airport_id || application.approved_airport_id || 0) || null;
+  const adStatus = deps.airportAdCampaignRepository
+    ? await deps.airportAdCampaignRepository.getPortalStatus(
+      approvedAirportId,
+      marketingConfig.airport_ad_monthly_price,
+    )
+    : {
+        active_campaign: null,
+        campaigns: [],
+        remaining_slots: 0,
+        slot_limit: 6,
+        monthly_price: marketingConfig.airport_ad_monthly_price,
+        low_balance_warning_threshold: AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD,
+        allowed_months: [1, 2, 3, 6, 12],
+      };
 
   return {
     account: {
@@ -1104,6 +1329,7 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
     admin_telegram_username: marketingConfig.admin_telegram_username,
     recharge_amounts: marketingConfig.recharge_amounts,
     wallet,
+    ad_status: adStatus,
     telegram_bot: telegramBot,
   };
 }
@@ -1297,6 +1523,7 @@ function buildSyncedAirportProfile(
 async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
   application_fee_amount: number;
   click_charge_amount: number;
+  airport_ad_monthly_price: number;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
 }> {
@@ -1304,6 +1531,7 @@ async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
     return {
       application_fee_amount: APPLICATION_FEE_AMOUNT,
       click_charge_amount: CLICK_CHARGE_AMOUNT,
+      airport_ad_monthly_price: AIRPORT_AD_MONTHLY_PRICE,
       recharge_amounts: [...RECHARGE_AMOUNTS],
       admin_telegram_username: null,
     };
@@ -1315,6 +1543,7 @@ async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
   return {
     application_fee_amount: Number(config.application_fee_amount || APPLICATION_FEE_AMOUNT),
     click_charge_amount: Number(config.click_charge_amount || CLICK_CHARGE_AMOUNT),
+    airport_ad_monthly_price: Number(config.airport_ad_monthly_price || AIRPORT_AD_MONTHLY_PRICE),
     recharge_amounts: rechargeAmounts.length > 0 ? rechargeAmounts : [...RECHARGE_AMOUNTS],
     admin_telegram_username: config.admin_telegram_username ?? null,
   };
@@ -1398,6 +1627,15 @@ function requireApplicantTelegramLoginFlowRepository(
     throw new HttpError(503, 'USER_TELEGRAM_LOGIN_NOT_CONFIGURED', 'Telegram 登录服务尚未配置');
   }
   return deps.applicantTelegramLoginFlowRepository;
+}
+
+function requireAirportAdCampaignRepository(
+  deps: PortalDeps,
+): NonNullable<PortalDeps['airportAdCampaignRepository']> {
+  if (!deps.airportAdCampaignRepository) {
+    throw new Error('airportAdCampaignRepository is not configured');
+  }
+  return deps.airportAdCampaignRepository;
 }
 
 function requireUserTelegramBotSettingsService(
@@ -1538,6 +1776,38 @@ function mustString(value: unknown, fieldName: string): string {
     throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be non-empty string`);
   }
   return value.trim();
+}
+
+function mustBoundedString(value: unknown, fieldName: string, maxLength: number): string {
+  const text = mustString(value, fieldName);
+  if (text.length > maxLength) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be at most ${maxLength} characters`);
+  }
+  return text;
+}
+
+function mustAdMonths(value: unknown): number {
+  const months = Number(value);
+  if (![1, 2, 3, 6, 12].includes(months)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'months must be one of 1,2,3,6,12');
+  }
+  return months;
+}
+
+function mustAdExtendMonths(value: unknown): number {
+  const months = Number(value);
+  if (![0, 1, 2, 3, 6, 12].includes(months)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'extend_months must be one of 0,1,2,3,6,12');
+  }
+  return months;
+}
+
+function mustDiscountPercent(value: unknown): number {
+  const percent = Number(value);
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) {
+    throw new HttpError(400, 'BAD_REQUEST', 'discount_percent must be between 0 and 100');
+  }
+  return Number(percent.toFixed(2));
 }
 
 function optionalString(value: unknown): string | undefined {

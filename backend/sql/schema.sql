@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS applicant_wallet_transactions (
   applicant_account_id BIGINT UNSIGNED NOT NULL,
   application_id BIGINT UNSIGNED NOT NULL,
   airport_id BIGINT UNSIGNED NULL,
-  transaction_type ENUM('recharge', 'click_charge', 'adjustment') NOT NULL,
+  transaction_type ENUM('recharge', 'click_charge', 'ad_campaign_charge', 'adjustment') NOT NULL,
   amount DECIMAL(10,2) NOT NULL,
   balance_after DECIMAL(10,2) NOT NULL,
   reference_type VARCHAR(64) NULL,
@@ -289,6 +289,33 @@ CREATE TABLE IF NOT EXISTS application_payment_orders (
   UNIQUE KEY uk_application_payment_orders_out_trade_no (out_trade_no),
   INDEX idx_application_payment_orders_application_id (application_id),
   INDEX idx_application_payment_orders_status_created_at (status, created_at DESC)
+);
+
+CREATE TABLE IF NOT EXISTS airport_ad_campaigns (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  airport_id BIGINT UNSIGNED NOT NULL,
+  applicant_account_id BIGINT UNSIGNED NOT NULL,
+  application_id BIGINT UNSIGNED NOT NULL,
+  wallet_id BIGINT UNSIGNED NOT NULL,
+  coupon_code VARCHAR(64) NOT NULL,
+  discount_title VARCHAR(128) NOT NULL,
+  discount_description TEXT NOT NULL,
+  applicable_plan VARCHAR(128) NOT NULL,
+  is_stackable TINYINT(1) NOT NULL DEFAULT 0,
+  refund_supported TINYINT(1) NOT NULL DEFAULT 0,
+  discount_percent DECIMAL(5,2) NULL,
+  purchased_months INT UNSIGNED NOT NULL,
+  billed_amount DECIMAL(10,2) NOT NULL,
+  starts_at DATETIME NOT NULL,
+  ends_at DATETIME NOT NULL,
+  status ENUM('active', 'canceled') NOT NULL DEFAULT 'active',
+  display_order BIGINT UNSIGNED NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_airport_ad_campaigns_active_slots (status, starts_at, ends_at, id),
+  INDEX idx_airport_ad_campaigns_airport_active (airport_id, status, ends_at),
+  INDEX idx_airport_ad_campaigns_account_created (applicant_account_id, created_at DESC)
 );
 
 CREATE TABLE IF NOT EXISTS airport_metrics_daily (
@@ -504,13 +531,13 @@ CREATE TABLE IF NOT EXISTS marketing_events (
   event_date DATE NOT NULL,
   event_type ENUM('page_view', 'airport_impression', 'outbound_click') NOT NULL,
   page_path VARCHAR(1024) NOT NULL,
-  page_kind ENUM('home', 'full_ranking', 'risk_monitor', 'report', 'methodology', 'news', 'apply', 'publish_token_docs') NOT NULL,
+  page_kind ENUM('home', 'full_ranking', 'risk_monitor', 'report', 'deals', 'methodology', 'news', 'apply', 'publish_token_docs') NOT NULL,
   referrer_path VARCHAR(1024) NULL,
   external_referrer_host VARCHAR(255) NULL,
   source_type VARCHAR(64) NOT NULL DEFAULT 'direct_or_unknown',
   source_label VARCHAR(255) NOT NULL DEFAULT 'Direct / Unknown',
   airport_id BIGINT UNSIGNED NULL,
-  placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header') NULL,
+  placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'deal_card') NULL,
   target_kind ENUM('website', 'subscription_url') NULL,
   target_url VARCHAR(2048) NULL,
   utm_source VARCHAR(255) NULL,

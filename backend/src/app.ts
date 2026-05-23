@@ -12,6 +12,7 @@ import { ApplicantTelegramBindingRepository } from './repositories/applicantTele
 import { ApplicantTelegramLoginFlowRepository } from './repositories/applicantTelegramLoginFlowRepository';
 import { ApplicantXOAuthFlowRepository } from './repositories/applicantXOAuthFlowRepository';
 import { AirportRepository } from './repositories/airportRepository';
+import { AirportAdCampaignRepository } from './repositories/airportAdCampaignRepository';
 import { AirportApplicationRepository } from './repositories/airportApplicationRepository';
 import { ApplicationPaymentOrderRepository } from './repositories/applicationPaymentOrderRepository';
 import { ApplicantBillingRepository } from './repositories/applicantBillingRepository';
@@ -74,6 +75,8 @@ export async function createApp() {
   const pool = getDbPool();
   const airportRepository = new AirportRepository(pool);
   await airportRepository.ensureSchema();
+  const airportAdCampaignRepository = new AirportAdCampaignRepository(pool);
+  await airportAdCampaignRepository.ensureSchema();
   const airportApplicationRepository = new AirportApplicationRepository(pool);
   await airportApplicationRepository.ensureSchema();
   const applicantAccountRepository = new ApplicantAccountRepository(pool);
@@ -250,6 +253,7 @@ export async function createApp() {
       airportApplicationRepository,
       applicantAccountRepository,
       applicantBillingRepository,
+      airportAdCampaignRepository,
       applicationNotificationService,
       mailService,
       metricsRepository,
@@ -271,6 +275,7 @@ export async function createApp() {
       airportRepository,
       applicationPaymentOrderRepository,
       applicantBillingRepository,
+      airportAdCampaignRepository,
       applicantPortalAuthService,
       applicantXOAuthService,
       applicantTelegramBindingRepository,
@@ -386,6 +391,7 @@ export async function createApp() {
   app.use(
     createPublicPageRoutes({
       publicViewService,
+      airportAdCampaignRepository,
       pageCache: publicHtmlPageCache,
     }),
   );

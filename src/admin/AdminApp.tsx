@@ -812,6 +812,7 @@ interface PaymentGatewaySettingsFormState {
 interface MarketingSettingsView {
   application_fee_amount: number;
   click_charge_amount: number;
+  airport_ad_monthly_price: number;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
   home_section_limits: {
@@ -828,6 +829,7 @@ interface MarketingSettingsView {
 interface MarketingSettingsFormState {
   application_fee_amount: string;
   click_charge_amount: string;
+  airport_ad_monthly_price: string;
   recharge_amounts: string[];
   admin_telegram_username: string;
   home_section_limits: {
@@ -3103,6 +3105,7 @@ function MarketingSettingsPage() {
   const [form, setForm] = useState<MarketingSettingsFormState>({
     application_fee_amount: '300',
     click_charge_amount: '1',
+    airport_ad_monthly_price: '1000',
     recharge_amounts: defaultRechargeAmountForm,
     admin_telegram_username: '',
     home_section_limits: defaultHomeSectionLimitForm,
@@ -3112,10 +3115,15 @@ function MarketingSettingsPage() {
     const rechargeAmounts = Array.isArray(view.recharge_amounts) && view.recharge_amounts.length > 0
       ? view.recharge_amounts
       : defaultRechargeAmountForm.map(Number);
-    setSettings(view);
+    const airportAdMonthlyPrice = Number(view.airport_ad_monthly_price || 1000);
+    setSettings({
+      ...view,
+      airport_ad_monthly_price: airportAdMonthlyPrice,
+    });
     setForm({
       application_fee_amount: String(view.application_fee_amount || 300),
       click_charge_amount: String(view.click_charge_amount || 1),
+      airport_ad_monthly_price: String(airportAdMonthlyPrice),
       recharge_amounts: rechargeAmounts.map((amount) => String(amount)),
       admin_telegram_username: view.admin_telegram_username ? `@${view.admin_telegram_username}` : '',
       home_section_limits: {
@@ -3155,6 +3163,7 @@ function MarketingSettingsPage() {
         body: JSON.stringify({
           application_fee_amount: Number(form.application_fee_amount),
           click_charge_amount: Number(form.click_charge_amount),
+          airport_ad_monthly_price: Number(form.airport_ad_monthly_price),
           recharge_amounts: form.recharge_amounts.map((amount) => Number(amount)),
           admin_telegram_username: form.admin_telegram_username,
           home_section_limits: {
@@ -3239,7 +3248,7 @@ function MarketingSettingsPage() {
               <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
                 <div className="text-xs font-medium text-neutral-500">费用规则</div>
                 <div className="mt-2 text-sm font-bold text-neutral-950">
-                  {settings ? `入驻 ¥${settings.application_fee_amount} / 点击 ¥${settings.click_charge_amount}` : '-'}
+                  {settings ? `入驻 ¥${settings.application_fee_amount} / 点击 ¥${settings.click_charge_amount} / 广告月费 ¥${settings.airport_ad_monthly_price || 1000}` : '-'}
                 </div>
               </div>
               <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
@@ -3263,9 +3272,9 @@ function MarketingSettingsPage() {
 
             <MarketingSettingsSection
               title="费用规则"
-              description="控制新入驻订单和 GateRank 外链有效点击扣费，已创建订单不回写金额。"
+              description="控制新入驻订单、GateRank 外链有效点击扣费和申请人广告投放月费，已创建订单和历史投放不回写金额。"
             >
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                 <FormField label="入驻费用 (元)" hint="申请人后台新建入驻支付订单时使用。">
                   <input
                     className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
@@ -3284,6 +3293,16 @@ function MarketingSettingsPage() {
                     step="0.01"
                     value={form.click_charge_amount}
                     onChange={(e) => setForm({ ...form, click_charge_amount: e.target.value })}
+                  />
+                </FormField>
+                <FormField label="广告投放月费 (元)" hint="申请人后台新建投放和续投时使用。">
+                  <input
+                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={form.airport_ad_monthly_price}
+                    onChange={(e) => setForm({ ...form, airport_ad_monthly_price: e.target.value })}
                   />
                 </FormField>
               </div>

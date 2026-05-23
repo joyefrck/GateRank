@@ -62,6 +62,10 @@ export function buildRiskMonitorHref(date?: string, page = 1): string {
   })}`;
 }
 
+export function buildDealsHref(): string {
+  return '/deals';
+}
+
 export function buildMethodologyHref(): string {
   return '/methodology';
 }
@@ -220,6 +224,7 @@ function SiteFooter() {
         <div className="flex flex-wrap justify-center gap-x-12 gap-y-4 text-sm font-bold text-neutral-600 mb-12">
           <a href={buildHomeHref()} onClick={(event) => { event.preventDefault(); navigate('/'); }} className="hover:text-black transition-colors">今日推荐</a>
           <a href={buildFullRankingHref()} onClick={(event) => { event.preventDefault(); navigate('/rankings/all'); }} className="hover:text-black transition-colors">全量榜单</a>
+          <a href={buildDealsHref()} onClick={(event) => { event.preventDefault(); navigate(buildDealsHref()); }} className="hover:text-black transition-colors">活动优惠</a>
           <a href={buildRiskMonitorHref()} onClick={(event) => { event.preventDefault(); navigate(buildRiskMonitorHref()); }} className="hover:text-black transition-colors">跑路监测</a>
           <a href={buildMethodologyHref()} onClick={(event) => { event.preventDefault(); navigate(buildMethodologyHref()); }} className="hover:text-black transition-colors">测评方法</a>
           <a href={buildNewsHref()} className="hover:text-black transition-colors">News</a>
