@@ -69,12 +69,12 @@ test('nginx proxies API routes and returns hard 404 for unknown public paths', a
   assert.doesNotMatch(catchAll, /\/index\.html/);
 });
 
-test('nginx serves hashed assets with immutable cache and keeps SPA entry revalidated', async () => {
+test('nginx keeps stable frontend assets and SPA entry revalidated', async () => {
   const config = await readFile(path.join(process.cwd(), 'nginx.conf'), 'utf8');
 
   const assets = getLocationBlock(config, '^~ /assets/');
-  assert.match(assets, /expires\s+1y;/);
-  assert.match(assets, /Cache-Control\s+"public, max-age=31536000, immutable"/);
+  assert.match(assets, /expires\s+-1;/);
+  assert.match(assets, /Cache-Control\s+"no-cache"/);
 
   const indexHtml = getLocationBlock(config, '= /index.html');
   assert.match(indexHtml, /expires\s+-1;/);
