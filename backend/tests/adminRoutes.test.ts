@@ -7,6 +7,7 @@ import { createAdminRoutes } from '../src/routes/adminRoutes';
 import { SmtpSendError } from '../src/services/mailService';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
 import type { PerformanceRunInput, ProbeSampleInput, ReportView } from '../src/types/domain';
+import { buildPerformanceNodeKey } from '../src/utils/performanceNodeKey';
 
 test('POST /performance-runs stores run diagnostics and performance samples', async () => {
   const insertedSamples: ProbeSampleInput[] = [];
@@ -231,6 +232,193 @@ test('GET /airports/:id/subscription-node-snapshots/latest returns latest reusab
     assert.equal(response.status, 200);
     assert.equal(data.id, 12);
     assert.equal(data.nodes[0]?.name, 'SG-1');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET and PATCH /airports/:id/performance-node-selection expose sanitized candidates and save selected keys', async () => {
+  const savedSelections: unknown[] = [];
+  const audits: Array<{ action: string; payload: unknown }> = [];
+  const snapshotNode = {
+    name: 'HK-1',
+    region: 'HK',
+    type: 'trojan',
+    outbound: { type: 'trojan', server: 'hk.example.com', server_port: 443, password: 'secret' },
+    raw_uri: 'trojan://secret@hk.example.com:443#HK-1',
+  };
+  const nodeKey = buildPerformanceNodeKey(snapshotNode);
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      subscriptionNodeSnapshotRepository: {
+        insert: async () => 1,
+        getLatestByAirport: async (airportId) => ({
+          id: 12,
+          airport_id: airportId,
+          captured_at: '2026-05-13T12:34:56+08:00',
+          source: 'cron-performance',
+          subscription_url: 'https://sub.example.com',
+          subscription_format: 'plain',
+          parsed_nodes_count: 1,
+          supported_nodes_count: 1,
+          nodes: [snapshotNode],
+          unsupported_nodes: [],
+          created_at: '2026-05-13T12:35:00+08:00',
+        }),
+      },
+      performanceNodePreferenceRepository: {
+        getByAirport: async () => ({
+          airport_id: 9,
+          selected_nodes: [{ key: nodeKey, name: 'HK-1', region: 'HK', type: 'trojan' }],
+          updated_by: 'admin',
+          updated_at: '2026-05-13T12:40:00+08:00',
+        }),
+        save: async (input) => {
+          savedSelections.push(input);
+        },
+        clear: async () => true,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, _actor, _requestId, payload) => {
+          audits.push({ action, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const getResponse = await fetch(`http://127.0.0.1:${port}/airports/9/performance-node-selection`);
+    const getData = (await getResponse.json()) as {
+      nodes: Array<{ key: string; name: string; region: string; type: string; raw_uri?: string; outbound?: unknown }>;
+      selected_keys: string[];
+      mode: string;
+    };
+    assert.equal(getResponse.status, 200);
+    assert.equal(getData.nodes[0]?.key, nodeKey);
+    assert.equal(getData.nodes[0]?.name, 'HK-1');
+    assert.equal(getData.nodes[0]?.raw_uri, undefined);
+    assert.equal(getData.nodes[0]?.outbound, undefined);
+    assert.deepEqual(getData.selected_keys, [nodeKey]);
+    assert.equal(getData.mode, 'specified');
+
+    const patchResponse = await fetch(`http://127.0.0.1:${port}/airports/9/performance-node-selection`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'ops' },
+      body: JSON.stringify({ selected_keys: [nodeKey] }),
+    });
+    const patchData = (await patchResponse.json()) as { mode: string; selected_keys: string[] };
+
+    assert.equal(patchResponse.status, 200);
+    assert.equal(patchData.mode, 'specified');
+    assert.deepEqual(patchData.selected_keys, [nodeKey]);
+    assert.equal(savedSelections.length, 1);
+    assert.equal((savedSelections[0] as { updated_by: string }).updated_by, 'ops');
+    assert.equal(audits[0]?.action, 'update_performance_node_selection');
+    assert.equal(JSON.stringify(audits[0]?.payload).includes('secret'), false);
+    assert.equal(JSON.stringify(audits[0]?.payload).includes('raw_uri'), false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airports/:id/performance-node-selection rejects unknown node keys and clears empty selection', async () => {
+  const clearedAirportIds: number[] = [];
+  const snapshotNode = {
+    name: 'SG-1',
+    region: 'SG',
+    type: 'trojan',
+    outbound: { type: 'trojan', server: 'sg.example.com', server_port: 443 },
+    raw_uri: 'trojan://password@sg.example.com:443#SG-1',
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      subscriptionNodeSnapshotRepository: {
+        insert: async () => 1,
+        getLatestByAirport: async (airportId) => ({
+          id: 13,
+          airport_id: airportId,
+          captured_at: '2026-05-13T12:34:56+08:00',
+          source: 'cron-performance',
+          subscription_url: 'https://sub.example.com',
+          subscription_format: 'plain',
+          parsed_nodes_count: 1,
+          supported_nodes_count: 1,
+          nodes: [snapshotNode],
+          unsupported_nodes: [],
+          created_at: '2026-05-13T12:35:00+08:00',
+        }),
+      },
+      performanceNodePreferenceRepository: {
+        getByAirport: async () => null,
+        save: async () => undefined,
+        clear: async (airportId) => {
+          clearedAirportIds.push(airportId);
+          return true;
+        },
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const badResponse = await fetch(`http://127.0.0.1:${port}/airports/9/performance-node-selection`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selected_keys: ['missing-key'] }),
+    });
+    const badData = (await badResponse.json()) as { code: string; message: string };
+    assert.equal(badResponse.status, 400);
+    assert.equal(badData.code, 'BAD_REQUEST');
+    assert.match(badData.message, /unknown node key/);
+
+    const clearResponse = await fetch(`http://127.0.0.1:${port}/airports/9/performance-node-selection`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ selected_keys: [] }),
+    });
+    const clearData = (await clearResponse.json()) as { mode: string; selected_keys: string[] };
+    assert.equal(clearResponse.status, 200);
+    assert.equal(clearData.mode, 'default');
+    assert.deepEqual(clearData.selected_keys, []);
+    assert.deepEqual(clearedAirportIds, [9]);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -5012,6 +5200,35 @@ test('PATCH /airport-applications/:id/review approves once and creates an airpor
     status: 'normal',
     plan_price_month: 10,
     has_trial: true,
+    streaming_support: ['netflix'],
+    payment_methods: ['wechat', 'crypto_other'],
+    payment_crypto_other: 'USDC',
+    profile: {
+      plan: {
+        supports_monthly: true,
+        supports_quarterly: null,
+        supports_half_yearly: null,
+        supports_annual: true,
+        lowest_monthly_price: 10,
+        lowest_annual_monthly_price: null,
+        has_trial_plan: true,
+        has_lifetime_plan: null,
+      },
+      telegram: {
+        has_group: null,
+        group_url: null,
+        has_channel: null,
+        channel_url: null,
+        group_allows_speaking: null,
+        group_member_count: null,
+        recent_active_at: null,
+        has_customer_service_bot: null,
+        has_ticket_system: null,
+      },
+      clients: { clash: true },
+      import_methods: { one_click_import: true },
+      regions: {},
+    },
     subscription_url: 'https://example.com/sub',
     applicant_email: 'contact@example.com',
     applicant_telegram: '@cloud',
@@ -5101,6 +5318,11 @@ test('PATCH /airport-applications/:id/review approves once and creates an airpor
     assert.equal(reviewed[0].approved_airport_id, 42);
     assert.equal(createdAirports[0].name, 'Cloud Airport');
     assert.equal(createdAirports[0].applicant_email, 'contact@example.com');
+    assert.deepEqual(createdAirports[0].streaming_support, ['netflix']);
+    assert.deepEqual(createdAirports[0].payment_methods, ['wechat', 'crypto_other']);
+    assert.equal(createdAirports[0].payment_crypto_other, 'USDC');
+    assert.equal((createdAirports[0].profile as any).plan.supports_annual, true);
+    assert.equal((createdAirports[0].profile as any).clients.clash, true);
     const data = (await response.json()) as {
       review_status: string;
       review_note: string;

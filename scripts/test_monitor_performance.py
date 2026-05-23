@@ -18,6 +18,8 @@ from scripts.monitor_performance import (
     normalize_subscription_text,
     parse_node_line,
     parse_nodes,
+    performance_node_key,
+    resolve_selected_nodes,
     run_for_airport,
     select_nodes,
 )
@@ -278,6 +280,44 @@ proxies:
         selected = select_nodes([node for node in nodes if node is not None], rng=PickLastRandom())
         self.assertEqual([node.name for node in selected], ["HK-A", "NL-A"])
 
+    def test_resolve_selected_nodes_keeps_default_region_selection_without_preferences(self) -> None:
+        nodes = [
+            node for node in [
+                parse_node_line("trojan://password@hk.example.com:443#HK-A"),
+                parse_node_line("trojan://password@jp.example.com:443#JP-A"),
+            ]
+            if node is not None
+        ]
+        availability = [NodeAvailabilityResult(node=node, available=True) for node in nodes]
+
+        result = resolve_selected_nodes(nodes, {"mode": "default", "selected_keys": []}, availability)
+
+        self.assertEqual(result.mode, "default")
+        self.assertEqual([node.name for node in result.selected_nodes], ["HK-A", "JP-A"])
+
+    def test_resolve_selected_nodes_uses_only_available_configured_nodes(self) -> None:
+        nodes = [
+            node for node in [
+                parse_node_line("trojan://password@hk.example.com:443#HK-A"),
+                parse_node_line("trojan://password@jp.example.com:443#JP-A"),
+            ]
+            if node is not None
+        ]
+        hk_key = performance_node_key(nodes[0])
+        jp_key = performance_node_key(nodes[1])
+        availability = [
+            NodeAvailabilityResult(node=nodes[0], available=False, error_code="connection refused"),
+            NodeAvailabilityResult(node=nodes[1], available=True),
+        ]
+
+        result = resolve_selected_nodes(nodes, {"mode": "specified", "selected_keys": [hk_key, jp_key, "missing"]}, availability)
+
+        self.assertEqual(result.mode, "specified")
+        self.assertEqual(result.configured_node_count, 3)
+        self.assertEqual([node.name for node in result.selected_nodes], ["JP-A"])
+        self.assertEqual(result.skipped_configured_nodes[0]["reason"], "configured_node_unavailable")
+        self.assertEqual(result.skipped_configured_nodes[1]["reason"], "configured_node_not_found")
+
     def test_check_nodes_availability_reports_percentages_for_all_supported_nodes(self) -> None:
         uris = [
             f"trojan://password@node{index}.example.com:443#HK-{index}"
@@ -414,6 +454,7 @@ proxies:
             patch("scripts.monitor_performance.check_nodes_availability", return_value=[
                 NodeAvailabilityResult(parse_node_line("trojan://secret@hk.example.com:443#HK-1"), True),
             ]),
+            patch("scripts.monitor_performance.get_performance_node_selection", return_value={"mode": "default", "selected_keys": []}),
             patch("scripts.monitor_performance.probe_node", side_effect=fake_probe_node),
         ):
             result = run_for_airport(config, airport, "2026-05-13T12:00:00+08:00")
@@ -459,6 +500,7 @@ proxies:
             patch("scripts.monitor_performance.check_nodes_availability", return_value=[
                 NodeAvailabilityResult(nodes_from_snapshot(snapshot)[0][0], True),
             ]),
+            patch("scripts.monitor_performance.get_performance_node_selection", return_value={"mode": "default", "selected_keys": []}),
             patch("scripts.monitor_performance.probe_node", side_effect=fake_probe_node),
         ):
             result = run_for_airport(config, airport, "2026-05-13T12:00:00+08:00")
@@ -469,6 +511,40 @@ proxies:
         self.assertEqual(payload["diagnostics"]["node_source"], "cached_snapshot")
         self.assertEqual(payload["diagnostics"]["cache_snapshot_id"], 12)
         self.assertEqual(payload["diagnostics"]["subscription_refresh_error_code"], "subscription_fetch_failed")
+
+    def test_run_for_airport_does_not_fallback_when_all_configured_nodes_are_unavailable(self) -> None:
+        config = self.make_config()
+        airport = {"id": 1, "name": "Alpha", "subscription_url": "https://sub.example.com"}
+        hk_node = parse_node_line("trojan://secret@hk.example.com:443#HK-1")
+        jp_node = parse_node_line("trojan://secret@jp.example.com:443#JP-1")
+        assert hk_node is not None
+        assert jp_node is not None
+
+        with (
+            patch("scripts.monitor_performance.fetch_subscription", return_value="\n".join([hk_node.raw_uri, jp_node.raw_uri])),
+            patch("scripts.monitor_performance.post_subscription_node_snapshot", return_value={"snapshot_id": 9}),
+            patch("scripts.monitor_performance.get_performance_node_selection", return_value={
+                "mode": "specified",
+                "selected_keys": [performance_node_key(hk_node), performance_node_key(jp_node)],
+            }),
+            patch("scripts.monitor_performance.check_nodes_availability", return_value=[
+                NodeAvailabilityResult(hk_node, False, "timeout"),
+                NodeAvailabilityResult(jp_node, False, "connection refused"),
+            ]),
+            patch("scripts.monitor_performance.probe_node", side_effect=AssertionError("probe_node should not run")),
+        ):
+            result = run_for_airport(config, airport, "2026-05-13T12:00:00+08:00")
+
+        payload = result["payload"]
+        self.assertEqual(payload["status"], "skipped")
+        self.assertEqual(payload["selected_nodes"], [])
+        self.assertEqual(payload["tested_nodes"], [])
+        self.assertEqual(payload["diagnostics"]["node_selection_mode"], "specified")
+        self.assertEqual(payload["diagnostics"]["configured_node_count"], 2)
+        self.assertEqual(
+            [item["reason"] for item in payload["diagnostics"]["skipped_configured_nodes"]],
+            ["configured_node_unavailable", "configured_node_unavailable"],
+        )
 
     def test_run_for_airport_uses_cached_snapshot_when_clash_yaml_has_no_supported_nodes(self) -> None:
         config = self.make_config()
@@ -493,6 +569,7 @@ proxies:
             patch("scripts.monitor_performance.check_nodes_availability", return_value=[
                 NodeAvailabilityResult(nodes_from_snapshot(snapshot)[0][0], True),
             ]),
+            patch("scripts.monitor_performance.get_performance_node_selection", return_value={"mode": "default", "selected_keys": []}),
             patch("scripts.monitor_performance.probe_node", return_value=NodeProbeResult(
                 node=nodes_from_snapshot(snapshot)[0][0],
                 latency_samples_ms=[88],

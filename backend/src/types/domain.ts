@@ -150,6 +150,10 @@ export interface AirportApplication {
   status: AirportStatus;
   plan_price_month: number;
   has_trial: boolean;
+  streaming_support?: AirportStreamingSupport[];
+  payment_methods?: AirportPaymentMethod[];
+  payment_crypto_other?: string | null;
+  profile?: AirportProfile;
   subscription_url?: string | null;
   applicant_email: string;
   applicant_telegram: string;
@@ -815,6 +819,26 @@ export interface SubscriptionNodeSnapshotInput {
   supported_nodes_count?: number;
   nodes: SubscriptionNodeSnapshotNode[];
   unsupported_nodes?: SubscriptionNodeSnapshotUnsupportedNode[];
+}
+
+export interface PerformanceNodePreferenceNode {
+  key: string;
+  name: string;
+  region?: string | null;
+  type?: string | null;
+}
+
+export interface PerformanceNodePreference {
+  airport_id: number;
+  selected_nodes: PerformanceNodePreferenceNode[];
+  updated_by: string;
+  updated_at: string;
+}
+
+export interface PerformanceNodePreferenceInput {
+  airport_id: number;
+  selected_nodes: PerformanceNodePreferenceNode[];
+  updated_by: string;
 }
 
 export interface AdminAuthResponse {

@@ -22,6 +22,7 @@ import {
   X,
   Eye,
   FileDown,
+  ListChecks,
 } from 'lucide-react';
 import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
@@ -503,6 +504,30 @@ interface ProbeSample {
 }
 
 type DashboardTab = 'base' | 'stability' | 'performance' | 'risk' | 'time_decay';
+
+type PerformanceNodeSelectionNode = {
+  key: string;
+  name: string;
+  region?: string | null;
+  type?: string | null;
+};
+
+type PerformanceNodeSelectionView = {
+  airport_id: number;
+  snapshot: {
+    id: number;
+    captured_at: string;
+    source: string;
+    subscription_format: string | null;
+    parsed_nodes_count: number;
+    supported_nodes_count: number;
+  } | null;
+  nodes: PerformanceNodeSelectionNode[];
+  selected_keys: string[];
+  mode: 'default' | 'specified';
+  updated_by: string | null;
+  updated_at: string | null;
+};
 
 interface ManualJobRecord {
   id: number;
@@ -8837,6 +8862,12 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
   const [jobTone, setJobTone] = useState<'neutral' | 'success' | 'error'>('neutral');
   const [manualTotalScoreInput, setManualTotalScoreInput] = useState('');
   const [manualTotalScoreSaving, setManualTotalScoreSaving] = useState(false);
+  const [performanceNodeSelection, setPerformanceNodeSelection] = useState<PerformanceNodeSelectionView | null>(null);
+  const [performanceNodeSelectionLoading, setPerformanceNodeSelectionLoading] = useState(false);
+  const [performanceNodeSelectionSaving, setPerformanceNodeSelectionSaving] = useState(false);
+  const [performanceNodeSelectionOpen, setPerformanceNodeSelectionOpen] = useState(false);
+  const [performanceNodeSelectionDraft, setPerformanceNodeSelectionDraft] = useState<string[]>([]);
+  const [performanceNodeSelectionError, setPerformanceNodeSelectionError] = useState('');
 
   const load = async () => {
     setLoading(true);
@@ -8847,13 +8878,35 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
         `/api/v1/admin/airports/${airportId}/dashboard?date=${date}`,
       )) as AirportDashboardView;
       setDashboard(data);
-      await loadSamplesOnly();
+      await Promise.all([
+        loadSamplesOnly(),
+        loadPerformanceNodeSelection(),
+      ]);
     } catch (err) {
       setDashboard(null);
       setError(err instanceof Error ? err.message : '加载失败');
       setRecentStabilitySamples([]);
+      setPerformanceNodeSelection(null);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadPerformanceNodeSelection = async (): Promise<PerformanceNodeSelectionView | null> => {
+    setPerformanceNodeSelectionLoading(true);
+    try {
+      const data = (await apiFetch(
+        `/api/v1/admin/airports/${airportId}/performance-node-selection`,
+      )) as PerformanceNodeSelectionView;
+      setPerformanceNodeSelection(data);
+      setPerformanceNodeSelectionError('');
+      return data;
+    } catch (err) {
+      setPerformanceNodeSelection(null);
+      setPerformanceNodeSelectionError(err instanceof Error ? err.message : '节点选择配置加载失败');
+      return null;
+    } finally {
+      setPerformanceNodeSelectionLoading(false);
     }
   };
 
@@ -8936,6 +8989,41 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
     } catch (err) {
       setJobTone('error');
       setJobMessage(err instanceof Error ? err.message : '执行失败');
+    }
+  };
+
+  const openPerformanceNodeSelection = async () => {
+    setPerformanceNodeSelectionError('');
+    const data = performanceNodeSelection || await loadPerformanceNodeSelection();
+    setPerformanceNodeSelectionDraft(data?.selected_keys || []);
+    setPerformanceNodeSelectionOpen(true);
+  };
+
+  const togglePerformanceNodeKey = (key: string) => {
+    setPerformanceNodeSelectionDraft((current) => (
+      current.includes(key)
+        ? current.filter((item) => item !== key)
+        : [...current, key]
+    ));
+  };
+
+  const savePerformanceNodeSelection = async () => {
+    setPerformanceNodeSelectionSaving(true);
+    setPerformanceNodeSelectionError('');
+    setMessage('');
+    try {
+      await apiFetch(`/api/v1/admin/airports/${airportId}/performance-node-selection`, {
+        method: 'PATCH',
+        body: JSON.stringify({ selected_keys: performanceNodeSelectionDraft }),
+      });
+      const next = await loadPerformanceNodeSelection();
+      setPerformanceNodeSelectionDraft(next?.selected_keys || []);
+      setPerformanceNodeSelectionOpen(false);
+      setMessage((next?.selected_keys || []).length > 0 ? '性能测试节点配置已保存' : '已恢复默认性能测试节点规则');
+    } catch (err) {
+      setPerformanceNodeSelectionError(err instanceof Error ? err.message : '节点选择配置保存失败');
+    } finally {
+      setPerformanceNodeSelectionSaving(false);
     }
   };
 
@@ -9122,6 +9210,10 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
       ? 'border border-neutral-200 bg-neutral-50 text-neutral-600'
       : 'border border-amber-200 bg-amber-50 text-amber-700';
   const manualActionsDisabled = dashboard?.base.status === 'down';
+  const performanceNodeSelectionCount = performanceNodeSelection?.selected_keys.length || 0;
+  const performanceNodeSelectionModeLabel = performanceNodeSelectionCount > 0
+    ? `已指定 ${performanceNodeSelectionCount} 个节点`
+    : '默认按地区随机';
 
   return (
     <div className="space-y-4">
@@ -9348,6 +9440,30 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               </div>
             </div>
 
+            <div className="rounded border border-neutral-200 bg-white p-4">
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <div className="text-sm font-semibold text-neutral-900">性能测试节点</div>
+                  <div className="mt-1 text-xs text-neutral-500">
+                    {performanceNodeSelectionLoading ? '配置加载中...' : performanceNodeSelectionModeLabel}
+                    {performanceNodeSelection?.updated_at ? ` · ${formatDateTimeInBeijing(performanceNodeSelection.updated_at)}` : ''}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="rounded bg-neutral-900 px-4 py-2 text-sm text-white inline-flex items-center gap-2 disabled:opacity-50"
+                  disabled={performanceNodeSelectionSaving}
+                  onClick={() => void openPerformanceNodeSelection()}
+                >
+                  <ListChecks size={14} />
+                  选择节点
+                </button>
+              </div>
+              {performanceNodeSelectionError && !performanceNodeSelectionOpen && (
+                <div className="mt-3 text-xs text-rose-600">{performanceNodeSelectionError}</div>
+              )}
+            </div>
+
             <div className="rounded border border-neutral-200 bg-neutral-50 p-4">
               <div className="text-sm font-semibold text-neutral-900">最近一次性能采集</div>
               <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
@@ -9480,6 +9596,98 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
 
           </div>
         ) : <div className="text-sm text-neutral-500">当日暂无数据</div>
+      )}
+      {performanceNodeSelectionOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-3xl overflow-hidden rounded-[24px] border border-neutral-200 bg-white shadow-[0_28px_100px_-36px_rgba(0,0,0,0.55)]">
+            <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
+              <div>
+                <h3 className="text-xl font-bold tracking-tight">选择性能测试节点</h3>
+                <p className="mt-1 text-sm text-neutral-500">
+                  {performanceNodeSelection?.snapshot
+                    ? `节点快照 #${performanceNodeSelection.snapshot.id} · ${formatDateTimeInBeijing(performanceNodeSelection.snapshot.captured_at)}`
+                    : '暂无可选节点'}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="w-10 h-10 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-900 disabled:opacity-50"
+                disabled={performanceNodeSelectionSaving}
+                onClick={() => setPerformanceNodeSelectionOpen(false)}
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="max-h-[65vh] overflow-y-auto px-6 py-5 space-y-4">
+              {performanceNodeSelectionError && (
+                <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                  {performanceNodeSelectionError}
+                </div>
+              )}
+              {(performanceNodeSelection?.nodes || []).length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-8 text-center text-sm text-neutral-500">
+                  暂无可选节点，请先执行一次性能采集生成节点快照。
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {(performanceNodeSelection?.nodes || []).map((node) => {
+                    const checked = performanceNodeSelectionDraft.includes(node.key);
+                    return (
+                      <label
+                        key={node.key}
+                        className={`flex cursor-pointer items-center justify-between gap-4 rounded-2xl border px-4 py-3 text-sm transition ${
+                          checked ? 'border-neutral-900 bg-neutral-50' : 'border-neutral-200 bg-white hover:bg-neutral-50'
+                        }`}
+                      >
+                        <span className="min-w-0">
+                          <span className="block truncate font-semibold text-neutral-900">{node.name}</span>
+                          <span className="mt-1 block text-xs text-neutral-500">
+                            {valueOrDash(node.region)} · {valueOrDash(node.type)}
+                          </span>
+                        </span>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 shrink-0 accent-neutral-900"
+                          checked={checked}
+                          disabled={performanceNodeSelectionSaving}
+                          onChange={() => togglePerformanceNodeKey(node.key)}
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="border-t border-neutral-200 px-6 py-5 flex items-center justify-between gap-3 bg-white">
+              <button
+                type="button"
+                className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50"
+                disabled={performanceNodeSelectionSaving}
+                onClick={() => setPerformanceNodeSelectionDraft([])}
+              >
+                恢复默认
+              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  className="px-4 py-2.5 rounded-2xl border border-neutral-300 text-sm font-medium disabled:opacity-50"
+                  disabled={performanceNodeSelectionSaving}
+                  onClick={() => setPerformanceNodeSelectionOpen(false)}
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  className="px-4 py-2.5 rounded-2xl bg-neutral-900 text-white text-sm font-medium disabled:opacity-50"
+                  disabled={performanceNodeSelectionSaving}
+                  onClick={() => void savePerformanceNodeSelection()}
+                >
+                  {performanceNodeSelectionSaving ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

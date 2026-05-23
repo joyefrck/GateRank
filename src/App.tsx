@@ -382,12 +382,108 @@ interface RouteState {
 }
 
 type AirportStatus = 'normal' | 'risk' | 'down';
+type AirportStreamingSupport =
+  | 'netflix'
+  | 'chatgpt'
+  | 'disney_plus'
+  | 'hbo_max'
+  | 'youtube_premium'
+  | 'tiktok'
+  | 'spotify';
+type AirportPaymentMethod =
+  | 'wechat'
+  | 'alipay'
+  | 'usdt_trc20'
+  | 'usdt_erc20'
+  | 'usdt_bep20'
+  | 'stripe_card'
+  | 'paypal'
+  | 'crypto_other'
+  | 'unionpay';
+type AirportProfileClientKey =
+  | 'self_built_client'
+  | 'clash'
+  | 'clash_verge'
+  | 'shadowrocket'
+  | 'quantumult_x'
+  | 'stash'
+  | 'surge'
+  | 'sing_box'
+  | 'v2rayn'
+  | 'v2rayng'
+  | 'nekobox'
+  | 'surfboard'
+  | 'xiaohuojian'
+  | 'openclash';
+type AirportProfileRegionKey =
+  | 'hong_kong'
+  | 'taiwan'
+  | 'japan'
+  | 'singapore'
+  | 'united_states'
+  | 'south_korea'
+  | 'united_kingdom'
+  | 'germany'
+  | 'turkey'
+  | 'argentina'
+  | 'india';
+type AirportProfileLineType = 'iepl' | 'iplc' | 'cn2' | 'bgp' | 'relay';
+type PortalProfileTab = 'basic' | 'review' | 'plan' | 'nodes' | 'clients' | 'import';
+
+interface AirportProfilePlan {
+  supports_monthly: boolean | null;
+  supports_quarterly: boolean | null;
+  supports_half_yearly: boolean | null;
+  supports_annual: boolean | null;
+  lowest_monthly_price: number | null;
+  lowest_annual_monthly_price: number | null;
+  has_trial_plan: boolean | null;
+  has_lifetime_plan: boolean | null;
+}
+
+interface AirportProfileTelegram {
+  has_group: boolean | null;
+  group_url: string | null;
+  has_channel: boolean | null;
+  channel_url: string | null;
+  group_allows_speaking: boolean | null;
+  group_member_count: number | null;
+  recent_active_at: string | null;
+  has_customer_service_bot: boolean | null;
+  has_ticket_system: boolean | null;
+}
+
+interface AirportProfileRegionInfo {
+  has_residential: boolean | null;
+  has_native_ip: boolean | null;
+  line_types: AirportProfileLineType[];
+}
+
+interface AirportProfileImportMethods {
+  one_click_import: boolean | null;
+  subscription_link: boolean | null;
+  universal_subscription: boolean | null;
+  qr_code_import: boolean | null;
+  tutorials: boolean | null;
+}
+
+interface AirportProfile {
+  plan: AirportProfilePlan;
+  telegram: AirportProfileTelegram;
+  clients: Record<AirportProfileClientKey, boolean | null>;
+  import_methods: AirportProfileImportMethods;
+  regions: Record<AirportProfileRegionKey, AirportProfileRegionInfo>;
+}
 
 interface ApplicationFormState {
   name: string;
   websites: string[];
   plan_price_month: string;
   has_trial: boolean;
+  streaming_support: AirportStreamingSupport[];
+  payment_methods: AirportPaymentMethod[];
+  payment_crypto_other: string;
+  profile: AirportProfile;
   subscription_url: string;
   applicant_email: string;
   applicant_telegram: string;
@@ -408,6 +504,76 @@ interface ApplicationSubmitResponse {
 interface ApplicationConfigResponse {
   application_fee_amount: number;
 }
+
+const AIRPORT_STREAMING_SUPPORT_OPTIONS: Array<{ value: AirportStreamingSupport; label: string }> = [
+  { value: 'netflix', label: 'Netflix' },
+  { value: 'chatgpt', label: 'ChatGPT' },
+  { value: 'disney_plus', label: 'Disney+' },
+  { value: 'hbo_max', label: 'HBO Max' },
+  { value: 'youtube_premium', label: 'YouTube Premium' },
+  { value: 'tiktok', label: 'TikTok' },
+  { value: 'spotify', label: 'Spotify' },
+];
+
+const AIRPORT_PAYMENT_METHOD_OPTIONS: Array<{ value: AirportPaymentMethod; label: string }> = [
+  { value: 'wechat', label: '微信' },
+  { value: 'alipay', label: '支付宝' },
+  { value: 'usdt_trc20', label: 'USDT-TRC20' },
+  { value: 'usdt_erc20', label: 'USDT-ERC20' },
+  { value: 'usdt_bep20', label: 'USDT-BEP20' },
+  { value: 'stripe_card', label: 'Stripe / 信用卡' },
+  { value: 'paypal', label: 'PayPal' },
+  { value: 'crypto_other', label: '虚拟币其他币种' },
+  { value: 'unionpay', label: '银联' },
+];
+
+const AIRPORT_PROFILE_CLIENT_OPTIONS: Array<{ value: AirportProfileClientKey; label: string }> = [
+  { value: 'self_built_client', label: '自建客户端' },
+  { value: 'clash', label: 'Clash' },
+  { value: 'clash_verge', label: 'Clash Verge' },
+  { value: 'shadowrocket', label: 'Shadowrocket' },
+  { value: 'quantumult_x', label: 'Quantumult X' },
+  { value: 'stash', label: 'Stash' },
+  { value: 'surge', label: 'Surge' },
+  { value: 'sing_box', label: 'Sing-box' },
+  { value: 'v2rayn', label: 'V2rayN' },
+  { value: 'v2rayng', label: 'V2rayNG' },
+  { value: 'nekobox', label: 'NekoBox' },
+  { value: 'surfboard', label: 'Surfboard' },
+  { value: 'xiaohuojian', label: '小火箭' },
+  { value: 'openclash', label: 'OpenClash' },
+];
+
+const AIRPORT_PROFILE_REGION_OPTIONS: Array<{ value: AirportProfileRegionKey; label: string }> = [
+  { value: 'hong_kong', label: '香港' },
+  { value: 'taiwan', label: '台湾' },
+  { value: 'japan', label: '日本' },
+  { value: 'singapore', label: '新加坡' },
+  { value: 'united_states', label: '美国' },
+  { value: 'south_korea', label: '韩国' },
+  { value: 'united_kingdom', label: '英国' },
+  { value: 'germany', label: '德国' },
+  { value: 'turkey', label: '土耳其' },
+  { value: 'argentina', label: '阿根廷' },
+  { value: 'india', label: '印度' },
+];
+
+const AIRPORT_PROFILE_LINE_TYPE_OPTIONS: Array<{ value: AirportProfileLineType; label: string }> = [
+  { value: 'iepl', label: 'IEPL' },
+  { value: 'iplc', label: 'IPLC' },
+  { value: 'cn2', label: 'CN2' },
+  { value: 'bgp', label: 'BGP' },
+  { value: 'relay', label: '中转' },
+];
+
+const PORTAL_PROFILE_TABS: Array<{ key: PortalProfileTab; label: string }> = [
+  { key: 'basic', label: '基础信息' },
+  { key: 'review', label: '申报信息' },
+  { key: 'plan', label: '套餐信息' },
+  { key: 'nodes', label: '节点覆盖' },
+  { key: 'clients', label: '客户端支持' },
+  { key: 'import', label: '导入教程' },
+];
 
 interface PortalAccountView {
   id: number;
@@ -500,10 +666,15 @@ interface PortalApplicationView {
   name: string;
   website: string;
   websites: string[];
+  approved_airport_id?: number | null;
   review_status: 'awaiting_payment' | 'pending' | 'reviewed' | 'rejected';
   payment_status: 'unpaid' | 'paid';
   plan_price_month: number;
   has_trial: boolean;
+  streaming_support?: AirportStreamingSupport[];
+  payment_methods?: AirportPaymentMethod[];
+  payment_crypto_other?: string | null;
+  profile?: AirportProfile;
   subscription_url: string | null;
   payment_amount: number | null;
   paid_at: string | null;
@@ -1895,10 +2066,9 @@ function PortalApplicationEditModal({
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             <PublicFormField label="机场名称">
               <input
-                className={portalInputClass}
+                className={portalDisabledInputClass}
                 value={applicationForm.name}
-                onChange={(e) => setApplicationForm((current) => ({ ...current, name: e.target.value }))}
-                required
+                disabled
               />
             </PublicFormField>
             <PublicFormField label="月付价格">
@@ -2280,6 +2450,7 @@ function PortalEmailChangeModal({
 }
 
 const portalInputClass = 'w-full rounded-[20px] border border-slate-200 bg-white/95 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-600 focus:ring-4 focus:ring-cyan-100';
+const portalDisabledInputClass = 'w-full cursor-not-allowed rounded-[20px] border border-slate-200 bg-slate-100 px-4 py-3 text-sm text-slate-400 opacity-75 outline-none shadow-none';
 const portalPrimaryButtonClass = 'inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-2xl bg-[linear-gradient(135deg,#0f8db3_0%,#0f766e_100%)] px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white shadow-[0_14px_32px_rgba(15,118,110,0.18)] transition duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-cyan-700/20 disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50';
 const portalActionButtonBaseClass = 'inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap font-black shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-lg disabled:cursor-not-allowed disabled:translate-y-0 disabled:opacity-50';
 const portalBindButtonBaseClass = `${portalActionButtonBaseClass} h-11 w-[132px] rounded-full px-5 py-2.5 text-sm`;
@@ -4594,6 +4765,8 @@ function PortalPage() {
   const [applicationEmailCodeStatus, setApplicationEmailCodeStatus] = useState('');
   const [savingApplication, setSavingApplication] = useState(false);
   const [isApplicationModalOpen, setIsApplicationModalOpen] = useState(false);
+  const [isApplicationOperationsEditing, setIsApplicationOperationsEditing] = useState(false);
+  const [applicationProfileTab, setApplicationProfileTab] = useState<PortalProfileTab>('basic');
   const [isPasswordRequiredModalOpen, setIsPasswordRequiredModalOpen] = useState(false);
   const [isEmailChangeModalOpen, setIsEmailChangeModalOpen] = useState(false);
   const [newLoginEmail, setNewLoginEmail] = useState('');
@@ -5258,7 +5431,7 @@ function PortalPage() {
       const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/application', {
         method: 'PATCH',
         body: JSON.stringify({
-          name: applicationForm.name.trim(),
+          name: (view?.application.name || applicationForm.name).trim(),
           website: websites[0],
           websites,
           plan_price_month: Number(applicationForm.plan_price_month || 0),
@@ -5290,6 +5463,67 @@ function PortalPage() {
     } finally {
       setSavingApplication(false);
     }
+  };
+
+  const saveApplicationOperations = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const websites = normalizeUrlList(applicationForm.websites);
+    if (websites.length === 0) {
+      setError('至少填写一个官网地址');
+      return;
+    }
+
+    setSavingApplication(true);
+    setError('');
+    setSuccess('');
+    try {
+      const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/application/operations', {
+        method: 'PATCH',
+        body: JSON.stringify({
+          website: websites[0],
+          websites,
+          name: (view?.application.name || applicationForm.name).trim(),
+          plan_price_month: Number(applicationForm.plan_price_month || 0),
+          has_trial: applicationForm.has_trial,
+          streaming_support: applicationForm.streaming_support,
+          payment_methods: applicationForm.payment_methods,
+          payment_crypto_other: applicationForm.payment_methods.includes('crypto_other')
+            ? applicationForm.payment_crypto_other.trim()
+            : null,
+          profile: normalizeAirportProfile(applicationForm.profile),
+          subscription_url: applicationForm.subscription_url.trim(),
+          applicant_telegram: applicationForm.applicant_telegram.trim(),
+          founded_on: applicationForm.founded_on,
+          airport_intro: applicationForm.airport_intro.trim(),
+          test_account: applicationForm.test_account.trim(),
+          test_password: applicationForm.test_password,
+        }),
+      });
+      setView(data);
+      setApplicationForm(createPortalApplicationForm(data.application));
+      setIsApplicationOperationsEditing(false);
+      setApplicationProfileTab('basic');
+      setSuccess('运营资料已保存');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存运营资料失败');
+    } finally {
+      setSavingApplication(false);
+    }
+  };
+
+  const openApplicationOperationsEditor = () => {
+    setApplicationForm(createPortalApplicationForm(view?.application));
+    setApplicationProfileTab('basic');
+    setError('');
+    setSuccess('');
+    setIsApplicationOperationsEditing(true);
+  };
+
+  const cancelApplicationOperationsEdit = () => {
+    setApplicationForm(createPortalApplicationForm(view?.application));
+    setApplicationProfileTab('basic');
+    setError('');
+    setIsApplicationOperationsEditing(false);
   };
 
   const logout = async () => {
@@ -5386,67 +5620,445 @@ function PortalPage() {
   };
 
   const renderApplicationDetailsSection = (portalView: PortalViewResponse) => {
-    const canEdit = portalView.application.payment_status !== 'paid';
-    const shouldCollapse = canEdit && portalView.application.review_status === 'awaiting_payment';
-
-    if (shouldCollapse) {
-      return (
-        <PortalCollapsedApplicationSummary
-          application={portalView.application}
-          onEdit={openApplicationModal}
-        />
-      );
-    }
+    const application = portalView.application;
+    const hasApprovedAirport = Boolean(application.approved_airport_id);
+    const visibleWebsiteCount = normalizeUrlList(applicationForm.websites).length || application.websites.length || 1;
+    const paymentLockedMessage = application.payment_status === 'paid'
+      ? '已支付，运营资料可继续维护；基础申请信息已锁定。'
+      : '未支付，运营资料和基础申请信息仍可维护。';
+    const updateProfilePlan = <K extends keyof AirportProfilePlan>(key: K, value: AirportProfilePlan[K]) => {
+      setApplicationForm((current) => {
+        const nextProfile = {
+          ...current.profile,
+          plan: { ...current.profile.plan, [key]: value },
+        };
+        return {
+          ...current,
+          plan_price_month: key === 'lowest_monthly_price' ? (value === null ? '' : String(value)) : current.plan_price_month,
+          has_trial: key === 'has_trial_plan' ? value === true : current.has_trial,
+          profile: nextProfile,
+        };
+      });
+    };
+    const updateProfileClient = (key: AirportProfileClientKey, value: boolean | null) => {
+      setApplicationForm((current) => ({
+        ...current,
+        profile: { ...current.profile, clients: { ...current.profile.clients, [key]: value } },
+      }));
+    };
+    const updateImportMethod = <K extends keyof AirportProfileImportMethods>(key: K, value: AirportProfileImportMethods[K]) => {
+      setApplicationForm((current) => ({
+        ...current,
+        profile: { ...current.profile, import_methods: { ...current.profile.import_methods, [key]: value } },
+      }));
+    };
+    const updateRegion = <K extends keyof AirportProfileRegionInfo>(
+      regionKey: AirportProfileRegionKey,
+      key: K,
+      value: AirportProfileRegionInfo[K],
+    ) => {
+      setApplicationForm((current) => ({
+        ...current,
+        profile: {
+          ...current.profile,
+          regions: {
+            ...current.profile.regions,
+            [regionKey]: { ...current.profile.regions[regionKey], [key]: value },
+          },
+        },
+      }));
+    };
 
     return (
       <PortalSectionCard
-        title="申请资料"
-        description={`这里展示你提交给 GateRank 的机场信息。${canEdit ? '支付前可直接修改并保存。' : '支付完成后资料已锁定，如需修改请联系管理员。'}`}
+        title="资料"
+        description={paymentLockedMessage}
         aside={(
-          <div className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] ${canEdit ? 'border border-amber-100 bg-amber-50 text-amber-700' : 'border border-slate-200 bg-slate-100 text-slate-500'}`}>
-            {canEdit ? '支付前可修改' : '支付后已锁定'}
+          <div className={`rounded-full px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] ${hasApprovedAirport ? 'border border-emerald-100 bg-emerald-50 text-emerald-700' : 'border border-sky-100 bg-sky-50 text-sky-700'}`}>
+            {hasApprovedAirport ? '资料已生效' : '资料待审核'}
           </div>
         )}
       >
         <div className="mb-8 grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4 xl:gap-6">
-          <PortalMetricTile label="机场名称" value={portalView.application.name} tone="blue" />
-          <PortalMetricTile label="月付价格" value={`¥${formatMetric(portalView.application.plan_price_month)}`} tone="amber" />
-          <PortalMetricTile label="试用支持" value={portalView.application.has_trial ? '支持' : '不支持'} tone="green" />
-          <PortalMetricTile label="提交时间" value={portalView.application.created_at} />
+          <PortalMetricTile label="机场名称" value={application.name} tone="blue" />
+          <PortalMetricTile label="月付价格" value={`¥${formatMetric(application.plan_price_month)}`} tone="amber" />
+          <PortalMetricTile label="试用支持" value={application.has_trial ? '支持' : '不支持'} tone="green" />
+          <PortalMetricTile label="官网数量" value={`${visibleWebsiteCount} 个`} />
         </div>
 
-        {canEdit ? (
-          <div className="flex items-center justify-between gap-4 rounded-[22px] border border-cyan-100 bg-cyan-50/80 px-5 py-4">
-            <div>
-              <div className="text-sm font-black text-slate-950">资料已收起</div>
-              <div className="mt-1 text-sm leading-6 text-slate-600">为避免干扰支付，完整表单改为弹窗编辑。你可以随时打开修改后再保存。</div>
-            </div>
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white px-5 py-3 text-sm font-black tracking-[0.04em] text-cyan-700 shadow-sm hover:bg-cyan-50"
-              onClick={openApplicationModal}
-            >
-              编辑完整资料
-            </button>
-          </div>
+        {isApplicationOperationsEditing ? (
+          <form onSubmit={saveApplicationOperations}>
+            <section className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#f8fcff_0%,#ffffff_100%)] p-5 shadow-[0_18px_42px_rgba(15,23,42,0.04)]">
+              <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700">Operations</div>
+                  <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">修改运营资料</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">
+                    只修改运营字段。保存后会更新当前资料。
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  onClick={cancelApplicationOperationsEdit}
+                >
+                  取消修改
+                </button>
+              </div>
+
+              <div className="mt-5 flex gap-2 overflow-x-auto border-b border-slate-100 pb-2">
+                {PORTAL_PROFILE_TABS.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    className={`shrink-0 rounded-full px-4 py-2 text-sm font-black transition ${
+                      applicationProfileTab === item.key ? 'bg-slate-950 text-white' : 'bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                    onClick={() => setApplicationProfileTab(item.key)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </div>
+
+              {applicationProfileTab === 'basic' && (
+                <div className="mt-5 space-y-5">
+                  <PublicFormField label="机场名称">
+                    <input
+                      className={portalDisabledInputClass}
+                      value={applicationForm.name}
+                      disabled
+                    />
+                  </PublicFormField>
+                  <PublicFormField label="解锁能力">
+                    <PortalCheckboxPillGroup
+                      options={AIRPORT_STREAMING_SUPPORT_OPTIONS}
+                      value={applicationForm.streaming_support}
+                      onChange={(streamingSupport) => setApplicationForm((current) => ({ ...current, streaming_support: streamingSupport }))}
+                    />
+                  </PublicFormField>
+                  <PublicFormField label="支付方式">
+                    <PortalCheckboxPillGroup
+                      options={AIRPORT_PAYMENT_METHOD_OPTIONS}
+                      value={applicationForm.payment_methods}
+                      onChange={(paymentMethods) => setApplicationForm((current) => ({ ...current, payment_methods: paymentMethods }))}
+                    />
+                    {applicationForm.payment_methods.includes('crypto_other') && (
+                      <input
+                        className={`${portalInputClass} mt-3`}
+                        value={applicationForm.payment_crypto_other}
+                        onChange={(e) => setApplicationForm((current) => ({ ...current, payment_crypto_other: e.target.value }))}
+                        placeholder="填写其他虚拟币币种"
+                      />
+                    )}
+                  </PublicFormField>
+                </div>
+              )}
+
+              {applicationProfileTab === 'review' && (
+                <div className="mt-5 space-y-5">
+                  <div className="space-y-3">
+                    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                      <div>
+                        <div className="text-sm font-black text-slate-950">官网列表</div>
+                        <div className="mt-1 text-xs leading-5 text-slate-500">至少保留一个官网地址，支持多个备用网址。</div>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 shadow-sm hover:bg-slate-50"
+                        onClick={() => setApplicationForm((current) => ({ ...current, websites: [...current.websites, ''] }))}
+                      >
+                        <Plus className="h-3.5 w-3.5" />
+                        添加官网
+                      </button>
+                    </div>
+                    <div className="space-y-3">
+                      {applicationForm.websites.map((website, index) => (
+                        <div key={`portal-operations-website-${index}`} className="flex items-center gap-3">
+                          <input
+                            className={portalInputClass}
+                            value={website}
+                            onChange={(e) => setApplicationForm((current) => ({
+                              ...current,
+                              websites: updateUrlListItem(current.websites, index, e.target.value),
+                            }))}
+                            placeholder="https://example.com"
+                            required
+                          />
+                          <button
+                            type="button"
+                            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-slate-200 bg-white text-slate-500 shadow-sm disabled:opacity-40"
+                            disabled={applicationForm.websites.length === 1}
+                            onClick={() => setApplicationForm((current) => ({
+                              ...current,
+                              websites: removeUrlListItem(current.websites, index),
+                            }))}
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="space-y-5">
+                    <PublicFormField label="订阅链接" hint="可选。">
+                      <input
+                        className={portalInputClass}
+                        value={applicationForm.subscription_url}
+                        onChange={(e) => setApplicationForm((current) => ({ ...current, subscription_url: e.target.value }))}
+                        placeholder="https://subscribe.example.com"
+                      />
+                    </PublicFormField>
+                    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+                      <PublicFormField label="Telegram">
+                        <input
+                          className={portalInputClass}
+                          value={applicationForm.applicant_telegram}
+                          onChange={(e) => setApplicationForm((current) => ({ ...current, applicant_telegram: e.target.value }))}
+                          required
+                        />
+                      </PublicFormField>
+                      <PublicFormField label="成立时间">
+                        <input
+                          className={portalInputClass}
+                          type="date"
+                          value={applicationForm.founded_on}
+                          onChange={(e) => setApplicationForm((current) => ({ ...current, founded_on: e.target.value }))}
+                          required
+                        />
+                      </PublicFormField>
+                      <PublicFormField label="测试账号">
+                        <input
+                          className={portalInputClass}
+                          value={applicationForm.test_account}
+                          onChange={(e) => setApplicationForm((current) => ({ ...current, test_account: e.target.value }))}
+                          required
+                        />
+                      </PublicFormField>
+                      <PublicFormField label="测试密码">
+                        <input
+                          className={portalInputClass}
+                          value={applicationForm.test_password}
+                          onChange={(e) => setApplicationForm((current) => ({ ...current, test_password: e.target.value }))}
+                          required
+                        />
+                      </PublicFormField>
+                    </div>
+                  </div>
+                  <PublicFormField label="机场简介">
+                    <textarea
+                      className={`${portalInputClass} min-h-28`}
+                      value={applicationForm.airport_intro}
+                      onChange={(e) => setApplicationForm((current) => ({ ...current, airport_intro: e.target.value }))}
+                      required
+                    />
+                  </PublicFormField>
+                </div>
+              )}
+
+              {applicationProfileTab === 'plan' && (
+                <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+                  <PortalNullableBooleanRadioGroup label="是否支持月付" name="portal_supports_monthly" value={applicationForm.profile.plan.supports_monthly} onChange={(value) => updateProfilePlan('supports_monthly', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否支持季付" name="portal_supports_quarterly" value={applicationForm.profile.plan.supports_quarterly} onChange={(value) => updateProfilePlan('supports_quarterly', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否支持半年付" name="portal_supports_half_yearly" value={applicationForm.profile.plan.supports_half_yearly} onChange={(value) => updateProfilePlan('supports_half_yearly', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否支持年付" name="portal_supports_annual" value={applicationForm.profile.plan.supports_annual} onChange={(value) => updateProfilePlan('supports_annual', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否支持试用" name="portal_has_trial_plan" value={applicationForm.profile.plan.has_trial_plan} onChange={(value) => updateProfilePlan('has_trial_plan', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否有不限时套餐" name="portal_has_lifetime_plan" value={applicationForm.profile.plan.has_lifetime_plan} onChange={(value) => updateProfilePlan('has_lifetime_plan', value)} />
+                  <PublicFormField label="最低月付价格">
+                    <input
+                      className={portalInputClass}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={applicationForm.profile.plan.lowest_monthly_price ?? ''}
+                      onChange={(e) => updateProfilePlan('lowest_monthly_price', parseOptionalNumberInput(e.target.value))}
+                      required
+                    />
+                  </PublicFormField>
+                  <PublicFormField label="最低年付折算月价">
+                    <input
+                      className={portalInputClass}
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={applicationForm.profile.plan.lowest_annual_monthly_price ?? ''}
+                      onChange={(e) => updateProfilePlan('lowest_annual_monthly_price', parseOptionalNumberInput(e.target.value))}
+                    />
+                  </PublicFormField>
+                </div>
+              )}
+
+              {applicationProfileTab === 'nodes' && (
+                <div className="mt-5 overflow-x-auto rounded-[24px] border border-slate-200 bg-white">
+                  <table className="w-full min-w-[1080px] table-fixed text-sm">
+                    <colgroup>
+                      <col className="w-[120px]" />
+                      <col className="w-[260px]" />
+                      <col className="w-[260px]" />
+                      <col />
+                    </colgroup>
+                    <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-[0.14em] text-slate-500">
+                      <tr>
+                        <th className="px-5 py-3">地区</th>
+                        <th className="px-5 py-3">家宽节点</th>
+                        <th className="px-5 py-3">原生 IP</th>
+                        <th className="px-5 py-3">线路属性</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {AIRPORT_PROFILE_REGION_OPTIONS.map((region) => (
+                        <tr key={region.value} className="h-[68px] border-t border-slate-100 align-middle">
+                          <td className="px-5 py-3 font-black text-slate-900">
+                            <span className="block whitespace-nowrap">{region.label}</span>
+                          </td>
+                          <td className="px-5 py-3 align-middle">
+                            <PortalCompactBooleanRadioGroup
+                              name={`portal-region-${region.value}-residential`}
+                              value={applicationForm.profile.regions[region.value].has_residential}
+                              onChange={(value) => updateRegion(region.value, 'has_residential', value)}
+                            />
+                          </td>
+                          <td className="px-5 py-3 align-middle">
+                            <PortalCompactBooleanRadioGroup
+                              name={`portal-region-${region.value}-native`}
+                              value={applicationForm.profile.regions[region.value].has_native_ip}
+                              onChange={(value) => updateRegion(region.value, 'has_native_ip', value)}
+                            />
+                          </td>
+                          <td className="px-5 py-3 align-middle">
+                            <PortalCompactCheckboxPillGroup
+                              options={AIRPORT_PROFILE_LINE_TYPE_OPTIONS}
+                              value={applicationForm.profile.regions[region.value].line_types}
+                              onChange={(lineTypes) => updateRegion(region.value, 'line_types', lineTypes)}
+                            />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {applicationProfileTab === 'clients' && (
+                <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+                  {AIRPORT_PROFILE_CLIENT_OPTIONS.map((client) => (
+                    <React.Fragment key={client.value}>
+                      <PortalNullableBooleanRadioGroup
+                        label={client.value === 'self_built_client' ? '是否自建客户端' : `是否支持 ${client.label}`}
+                        name={`portal-client-${client.value}`}
+                        value={applicationForm.profile.clients[client.value]}
+                        onChange={(value) => updateProfileClient(client.value, value)}
+                      />
+                    </React.Fragment>
+                  ))}
+                </div>
+              )}
+
+              {applicationProfileTab === 'import' && (
+                <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+                  <PortalNullableBooleanRadioGroup label="是否提供一键导入" name="portal_import_one_click" value={applicationForm.profile.import_methods.one_click_import} onChange={(value) => updateImportMethod('one_click_import', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否提供订阅链接" name="portal_import_subscription" value={applicationForm.profile.import_methods.subscription_link} onChange={(value) => updateImportMethod('subscription_link', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否支持通用订阅" name="portal_import_universal" value={applicationForm.profile.import_methods.universal_subscription} onChange={(value) => updateImportMethod('universal_subscription', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否支持二维码导入" name="portal_import_qr" value={applicationForm.profile.import_methods.qr_code_import} onChange={(value) => updateImportMethod('qr_code_import', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否提供教程" name="portal_import_tutorials" value={applicationForm.profile.import_methods.tutorials} onChange={(value) => updateImportMethod('tutorials', value)} />
+                </div>
+              )}
+
+              <div className="mt-6 flex flex-wrap justify-end gap-3 border-t border-slate-100 pt-5">
+                <button
+                  type="button"
+                  className="inline-flex min-h-12 items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-sm font-black tracking-[0.04em] text-slate-700 shadow-sm transition hover:bg-slate-50"
+                  onClick={cancelApplicationOperationsEdit}
+                >
+                  取消
+                </button>
+                <button
+                  type="submit"
+                  className={portalPrimaryButtonClass}
+                  disabled={savingApplication}
+                >
+                  {savingApplication ? '保存中...' : '保存运营资料'}
+                </button>
+              </div>
+            </section>
+          </form>
         ) : (
-          <div className="grid grid-cols-1 gap-5 xl:grid-cols-2 xl:gap-6">
-            <PortalReadOnlyBlock label="官网列表" value={portalView.application.websites.join('\n')} />
-            <PortalReadOnlyBlock label="申请邮箱 / 登录邮箱" value={portalView.application.applicant_email} />
-            <PortalReadOnlyBlock label="Telegram" value={portalView.application.applicant_telegram} />
-            <PortalReadOnlyBlock label="成立时间" value={formatDateLabel(portalView.application.founded_on)} />
-            <PortalReadOnlyBlock label="试用支持" value={portalView.application.has_trial ? '支持' : '不支持'} />
-            <PortalReadOnlyBlock label="订阅链接" value={portalView.application.subscription_url || '-'} />
-            <PortalReadOnlyBlock label="测试账号" value={portalView.application.test_account} />
-            <PortalReadOnlyBlock label="测试密码" value={portalView.application.test_password} />
-            <PortalReadOnlyBlock label="支付时间" value={portalView.application.paid_at || '-'} />
-            <PortalReadOnlyBlock label="审核时间" value={portalView.application.reviewed_at || '-'} />
-            <PortalReadOnlyBlock label="审核备注" value={portalView.application.review_note || '-'} />
-            <div className="xl:col-span-2">
-              <PortalReadOnlyBlock label="机场简介" value={portalView.application.airport_intro} />
+          <section className="rounded-[28px] border border-slate-200 bg-[linear-gradient(180deg,#f8fcff_0%,#ffffff_100%)] p-5 shadow-[0_18px_42px_rgba(15,23,42,0.04)]">
+            <div className="flex flex-col gap-3 border-b border-slate-100 pb-5 md:flex-row md:items-start md:justify-between">
+              <div>
+                <div className="text-xs font-black uppercase tracking-[0.22em] text-cyan-700">Operations</div>
+                <h3 className="mt-2 text-xl font-black tracking-tight text-slate-950">运营资料</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  当前展示的是已提交资料。点击修改后才会进入编辑状态。
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  className="inline-flex min-h-11 items-center justify-center rounded-full border border-cyan-200 bg-white px-4 py-2 text-sm font-black text-cyan-700 shadow-sm transition hover:bg-cyan-50"
+                  onClick={openApplicationOperationsEditor}
+                >
+                  修改资料
+                </button>
+                {application.payment_status !== 'paid' && (
+                  <button
+                    type="button"
+                    className="inline-flex min-h-11 items-center justify-center rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50"
+                    onClick={openApplicationModal}
+                  >
+                    编辑基础申请资料
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+
+            <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+              <PortalReadOnlyBlock label="月付价格" value={`¥${formatMetric(application.plan_price_month)}`} />
+              <PortalReadOnlyBlock label="试用支持" value={application.has_trial ? '支持' : '不支持'} />
+              <PortalReadOnlyBlock label="官网列表" value={application.websites.join('\n')} />
+              <PortalReadOnlyBlock label="订阅链接" value={application.subscription_url || '-'} />
+              <PortalReadOnlyBlock label="测试账号" value={application.test_account} />
+              <PortalReadOnlyBlock label="测试密码" value={application.test_password} />
+              <PortalReadOnlyBlock label="资料状态" value={hasApprovedAirport ? '已生效' : '待审核'} />
+              <PortalReadOnlyBlock
+                label="解锁能力"
+                value={formatSelectedLabels(application.streaming_support, AIRPORT_STREAMING_SUPPORT_OPTIONS)}
+              />
+              <PortalReadOnlyBlock
+                label="支付方式"
+                value={formatSelectedLabels(application.payment_methods, AIRPORT_PAYMENT_METHOD_OPTIONS)}
+              />
+              <PortalReadOnlyBlock
+                label="客户端支持"
+                value={formatSelectedLabels(
+                  AIRPORT_PROFILE_CLIENT_OPTIONS
+                    .filter((client) => application.profile?.clients?.[client.value] === true)
+                    .map((client) => client.value),
+                  AIRPORT_PROFILE_CLIENT_OPTIONS,
+                )}
+              />
+              <PortalReadOnlyBlock
+                label="一键导入"
+                value={formatNullableBooleanLabel(application.profile?.import_methods?.one_click_import ?? null)}
+              />
+            </div>
+          </section>
         )}
+
+        <section className="mt-6 grid grid-cols-1 gap-5 xl:grid-cols-2 xl:gap-6">
+          <PortalReadOnlyBlock label="申请邮箱 / 登录邮箱" value={application.applicant_email} />
+          <PortalReadOnlyBlock label="Telegram" value={application.applicant_telegram} />
+          <PortalReadOnlyBlock label="成立时间" value={formatDateLabel(application.founded_on)} />
+          <PortalReadOnlyBlock label="提交时间" value={application.created_at} />
+          <PortalReadOnlyBlock label="支付状态" value={formatPortalPaymentStatus(application.payment_status)} />
+          <PortalReadOnlyBlock label="审核状态" value={formatPortalReviewStatus(application.review_status)} />
+          <PortalReadOnlyBlock label="支付时间" value={application.paid_at || '-'} />
+          <PortalReadOnlyBlock label="审核时间" value={application.reviewed_at || '-'} />
+          <PortalReadOnlyBlock label="审核备注" value={application.review_note || '-'} />
+          <div className="xl:col-span-2">
+            <PortalReadOnlyBlock label="机场简介" value={application.airport_intro} />
+          </div>
+        </section>
       </PortalSectionCard>
     );
   };
@@ -6509,12 +7121,280 @@ function PublicFormField({
   );
 }
 
+function PortalCheckboxPillGroup<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ value: T; label: string }>;
+  value: T[];
+  onChange: (value: T[]) => void;
+}) {
+  const selected = new Set(value);
+  return (
+    <div className="flex flex-wrap gap-2">
+      {options.map((option) => {
+        const active = selected.has(option.value);
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={`rounded-full border px-3 py-2 text-xs font-black transition ${
+              active ? 'border-cyan-600 bg-cyan-50 text-cyan-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+            onClick={() => onChange(active ? value.filter((item) => item !== option.value) : [...value, option.value])}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PortalCompactCheckboxPillGroup<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: Array<{ value: T; label: string }>;
+  value: T[];
+  onChange: (value: T[]) => void;
+}) {
+  const selected = new Set(value);
+  return (
+    <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap py-1">
+      {options.map((option) => {
+        const active = selected.has(option.value);
+        return (
+          <button
+            key={option.value}
+            type="button"
+            className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full border px-4 text-xs font-black transition ${
+              active ? 'border-cyan-600 bg-cyan-50 text-cyan-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+            }`}
+            onClick={() => onChange(active ? value.filter((item) => item !== option.value) : [...value, option.value])}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PortalCompactBooleanRadioGroup({
+  name,
+  value,
+  onChange,
+}: {
+  name: string;
+  value: boolean | null;
+  onChange: (value: boolean | null) => void;
+}) {
+  return (
+    <div className="inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 p-1">
+      {[
+        { label: '是', value: true },
+        { label: '否', value: false },
+        { label: '未设置', value: null },
+      ].map((option) => {
+        const active = value === option.value;
+        return (
+          <button
+            key={`${name}-${option.label}`}
+            type="button"
+            className={`inline-flex h-8 min-w-[56px] items-center justify-center rounded-full px-3 text-xs font-black transition ${
+              active ? 'bg-white text-cyan-700 shadow-sm ring-1 ring-cyan-100' : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
+            }`}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function PortalNullableBooleanRadioGroup({
+  label,
+  name,
+  value,
+  onChange,
+}: {
+  label: string;
+  name: string;
+  value: boolean | null;
+  onChange: (value: boolean | null) => void;
+}) {
+  return (
+    <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
+      <div className="text-sm font-black text-slate-950">{label}</div>
+      <div className="mt-3 flex flex-wrap items-center gap-4 text-sm font-black text-slate-700">
+        {[
+          { label: '是', value: true },
+          { label: '否', value: false },
+          { label: '未设置', value: null },
+        ].map((option) => (
+          <label key={`${name}-${option.label}`} className="inline-flex cursor-pointer items-center gap-2">
+            <input
+              type="radio"
+              name={name}
+              checked={value === option.value}
+              onChange={() => onChange(option.value)}
+            />
+            {option.label}
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function formatNullableBooleanLabel(value: boolean | null): string {
+  if (value === true) return '是';
+  if (value === false) return '否';
+  return '未设置';
+}
+
+function formatSelectedLabels<T extends string>(
+  value: T[] | undefined,
+  options: Array<{ value: T; label: string }>,
+): string {
+  const labels = (value || [])
+    .map((item) => options.find((option) => option.value === item)?.label)
+    .filter(Boolean);
+  return labels.length > 0 ? labels.join('、') : '-';
+}
+
+function createDefaultAirportProfile(): AirportProfile {
+  return {
+    plan: {
+      supports_monthly: null,
+      supports_quarterly: null,
+      supports_half_yearly: null,
+      supports_annual: null,
+      lowest_monthly_price: null,
+      lowest_annual_monthly_price: null,
+      has_trial_plan: null,
+      has_lifetime_plan: null,
+    },
+    telegram: {
+      has_group: null,
+      group_url: null,
+      has_channel: null,
+      channel_url: null,
+      group_allows_speaking: null,
+      group_member_count: null,
+      recent_active_at: null,
+      has_customer_service_bot: null,
+      has_ticket_system: null,
+    },
+    clients: Object.fromEntries(AIRPORT_PROFILE_CLIENT_OPTIONS.map((item) => [item.value, null])) as Record<
+      AirportProfileClientKey,
+      boolean | null
+    >,
+    import_methods: {
+      one_click_import: null,
+      subscription_link: null,
+      universal_subscription: null,
+      qr_code_import: null,
+      tutorials: null,
+    },
+    regions: Object.fromEntries(
+      AIRPORT_PROFILE_REGION_OPTIONS.map((item) => [item.value, {
+        has_residential: null,
+        has_native_ip: null,
+        line_types: [],
+      }]),
+    ) as Record<AirportProfileRegionKey, AirportProfileRegionInfo>,
+  };
+}
+
+function normalizeAirportProfile(
+  value: unknown,
+  planPriceMonth?: number | null,
+  hasTrial?: boolean | null,
+): AirportProfile {
+  const defaults = createDefaultAirportProfile();
+  if (!value || typeof value !== 'object') {
+    if (planPriceMonth !== undefined && planPriceMonth !== null) {
+      defaults.plan.lowest_monthly_price = planPriceMonth;
+    }
+    if (hasTrial !== undefined && hasTrial !== null) {
+      defaults.plan.has_trial_plan = hasTrial;
+    }
+    return defaults;
+  }
+  const input = value as Partial<AirportProfile>;
+  const plan = (input.plan || {}) as Partial<AirportProfilePlan>;
+  const telegram = (input.telegram || {}) as Partial<AirportProfileTelegram>;
+  const clients = (input.clients || {}) as Partial<Record<AirportProfileClientKey, boolean | null>>;
+  const importMethods = (input.import_methods || {}) as Partial<AirportProfileImportMethods>;
+  const regions = (input.regions || {}) as Partial<Record<AirportProfileRegionKey, Partial<AirportProfileRegionInfo>>>;
+  const profile: AirportProfile = {
+    plan: {
+      supports_monthly: normalizeNullableBoolean(plan.supports_monthly),
+      supports_quarterly: normalizeNullableBoolean(plan.supports_quarterly),
+      supports_half_yearly: normalizeNullableBoolean(plan.supports_half_yearly),
+      supports_annual: normalizeNullableBoolean(plan.supports_annual),
+      lowest_monthly_price: normalizeOptionalNumber(plan.lowest_monthly_price),
+      lowest_annual_monthly_price: normalizeOptionalNumber(plan.lowest_annual_monthly_price),
+      has_trial_plan: normalizeNullableBoolean(plan.has_trial_plan),
+      has_lifetime_plan: normalizeNullableBoolean(plan.has_lifetime_plan),
+    },
+    telegram: {
+      has_group: normalizeNullableBoolean(telegram.has_group),
+      group_url: normalizeOptionalString(telegram.group_url),
+      has_channel: normalizeNullableBoolean(telegram.has_channel),
+      channel_url: normalizeOptionalString(telegram.channel_url),
+      group_allows_speaking: normalizeNullableBoolean(telegram.group_allows_speaking),
+      group_member_count: normalizeOptionalInteger(telegram.group_member_count),
+      recent_active_at: normalizeOptionalString(telegram.recent_active_at),
+      has_customer_service_bot: normalizeNullableBoolean(telegram.has_customer_service_bot),
+      has_ticket_system: normalizeNullableBoolean(telegram.has_ticket_system),
+    },
+    clients: Object.fromEntries(
+      AIRPORT_PROFILE_CLIENT_OPTIONS.map((item) => [item.value, normalizeNullableBoolean(clients[item.value])]),
+    ) as Record<AirportProfileClientKey, boolean | null>,
+    import_methods: {
+      one_click_import: normalizeNullableBoolean(importMethods.one_click_import),
+      subscription_link: normalizeNullableBoolean(importMethods.subscription_link),
+      universal_subscription: normalizeNullableBoolean(importMethods.universal_subscription),
+      qr_code_import: normalizeNullableBoolean(importMethods.qr_code_import),
+      tutorials: normalizeNullableBoolean(importMethods.tutorials),
+    },
+    regions: Object.fromEntries(
+      AIRPORT_PROFILE_REGION_OPTIONS.map((item) => {
+        const region = regions[item.value] || defaults.regions[item.value];
+        return [item.value, {
+          has_residential: normalizeNullableBoolean(region.has_residential),
+          has_native_ip: normalizeNullableBoolean(region.has_native_ip),
+          line_types: normalizeAirportOptionValues(region.line_types, AIRPORT_PROFILE_LINE_TYPE_OPTIONS),
+        }];
+      }),
+    ) as Record<AirportProfileRegionKey, AirportProfileRegionInfo>,
+  };
+  if (profile.plan.lowest_monthly_price === null && planPriceMonth !== undefined && planPriceMonth !== null) {
+    profile.plan.lowest_monthly_price = planPriceMonth;
+  }
+  if (profile.plan.has_trial_plan === null && hasTrial !== undefined && hasTrial !== null) {
+    profile.plan.has_trial_plan = hasTrial;
+  }
+  return profile;
+}
+
 function createApplicationForm(): ApplicationFormState {
   return {
     name: '',
     websites: [''],
     plan_price_month: '',
     has_trial: false,
+    streaming_support: [],
+    payment_methods: [],
+    payment_crypto_other: '',
+    profile: createDefaultAirportProfile(),
     subscription_url: '',
     applicant_email: '',
     applicant_telegram: '',
@@ -6541,6 +7421,10 @@ function createPortalApplicationForm(
         : [''],
     plan_price_month: String(application.plan_price_month ?? ''),
     has_trial: Boolean(application.has_trial),
+    streaming_support: normalizeAirportOptionValues(application.streaming_support, AIRPORT_STREAMING_SUPPORT_OPTIONS),
+    payment_methods: normalizeAirportOptionValues(application.payment_methods, AIRPORT_PAYMENT_METHOD_OPTIONS),
+    payment_crypto_other: application.payment_crypto_other || '',
+    profile: normalizeAirportProfile(application.profile, application.plan_price_month, application.has_trial),
     subscription_url: application.subscription_url || '',
     applicant_email: application.applicant_email || '',
     applicant_telegram: application.applicant_telegram || '',
@@ -6562,6 +7446,46 @@ function updateUrlListItem(values: string[], index: number, nextValue: string): 
 function removeUrlListItem(values: string[], index: number): string[] {
   const nextValues = values.filter((_, currentIndex) => currentIndex !== index);
   return nextValues.length > 0 ? nextValues : [''];
+}
+
+function normalizeAirportOptionValues<T extends string>(
+  value: unknown,
+  options: Array<{ value: T; label: string }>,
+): T[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const allowed = new Set(options.map((option) => option.value));
+  return [...new Set(value.map(String).filter((item): item is T => allowed.has(item as T)))];
+}
+
+function normalizeNullableBoolean(value: boolean | null | undefined): boolean | null {
+  return typeof value === 'boolean' ? value : null;
+}
+
+function normalizeOptionalString(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  const trimmed = String(value).trim();
+  return trimmed || null;
+}
+
+function normalizeOptionalNumber(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function normalizeOptionalInteger(value: unknown): number | null {
+  const parsed = normalizeOptionalNumber(value);
+  return parsed === null ? null : Math.floor(parsed);
+}
+
+function parseOptionalNumberInput(value: string): number | null {
+  return normalizeOptionalNumber(value);
 }
 
 function todayInShanghai(): string {

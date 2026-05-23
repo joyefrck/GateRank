@@ -44,6 +44,9 @@ import type {
   ManualJobKind,
   MarketingAirportConversionItem,
   MarketingGranularity,
+  PerformanceNodePreference,
+  PerformanceNodePreferenceInput,
+  PerformanceNodePreferenceNode,
   PerformanceRunNode,
   DailyMetricsInput,
   PerformanceRunInput,
@@ -71,6 +74,7 @@ import {
   isStableDay,
 } from '../utils/stability';
 import { buildPortalLoginUrl, getSiteOrigin } from '../utils/siteUrl';
+import { buildPerformanceNodeKey } from '../utils/performanceNodeKey';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
 
 interface AdminDeps {
@@ -239,6 +243,11 @@ interface AdminDeps {
   subscriptionNodeSnapshotRepository?: {
     insert(input: SubscriptionNodeSnapshotInput): Promise<number>;
     getLatestByAirport(airportId: number): Promise<SubscriptionNodeSnapshot | null>;
+  };
+  performanceNodePreferenceRepository?: {
+    getByAirport(airportId: number): Promise<PerformanceNodePreference | null>;
+    save(input: PerformanceNodePreferenceInput): Promise<void>;
+    clear(airportId: number): Promise<boolean>;
   };
   metricsRepository: {
     upsertDaily(input: DailyMetricsInput): Promise<void>;
@@ -1191,6 +1200,10 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         status: AirportStatus;
         plan_price_month: number;
         has_trial: boolean;
+        streaming_support?: AirportStreamingSupport[];
+        payment_methods?: AirportPaymentMethod[];
+        payment_crypto_other?: string | null;
+        profile?: AirportProfile;
         subscription_url?: string | null;
         applicant_email?: string | null;
         applicant_telegram?: string | null;
@@ -1219,6 +1232,10 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           is_listed: true,
           plan_price_month: currentApplication.plan_price_month,
           has_trial: currentApplication.has_trial,
+          streaming_support: currentApplication.streaming_support || [],
+          payment_methods: currentApplication.payment_methods || [],
+          payment_crypto_other: currentApplication.payment_crypto_other || null,
+          profile: currentApplication.profile,
           subscription_url: currentApplication.subscription_url || null,
           applicant_email: currentApplication.applicant_email || null,
           applicant_telegram: currentApplication.applicant_telegram || null,
@@ -1818,6 +1835,88 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         throw new HttpError(404, 'SUBSCRIPTION_NODE_SNAPSHOT_NOT_FOUND', 'subscription node snapshot not found');
       }
       res.json(snapshot);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/airports/:id/performance-node-selection', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const [snapshot, preference] = await Promise.all([
+        getSubscriptionNodeSnapshotRepository(deps).getLatestByAirport(airportId),
+        getPerformanceNodePreferenceRepository(deps).getByAirport(airportId),
+      ]);
+      const candidates = snapshot ? buildPerformanceNodeSelectionCandidates(snapshot.nodes) : [];
+      const selectedKeys = (preference?.selected_nodes || []).map((node) => node.key);
+
+      res.json({
+        airport_id: airportId,
+        snapshot: snapshot ? {
+          id: snapshot.id,
+          captured_at: snapshot.captured_at,
+          source: snapshot.source,
+          subscription_format: snapshot.subscription_format,
+          parsed_nodes_count: snapshot.parsed_nodes_count,
+          supported_nodes_count: snapshot.supported_nodes_count,
+        } : null,
+        nodes: candidates,
+        selected_keys: selectedKeys,
+        mode: selectedKeys.length > 0 ? 'specified' : 'default',
+        updated_by: preference?.updated_by ?? null,
+        updated_at: preference?.updated_at ?? null,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/airports/:id/performance-node-selection', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const payload = (req.body || {}) as Record<string, unknown>;
+      const selectedKeys = [...new Set(
+        toStringArray(payload.selected_keys, 'selected_keys')
+          .map((key) => key.trim())
+          .filter(Boolean),
+      )];
+      const repository = getPerformanceNodePreferenceRepository(deps);
+
+      if (selectedKeys.length === 0) {
+        await repository.clear(airportId);
+        await deps.auditRepository.log('clear_performance_node_selection', actorFromReq(req), req.requestId, {
+          airport_id: airportId,
+        });
+        res.json({ airport_id: airportId, selected_keys: [], mode: 'default' });
+        return;
+      }
+
+      const snapshot = await getSubscriptionNodeSnapshotRepository(deps).getLatestByAirport(airportId);
+      if (!snapshot) {
+        throw new HttpError(404, 'SUBSCRIPTION_NODE_SNAPSHOT_NOT_FOUND', 'subscription node snapshot not found');
+      }
+      const candidates = buildPerformanceNodeSelectionCandidates(snapshot.nodes);
+      const candidateByKey = new Map(candidates.map((node) => [node.key, node]));
+      const unknownKeys = selectedKeys.filter((key) => !candidateByKey.has(key));
+      if (unknownKeys.length > 0) {
+        throw new HttpError(400, 'BAD_REQUEST', `selected_keys contains unknown node key: ${unknownKeys[0]}`);
+      }
+
+      const selectedNodes = selectedKeys.map((key) => candidateByKey.get(key)).filter(Boolean) as PerformanceNodePreferenceNode[];
+      await repository.save({
+        airport_id: airportId,
+        selected_nodes: selectedNodes,
+        updated_by: actorFromReq(req),
+      });
+      await deps.auditRepository.log('update_performance_node_selection', actorFromReq(req), req.requestId, {
+        airport_id: airportId,
+        selected_nodes: selectedNodes,
+      });
+      res.json({
+        airport_id: airportId,
+        selected_keys: selectedNodes.map((node) => node.key),
+        mode: 'specified',
+      });
     } catch (error) {
       next(error);
     }
@@ -3515,6 +3614,32 @@ function getSubscriptionNodeSnapshotRepository(deps: AdminDeps): NonNullable<Adm
     throw new Error('subscriptionNodeSnapshotRepository is not configured');
   }
   return deps.subscriptionNodeSnapshotRepository;
+}
+
+function getPerformanceNodePreferenceRepository(deps: AdminDeps): NonNullable<AdminDeps['performanceNodePreferenceRepository']> {
+  if (!deps.performanceNodePreferenceRepository) {
+    throw new Error('performanceNodePreferenceRepository is not configured');
+  }
+  return deps.performanceNodePreferenceRepository;
+}
+
+function buildPerformanceNodeSelectionCandidates(nodes: SubscriptionNodeSnapshotNode[]): PerformanceNodePreferenceNode[] {
+  const seen = new Set<string>();
+  const candidates: PerformanceNodePreferenceNode[] = [];
+  for (const node of nodes) {
+    const key = buildPerformanceNodeKey(node);
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    candidates.push({
+      key,
+      name: node.name,
+      region: node.region ?? null,
+      type: node.type ?? null,
+    });
+  }
+  return candidates;
 }
 
 function numberOrNull(value: unknown): number | null {

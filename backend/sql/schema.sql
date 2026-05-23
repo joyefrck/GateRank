@@ -41,6 +41,10 @@ CREATE TABLE IF NOT EXISTS airport_applications (
   status ENUM('normal', 'risk', 'down') NOT NULL DEFAULT 'normal',
   plan_price_month DECIMAL(10,2) NOT NULL,
   has_trial TINYINT(1) NOT NULL DEFAULT 0,
+  streaming_support_json JSON NULL,
+  payment_methods_json JSON NULL,
+  payment_crypto_other VARCHAR(128) NULL,
+  airport_profile_json JSON NULL,
   subscription_url VARCHAR(1024) NULL,
   applicant_email VARCHAR(255) NOT NULL,
   applicant_telegram VARCHAR(128) NOT NULL,
@@ -392,6 +396,15 @@ CREATE TABLE IF NOT EXISTS airport_subscription_node_snapshots (
   PRIMARY KEY (id),
   INDEX idx_subscription_node_snapshots_airport_time (airport_id, captured_at DESC),
   CONSTRAINT fk_subscription_node_snapshots_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
+);
+
+CREATE TABLE IF NOT EXISTS airport_performance_node_preferences (
+  airport_id BIGINT UNSIGNED NOT NULL,
+  selected_nodes_json JSON NOT NULL,
+  updated_by VARCHAR(128) NOT NULL DEFAULT 'admin',
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (airport_id),
+  CONSTRAINT fk_performance_node_preferences_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
 );
 
 CREATE TABLE IF NOT EXISTS airport_scores_daily (

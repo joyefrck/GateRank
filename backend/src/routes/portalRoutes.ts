@@ -42,6 +42,9 @@ import {
 } from '../services/userTelegramBotSettingsService';
 import { resolveAvailablePaymentMethods } from '../services/paymentMethodAvailability';
 import { PORTAL_AUTH_COOKIE, clearAuthCookie, setAuthCookie } from '../utils/authCookies';
+import type { UpdateAirportInput } from '../repositories/airportRepository';
+import type { Airport, AirportPaymentMethod, AirportProfile, AirportStreamingSupport } from '../types/domain';
+import { createDefaultAirportProfile, normalizeAirportProfile, parseAirportProfilePayload } from '../utils/airportProfile';
 
 interface PortalDeps {
   applicantAccountRepository: {
@@ -74,7 +77,18 @@ interface PortalDeps {
         test_password: string;
       },
     ): Promise<boolean | RechargeCreditResult>;
+    updateApplicantOperations?(
+      id: number,
+      input: ApplicantApplicationOperationsInput,
+    ): Promise<boolean | RechargeCreditResult>;
     markPaid(id: number, paymentAmount: number, paidAt: string): Promise<boolean>;
+  };
+  airportRepository?: {
+    getById?(id: number): Promise<Airport | null>;
+    update(id: number, input: UpdateAirportInput): Promise<boolean>;
+  };
+  publicPageCache?: {
+    clear(): void;
   };
   applicationPaymentOrderRepository: {
     create(input: {
@@ -198,6 +212,25 @@ interface PortalDeps {
     }): Promise<void>;
   };
   userTelegramBotMessageService?: UserTelegramBotBillingNotificationService;
+}
+
+interface ApplicantApplicationOperationsInput {
+  name: string;
+  website: string;
+  websites: string[];
+  plan_price_month: number;
+  has_trial: boolean;
+  streaming_support: AirportStreamingSupport[];
+  payment_methods: AirportPaymentMethod[];
+  payment_crypto_other: string | null;
+  profile: AirportProfile;
+  profile_from_payload: boolean;
+  subscription_url: string | null;
+  applicant_telegram: string;
+  founded_on: string;
+  airport_intro: string;
+  test_account: string;
+  test_password: string;
 }
 
 export function createPortalRoutes(deps: PortalDeps): Router {
@@ -690,7 +723,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       }
 
       const input = {
-        name: mustString(payload.name, 'name'),
+        name: application.name,
         website: websiteBundle.website,
         websites: websiteBundle.websites,
         plan_price_month: mustNonNegativeNumber(payload.plan_price_month, 'plan_price_month'),
@@ -715,6 +748,31 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         }
         await deps.applicantAccountRepository.updateEmail(account.id, applicantEmail);
       }
+
+      res.json(await buildPortalView(deps, session.applicant_id));
+    } catch (error) {
+      next(normalizePortalApplicationMutationError(error));
+    }
+  });
+
+  router.patch('/portal/application/operations', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      const application = await requireApplication(deps, account.application_id);
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const input = parseApplicantApplicationOperationsPayload(payload);
+      input.name = application.name;
+
+      if (!deps.airportApplicationRepository.updateApplicantOperations) {
+        throw new Error('airportApplicationRepository.updateApplicantOperations is not configured');
+      }
+      const updated = await deps.airportApplicationRepository.updateApplicantOperations(application.id, input);
+      if (!updated) {
+        throw new HttpError(409, 'PORTAL_APPLICATION_UPDATE_FAILED', '申请资料未更新，请刷新后重试');
+      }
+
+      await syncApprovedAirportOperations(deps, application, input);
 
       res.json(await buildPortalView(deps, session.applicant_id));
     } catch (error) {
@@ -1022,12 +1080,13 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
     getAvailablePaymentMethods(deps),
     buildTelegramBotView(deps, account.id),
   ]);
+  const portalApplication = await resolvePortalApplicationView(deps, application);
 
   return {
     account: {
       ...toPortalAccountView(account),
     },
-    application,
+    application: portalApplication,
     latest_payment_order: latestPaymentOrder
       ? {
           out_trade_no: latestPaymentOrder.out_trade_no,
@@ -1046,6 +1105,45 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
     recharge_amounts: marketingConfig.recharge_amounts,
     wallet,
     telegram_bot: telegramBot,
+  };
+}
+
+async function resolvePortalApplicationView(deps: PortalDeps, application: any): Promise<any> {
+  const approvedAirportId = Number(application.approved_airport_id || 0);
+  if (!approvedAirportId || !deps.airportRepository?.getById) {
+    return application;
+  }
+  const airport = await deps.airportRepository.getById(approvedAirportId);
+  if (!airport) {
+    return application;
+  }
+  return mergeApprovedAirportOperations(application, airport);
+}
+
+function mergeApprovedAirportOperations(application: any, airport: Airport): any {
+  const websites = Array.isArray(airport.websites) && airport.websites.length > 0
+    ? airport.websites
+    : airport.website
+      ? [airport.website]
+      : application.websites;
+  const planPriceMonth = Number(airport.plan_price_month);
+  return {
+    ...application,
+    name: airport.name || application.name,
+    website: websites[0] || application.website,
+    websites,
+    plan_price_month: Number.isFinite(planPriceMonth) ? planPriceMonth : application.plan_price_month,
+    has_trial: Boolean(airport.has_trial),
+    streaming_support: airport.streaming_support || [],
+    payment_methods: airport.payment_methods || [],
+    payment_crypto_other: airport.payment_crypto_other ?? null,
+    profile: normalizeAirportProfile(airport.profile || application.profile || createDefaultAirportProfile()),
+    subscription_url: airport.subscription_url ?? null,
+    applicant_telegram: airport.applicant_telegram || application.applicant_telegram,
+    founded_on: airport.founded_on || application.founded_on,
+    airport_intro: airport.airport_intro || application.airport_intro,
+    test_account: airport.test_account || application.test_account,
+    test_password: airport.test_password || application.test_password,
   };
 }
 
@@ -1080,6 +1178,119 @@ async function buildTelegramBotView(deps: PortalDeps, applicantAccountId: number
           bound_at: binding.bound_at,
         }
       : null,
+  };
+}
+
+function parseApplicantApplicationOperationsPayload(
+  payload: Record<string, unknown>,
+): ApplicantApplicationOperationsInput {
+  const websiteBundle = parseWebsiteFields(payload, true);
+  const foundedOn = mustDate(payload.founded_on, 'founded_on');
+  const today = getDateInTimezone();
+  if (foundedOn > today) {
+    throw new HttpError(400, 'BAD_REQUEST', 'founded_on cannot be in the future');
+  }
+  const planPriceMonth = mustNonNegativeNumber(payload.plan_price_month, 'plan_price_month');
+  const hasTrial = Boolean(payload.has_trial);
+  const profileFromPayload = payload.profile !== undefined;
+  const profile = normalizeApplicantOperationsProfile(
+    profileFromPayload ? parseAirportProfilePayload(payload.profile) : createDefaultAirportProfile(),
+    planPriceMonth,
+    hasTrial,
+  );
+  const paymentMethods = toAirportPaymentMethodArray(payload.payment_methods ?? []);
+  return {
+    name: mustString(payload.name, 'name'),
+    website: websiteBundle.website,
+    websites: websiteBundle.websites,
+    plan_price_month: planPriceMonth,
+    has_trial: hasTrial,
+    streaming_support: toAirportStreamingSupportArray(payload.streaming_support ?? []),
+    payment_methods: paymentMethods,
+    payment_crypto_other: paymentMethods.includes('crypto_other') ? optionalString(payload.payment_crypto_other) || null : null,
+    profile,
+    profile_from_payload: profileFromPayload,
+    subscription_url: optionalString(payload.subscription_url) || null,
+    applicant_telegram: mustString(payload.applicant_telegram, 'applicant_telegram'),
+    founded_on: foundedOn,
+    airport_intro: mustString(payload.airport_intro, 'airport_intro'),
+    test_account: mustString(payload.test_account, 'test_account'),
+    test_password: mustString(payload.test_password, 'test_password'),
+  };
+}
+
+function normalizeApplicantOperationsProfile(
+  profile: AirportProfile,
+  planPriceMonth: number,
+  hasTrial: boolean,
+): AirportProfile {
+  const normalized = normalizeAirportProfile(profile);
+  return {
+    ...normalized,
+    plan: {
+      ...normalized.plan,
+      lowest_monthly_price: planPriceMonth,
+      has_trial_plan: hasTrial,
+    },
+  };
+}
+
+async function syncApprovedAirportOperations(
+  deps: PortalDeps,
+  application: { approved_airport_id?: number | null },
+  input: ApplicantApplicationOperationsInput,
+): Promise<void> {
+  const approvedAirportId = Number(application.approved_airport_id || 0);
+  if (!approvedAirportId) {
+    return;
+  }
+  if (!deps.airportRepository) {
+    throw new Error('airportRepository is not configured');
+  }
+
+  const airport = deps.airportRepository.getById
+    ? await deps.airportRepository.getById(approvedAirportId)
+    : null;
+  const profile = input.profile_from_payload
+    ? input.profile
+    : buildSyncedAirportProfile(airport?.profile ?? createDefaultAirportProfile(), input);
+
+  const patch: UpdateAirportInput = {
+    name: input.name,
+    website: input.website,
+    websites: input.websites,
+    plan_price_month: input.plan_price_month,
+    has_trial: input.has_trial,
+    streaming_support: input.streaming_support,
+    payment_methods: input.payment_methods,
+    payment_crypto_other: input.payment_crypto_other,
+    subscription_url: input.subscription_url,
+    applicant_telegram: input.applicant_telegram,
+    founded_on: input.founded_on,
+    airport_intro: input.airport_intro,
+    test_account: input.test_account,
+    test_password: input.test_password,
+    profile,
+  };
+
+  const updated = await deps.airportRepository.update(approvedAirportId, patch);
+  if (!updated) {
+    throw new HttpError(409, 'PORTAL_AIRPORT_SYNC_FAILED', '正式机场资料未同步，请联系管理员');
+  }
+  deps.publicPageCache?.clear();
+}
+
+function buildSyncedAirportProfile(
+  profile: AirportProfile,
+  input: ApplicantApplicationOperationsInput,
+): AirportProfile {
+  return {
+    ...profile,
+    plan: {
+      ...profile.plan,
+      lowest_monthly_price: input.plan_price_month,
+      has_trial_plan: input.has_trial,
+    },
   };
 }
 
@@ -1365,6 +1576,44 @@ function toStringArray(value: unknown, fieldName = 'items'): string[] {
     throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be array`);
   }
   return value.map((v) => String(v));
+}
+
+function toAirportStreamingSupportArray(value: unknown): AirportStreamingSupport[] {
+  return toEnumArray(value, 'streaming_support', [
+    'netflix',
+    'chatgpt',
+    'disney_plus',
+    'hbo_max',
+    'youtube_premium',
+    'tiktok',
+    'spotify',
+  ]);
+}
+
+function toAirportPaymentMethodArray(value: unknown): AirportPaymentMethod[] {
+  return toEnumArray(value, 'payment_methods', [
+    'wechat',
+    'alipay',
+    'usdt_trc20',
+    'usdt_erc20',
+    'usdt_bep20',
+    'stripe_card',
+    'paypal',
+    'crypto_other',
+    'unionpay',
+  ]);
+}
+
+function toEnumArray<T extends string>(value: unknown, fieldName: string, allowedValues: readonly T[]): T[] {
+  const items = toStringArray(value, fieldName)
+    .map((item) => item.trim())
+    .filter(Boolean);
+  const allowed = new Set(allowedValues);
+  const invalid = items.find((item) => !allowed.has(item as T));
+  if (invalid) {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} contains unsupported value: ${invalid}`);
+  }
+  return [...new Set(items as T[])];
 }
 
 function parseWebsiteFields(

@@ -407,6 +407,165 @@ test('GET /portal/me returns current airport listing state', async () => {
   }
 });
 
+test('GET /portal/me hydrates approved airport operations into applicant profile', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount(),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => ({
+          id: 7,
+          name: '小米',
+          website: 'https://application.example.com',
+          websites: ['https://application.example.com'],
+          approved_airport_id: 42,
+          review_status: 'reviewed',
+          payment_status: 'paid',
+          payment_amount: 456,
+          applicant_email: 'user@example.com',
+          applicant_telegram: '@application',
+          founded_on: '2025-01-01',
+          airport_intro: 'application intro',
+          plan_price_month: 1000,
+          has_trial: true,
+          streaming_support: [],
+          payment_methods: [],
+          payment_crypto_other: null,
+          profile: {},
+          subscription_url: null,
+          test_account: 'application-user',
+          test_password: 'application-pass',
+          created_at: '2026-04-18 10:00:00',
+        }),
+        markPaid: async () => true,
+      },
+      airportRepository: {
+        getById: async (id) => ({
+          id,
+          name: '小米',
+          website: 'https://mi.example.com',
+          websites: ['https://mi.example.com', 'https://backup.mi.example.com'],
+          status: 'normal',
+          is_listed: true,
+          plan_price_month: 1888,
+          has_trial: false,
+          streaming_support: ['netflix', 'chatgpt', 'youtube_premium'],
+          payment_methods: ['wechat', 'alipay', 'usdt_trc20'],
+          payment_crypto_other: null,
+          profile: {
+            plan: {
+              supports_monthly: true,
+              supports_quarterly: null,
+              supports_half_yearly: null,
+              supports_annual: true,
+              lowest_monthly_price: 1888,
+              lowest_annual_monthly_price: 1200,
+              has_trial_plan: false,
+              has_lifetime_plan: null,
+            },
+            regions: {
+              hong_kong: {
+                has_residential: true,
+                has_native_ip: false,
+                line_types: ['iepl', 'iplc'],
+              },
+            },
+            clients: { clash: true },
+            import_methods: { one_click_import: true },
+          } as any,
+          subscription_url: 'https://subscribe.mi.example.com',
+          applicant_telegram: '@mi',
+          founded_on: '2024-12-01',
+          airport_intro: 'airport intro',
+          test_account: 'airport-user',
+          test_password: 'airport-pass',
+          tags: [],
+          created_at: '2026-04-18 10:00:00',
+        } as any),
+        update: async () => true,
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({}),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/me`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as {
+      application: {
+        website: string;
+        websites: string[];
+        plan_price_month: number;
+        has_trial: boolean;
+        streaming_support: string[];
+        payment_methods: string[];
+        subscription_url: string | null;
+        applicant_email: string;
+        applicant_telegram: string;
+        airport_intro: string;
+        test_account: string;
+        profile: {
+          plan: { supports_annual: boolean | null; lowest_monthly_price: number | null };
+          clients: { clash: boolean | null };
+          import_methods: { one_click_import: boolean | null };
+          regions: { hong_kong: { has_residential: boolean | null; line_types: string[] } };
+        };
+      };
+    };
+    assert.equal(data.application.website, 'https://mi.example.com');
+    assert.deepEqual(data.application.websites, ['https://mi.example.com', 'https://backup.mi.example.com']);
+    assert.equal(data.application.plan_price_month, 1888);
+    assert.equal(data.application.has_trial, false);
+    assert.deepEqual(data.application.streaming_support, ['netflix', 'chatgpt', 'youtube_premium']);
+    assert.deepEqual(data.application.payment_methods, ['wechat', 'alipay', 'usdt_trc20']);
+    assert.equal(data.application.subscription_url, 'https://subscribe.mi.example.com');
+    assert.equal(data.application.applicant_email, 'user@example.com');
+    assert.equal(data.application.applicant_telegram, '@mi');
+    assert.equal(data.application.airport_intro, 'airport intro');
+    assert.equal(data.application.test_account, 'airport-user');
+    assert.equal(data.application.profile.plan.supports_annual, true);
+    assert.equal(data.application.profile.plan.lowest_monthly_price, 1888);
+    assert.equal(data.application.profile.clients.clash, true);
+    assert.equal(data.application.profile.import_methods.one_click_import, true);
+    assert.equal(data.application.profile.regions.hong_kong.has_residential, true);
+    assert.deepEqual(data.application.profile.regions.hong_kong.line_types, ['iepl', 'iplc']);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /portal/telegram-bind/start creates Telegram deep link before review or payment', async () => {
   process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
   const app = express();
@@ -2890,7 +3049,7 @@ test('PATCH /portal/application updates unpaid applicant details and syncs login
     assert.equal(response.status, 200);
     assert.deepEqual(consumedCodes, [{ accountId: 1, email: 'owner@example.com', code: '123456' }]);
     assert.equal(updatedDrafts.length, 1);
-    assert.equal(updatedDrafts[0].name, 'Cloud Airport Pro');
+    assert.equal(updatedDrafts[0].name, 'Cloud Airport');
     assert.deepEqual(updatedDrafts[0].websites, ['https://example.com', 'https://mirror.example.com']);
     assert.equal(updatedEmails.length, 1);
     assert.equal(updatedEmails[0].email, 'owner@example.com');
@@ -2899,7 +3058,7 @@ test('PATCH /portal/application updates unpaid applicant details and syncs login
       application: { name: string; applicant_email: string; plan_price_month: number; websites: string[] };
     };
     assert.equal(data.account.email, 'owner@example.com');
-    assert.equal(data.application.name, 'Cloud Airport Pro');
+    assert.equal(data.application.name, 'Cloud Airport');
     assert.equal(data.application.applicant_email, 'owner@example.com');
     assert.equal(data.application.plan_price_month, 1888);
     assert.deepEqual(data.application.websites, ['https://example.com', 'https://mirror.example.com']);
@@ -3125,6 +3284,323 @@ test('PATCH /portal/application rejects changes after payment', async () => {
     const data = (await response.json()) as { code: string; message: string };
     assert.equal(data.code, 'PORTAL_APPLICATION_LOCKED');
     assert.match(data.message, /不能再修改申请资料/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /portal/application/operations updates paid operations and syncs approved airport', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const updatedApplications: Array<Record<string, unknown>> = [];
+  const updatedAirports: Array<Record<string, unknown>> = [];
+  let cacheClears = 0;
+  const application: any = {
+    id: 7,
+    name: 'Cloud Airport',
+    website: 'https://example.com',
+    websites: ['https://example.com'],
+    approved_airport_id: 42,
+    review_status: 'reviewed',
+    payment_status: 'paid',
+    payment_amount: 1000,
+    paid_at: '2026-04-18 11:00:00',
+    applicant_email: 'user@example.com',
+    applicant_telegram: '@cloud',
+    founded_on: '2025-01-01',
+    airport_intro: 'intro',
+    plan_price_month: 1000,
+    has_trial: true,
+    subscription_url: 'https://subscribe.example.com',
+    test_account: 'tester',
+    test_password: 'secret',
+    created_at: '2026-04-18 10:00:00',
+  };
+  const approvedAirport: any = {
+    id: 42,
+    name: 'Cloud Airport',
+    website: 'https://example.com',
+    websites: ['https://example.com'],
+    status: 'normal',
+    is_listed: true,
+    plan_price_month: 1000,
+    has_trial: true,
+    subscription_url: 'https://subscribe.example.com',
+    test_account: 'tester',
+    test_password: 'secret',
+    tags: [],
+    created_at: '2026-04-18 10:00:00',
+    profile: {
+      plan: {
+        supports_monthly: true,
+        supports_quarterly: null,
+        supports_half_yearly: null,
+        supports_annual: null,
+        lowest_monthly_price: 1000,
+        lowest_annual_monthly_price: null,
+        has_trial_plan: true,
+        has_lifetime_plan: null,
+      },
+    },
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount(),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => application,
+        updateApplicantOperations: async (id, input) => {
+          updatedApplications.push({ id, ...input });
+          Object.assign(application, input, {
+            website: input.website,
+            websites: input.websites,
+          });
+          return true;
+        },
+        markPaid: async () => true,
+      },
+      airportRepository: {
+        getById: async () => approvedAirport,
+        update: async (id, input) => {
+          updatedAirports.push({ id, ...input });
+          Object.assign(approvedAirport, input);
+          return true;
+        },
+      },
+      publicPageCache: {
+        clear: () => {
+          cacheClears += 1;
+        },
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({ application_fee_amount: 1000 }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/application/operations`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: 'Injected Name',
+        applicant_email: 'attacker@example.com',
+        websites: ['https://new.example.com', 'https://backup.example.com'],
+        plan_price_month: 1888,
+        has_trial: false,
+        streaming_support: ['netflix', 'chatgpt'],
+        payment_methods: ['wechat', 'crypto_other'],
+        payment_crypto_other: 'USDC',
+        profile: {
+          plan: { supports_monthly: true, supports_annual: true },
+          clients: { clash: true },
+          import_methods: { one_click_import: true },
+        },
+        subscription_url: 'https://subscribe-new.example.com',
+        applicant_telegram: '@cloudpro',
+        founded_on: '2024-12-01',
+        airport_intro: 'updated intro',
+        test_account: 'tester-new',
+        test_password: 'secret-new',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(updatedApplications.length, 1);
+    assert.equal(updatedApplications[0].id, 7);
+    assert.equal(updatedApplications[0].name, 'Cloud Airport');
+    assert.deepEqual(updatedApplications[0].websites, ['https://new.example.com', 'https://backup.example.com']);
+    assert.deepEqual(updatedApplications[0].streaming_support, ['netflix', 'chatgpt']);
+    assert.deepEqual(updatedApplications[0].payment_methods, ['wechat', 'crypto_other']);
+    assert.equal(updatedApplications[0].payment_crypto_other, 'USDC');
+    assert.equal(updatedApplications[0].applicant_telegram, '@cloudpro');
+    assert.equal(updatedApplications[0].founded_on, '2024-12-01');
+    assert.equal(updatedApplications[0].airport_intro, 'updated intro');
+    assert.equal(updatedAirports.length, 1);
+    assert.equal(updatedAirports[0].id, 42);
+    assert.equal(updatedAirports[0].name, 'Cloud Airport');
+    assert.deepEqual(updatedAirports[0].websites, ['https://new.example.com', 'https://backup.example.com']);
+    assert.equal(updatedAirports[0].plan_price_month, 1888);
+    assert.equal(updatedAirports[0].has_trial, false);
+    assert.deepEqual(updatedAirports[0].streaming_support, ['netflix', 'chatgpt']);
+    assert.deepEqual(updatedAirports[0].payment_methods, ['wechat', 'crypto_other']);
+    assert.equal(updatedAirports[0].payment_crypto_other, 'USDC');
+    assert.equal(updatedAirports[0].subscription_url, 'https://subscribe-new.example.com');
+    assert.equal(updatedAirports[0].applicant_telegram, '@cloudpro');
+    assert.equal(updatedAirports[0].founded_on, '2024-12-01');
+    assert.equal(updatedAirports[0].airport_intro, 'updated intro');
+    assert.equal(updatedAirports[0].test_account, 'tester-new');
+    assert.equal(updatedAirports[0].test_password, 'secret-new');
+    assert.equal((updatedAirports[0].profile as any).plan.supports_annual, true);
+    assert.equal((updatedAirports[0].profile as any).plan.lowest_monthly_price, 1888);
+    assert.equal((updatedAirports[0].profile as any).plan.has_trial_plan, false);
+    assert.equal((updatedAirports[0].profile as any).clients.clash, true);
+    assert.equal((updatedAirports[0].profile as any).import_methods.one_click_import, true);
+    assert.equal(cacheClears, 1);
+    const data = (await response.json()) as {
+      application: {
+        name: string;
+        applicant_email: string;
+        plan_price_month: number;
+        has_trial: boolean;
+        websites: string[];
+      };
+    };
+    assert.equal(data.application.name, 'Cloud Airport');
+    assert.equal(data.application.applicant_email, 'user@example.com');
+    assert.equal(data.application.plan_price_month, 1888);
+    assert.equal(data.application.has_trial, false);
+    assert.deepEqual(data.application.websites, ['https://new.example.com', 'https://backup.example.com']);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /portal/application/operations updates application without airport sync before approval', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const updatedApplications: Array<Record<string, unknown>> = [];
+  let airportUpdateCalls = 0;
+  let cacheClears = 0;
+  const application: any = {
+    id: 7,
+    name: 'Cloud Airport',
+    website: 'https://example.com',
+    websites: ['https://example.com'],
+    approved_airport_id: null,
+    review_status: 'pending',
+    payment_status: 'paid',
+    payment_amount: 1000,
+    paid_at: '2026-04-18 11:00:00',
+    applicant_email: 'user@example.com',
+    applicant_telegram: '@cloud',
+    founded_on: '2025-01-01',
+    airport_intro: 'intro',
+    plan_price_month: 1000,
+    has_trial: true,
+    subscription_url: 'https://subscribe.example.com',
+    test_account: 'tester',
+    test_password: 'secret',
+    created_at: '2026-04-18 10:00:00',
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount(),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => application,
+        updateApplicantOperations: async (id, input) => {
+          updatedApplications.push({ id, ...input });
+          Object.assign(application, input, {
+            website: input.website,
+            websites: input.websites,
+          });
+          return true;
+        },
+        markPaid: async () => true,
+      },
+      airportRepository: {
+        update: async () => {
+          airportUpdateCalls += 1;
+          return true;
+        },
+      },
+      publicPageCache: {
+        clear: () => {
+          cacheClears += 1;
+        },
+      },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({ application_fee_amount: 1000 }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/application/operations`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: 'Cloud Airport Pro',
+        websites: ['https://new.example.com'],
+        plan_price_month: 1888,
+        has_trial: false,
+        streaming_support: ['netflix'],
+        payment_methods: ['wechat'],
+        profile: { clients: { clash: true } },
+        subscription_url: 'https://subscribe-new.example.com',
+        applicant_telegram: '@cloudpro',
+        founded_on: '2024-12-01',
+        airport_intro: 'updated intro',
+        test_account: 'tester-new',
+        test_password: 'secret-new',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(updatedApplications.length, 1);
+    assert.equal(airportUpdateCalls, 0);
+    assert.equal(cacheClears, 0);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

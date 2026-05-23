@@ -11,7 +11,7 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
       calls.push({ sql, params });
       if (sql.includes('FROM information_schema.COLUMNS')) {
         schemaChecks += 1;
-        return [schemaChecks <= 22 ? [] : [{ 1: 1 }]];
+        return [schemaChecks <= 26 ? [] : [{ 1: 1 }]];
       }
       return [[]];
     },
@@ -41,6 +41,12 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
     calls.some((call) => call.sql.includes('ALTER TABLE airport_applications ADD COLUMN admin_note TEXT NULL AFTER review_note')),
   );
   assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airport_applications ADD COLUMN streaming_support_json JSON NULL AFTER has_trial')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airport_applications ADD COLUMN airport_profile_json JSON NULL AFTER payment_crypto_other')),
+  );
+  assert.ok(
     calls.some((call) => call.sql.includes("MODIFY COLUMN review_status") && call.sql.includes("ENUM('awaiting_payment', 'pending', 'reviewed', 'rejected')")),
   );
   assert.ok(
@@ -48,6 +54,9 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
   );
   assert.ok(
     calls.some((call) => call.sql.includes('SET websites_json = JSON_ARRAY(website)')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('SET airport_profile_json = JSON_OBJECT()')),
   );
 });
 
@@ -67,6 +76,10 @@ test('AirportApplicationRepository.listByQuery filters by payment status', async
         status: 'normal',
         plan_price_month: 10,
         has_trial: 1,
+        streaming_support_json: JSON.stringify(['netflix']),
+        payment_methods_json: JSON.stringify(['wechat']),
+        payment_crypto_other: null,
+        airport_profile_json: JSON.stringify({ plan: { supports_monthly: true } }),
         subscription_url: 'https://example.com/sub',
         applicant_email: 'contact@example.com',
         applicant_telegram: '@cloud',
@@ -101,6 +114,9 @@ test('AirportApplicationRepository.listByQuery filters by payment status', async
   assert.equal(result.total, 1);
   assert.equal(result.items[0]?.payment_status, 'paid');
   assert.equal(result.items[0]?.admin_note, 'line one\nline two');
+  assert.deepEqual(result.items[0]?.streaming_support, ['netflix']);
+  assert.deepEqual(result.items[0]?.payment_methods, ['wechat']);
+  assert.equal(result.items[0]?.profile?.plan.supports_monthly, true);
   assert.ok(calls[1]?.sql.includes('airport_applications.admin_note'));
   assert.ok(calls[0]?.sql.includes('review_status = ?'));
   assert.ok(calls[0]?.sql.includes('payment_status = ?'));
@@ -125,6 +141,101 @@ test('AirportApplicationRepository.updateAdminNote saves multiline note and clea
   assert.ok(calls[0]?.sql.includes('SET admin_note = ?'));
   assert.deepEqual(calls[0]?.params, ['line one\nline two', 7]);
   assert.deepEqual(calls[1]?.params, [null, 7]);
+});
+
+test('AirportApplicationRepository.updateApplicantOperations saves capability profile fields', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new AirportApplicationRepository({
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  } as never);
+
+  const updated = await repository.updateApplicantOperations(7, {
+    name: 'Cloud Airport Pro',
+    website: 'https://example.com',
+    websites: ['https://example.com', 'https://backup.example.com'],
+    plan_price_month: 1888,
+    has_trial: false,
+    streaming_support: ['netflix', 'chatgpt'],
+    payment_methods: ['wechat', 'crypto_other'],
+    payment_crypto_other: 'USDC',
+    profile: {
+      plan: {
+        supports_monthly: true,
+        supports_quarterly: null,
+        supports_half_yearly: null,
+        supports_annual: true,
+        lowest_monthly_price: 1888,
+        lowest_annual_monthly_price: null,
+        has_trial_plan: false,
+        has_lifetime_plan: null,
+      },
+      telegram: {
+        has_group: null,
+        group_url: null,
+        has_channel: null,
+        channel_url: null,
+        group_allows_speaking: null,
+        group_member_count: null,
+        recent_active_at: null,
+        has_customer_service_bot: null,
+        has_ticket_system: null,
+      },
+      clients: {
+        self_built_client: null,
+        clash: true,
+        clash_verge: null,
+        shadowrocket: null,
+        quantumult_x: null,
+        stash: null,
+        surge: null,
+        sing_box: null,
+        v2rayn: null,
+        v2rayng: null,
+        nekobox: null,
+        surfboard: null,
+        xiaohuojian: null,
+        openclash: null,
+      },
+      import_methods: {
+        one_click_import: true,
+        subscription_link: null,
+        universal_subscription: null,
+        qr_code_import: null,
+        tutorials: null,
+      },
+      regions: {
+        hong_kong: { has_residential: null, has_native_ip: null, line_types: [] },
+        taiwan: { has_residential: null, has_native_ip: null, line_types: [] },
+        japan: { has_residential: null, has_native_ip: null, line_types: [] },
+        singapore: { has_residential: null, has_native_ip: null, line_types: [] },
+        united_states: { has_residential: null, has_native_ip: null, line_types: [] },
+        south_korea: { has_residential: null, has_native_ip: null, line_types: [] },
+        united_kingdom: { has_residential: null, has_native_ip: null, line_types: [] },
+        germany: { has_residential: null, has_native_ip: null, line_types: [] },
+        turkey: { has_residential: null, has_native_ip: null, line_types: [] },
+        argentina: { has_residential: null, has_native_ip: null, line_types: [] },
+        india: { has_residential: null, has_native_ip: null, line_types: [] },
+      },
+    },
+    subscription_url: 'https://subscribe.example.com',
+    applicant_telegram: '@cloud',
+    founded_on: '2025-01-01',
+    airport_intro: 'intro',
+    test_account: 'tester',
+    test_password: 'secret',
+  });
+
+  assert.equal(updated, true);
+  assert.ok(calls[0]?.sql.includes('streaming_support_json = ?'));
+  assert.ok(calls[0]?.sql.includes('airport_profile_json = ?'));
+  assert.equal(calls[0]?.params?.[0], 'Cloud Airport Pro');
+  assert.equal(calls[0]?.params?.[5], JSON.stringify(['netflix', 'chatgpt']));
+  assert.equal(calls[0]?.params?.[6], JSON.stringify(['wechat', 'crypto_other']));
+  assert.equal(calls[0]?.params?.[7], 'USDC');
+  assert.equal(JSON.parse(String(calls[0]?.params?.[8])).plan.lowest_monthly_price, 1888);
 });
 
 test('AirportApplicationRepository creates and lists email reply history newest first', async () => {

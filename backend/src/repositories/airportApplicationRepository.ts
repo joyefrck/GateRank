@@ -4,8 +4,12 @@ import type {
   AirportApplicationEmailReply,
   AirportApplicationPaymentStatus,
   AirportApplicationReviewStatus,
+  AirportPaymentMethod,
+  AirportProfile,
   AirportStatus,
+  AirportStreamingSupport,
 } from '../types/domain';
+import { normalizeAirportProfile } from '../utils/airportProfile';
 import { formatDateOnly } from '../utils/time';
 
 interface AirportApplicationRow extends RowDataPacket {
@@ -16,6 +20,10 @@ interface AirportApplicationRow extends RowDataPacket {
   status: AirportStatus;
   plan_price_month: number;
   has_trial: number;
+  streaming_support_json: unknown;
+  payment_methods_json: unknown;
+  payment_crypto_other: string | null;
+  airport_profile_json: unknown;
   subscription_url: string | null;
   applicant_email: string;
   applicant_telegram: string;
@@ -54,6 +62,10 @@ export interface CreateAirportApplicationInput {
   status: AirportStatus;
   plan_price_month: number;
   has_trial: boolean;
+  streaming_support?: AirportStreamingSupport[];
+  payment_methods?: AirportPaymentMethod[];
+  payment_crypto_other?: string | null;
+  profile?: AirportProfile;
   subscription_url?: string | null;
   applicant_email: string;
   applicant_telegram: string;
@@ -77,8 +89,30 @@ export interface UpdateAirportApplicationInput {
   websites?: string[];
   plan_price_month: number;
   has_trial: boolean;
+  streaming_support?: AirportStreamingSupport[];
+  payment_methods?: AirportPaymentMethod[];
+  payment_crypto_other?: string | null;
+  profile?: AirportProfile;
   subscription_url?: string | null;
   applicant_email: string;
+  applicant_telegram: string;
+  founded_on: string;
+  airport_intro: string;
+  test_account: string;
+  test_password: string;
+}
+
+export interface UpdateAirportApplicationOperationsInput {
+  name: string;
+  website: string;
+  websites?: string[];
+  plan_price_month: number;
+  has_trial: boolean;
+  streaming_support?: AirportStreamingSupport[];
+  payment_methods?: AirportPaymentMethod[];
+  payment_crypto_other?: string | null;
+  profile?: AirportProfile;
+  subscription_url?: string | null;
   applicant_telegram: string;
   founded_on: string;
   airport_intro: string;
@@ -107,6 +141,10 @@ export class AirportApplicationRepository {
         status ENUM('normal', 'risk', 'down') NOT NULL DEFAULT 'normal',
         plan_price_month DECIMAL(10,2) NOT NULL,
         has_trial TINYINT(1) NOT NULL DEFAULT 0,
+        streaming_support_json JSON NULL,
+        payment_methods_json JSON NULL,
+        payment_crypto_other VARCHAR(128) NULL,
+        airport_profile_json JSON NULL,
         subscription_url VARCHAR(1024) NULL,
         applicant_email VARCHAR(255) NOT NULL,
         applicant_telegram VARCHAR(128) NOT NULL,
@@ -157,7 +195,11 @@ export class AirportApplicationRepository {
     );
     await this.ensureColumn('plan_price_month', 'DECIMAL(10,2) NOT NULL DEFAULT 0 AFTER status');
     await this.ensureColumn('has_trial', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER plan_price_month');
-    await this.ensureColumn('subscription_url', 'VARCHAR(1024) NULL AFTER has_trial');
+    await this.ensureColumn('streaming_support_json', 'JSON NULL AFTER has_trial');
+    await this.ensureColumn('payment_methods_json', 'JSON NULL AFTER streaming_support_json');
+    await this.ensureColumn('payment_crypto_other', 'VARCHAR(128) NULL AFTER payment_methods_json');
+    await this.ensureColumn('airport_profile_json', 'JSON NULL AFTER payment_crypto_other');
+    await this.ensureColumn('subscription_url', 'VARCHAR(1024) NULL AFTER airport_profile_json');
     await this.ensureColumn('applicant_email', 'VARCHAR(255) NOT NULL AFTER subscription_url');
     await this.ensureColumn('applicant_telegram', 'VARCHAR(128) NOT NULL AFTER applicant_email');
     await this.ensureColumn('founded_on', 'DATE NOT NULL AFTER applicant_telegram');
@@ -199,6 +241,24 @@ export class AirportApplicationRepository {
            OR JSON_TYPE(websites_json) != 'ARRAY'
            OR JSON_LENGTH(websites_json) = 0`,
     );
+    await this.pool.query(
+      `UPDATE airport_applications
+          SET streaming_support_json = JSON_ARRAY()
+        WHERE streaming_support_json IS NULL
+           OR JSON_TYPE(streaming_support_json) != 'ARRAY'`,
+    );
+    await this.pool.query(
+      `UPDATE airport_applications
+          SET payment_methods_json = JSON_ARRAY()
+        WHERE payment_methods_json IS NULL
+           OR JSON_TYPE(payment_methods_json) != 'ARRAY'`,
+    );
+    await this.pool.query(
+      `UPDATE airport_applications
+          SET airport_profile_json = JSON_OBJECT()
+        WHERE airport_profile_json IS NULL
+           OR JSON_TYPE(airport_profile_json) != 'OBJECT'`,
+    );
   }
 
   async create(input: CreateAirportApplicationInput): Promise<number> {
@@ -211,6 +271,10 @@ export class AirportApplicationRepository {
         status,
         plan_price_month,
         has_trial,
+        streaming_support_json,
+        payment_methods_json,
+        payment_crypto_other,
+        airport_profile_json,
         subscription_url,
         applicant_email,
         applicant_telegram,
@@ -220,7 +284,7 @@ export class AirportApplicationRepository {
         test_password,
         review_status,
         payment_status
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_payment', 'unpaid')`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'awaiting_payment', 'unpaid')`,
       [
         input.name,
         websites[0],
@@ -228,6 +292,10 @@ export class AirportApplicationRepository {
         input.status,
         input.plan_price_month,
         input.has_trial ? 1 : 0,
+        JSON.stringify(input.streaming_support || []),
+        JSON.stringify(input.payment_methods || []),
+        input.payment_crypto_other || null,
+        JSON.stringify(normalizeAirportProfile(input.profile)),
         input.subscription_url || null,
         input.applicant_email,
         input.applicant_telegram,
@@ -298,6 +366,10 @@ export class AirportApplicationRepository {
          airport_applications.status,
          airport_applications.plan_price_month,
          airport_applications.has_trial,
+         airport_applications.streaming_support_json,
+         airport_applications.payment_methods_json,
+         airport_applications.payment_crypto_other,
+         airport_applications.airport_profile_json,
          airport_applications.subscription_url,
          airport_applications.applicant_email,
          airport_applications.applicant_telegram,
@@ -342,6 +414,10 @@ export class AirportApplicationRepository {
          airport_applications.status,
          airport_applications.plan_price_month,
          airport_applications.has_trial,
+         airport_applications.streaming_support_json,
+         airport_applications.payment_methods_json,
+         airport_applications.payment_crypto_other,
+         airport_applications.airport_profile_json,
          airport_applications.subscription_url,
          airport_applications.applicant_email,
          airport_applications.applicant_telegram,
@@ -463,6 +539,49 @@ export class AirportApplicationRepository {
         input.has_trial ? 1 : 0,
         input.subscription_url || null,
         input.applicant_email,
+        input.applicant_telegram,
+        input.founded_on,
+        input.airport_intro,
+        input.test_account,
+        input.test_password,
+        id,
+      ],
+    );
+
+    return result.affectedRows > 0;
+  }
+
+  async updateApplicantOperations(id: number, input: UpdateAirportApplicationOperationsInput): Promise<boolean> {
+    const websites = normalizeWebsiteList(input.websites, input.website);
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE airport_applications
+          SET name = ?,
+              website = ?,
+              websites_json = ?,
+              plan_price_month = ?,
+              has_trial = ?,
+              streaming_support_json = ?,
+              payment_methods_json = ?,
+              payment_crypto_other = ?,
+              airport_profile_json = ?,
+              subscription_url = ?,
+              applicant_telegram = ?,
+              founded_on = ?,
+              airport_intro = ?,
+              test_account = ?,
+              test_password = ?
+        WHERE id = ?`,
+      [
+        input.name,
+        websites[0],
+        JSON.stringify(websites),
+        input.plan_price_month,
+        input.has_trial ? 1 : 0,
+        JSON.stringify(input.streaming_support || []),
+        JSON.stringify(input.payment_methods || []),
+        input.payment_crypto_other || null,
+        JSON.stringify(normalizeAirportProfile(input.profile)),
+        input.subscription_url || null,
         input.applicant_telegram,
         input.founded_on,
         input.airport_intro,
@@ -637,6 +756,10 @@ function toAirportApplicationEntity(row: AirportApplicationRow): AirportApplicat
     status: row.status,
     plan_price_month: Number(row.plan_price_month),
     has_trial: !!row.has_trial,
+    streaming_support: safeJsonArray(row.streaming_support_json) as AirportStreamingSupport[],
+    payment_methods: safeJsonArray(row.payment_methods_json) as AirportPaymentMethod[],
+    payment_crypto_other: row.payment_crypto_other,
+    profile: normalizeAirportProfile(row.airport_profile_json),
     subscription_url: row.subscription_url,
     applicant_email: row.applicant_email,
     applicant_telegram: row.applicant_telegram,

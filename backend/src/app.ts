@@ -18,6 +18,7 @@ import { ApplicantBillingRepository } from './repositories/applicantBillingRepos
 import { AuditRepository } from './repositories/auditRepository';
 import { NewsRepository } from './repositories/newsRepository';
 import { MetricsRepository } from './repositories/metricsRepository';
+import { PerformanceNodePreferenceRepository } from './repositories/performanceNodePreferenceRepository';
 import { PerformanceRunRepository } from './repositories/performanceRunRepository';
 import { ProbeSampleRepository } from './repositories/probeSampleRepository';
 import { RankingRepository } from './repositories/rankingRepository';
@@ -98,6 +99,8 @@ export async function createApp() {
   await performanceRunRepository.ensureSchema();
   const subscriptionNodeSnapshotRepository = new SubscriptionNodeSnapshotRepository(pool);
   await subscriptionNodeSnapshotRepository.ensureSchema();
+  const performanceNodePreferenceRepository = new PerformanceNodePreferenceRepository(pool);
+  await performanceNodePreferenceRepository.ensureSchema();
   const manualJobRepository = new ManualJobRepository(pool);
   await manualJobRepository.ensureSchema();
   const schedulerTaskRepository = new SchedulerTaskRepository(pool);
@@ -265,6 +268,7 @@ export async function createApp() {
       applicantAccountRepository,
       applicantEmailChangeCodeRepository,
       airportApplicationRepository,
+      airportRepository,
       applicationPaymentOrderRepository,
       applicantBillingRepository,
       applicantPortalAuthService,
@@ -278,6 +282,7 @@ export async function createApp() {
       applicationNotificationService,
       mailService,
       userTelegramBotMessageService,
+      publicPageCache,
     }),
   );
 
@@ -328,6 +333,7 @@ export async function createApp() {
       probeSampleRepository,
       performanceRunRepository,
       subscriptionNodeSnapshotRepository,
+      performanceNodePreferenceRepository,
       metricsRepository,
       scoreRepository,
       recomputeService,

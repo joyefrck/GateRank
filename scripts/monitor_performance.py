@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import json
 import os
 import random
@@ -139,6 +140,15 @@ class NodeSourceResult:
     subscription_format: str | None
     node_source: str
     diagnostics: dict[str, Any]
+
+
+@dataclass
+class NodeSelectionResult:
+    selected_nodes: list[ParsedNode]
+    mode: str
+    configured_node_count: int | None = None
+    skipped_configured_nodes: list[dict[str, str]] | None = None
+    error: str | None = None
 
 
 def main() -> int:
@@ -445,9 +455,11 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
     unsupported_nodes = node_source.unsupported_nodes
     subscription_format = node_source.subscription_format
     diagnostics = node_source.diagnostics
-    selected_nodes = select_nodes(parsed_nodes)
+    selection_config = get_performance_node_selection(config, airport_id)
     availability_results = check_nodes_availability(config, parsed_nodes)
     availability_summary = summarize_node_availability(availability_results)
+    selection_result = resolve_selected_nodes(parsed_nodes, selection_config, availability_results)
+    selected_nodes = selection_result.selected_nodes
     tested_nodes: list[dict[str, Any]] = []
     latency_samples: list[float] = []
     latency_sampled_at: list[str] = []
@@ -476,6 +488,10 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             error_message="no testable nodes selected from subscription",
             diagnostics={
                 **diagnostics,
+                "node_selection_mode": selection_result.mode,
+                "configured_node_count": selection_result.configured_node_count,
+                "skipped_configured_nodes": selection_result.skipped_configured_nodes or [],
+                "node_selection_error": selection_result.error,
                 "unsupported_nodes_count": len(unsupported_nodes),
                 "unsupported_nodes": unsupported_nodes,
                 "node_availability": availability_summary["nodes"],
@@ -563,6 +579,10 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             "speed_measurement": "multi_connection_http_download_via_local_proxy",
             "speed_test_url": config.test_url_speed,
             "speed_test_connections": config.speed_connections,
+            "node_selection_mode": selection_result.mode,
+            "configured_node_count": selection_result.configured_node_count,
+            "skipped_configured_nodes": selection_result.skipped_configured_nodes or [],
+            "node_selection_error": selection_result.error,
             "selected_node_count": len(selected_nodes),
             "tested_region_count": count_selected_regions(selected_nodes),
             "node_availability": availability_summary["nodes"],
@@ -1357,6 +1377,67 @@ def select_nodes(nodes: list[ParsedNode], rng: Any = random) -> list[ParsedNode]
     return selected
 
 
+def resolve_selected_nodes(
+    nodes: list[ParsedNode],
+    selection_config: dict[str, Any] | None,
+    availability_results: list[NodeAvailabilityResult],
+) -> NodeSelectionResult:
+    if not selection_config or selection_config.get("mode") != "specified":
+        return NodeSelectionResult(
+            selected_nodes=select_nodes(nodes),
+            mode="default",
+            error=str(selection_config.get("error")) if selection_config and selection_config.get("error") else None,
+        )
+
+    raw_keys = selection_config.get("selected_keys")
+    selected_keys = [str(key).strip() for key in raw_keys] if isinstance(raw_keys, list) else []
+    selected_keys = [key for key in selected_keys if key]
+    if not selected_keys:
+        return NodeSelectionResult(selected_nodes=select_nodes(nodes), mode="default")
+
+    nodes_by_key = {performance_node_key(node): node for node in nodes}
+    availability_by_key = {performance_node_key(item.node): item for item in availability_results}
+    selected_nodes: list[ParsedNode] = []
+    skipped_nodes: list[dict[str, str]] = []
+
+    for key in selected_keys:
+        node = nodes_by_key.get(key)
+        if node is None:
+            skipped_nodes.append({"key": key, "name": "", "reason": "configured_node_not_found"})
+            continue
+        availability = availability_by_key.get(key)
+        if availability is not None and not availability.available:
+            skipped_nodes.append({
+                "key": key,
+                "name": node.name,
+                "reason": "configured_node_unavailable",
+                "error_code": availability.error_code or "",
+            })
+            continue
+        selected_nodes.append(node)
+
+    return NodeSelectionResult(
+        selected_nodes=selected_nodes,
+        mode="specified",
+        configured_node_count=len(selected_keys),
+        skipped_configured_nodes=skipped_nodes,
+    )
+
+
+def performance_node_key(node: ParsedNode) -> str:
+    raw_uri = (node.raw_uri or "").strip()
+    if raw_uri:
+        return hashlib.sha256(raw_uri.encode("utf-8")).hexdigest()
+    outbound = node.outbound or {}
+    identity = "|".join([
+        node.name or "",
+        node.node_type or "",
+        str(outbound.get("server") or ""),
+        str(outbound.get("server_port") or ""),
+    ])
+    return hashlib.sha256(identity.encode("utf-8")).hexdigest()
+
+
 def ordered_regions(nodes: list[ParsedNode]) -> list[str]:
     present = {region_key(node) for node in nodes}
     ordered = [region for region in REGION_PRIORITY if region in present]
@@ -1636,6 +1717,14 @@ def post_subscription_node_snapshot(config: Config, airport_id: int, payload: di
 
 def get_latest_subscription_node_snapshot(config: Config, airport_id: int) -> dict[str, Any]:
     return request_json(config, "GET", f"/api/v1/admin/airports/{airport_id}/subscription-node-snapshots/latest")
+
+
+def get_performance_node_selection(config: Config, airport_id: int) -> dict[str, Any]:
+    try:
+        selection = request_json(config, "GET", f"/api/v1/admin/airports/{airport_id}/performance-node-selection")
+        return selection if isinstance(selection, dict) else {"mode": "default"}
+    except Exception as exc:
+        return {"mode": "default", "error": str(exc)}
 
 
 def post_admin_action(config: Config, path: str) -> dict[str, Any]:
