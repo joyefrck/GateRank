@@ -54,6 +54,9 @@ jobs:
           context: .
           file: ./Dockerfile.api
           push: true
+          build-args: |
+            VITE_SITE_URL=${{ env.VITE_SITE_URL }}
+            VITE_API_BASE=${{ env.VITE_API_BASE }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.API_IMAGE }}:main
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.API_IMAGE }}:${{ github.sha }}
