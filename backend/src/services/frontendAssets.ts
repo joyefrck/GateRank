@@ -26,7 +26,7 @@ export function resolvePublicFrontendAssets(manifestPath = getDefaultManifestPat
     return cachedAssets;
   }
 
-  const assets = readManifestAssets(manifestPath) || FALLBACK_PUBLIC_FRONTEND_ASSETS;
+  const assets = readManifestAssets(manifestPath) || versionFrontendAssets(FALLBACK_PUBLIC_FRONTEND_ASSETS);
   if (manifestPath === getDefaultManifestPath()) {
     cachedAssets = assets;
   }
@@ -45,8 +45,8 @@ export function readManifestAssets(manifestPath: string): PublicFrontendAssets |
   }
 
   return {
-    script: toPublicAssetPath(entry.file),
-    stylesheet: toPublicAssetPath(entry.css?.[0] || FALLBACK_PUBLIC_FRONTEND_ASSETS.stylesheet),
+    script: versionAssetPath(toPublicAssetPath(entry.file)),
+    stylesheet: versionAssetPath(toPublicAssetPath(entry.css?.[0] || FALLBACK_PUBLIC_FRONTEND_ASSETS.stylesheet)),
   };
 }
 
@@ -56,4 +56,20 @@ function getDefaultManifestPath(): string {
 
 function toPublicAssetPath(file: string): string {
   return file.startsWith('/') ? file : `/${file}`;
+}
+
+function versionFrontendAssets(assets: PublicFrontendAssets): PublicFrontendAssets {
+  return {
+    script: versionAssetPath(assets.script),
+    stylesheet: versionAssetPath(assets.stylesheet),
+  };
+}
+
+function versionAssetPath(assetPath: string): string {
+  const version = process.env.PUBLIC_FRONTEND_ASSET_VERSION?.trim();
+  if (!version) {
+    return assetPath;
+  }
+  const separator = assetPath.includes('?') ? '&' : '?';
+  return `${assetPath}${separator}v=${encodeURIComponent(version)}`;
 }

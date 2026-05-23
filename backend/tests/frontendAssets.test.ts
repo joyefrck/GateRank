@@ -9,30 +9,65 @@ import {
   resolvePublicFrontendAssets,
 } from '../src/services/frontendAssets';
 
-test('readManifestAssets resolves hashed Vite entry script and stylesheet', async () => {
+test('readManifestAssets resolves Vite entry script and stylesheet with deploy version', async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'gaterank-manifest-'));
   const manifestPath = path.join(dir, 'manifest.json');
+  const previousVersion = process.env.PUBLIC_FRONTEND_ASSET_VERSION;
+  process.env.PUBLIC_FRONTEND_ASSET_VERSION = 'commit-sha-123';
   try {
     await writeFile(manifestPath, JSON.stringify({
       'index.html': {
-        file: 'assets/index-CkG9aP2q.js',
-        css: ['assets/index-BzS9fL3m.css'],
+        file: 'assets/index.js',
+        css: ['assets/index.css'],
         isEntry: true,
       },
     }));
 
     assert.deepEqual(readManifestAssets(manifestPath), {
-      script: '/assets/index-CkG9aP2q.js',
-      stylesheet: '/assets/index-BzS9fL3m.css',
+      script: '/assets/index.js?v=commit-sha-123',
+      stylesheet: '/assets/index.css?v=commit-sha-123',
     });
   } finally {
+    if (previousVersion === undefined) {
+      delete process.env.PUBLIC_FRONTEND_ASSET_VERSION;
+    } else {
+      process.env.PUBLIC_FRONTEND_ASSET_VERSION = previousVersion;
+    }
     await rm(dir, { recursive: true, force: true });
   }
 });
 
 test('resolvePublicFrontendAssets falls back when Vite manifest is absent', () => {
+  const previousVersion = process.env.PUBLIC_FRONTEND_ASSET_VERSION;
+  delete process.env.PUBLIC_FRONTEND_ASSET_VERSION;
+  try {
+    assert.deepEqual(
+      resolvePublicFrontendAssets(path.join(os.tmpdir(), 'gaterank-missing-manifest.json')),
+      FALLBACK_PUBLIC_FRONTEND_ASSETS,
+    );
+  } finally {
+    if (previousVersion !== undefined) {
+      process.env.PUBLIC_FRONTEND_ASSET_VERSION = previousVersion;
+    }
+  }
+});
+
+test('resolvePublicFrontendAssets versions fallback assets when configured', () => {
+  const previousVersion = process.env.PUBLIC_FRONTEND_ASSET_VERSION;
+  process.env.PUBLIC_FRONTEND_ASSET_VERSION = 'deploy 42';
+  try {
   assert.deepEqual(
     resolvePublicFrontendAssets(path.join(os.tmpdir(), 'gaterank-missing-manifest.json')),
-    FALLBACK_PUBLIC_FRONTEND_ASSETS,
+    {
+      script: '/assets/index.js?v=deploy%2042',
+      stylesheet: '/assets/index.css?v=deploy%2042',
+    },
   );
+  } finally {
+    if (previousVersion === undefined) {
+      delete process.env.PUBLIC_FRONTEND_ASSET_VERSION;
+    } else {
+      process.env.PUBLIC_FRONTEND_ASSET_VERSION = previousVersion;
+    }
+  }
 });

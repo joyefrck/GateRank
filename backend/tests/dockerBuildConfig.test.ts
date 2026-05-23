@@ -9,8 +9,11 @@ test('API image builds frontend manifest with the same public Vite env as web im
 
   assert.match(dockerfile, /ARG VITE_SITE_URL=https:\/\/gate-rank\.com/);
   assert.match(dockerfile, /ARG VITE_API_BASE=/);
+  assert.match(dockerfile, /ARG PUBLIC_FRONTEND_ASSET_VERSION=/);
   assert.match(dockerfile, /ENV VITE_SITE_URL=\$VITE_SITE_URL/);
   assert.match(dockerfile, /ENV VITE_API_BASE=\$VITE_API_BASE/);
+  assert.match(dockerfile, /ENV PUBLIC_FRONTEND_ASSET_VERSION=\$PUBLIC_FRONTEND_ASSET_VERSION/);
   assert.match(workflow, /file:\s+\.\/Dockerfile\.api[\s\S]*?build-args:\s*\|[\s\S]*?VITE_SITE_URL=\$\{\{ env\.VITE_SITE_URL \}\}/);
   assert.match(workflow, /file:\s+\.\/Dockerfile\.api[\s\S]*?build-args:\s*\|[\s\S]*?VITE_API_BASE=\$\{\{ env\.VITE_API_BASE \}\}/);
+  assert.match(workflow, /file:\s+\.\/Dockerfile\.api[\s\S]*?build-args:\s*\|[\s\S]*?PUBLIC_FRONTEND_ASSET_VERSION=\$\{\{ github\.sha \}\}/);
 });
