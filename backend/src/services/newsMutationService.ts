@@ -18,7 +18,7 @@ interface CurrentArticleState {
 }
 
 interface NewsMutationServiceDeps {
-  newsRepository: Pick<NewsRepository, 'getById' | 'create' | 'update' | 'resolveCategoryId' | 'resolveTopicIds'>;
+  newsRepository: Pick<NewsRepository, 'getById' | 'getBySlug' | 'create' | 'update' | 'resolveCategoryId' | 'resolveTopicIds'>;
   newsContentService: Pick<NewsContentService, 'render'>;
   newsCoverImageService: Pick<NewsCoverImageService, 'compressUploadedCover'>;
 }
@@ -78,6 +78,23 @@ export class NewsMutationService {
     const article = await this.deps.newsRepository.getById(id);
     if (!article) {
       throw new HttpError(404, 'NEWS_NOT_FOUND', `news article ${id} not found`);
+    }
+    return article;
+  }
+
+  async resolveArticleByIdOrSlug(value: string) {
+    const identifier = normalizeString(value);
+    if (isNumericArticleIdentifier(identifier)) {
+      return this.requireArticle(parseArticleId(identifier));
+    }
+
+    if (!identifier) {
+      throw new HttpError(404, 'NEWS_NOT_FOUND', 'news article not found');
+    }
+
+    const article = await this.deps.newsRepository.getBySlug(identifier);
+    if (!article) {
+      throw new HttpError(404, 'NEWS_NOT_FOUND', `news article ${identifier} not found`);
     }
     return article;
   }
@@ -187,6 +204,10 @@ export function parseArticleId(value: string): number {
     throw new HttpError(400, 'BAD_REQUEST', 'article id must be positive integer');
   }
   return Math.floor(id);
+}
+
+function isNumericArticleIdentifier(value: string): boolean {
+  return value !== '' && Number.isFinite(Number(value));
 }
 
 export function normalizeString(value: unknown, fallback = ''): string {

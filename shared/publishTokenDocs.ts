@@ -32,7 +32,7 @@ export type PublishTokenDocSchemaRow = [field: string, type: string, required: s
 
 export const PUBLISH_TOKEN_DOCS_PATH = '/publish-token-docs';
 export const PUBLISH_TOKEN_DOCS_MARKDOWN_PATH = '/publish-token-docs.md';
-export const PUBLISH_TOKEN_DOCS_LAST_UPDATED = '2026-03-29T00:00:00+08:00';
+export const PUBLISH_TOKEN_DOCS_LAST_UPDATED = '2026-05-24T00:00:00+08:00';
 
 export const PUBLISH_TOKEN_DOCS_META = {
   title: `发布令牌接入说明 | ${PUBLIC_SITE_BRAND_NAME}`,
@@ -66,7 +66,7 @@ export const PUBLISH_TOKEN_DOCS_OVERVIEW_FIELDS = [
 export const PUBLISH_TOKEN_DOCS_OVERVIEW_FIELD_NOTES: PublishTokenDocLineItem[] = [
   { code: 'title', text: '文章标题。' },
   { code: 'content_markdown', text: '正文 Markdown，发布时必填。' },
-  { code: 'slug', text: '可选，不传时会按标题自动生成。' },
+  { code: 'slug', text: '创建时可选，不传时会按标题自动生成；PATCH 更新时可在路径中使用现有 slug 定位文章。' },
   { code: 'excerpt', text: '可选，不传时会根据正文自动提取摘要。' },
   { code: 'cover_image_url', text: '封面地址字段，可直接传本站已上传图片 URL。' },
   { code: 'publish_mode', text: '只支持 draft 或 publish，默认 draft。' },
@@ -75,7 +75,7 @@ export const PUBLISH_TOKEN_DOCS_OVERVIEW_FIELD_NOTES: PublishTokenDocLineItem[] 
 export const PUBLISH_TOKEN_DOCS_OVERVIEW_BEHAVIOR_NOTES: PublishTokenDocLineItem[] = [
   { code: 'draft', text: '只在后台创建草稿，不出现在前台 News。' },
   { code: 'publish', text: '创建后立即上线，需要 news:create + news:publish。' },
-  { code: 'article.id', text: '创建成功后返回文章 ID，后续更新和发布都基于这个 ID。' },
+  { code: 'article.id', text: '创建成功后返回文章 ID；更新可用 ID 或现有 slug，发布和归档仍基于 ID。' },
 ];
 
 export const PUBLISH_TOKEN_DOCS_SECURITY_AUTH_NOTES: PublishTokenDocLineItem[] = [
@@ -87,7 +87,7 @@ export const PUBLISH_TOKEN_DOCS_SECURITY_AUTH_NOTES: PublishTokenDocLineItem[] =
 export const PUBLISH_TOKEN_DOCS_SECURITY_TOKEN_NOTES: PublishTokenDocLineItem[] = [
   { code: 'plain_token', text: '明文令牌只在创建成功时返回一次，之后不可找回。' },
   { code: 'revoke', text: '吊销后立刻失效，后续请求全部按未授权处理。' },
-  { code: 'article.id', text: '第三方系统应保存创建返回的 article.id，后续操作均基于此值。' },
+  { code: 'article.id', text: '第三方系统仍建议保存创建返回的 article.id；如需修正文案，也可以用现有 slug 调用 PATCH。' },
 ];
 
 export const PUBLISH_TOKEN_DOCS_SECURITY_WARNING =
@@ -131,6 +131,7 @@ export const PUBLISH_TOKEN_DOCS_CREATE_RESPONSE_CARDS: PublishTokenDocResponseCa
     lines: [
       '返回完整 article 对象，其中包含 article.id。',
       '如果 slug 冲突，会返回 NEWS_SLUG_CONFLICT。',
+      '创建接口不会按 slug 自动 upsert；需要修改已有文章时请调用 PATCH。',
       '未传 excerpt 时，会按正文自动提取摘要。',
     ],
   },
@@ -139,14 +140,14 @@ export const PUBLISH_TOKEN_DOCS_CREATE_RESPONSE_CARDS: PublishTokenDocResponseCa
 export const PUBLISH_TOKEN_DOCS_CREATE_REQUEST_ROWS: PublishTokenDocSchemaRow[] = [
   ['title', 'string', '是', '文章标题'],
   ['content_markdown', 'string', '是', '正文 Markdown'],
-  ['slug', 'string', '否', '可选，不传自动生成'],
+  ['slug', 'string', '否', '创建时可选，不传自动生成；创建不会按 slug upsert'],
   ['excerpt', 'string', '否', '可选，不传自动提取'],
   ['cover_image_url', 'string', '否', '封面地址字段'],
   ['publish_mode', 'draft | publish', '否', '默认 draft'],
 ];
 
 export const PUBLISH_TOKEN_DOCS_CREATE_RESPONSE_ROWS: PublishTokenDocSchemaRow[] = [
-  ['article.id', 'number', '是', '文章主键，后续更新/发布/归档都基于此值'],
+  ['article.id', 'number', '是', '文章主键；更新也可用 slug，发布/归档仍基于此值'],
   ['article.status', 'string', '是', 'draft 或 published'],
   ['article.slug', 'string', '是', '最终文章 slug'],
   ['article.published_at', 'string | null', '是', '未发布时为 null'],
@@ -171,9 +172,9 @@ export const PUBLISH_TOKEN_DOCS_UPLOAD_RESPONSE_ROWS: PublishTokenDocSchemaRow[]
 export const PUBLISH_TOKEN_DOCS_MANAGE_ENDPOINTS: PublishTokenDocEndpoint[] = [
   {
     method: 'PATCH',
-    path: '/api/v1/publish/news/:id',
+    path: '/api/v1/publish/news/:idOrSlug',
     scopes: 'news:update',
-    summary: '更新已存在的文章内容。',
+    summary: '通过文章 ID 或现有 slug 更新已存在的文章内容。',
   },
   {
     method: 'POST',
@@ -193,7 +194,7 @@ export const PUBLISH_TOKEN_DOCS_MANAGE_RESPONSE_CARDS: PublishTokenDocResponseCa
   {
     title: '更新文章',
     lines: [
-      '适用于修正文案、摘要、slug、正文和封面。',
+      '适用于修正文案、摘要、slug、正文和封面，路径参数可传 article.id 或现有 article.slug。',
       '建议只提交需要变更的字段，但 title 与 content_markdown 通常应保持完整。',
     ],
   },
@@ -218,32 +219,32 @@ export const PUBLISH_TOKEN_DOCS_ERROR_CODES: Array<[code: string, meaning: strin
   ['FORBIDDEN', '令牌存在，但缺少当前接口所需 scope。'],
   ['NEWS_SLUG_CONFLICT', 'slug 已存在，需要更换。'],
   ['BAD_REQUEST', '字段缺失、publish_mode 非法、文件或参数格式错误。'],
-  ['NEWS_NOT_FOUND', '文章 ID 不存在。'],
+  ['NEWS_NOT_FOUND', '文章 ID 或 slug 不存在。'],
 ];
 
 export const PUBLISH_TOKEN_DOCS_ERROR_TROUBLESHOOTING: PublishTokenDocLineItem[] = [
   { code: '401', text: '先检查 Authorization 格式、令牌是否已吊销、是否已过期。' },
   { code: '403', text: '再检查该 token 是否具备当前接口所需 scope。' },
-  { code: 'BAD_REQUEST', text: '最后检查 JSON 字段、multipart 参数和文章 ID 是否正确。' },
+  { code: 'BAD_REQUEST', text: '最后检查 JSON 字段、multipart 参数和文章 ID/slug 是否正确。' },
 ];
 
 export const PUBLISH_TOKEN_DOCS_INTEGRATION_TIPS: PublishTokenDocLineItem[] = [
   { code: 'request_id', text: '建议在调用失败时记录返回中的 request_id 便于排查。' },
   { code: 'retry', text: '仅对网络错误或明确可重试场景做有限重试，不要对 401/403 盲目重放。' },
-  { code: 'slug', text: '若系统自行生成 slug，需处理 NEWS_SLUG_CONFLICT 回退逻辑。' },
+  { code: 'slug', text: '创建时若系统自行生成 slug，需处理 NEWS_SLUG_CONFLICT；更新已有文章时可将现有 slug 放入 PATCH 路径。' },
 ];
 
 export const PUBLISH_TOKEN_DOCS_SCOPE_MATRIX: Array<[path: string, scopes: string]> = [
   ['/api/v1/publish/news', 'news:create'],
   ['/api/v1/publish/news（publish_mode=publish）', 'news:create + news:publish'],
-  ['/api/v1/publish/news/:id', 'news:update'],
+  ['/api/v1/publish/news/:idOrSlug', 'news:update'],
   ['/api/v1/publish/news/:id/publish', 'news:publish'],
   ['/api/v1/publish/news/:id/archive', 'news:archive'],
   ['/api/v1/publish/news/upload-image', 'news:upload'],
 ];
 
 export const PUBLISH_TOKEN_DOCS_CLOSING_NOTE =
-  'v1 不支持按 slug / external id 的 upsert，也不提供基于 token 的文章列表查询。第三方系统如需后续更新文章，请保存创建接口返回的 article.id。';
+  'PATCH 更新支持使用 article.id 或现有 article.slug 定位文章；创建接口仍不会按 slug upsert，slug 冲突会返回 NEWS_SLUG_CONFLICT，发布/归档仍使用 article.id。';
 
 export function buildPublishTokenDocsUrl(siteUrl: string): string {
   return buildAbsoluteUrl(siteUrl, PUBLISH_TOKEN_DOCS_PATH);
@@ -307,8 +308,14 @@ export function buildPublishTokenDocsUploadResponseExample(): string {
 
 export function buildPublishTokenDocsManageCurl(siteUrl: string): string {
   const base = buildPublishApiBase(siteUrl);
-  return `# 更新文章
+  return `# 按 ID 更新文章
 curl -X PATCH '${base}/news/123' \\
+  -H 'Authorization: Bearer <publish_token>' \\
+  -H 'Content-Type: application/json' \\
+  -d '{"title":"更新后的标题","content_markdown":"# Updated"}'
+
+# 按 slug 更新文章
+curl -X PATCH '${base}/news/new-article' \\
   -H 'Authorization: Bearer <publish_token>' \\
   -H 'Content-Type: application/json' \\
   -d '{"title":"更新后的标题","content_markdown":"# Updated"}'

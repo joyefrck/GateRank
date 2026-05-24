@@ -98,7 +98,7 @@ SQL 文件：[`backend/sql/schema.sql`](backend/sql/schema.sql)
 ### 第三方发文接口（`Bearer publish_token`）
 
 - `POST /api/v1/publish/news`
-- `PATCH /api/v1/publish/news/:id`
+- `PATCH /api/v1/publish/news/:idOrSlug`
 - `POST /api/v1/publish/news/:id/publish`
 - `POST /api/v1/publish/news/:id/archive`
 - `POST /api/v1/publish/news/upload-image`
@@ -107,7 +107,7 @@ SQL 文件：[`backend/sql/schema.sql`](backend/sql/schema.sql)
 
 - `title`: 文章标题
 - `content_markdown`: 正文 Markdown
-- `slug`: 可选，不传则自动生成
+- `slug`: 创建时可选，不传则自动生成；创建不会按 slug upsert
 - `excerpt`: 可选，不传则按正文自动提取
 - `cover_image_url`: 可选，封面地址字段
 - `publish_mode`: 可选，`draft | publish`，默认 `draft`
@@ -118,6 +118,8 @@ SQL 文件：[`backend/sql/schema.sql`](backend/sql/schema.sql)
 2. 把返回的 `url` 填到 `cover_image_url`
 3. 调 `POST /api/v1/publish/news` 创建草稿或直接发布
 4. 如果先创建草稿，再调 `POST /api/v1/publish/news/:id/publish` 上线
+
+后续修改文章可调用 `PATCH /api/v1/publish/news/:idOrSlug`，路径参数支持 `article.id` 或现有 `article.slug`；发布和归档仍只接受 `article.id`。
 
 `/dashboard` 返回固定结构：`base / stability / performance / risk / time_decay`，用于后台固定 5 Tab。
 
@@ -222,6 +224,15 @@ curl -X POST 'http://localhost:3000/api/v1/publish/news' \
     "content_markdown":"# Hello\n\n正文内容",
     "publish_mode":"draft"
   }'
+```
+
+更新文章示例：
+
+```bash
+curl -X PATCH 'http://localhost:3000/api/v1/publish/news/new-article' \
+  -H 'Authorization: Bearer <publish_token>' \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"更新后的标题","content_markdown":"# Updated"}'
 ```
 
 Google Analytics 当前只统计公开站页面，不统计 `/admin`，并且只接入基础 `page_view`，未启用 EEA consent mode。

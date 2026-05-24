@@ -52,14 +52,12 @@ export function createPublishRoutes(deps: PublishRoutesDeps): Router {
   );
 
   router.patch(
-    '/publish/news/:id',
+    '/publish/news/:idOrSlug',
     publishTokenAuth(deps.accessTokenService, ['news:update']),
     async (req, res, next) => {
       try {
-        const article = await deps.newsMutationService.update(
-          parseArticleId(req.params.id),
-          (req.body ?? {}) as Record<string, unknown>,
-        );
+        const current = await deps.newsMutationService.resolveArticleByIdOrSlug(req.params.idOrSlug);
+        const article = await deps.newsMutationService.update(current.id, (req.body ?? {}) as Record<string, unknown>);
         await deps.auditRepository.log(
           'token_update_news_article',
           actorFromReq(req),
