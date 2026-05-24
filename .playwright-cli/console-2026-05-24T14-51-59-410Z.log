@@ -1,1 +1,7 @@
 [  236442ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=1586caeb:20102
+[ 6529017ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=1586caeb:20102
+[ 6543090ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=1586caeb:20102
+[ 7967194ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://127.0.0.1:3000/node_modules/.vite/deps/react-dom_client.js?v=1586caeb:20102
+[ 7967216ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/v1/portal/me:0
+[ 7967221ms] [ERROR] Failed to load resource: the server responded with a status of 500 (Internal Server Error) @ http://127.0.0.1:3000/api/v1/portal/me:0
+[ 7967321ms] [VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ http://127.0.0.1:3000/portal:0
