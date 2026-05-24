@@ -2564,7 +2564,7 @@ function PortalAdCampaignModal({
               {isEdit ? '修改投放' : '新建投放'}
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              {isEdit ? '默认只保存文案，不扣费；选择延长时长后才会按月扣费。' : '填写活动素材并选择投放月份，扣费成功后立即上架。'}
+              {isEdit ? '默认只保存文案，不扣费；选择延时时长后才会按月扣费。' : '填写活动素材并选择投放月份，扣费成功后立即上架。'}
             </p>
           </div>
           <button
@@ -2580,14 +2580,14 @@ function PortalAdCampaignModal({
         <form onSubmit={onSubmit} className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <PortalInfoCard eyebrow="Price" title="固定月费" value={`¥${formatMetric(monthlyPrice)} / 月`} tone="blue" />
-            <PortalInfoCard eyebrow={isEdit ? 'Extend' : 'Months'} title={isEdit ? '延长时长' : '本次投放'} value={form.months === 0 ? '不延长' : `${form.months} 个月`} tone="green" />
+            <PortalInfoCard eyebrow={isEdit ? 'Extend' : 'Months'} title={isEdit ? '延时时长' : '本次投放'} value={form.months === 0 ? '不要延时' : `${form.months} 个月`} tone="green" />
             <PortalInfoCard eyebrow="Balance" title="扣费后余额" value={`¥${formatMetric(balanceAfter)}`} tone={hasNegativeBalanceAfterCharge ? 'red' : chargeAmount > 0 && balanceAfter < lowBalanceThreshold ? 'amber' : 'green'} />
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
               <div>
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">{isEdit ? '延长时长' : '投放时长'}</label>
+                <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">{isEdit ? '延时时长' : '投放时长'}</label>
                 <div className="mt-3 flex flex-wrap gap-2">
                   {monthOptions.map((months) => (
                     <button
@@ -2596,7 +2596,7 @@ function PortalAdCampaignModal({
                       className={`rounded-full px-4 py-2 text-sm font-black ${form.months === months ? 'bg-slate-950 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
                       onClick={() => onFormChange((current) => ({ ...current, months }))}
                     >
-                      {months === 0 ? '不延长' : `${months}个月`}
+                      {months === 0 ? '不要延时' : `${months}个月`}
                     </button>
                   ))}
                 </div>
@@ -5112,7 +5112,6 @@ function PortalPage() {
 
   useEffect(() => {
     setApplicationForm(createPortalApplicationForm(view?.application));
-    setAdCampaignForm(createPortalAdCampaignForm());
     setApplicationEmailCode('');
     setApplicationEmailCodeStatus('');
   }, [view]);
@@ -5865,8 +5864,9 @@ function PortalPage() {
     if (!latestAdStatus) {
       return;
     }
-    setAdCampaignForm(createPortalAdCampaignForm(campaign, 0));
-    setEditingAdCampaign(campaign);
+    const latestCampaign = latestAdStatus.campaigns.find((item) => item.campaign_id === campaign.campaign_id) || campaign;
+    setAdCampaignForm(createPortalAdCampaignForm(latestCampaign, 0));
+    setEditingAdCampaign(latestCampaign);
     setAdCampaignModalMode('edit');
     setError('');
     setSuccess('');
