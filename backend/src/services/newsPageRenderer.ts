@@ -468,6 +468,198 @@ const sharedStyles = `
     border-top: 1px solid rgba(17,17,17,0.08);
     margin: 38px 0;
   }
+  .news-airport-profile-card {
+    margin: 34px 0;
+    display: grid;
+    grid-template-columns: 118px minmax(0, 1fr);
+    gap: 18px;
+    border: 1px solid rgba(17,17,17,0.08);
+    border-radius: 28px;
+    background: linear-gradient(180deg,#ffffff 0%,#f8fafc 100%);
+    box-shadow: 0 22px 56px rgba(15,23,42,0.08);
+    padding: 18px;
+  }
+  .news-airport-profile-rank {
+    border-radius: 20px;
+    background: #111111;
+    color: #ffffff;
+    padding: 18px 16px;
+  }
+  .news-airport-profile-rank-label {
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 900;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.55);
+  }
+  .news-airport-profile-rank-value {
+    margin-top: 8px;
+    font-size: 34px;
+    line-height: 1;
+    font-weight: 900;
+  }
+  .news-airport-profile-score-block {
+    margin-top: 22px;
+    padding-top: 16px;
+    border-top: 1px solid rgba(255,255,255,0.12);
+  }
+  .news-airport-profile-score {
+    margin-top: 8px;
+    color: #5ee7b7;
+    font-size: 28px;
+    line-height: 1;
+    font-weight: 900;
+  }
+  .news-airport-profile-date-label {
+    margin-top: 14px;
+    font-size: 11px;
+    font-weight: 800;
+    color: rgba(255,255,255,0.52);
+  }
+  .news-airport-profile-score-date {
+    margin-top: 4px;
+    font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 800;
+    color: rgba(255,255,255,0.72);
+  }
+  .news-airport-profile-main {
+    min-width: 0;
+  }
+  .news-airport-profile-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+  }
+  .news-airport-profile-title {
+    margin: 0;
+    font-size: 25px;
+    line-height: 1.25;
+    font-weight: 900;
+    letter-spacing: 0;
+  }
+  .news-airport-profile-status {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid rgba(16,185,129,0.34);
+    border-radius: 999px;
+    background: rgba(16,185,129,0.08);
+    padding: 6px 12px;
+    color: #047857;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 900;
+  }
+  .news-airport-profile-intro {
+    margin: 16px 0 0;
+    color: rgba(17,17,17,0.72);
+    font-size: 16px;
+    line-height: 1.9;
+  }
+  .news-airport-profile-metrics {
+    margin: 18px 0 0;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+  .news-airport-profile-metric {
+    border: 1px solid rgba(17,17,17,0.08);
+    border-radius: 16px;
+    background: #ffffff;
+    padding: 12px 14px;
+  }
+  .news-airport-profile-metric dt {
+    color: rgba(17,17,17,0.42);
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+  }
+  .news-airport-profile-metric dd {
+    margin: 6px 0 0;
+    color: rgba(17,17,17,0.84);
+    font-size: 15px;
+    line-height: 1.25;
+    font-weight: 900;
+  }
+  .news-airport-profile-delta-down { color: #e11d48 !important; }
+  .news-airport-profile-delta-up { color: #059669 !important; }
+  .news-airport-profile-delta-neutral { color: rgba(17,17,17,0.62) !important; }
+  .news-airport-profile-badges {
+    margin-top: 16px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .news-airport-profile-badge {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    border: 1px solid rgba(16,185,129,0.28);
+    border-radius: 999px;
+    background: rgba(16,185,129,0.08);
+    padding: 0 12px;
+    color: #047857;
+    font-size: 12px;
+    line-height: 1;
+    font-weight: 900;
+  }
+  .news-airport-profile-actions {
+    grid-column: 2;
+    display: grid;
+    grid-template-columns: minmax(0,1fr) 152px 152px;
+    gap: 10px;
+    align-items: stretch;
+  }
+  .news-airport-profile-action-note {
+    border-radius: 18px;
+    background: rgba(17,17,17,0.035);
+    padding: 14px;
+  }
+  .news-airport-profile-action-label {
+    color: rgba(17,17,17,0.42);
+    font-size: 11px;
+    line-height: 1.2;
+    font-weight: 900;
+    letter-spacing: 0.14em;
+  }
+  .news-airport-profile-action-note p {
+    margin: 8px 0 0;
+    color: rgba(17,17,17,0.56);
+    font-size: 13px;
+    line-height: 1.65;
+  }
+  .news-airport-profile-primary-link,
+  .news-airport-profile-secondary-link,
+  .news-airport-profile-disabled-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 48px;
+    border-radius: 18px;
+    padding: 12px 14px;
+    text-align: center;
+    font-size: 12px;
+    line-height: 1.2;
+    font-weight: 900;
+    text-decoration: none;
+  }
+  .news-airport-profile-primary-link {
+    background: #111111;
+    color: #ffffff;
+  }
+  .news-airport-profile-secondary-link {
+    border: 1px solid rgba(17,17,17,0.10);
+    background: #ffffff;
+    color: rgba(17,17,17,0.82);
+  }
+  .news-airport-profile-disabled-link {
+    border: 1px solid rgba(17,17,17,0.08);
+    background: rgba(17,17,17,0.035);
+    color: rgba(17,17,17,0.38);
+  }
   .aside-card {
     border-radius: 28px;
     padding: 24px;
@@ -846,6 +1038,18 @@ const sharedStyles = `
     .news-list,
     .news-blockquote {
       font-size: 16px;
+    }
+    .news-airport-profile-card {
+      grid-template-columns: 1fr;
+      border-radius: 24px;
+      padding: 14px;
+    }
+    .news-airport-profile-actions {
+      grid-column: auto;
+      grid-template-columns: 1fr;
+    }
+    .news-airport-profile-metrics {
+      grid-template-columns: 1fr;
     }
     .footer-copy { font-size: 13px; }
   }

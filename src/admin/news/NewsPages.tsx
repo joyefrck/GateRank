@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Archive,
   ArrowLeft,
+  Building2,
   CalendarDays,
   Clock3,
   Eye,
@@ -14,6 +15,12 @@ import {
   X,
 } from 'lucide-react';
 import { estimateReadingMinutes } from '../../news/renderMarkdown';
+import {
+  extractNewsAirportProfileEmbeds,
+  removeNewsAirportProfileEmbedAt,
+  serializeNewsAirportProfileEmbed,
+  type NewsAirportProfileEmbed,
+} from '../../../shared/newsAirportProfile';
 
 const COVER_SEARCH_PER_PAGE = 12;
 
@@ -85,6 +92,51 @@ interface PexelsCoverSearchResponse {
   per_page: number;
   total: number;
   items: PexelsCoverCandidate[];
+}
+
+interface ScoreDeltaView {
+  label: string;
+  value: number | null;
+}
+
+interface FullRankingItemResponse {
+  airport_id: number;
+  rank: number;
+  name: string;
+  website: string;
+  status: string;
+  tags: string[];
+  founded_on?: string | null;
+  plan_price_month: number | null;
+  has_trial: boolean;
+  airport_intro?: string | null;
+  created_at: string | null;
+  score: number | null;
+  score_date?: string | null;
+  score_delta_vs_yesterday: ScoreDeltaView;
+  report_url?: string | null;
+  capabilities?: {
+    payment_methods: Array<{ label: string }>;
+    streaming: Array<{ label: string }>;
+    clients: Array<{ label: string }>;
+    import_methods: Array<{ label: string }>;
+    regions: Array<{ label: string }>;
+    plan: {
+      supports_annual: boolean | null;
+      has_lifetime_plan: boolean | null;
+    };
+    telegram: {
+      has_group: boolean | null;
+    };
+  };
+}
+
+interface FullRankingPageResponse {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  items: FullRankingItemResponse[];
 }
 
 interface NewsEditorPageProps {
@@ -394,6 +446,14 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   const [coverSearchImportingId, setCoverSearchImportingId] = useState<number | null>(null);
   const [coverSearchError, setCoverSearchError] = useState('');
   const [coverPickerOpen, setCoverPickerOpen] = useState(false);
+  const [airportProfilePickerOpen, setAirportProfilePickerOpen] = useState(false);
+  const [airportProfileSearchQuery, setAirportProfileSearchQuery] = useState('');
+  const [airportProfileResults, setAirportProfileResults] = useState<FullRankingItemResponse[]>([]);
+  const [airportProfileSearchPage, setAirportProfileSearchPage] = useState(1);
+  const [airportProfileSearchTotal, setAirportProfileSearchTotal] = useState(0);
+  const [airportProfileTotalPages, setAirportProfileTotalPages] = useState(1);
+  const [airportProfileSearchLoading, setAirportProfileSearchLoading] = useState(false);
+  const [airportProfileSearchError, setAirportProfileSearchError] = useState('');
   const markdownRef = useRef<HTMLTextAreaElement | null>(null);
 
   useEffect(() => {
@@ -461,6 +521,10 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   }, [articleId]);
 
   const readingMinutes = useMemo(() => estimateReadingMinutes(form.content_markdown), [form.content_markdown]);
+  const airportProfileEmbeds = useMemo(
+    () => extractNewsAirportProfileEmbeds(form.content_markdown),
+    [form.content_markdown],
+  );
   const isSlugLocked = form.status !== 'draft';
 
   function buildPayload() {
@@ -726,6 +790,71 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
     }
   }
 
+  function openAirportProfilePicker(): void {
+    setAirportProfilePickerOpen(true);
+    if (airportProfileResults.length === 0) {
+      void searchAirportProfiles(1, airportProfileSearchQuery);
+    }
+  }
+
+  async function searchAirportProfiles(targetPage = 1, queryOverride = airportProfileSearchQuery): Promise<void> {
+    setAirportProfileSearchLoading(true);
+    setAirportProfileSearchError('');
+    try {
+      const search = new URLSearchParams();
+      search.set('page', String(targetPage));
+      const query = queryOverride.trim();
+      if (query) {
+        search.set('q', query);
+      }
+      const result = await apiFetch<FullRankingPageResponse>(`/api/v1/pages/full-ranking?${search.toString()}`);
+      setAirportProfileResults(result.items);
+      setAirportProfileSearchPage(result.page);
+      setAirportProfileSearchTotal(result.total);
+      setAirportProfileTotalPages(result.total_pages);
+      if (result.items.length === 0) {
+        setAirportProfileSearchError('没有找到匹配的机场');
+      }
+    } catch (err: unknown) {
+      setAirportProfileResults([]);
+      setAirportProfileSearchTotal(0);
+      setAirportProfileTotalPages(1);
+      setAirportProfileSearchError(err instanceof Error ? err.message : '机场搜索失败');
+    } finally {
+      setAirportProfileSearchLoading(false);
+    }
+  }
+
+  function insertAirportProfile(item: FullRankingItemResponse): void {
+    const embed = buildAirportProfileEmbed(item);
+    const block = serializeNewsAirportProfileEmbed(embed);
+    setForm((current) => {
+      const markdown = current.content_markdown;
+      const target = markdownRef.current;
+      if (!target) {
+        return { ...current, content_markdown: `${markdown}${block}` };
+      }
+      const start = target.selectionStart || markdown.length;
+      const end = target.selectionEnd || markdown.length;
+      return {
+        ...current,
+        content_markdown: `${markdown.slice(0, start)}${block}${markdown.slice(end)}`,
+      };
+    });
+    setNotice(`已插入「${item.name}」机场简介`);
+    setError('');
+    setAirportProfilePickerOpen(false);
+  }
+
+  function removeAirportProfileBlock(start: number): void {
+    setForm((current) => ({
+      ...current,
+      content_markdown: removeNewsAirportProfileEmbedAt(current.content_markdown, start),
+    }));
+    setNotice('机场简介块已删除');
+    setError('');
+  }
+
   if (loading) {
     return <div className="py-16 text-center text-neutral-400">文章加载中...</div>;
   }
@@ -961,22 +1090,32 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
           <Field
             label="正文 Markdown"
             action={(
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50">
-                <ImageUp size={14} />
-                插入正文图片
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
-                  className="hidden"
-                  onChange={(event) => {
-                    const file = event.target.files?.[0];
-                    if (file) {
-                      void uploadImage('body', file);
-                    }
-                    event.target.value = '';
-                  }}
-                />
-              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+                  onClick={openAirportProfilePicker}
+                >
+                  <Building2 size={14} />
+                  插入机场简介
+                </button>
+                <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50">
+                  <ImageUp size={14} />
+                  插入正文图片
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
+                    className="hidden"
+                    onChange={(event) => {
+                      const file = event.target.files?.[0];
+                      if (file) {
+                        void uploadImage('body', file);
+                      }
+                      event.target.value = '';
+                    }}
+                  />
+                </label>
+              </div>
             )}
           >
             <textarea
@@ -986,6 +1125,36 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
               onChange={(event) => setForm((current) => ({ ...current, content_markdown: event.target.value }))}
               placeholder="# 标题&#10;&#10;使用 Markdown 写正文，支持图片、引用、列表和代码块。"
             />
+            {airportProfileEmbeds.length > 0 ? (
+              <div className="mt-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">已插入机场简介</div>
+                <div className="grid gap-2">
+                  {airportProfileEmbeds.map((match) => (
+                    <div
+                      key={`${match.start}-${match.end}`}
+                      className="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-neutral-900">
+                          {match.embed?.name || '无法解析的机场简介块'}
+                        </div>
+                        <div className="mt-1 text-xs text-neutral-500">
+                          {match.embed ? `Rank #${match.embed.rank} · ${formatScoreLabel(match.embed.score)} · ${match.embed.report_url || '暂无测评报告'}` : '请删除后重新插入'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                        onClick={() => removeAirportProfileBlock(match.start)}
+                      >
+                        <Trash2 size={13} />
+                        整体删除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
           </Field>
         </div>
       </div>
@@ -1008,6 +1177,24 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
         onSearch={(page) => void searchPexelsCovers(page)}
         onPageChange={(page) => void searchPexelsCovers(page)}
         onImport={(item) => void importPexelsCover(item)}
+      />
+      <AirportProfilePickerModal
+        open={airportProfilePickerOpen}
+        query={airportProfileSearchQuery}
+        page={airportProfileSearchPage}
+        totalPages={airportProfileTotalPages}
+        total={airportProfileSearchTotal}
+        results={airportProfileResults}
+        loading={airportProfileSearchLoading}
+        error={airportProfileSearchError}
+        onClose={() => setAirportProfilePickerOpen(false)}
+        onQueryChange={(value) => {
+          setAirportProfileSearchQuery(value);
+          setAirportProfileSearchPage(1);
+        }}
+        onSearch={(page) => void searchAirportProfiles(page)}
+        onPageChange={(page) => void searchAirportProfiles(page)}
+        onInsert={insertAirportProfile}
       />
     </section>
   );
@@ -1216,6 +1403,194 @@ function CoverPickerModal({
   );
 }
 
+function AirportProfilePickerModal({
+  open,
+  query,
+  page,
+  totalPages,
+  total,
+  results,
+  loading,
+  error,
+  onClose,
+  onQueryChange,
+  onSearch,
+  onPageChange,
+  onInsert,
+}: {
+  open: boolean;
+  query: string;
+  page: number;
+  totalPages: number;
+  total: number;
+  results: FullRankingItemResponse[];
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+  onQueryChange: (value: string) => void;
+  onSearch: (page: number) => void;
+  onPageChange: (page: number) => void;
+  onInsert: (item: FullRankingItemResponse) => void;
+}) {
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-0 backdrop-blur-sm md:items-center md:p-4"
+      onClick={onClose}
+    >
+      <div
+        className="flex h-full w-full flex-col overflow-hidden rounded-none border-0 bg-white shadow-none md:h-auto md:max-h-[88vh] md:max-w-5xl md:rounded-[28px] md:border md:border-neutral-200 md:shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)]"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-neutral-200 px-5 py-4 md:px-6 md:py-5">
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold tracking-tight md:text-2xl">插入机场简介</h3>
+            <p className="text-sm text-neutral-500">从全量榜单选择机场，插入后会在文章页渲染为可索引的机场简介卡片。</p>
+          </div>
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 hover:text-neutral-900"
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-5 md:px-6 md:py-6">
+          <section className="rounded-2xl border border-neutral-200 bg-neutral-50/70 p-4 md:p-5">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end">
+              <div className="flex-1">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">机场搜索</div>
+                <div className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2">
+                  <Search size={15} className="text-neutral-400" />
+                  <input
+                    className="w-full bg-transparent text-sm outline-none"
+                    placeholder="输入机场名、官网、标签或简介关键词"
+                    value={query}
+                    onChange={(event) => onQueryChange(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault();
+                        onSearch(1);
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium hover:bg-neutral-100 disabled:opacity-50"
+                onClick={() => onSearch(1)}
+                disabled={loading}
+              >
+                {loading ? '搜索中...' : '搜索机场'}
+              </button>
+            </div>
+            {error ? (
+              <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-700">
+                {error}
+              </div>
+            ) : null}
+          </section>
+
+          {results.length > 0 ? (
+            <section className="space-y-4">
+              <div className="grid gap-3">
+                {results.map((item) => (
+                  <div key={`${item.airport_id}-${item.rank}`} className="rounded-2xl border border-neutral-200 bg-white p-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-lg bg-neutral-950 px-2.5 py-1 text-xs font-black text-white">#{item.rank}</span>
+                          <div className="text-lg font-black tracking-tight text-neutral-900">{item.name}</div>
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                            {formatAirportStatusLabel(item.status)}
+                          </span>
+                        </div>
+                        <p className="mt-3 line-clamp-2 text-sm leading-6 text-neutral-600">
+                          {item.airport_intro?.trim() || '该机场已进入正式榜单，当前公开页提供官网入口、标签、成立日期、价格与试用支持信息。'}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-neutral-500">
+                          <span>公开分数 {formatScoreLabel(item.score)}</span>
+                          <span>月付 {formatCurrencyLabel(item.plan_price_month)}</span>
+                          <span>{item.has_trial ? '支持试用' : '暂不支持试用'}</span>
+                          {item.report_url ? <span>{item.report_url}</span> : null}
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-1.5">
+                          {[...item.tags, ...buildCapabilityLabels(item)].slice(0, 8).map((label) => (
+                            <span key={label} className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                              {label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+                        onClick={() => onInsert(item)}
+                        disabled={loading}
+                      >
+                        插入
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex flex-col gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="text-sm text-neutral-500">共 {total} 个机场</div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm disabled:opacity-40"
+                    onClick={() => onPageChange(Math.max(1, page - 1))}
+                    disabled={loading || page <= 1}
+                  >
+                    上一页
+                  </button>
+                  <div className="rounded-lg bg-white px-3 py-1.5 text-sm font-medium text-neutral-700">
+                    {page} / {Math.max(1, totalPages)}
+                  </div>
+                  <button
+                    type="button"
+                    className="rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm disabled:opacity-40"
+                    onClick={() => onPageChange(Math.min(Math.max(1, totalPages), page + 1))}
+                    disabled={loading || page >= Math.max(1, totalPages)}
+                  >
+                    下一页
+                  </button>
+                </div>
+              </div>
+            </section>
+          ) : (
+            <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 px-6 py-12 text-center text-sm text-neutral-500">
+              {loading ? '正在加载机场列表...' : '输入关键词搜索机场，或直接从默认榜单里选择。'}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Field({
   label,
   children,
@@ -1244,6 +1619,65 @@ function StatusPill({ status }: { status: NewsArticle['status'] }) {
       : 'border-neutral-200 bg-neutral-100 text-neutral-700';
   const label = status === 'published' ? '已发布' : status === 'archived' ? '已下线' : '草稿';
   return <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold ${tone}`}>{label}</span>;
+}
+
+function buildAirportProfileEmbed(item: FullRankingItemResponse): NewsAirportProfileEmbed {
+  return {
+    version: 1,
+    airport_id: item.airport_id,
+    rank: item.rank,
+    name: item.name,
+    status: item.status,
+    website: item.website,
+    report_url: item.report_url || null,
+    airport_intro: item.airport_intro || null,
+    founded_on: item.founded_on || null,
+    plan_price_month: item.plan_price_month,
+    has_trial: item.has_trial,
+    created_at: item.created_at || null,
+    score: item.score,
+    score_date: item.score_date || null,
+    score_delta_vs_yesterday: {
+      label: item.score_delta_vs_yesterday.label,
+      value: item.score_delta_vs_yesterday.value,
+    },
+    tags: item.tags,
+    capability_labels: buildCapabilityLabels(item),
+  };
+}
+
+function buildCapabilityLabels(item: FullRankingItemResponse): string[] {
+  if (!item.capabilities) {
+    return [];
+  }
+  return [
+    ...item.capabilities.payment_methods.slice(0, 3).map((capability) => capability.label),
+    ...item.capabilities.clients.slice(0, 3).map((capability) => capability.label),
+    ...item.capabilities.import_methods.slice(0, 2).map((capability) => capability.label),
+    ...item.capabilities.regions.slice(0, 4).map((region) => region.label),
+    item.capabilities.plan.supports_annual ? '年付' : '',
+    item.capabilities.plan.has_lifetime_plan ? '不限时套餐' : '',
+    item.capabilities.telegram.has_group ? 'Telegram 群' : '',
+  ].filter(Boolean);
+}
+
+function formatAirportStatusLabel(status: string): string {
+  if (status === 'normal') return '正常';
+  if (status === 'risk') return '观察';
+  if (status === 'down') return '跑路';
+  return status || '未知';
+}
+
+function formatScoreLabel(value: number | null): string {
+  return value === null ? '未公开' : trimNumber(value);
+}
+
+function formatCurrencyLabel(value: number | null): string {
+  return value === null ? '-' : `¥${trimNumber(value)}/月`;
+}
+
+function trimNumber(value: number): string {
+  return Number(value).toFixed(2).replace(/\.?0+$/, '');
 }
 
 function formatDateTime(value: string | null): string {
