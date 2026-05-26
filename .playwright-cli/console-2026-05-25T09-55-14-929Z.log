@@ -130,3 +130,9 @@
 [55446473ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3003/events:0
 [55449477ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3003/events:0
 [55452482ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3003/events:0
+[55497537ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3003/events:0
+[55500542ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3003/events:0
+[55503546ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3003/events:0
+[55506549ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3003/events:0
+[55509554ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3003/events:0
+[55512559ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:3003/events:0
