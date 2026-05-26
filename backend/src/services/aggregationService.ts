@@ -101,13 +101,20 @@ export class AggregationService {
     const base = await this.deps.metricsRepository.getLatestByAirportBeforeDate(airportId, date);
     const performanceRun =
       (await this.deps.performanceRunRepository?.getLatestByAirportAndDate(airportId, date)) ?? null;
-    const medianLatency = performanceLatencies.length
+    const performanceRunDownloads = performanceRun?.tested_nodes
+      .map((node) => node.download_mbps)
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+      .map((value) => round2(value)) ?? [];
+    const effectiveDownloads = performanceRunDownloads.length ? performanceRunDownloads : downloads;
+    const medianLatency = performanceRun?.median_latency_ms ?? (performanceLatencies.length
       ? median(performanceLatencies)
-      : base?.median_latency_ms ?? 999;
-    const medianDownload = downloads.length ? median(downloads) : base?.median_download_mbps ?? 0;
-    const packetLoss = packetLossSamples.length
+      : base?.median_latency_ms ?? 999);
+    const medianDownload = performanceRun?.median_download_mbps ?? (effectiveDownloads.length
+      ? median(effectiveDownloads)
+      : base?.median_download_mbps ?? 0);
+    const packetLoss = performanceRun?.packet_loss_percent ?? (packetLossSamples.length
       ? median(packetLossSamples)
-      : base?.packet_loss_percent ?? 100;
+      : base?.packet_loss_percent ?? 100);
     const hasCurrentDayRiskSnapshot = base?.date === date;
     const domainOk = hasCurrentDayRiskSnapshot
       ? base.domain_ok
@@ -146,7 +153,7 @@ export class AggregationService {
       latency_mean_ms: latencyStats.meanMs,
       latency_std_ms: latencyStats.stdMs,
       latency_cv: latencyStats.cv,
-      download_samples_mbps: downloads,
+      download_samples_mbps: effectiveDownloads,
       median_latency_ms: medianLatency,
       median_download_mbps: medianDownload,
       packet_loss_percent: packetLoss,

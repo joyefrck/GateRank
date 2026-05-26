@@ -120,6 +120,97 @@ test('aggregateForDate converts samples to daily metrics', async () => {
   assert.equal(written[0].ssl_days_left, null);
 });
 
+test('aggregateForDate prefers latest performance run metrics over stale performance probe samples', async () => {
+  const written: DailyMetrics[] = [];
+  const samples: ProbeSample[] = [
+    {
+      id: 1,
+      airport_id: 1,
+      sampled_at: '2026-05-27T00:10:00.000Z',
+      sample_type: 'download',
+      probe_scope: 'performance',
+      latency_ms: null,
+      download_mbps: 0.47,
+      availability: null,
+      source: 'manual-performance',
+    },
+    {
+      id: 2,
+      airport_id: 1,
+      sampled_at: '2026-05-27T00:20:00.000Z',
+      sample_type: 'latency',
+      probe_scope: 'performance',
+      latency_ms: 500,
+      download_mbps: null,
+      availability: null,
+      source: 'manual-performance',
+    },
+    {
+      id: 3,
+      airport_id: 1,
+      sampled_at: '2026-05-27T00:25:00.000Z',
+      sample_type: 'availability',
+      probe_scope: 'stability',
+      latency_ms: null,
+      download_mbps: null,
+      availability: true,
+      source: 'agent',
+    },
+  ];
+
+  const service = new AggregationService({
+    airportRepository: {
+      listAll: async () => [{ id: 1, status: 'normal', is_listed: true }],
+    },
+    probeSampleRepository: {
+      getProbeSamplesInRange: async () => samples,
+      getPacketLossSamplesByDate: async () => [95],
+    },
+    metricsRepository: {
+      getLatestByAirportBeforeDate: async () => null,
+      upsertDaily: async (input) => {
+        written.push(input);
+      },
+    },
+    performanceRunRepository: {
+      getLatestByAirportAndDate: async () => ({
+        id: 9,
+        airport_id: 1,
+        sampled_at: '2026-05-27T01:30:52+08:00',
+        source: 'manual-performance',
+        status: 'success',
+        subscription_format: 'base64',
+        parsed_nodes_count: 23,
+        supported_nodes_count: 23,
+        selected_nodes: [],
+        tested_nodes: [
+          { name: 'US', region: 'US', type: 'vless', status: 'ok', download_mbps: 75.59 },
+          { name: 'JP', region: 'JP', type: 'vless', status: 'ok', download_mbps: 167.6 },
+          { name: 'HK', region: 'HK', type: 'vless', status: 'ok', download_mbps: 208.2 },
+        ],
+        available_nodes_count: 23,
+        unavailable_nodes_count: 0,
+        node_availability_percent: 100,
+        node_unavailability_percent: 0,
+        median_latency_ms: 62.79,
+        median_download_mbps: 167.6,
+        packet_loss_percent: 0,
+        error_code: null,
+        error_message: null,
+        diagnostics: {},
+      }),
+    },
+  });
+
+  const result = await service.aggregateForDate('2026-05-27');
+
+  assert.equal(result.aggregated, 1);
+  assert.equal(written[0].median_latency_ms, 62.79);
+  assert.equal(written[0].median_download_mbps, 167.6);
+  assert.deepEqual(written[0].download_samples_mbps, [75.59, 167.6, 208.2]);
+  assert.equal(written[0].packet_loss_percent, 0);
+});
+
 test('aggregateForDate keeps raw latency_cv and classifies healthy jitter separately from strict stable days', async () => {
   const written: DailyMetrics[] = [];
   const samples: ProbeSample[] = [
