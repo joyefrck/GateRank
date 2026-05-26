@@ -1,2 +1,5 @@
 .env
 backend/.env
+
+# Runtime/browser automation logs
+.playwright-cli/*.log
