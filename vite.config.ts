@@ -5,7 +5,7 @@ import type { Plugin } from 'vite';
 import {defineConfig, loadEnv} from 'vite';
 import { DEFAULT_NEWS_CATEGORIES, DEFAULT_NEWS_TOPICS } from './shared/newsTaxonomy';
 import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from './shared/publishTokenDocs';
-import { PUBLIC_SEO_STATIC_LASTMOD } from './shared/publicSeo';
+import { PUBLIC_DEALS_LASTMOD, PUBLIC_SEO_STATIC_LASTMOD } from './shared/publicSeo';
 import { getIndexableFullRankingFilterPaths } from './shared/fullRankingFilters';
 
 function emitSeoAssets(siteUrl: string): Plugin {
@@ -19,7 +19,7 @@ function emitSeoAssets(siteUrl: string): Plugin {
         ['/', PUBLIC_SEO_STATIC_LASTMOD],
         ['/rankings/all', PUBLIC_SEO_STATIC_LASTMOD],
         ...getIndexableFullRankingFilterPaths().map((pathname) => [pathname, PUBLIC_SEO_STATIC_LASTMOD] as const),
-        ['/deals', PUBLIC_SEO_STATIC_LASTMOD],
+        ['/deals', PUBLIC_DEALS_LASTMOD],
         ['/methodology', PUBLIC_SEO_STATIC_LASTMOD],
         ['/apply', PUBLIC_SEO_STATIC_LASTMOD],
         ['/risk-monitor', PUBLIC_SEO_STATIC_LASTMOD],

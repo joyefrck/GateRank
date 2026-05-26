@@ -1,17 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  BadgeCheck,
-  Bot,
+  BookOpenCheck,
+  CircleHelp,
   Copy,
   ExternalLink,
   Eye,
   Info,
+  ListChecks,
   Scale,
   ShieldCheck,
   Sparkles,
+  Tags,
+  WalletCards,
 } from 'lucide-react';
 
-import { buildDealsSeo } from '../../../shared/publicSeo';
+import { DEALS_CONTENT_SECTIONS, DEALS_FAQ_ITEMS, buildDealsSeo, buildDealsStructuredData } from '../../../shared/publicSeo';
 import type { AirportDealView } from '../../../shared/airportAds';
 import { buildAbsoluteUrl, buildDealsHref, navigate, PageFrame, usePageSeo } from '../../site/publicSite';
 import { createTrackedOutboundClickHandler, trackMarketingPageView } from '../../site/marketing';
@@ -29,17 +32,6 @@ export function DealsPage() {
   const [copiedCode, setCopiedCode] = useState('');
 
   const seo = useMemo(() => buildDealsSeo({ activeDeals: data?.total ?? 0 }), [data?.total]);
-  usePageSeo({
-    ...seo,
-    canonicalPath: buildDealsHref(),
-    structuredData: {
-      '@context': 'https://schema.org',
-      '@type': 'CollectionPage',
-      name: seo.title,
-      description: seo.description,
-      url: buildAbsoluteUrl(buildDealsHref()),
-    },
-  });
 
   useEffect(() => {
     trackMarketingPageView('deals', buildDealsHref());
@@ -77,6 +69,15 @@ export function DealsPage() {
   }, []);
 
   const deals = useMemo(() => data?.items ?? [], [data?.items]);
+  const structuredData = useMemo(
+    () => buildDealsStructuredData(buildAbsoluteUrl('/').replace(/\/+$/, ''), deals, buildDealsHref()),
+    [deals],
+  );
+  usePageSeo({
+    ...seo,
+    canonicalPath: buildDealsHref(),
+    structuredData,
+  });
 
   const copyCoupon = async (code: string) => {
     try {
@@ -92,6 +93,17 @@ export function DealsPage() {
     <PageFrame active="deals">
       <main className="bg-[radial-gradient(circle_at_85%_7%,rgba(37,99,235,0.08),transparent_25%),linear-gradient(180deg,#fff_0%,#fbfdff_58%,#fff_100%)] pb-4">
         <div className="mx-auto w-[min(1240px,calc(100%-64px))] pt-8">
+          <section className="mb-8 rounded-[18px] border border-slate-200 bg-white px-6 py-7 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Deals & Coupons</div>
+            <h1 className="mt-3 max-w-4xl text-[clamp(32px,5vw,56px)] font-black leading-none tracking-normal text-slate-950">机场优惠码大全：活动折扣、免费试用与 USDT 支付优惠</h1>
+            <p className="mt-4 max-w-3xl text-[16px] leading-8 text-slate-600">{seo.description}</p>
+            <div className="mt-5 grid gap-3 md:grid-cols-3">
+              <HeroMetric label="当前活动" value={`${deals.length}/6`} />
+              <HeroMetric label="免费试用" value={`${deals.filter((deal) => deal.supports_trial).length}+`} />
+              <HeroMetric label="支持 USDT" value={`${deals.filter((deal) => deal.supports_usdt).length}+`} />
+            </div>
+          </section>
+
           <div className="mb-8 flex items-center justify-center gap-2 rounded-[10px] border border-blue-200 bg-blue-50 px-[18px] py-3.5 text-center text-[15px] text-blue-900">
             <Info className="h-5 w-5" />
             <strong>重要说明：</strong>
@@ -121,9 +133,21 @@ export function DealsPage() {
             <TrustCard icon={<Scale />} title="不卖排名" body="我们不出售排名或提供榜单位置，坚持独立客观的测评原则。" />
             <TrustCard icon={<ShieldCheck />} title="优惠信息独立于评分" body="优惠活动不影响 GateRank Score，评分仅基于真实使用数据与监测结果。" />
           </section>
+
+          <DealsGuide />
+          <DealsFaq />
         </div>
       </main>
     </PageFrame>
+  );
+}
+
+function HeroMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-[8px] border border-slate-200 bg-slate-50 px-4 py-3">
+      <div className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">{label}</div>
+      <div className="mt-1 text-2xl font-black text-slate-950">{value}</div>
+    </div>
   );
 }
 
@@ -207,6 +231,56 @@ function TrustCard({ icon, title, body }: { icon: React.ReactNode; title: string
         <p className="m-0 mt-1.5 text-[15px] leading-7 text-slate-500">{body}</p>
       </div>
     </div>
+  );
+}
+
+function DealsGuide() {
+  const icons = [<Tags />, <BookOpenCheck />, <ListChecks />, <Sparkles />, <WalletCards />];
+  return (
+    <section className="mt-8 rounded-[18px] border border-slate-200 bg-white p-6" aria-label="机场优惠码指南">
+      <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Coupon Guide</div>
+      <h2 className="mt-2 text-2xl font-black tracking-normal text-slate-950">机场优惠码和活动折扣怎么判断</h2>
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        {DEALS_CONTENT_SECTIONS.map((section, index) => (
+          <article key={section.title} className="rounded-[8px] border border-slate-200 bg-slate-50 p-5">
+            <div className="grid grid-cols-[44px_1fr] gap-4">
+              <div className="grid h-11 w-11 place-items-center rounded-[8px] bg-white text-blue-600 [&>svg]:h-5 [&>svg]:w-5">{icons[index] || <Info />}</div>
+              <div>
+                <h3 className="text-lg font-black tracking-normal text-slate-950">{section.title}</h3>
+                <p className="mt-2 text-sm leading-7 text-slate-600">{section.body}</p>
+                <ul className="mt-3 grid gap-1.5 text-xs font-bold text-slate-500">
+                  {section.facts.map((fact) => (
+                    <li key={fact}>・{fact}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function DealsFaq() {
+  return (
+    <section className="mt-8 rounded-[18px] border border-slate-200 bg-white p-6" aria-label="机场优惠码常见问题">
+      <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">FAQ</div>
+      <h2 className="mt-2 text-2xl font-black tracking-normal text-slate-950">机场优惠码常见问题</h2>
+      <div className="mt-5 grid gap-3">
+        {DEALS_FAQ_ITEMS.map((item) => (
+          <article key={item.question} className="grid grid-cols-[40px_1fr] gap-4 rounded-[8px] border border-slate-200 bg-slate-50 p-4">
+            <div className="grid h-10 w-10 place-items-center rounded-[8px] bg-white text-slate-700">
+              <CircleHelp className="h-5 w-5" />
+            </div>
+            <div>
+              <h3 className="text-base font-black tracking-normal text-slate-950">{item.question}</h3>
+              <p className="mt-1.5 text-sm leading-7 text-slate-600">{item.answer}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 

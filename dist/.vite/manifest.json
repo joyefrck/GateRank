@@ -1,0 +1,33 @@
+{
+  "index.html": {
+    "file": "assets/index.js",
+    "name": "index",
+    "src": "index.html",
+    "isEntry": true,
+    "dynamicImports": [
+      "src/pages/publishTokenDocs/PublishTokenDocsPage.tsx",
+      "src/admin/AdminApp.tsx"
+    ],
+    "css": [
+      "assets/index.css"
+    ]
+  },
+  "src/admin/AdminApp.tsx": {
+    "file": "assets/AdminApp.js",
+    "name": "AdminApp",
+    "src": "src/admin/AdminApp.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ]
+  },
+  "src/pages/publishTokenDocs/PublishTokenDocsPage.tsx": {
+    "file": "assets/PublishTokenDocsPage.js",
+    "name": "PublishTokenDocsPage",
+    "src": "src/pages/publishTokenDocs/PublishTokenDocsPage.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
+    ]
+  }
+}

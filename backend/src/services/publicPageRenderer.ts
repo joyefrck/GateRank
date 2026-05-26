@@ -9,8 +9,11 @@ import type {
 import type { PublicSummaryData } from './machineReadableRenderer';
 import {
   APPLY_SEO,
+  DEALS_CONTENT_SECTIONS,
+  DEALS_FAQ_ITEMS,
   METHODOLOGY_SEO,
   PUBLIC_SEO_PATHS,
+  buildDealsStructuredData,
   buildFullRankingHeading,
   buildFullRankingSeo,
   buildDealsSeo,
@@ -276,23 +279,7 @@ export function renderDealsPublicPage(
     canonicalPath,
     seo,
     active: 'deals',
-    jsonLd: [
-      buildCollectionPageJsonLd(siteUrl, canonicalPath, seo),
-      buildBreadcrumbJsonLd(siteUrl, [
-        ['今日推荐', '/'],
-        ['活动优惠', canonicalPath],
-      ]),
-      {
-        '@context': 'https://schema.org',
-        '@type': 'ItemList',
-        itemListElement: deals.map((deal, index) => ({
-          '@type': 'ListItem',
-          position: index + 1,
-          url: `${siteUrl}${deal.report_url}`,
-          name: deal.airport_name,
-        })),
-      },
-    ],
+    jsonLd: buildDealsStructuredData(siteUrl, deals, canonicalPath),
     initialData: {
       kind: 'deals',
       params: {},
@@ -303,7 +290,7 @@ export function renderDealsPublicPage(
       <main class="page-main">
         <section class="hero">
           <div class="eyebrow">DEALS &amp; COUPONS</div>
-          <h1>活动优惠专区</h1>
+          <h1>机场优惠码大全：活动折扣、免费试用与 USDT 支付优惠</h1>
           <p>${escapeHtml(seo.description)}</p>
           <div class="metric-grid">
             ${renderMetric('广告位', `${deals.length}/6`)}
@@ -323,6 +310,8 @@ export function renderDealsPublicPage(
             ${deals.length > 0 ? deals.map(renderDealMiniCard).join('') : '<p class="muted">当前暂无上架广告活动。</p>'}
           </div>
         </section>
+        ${renderDealsGuideSections()}
+        ${renderDealsFaqSection()}
       </main>
     `,
   });
@@ -1059,6 +1048,40 @@ function renderDealMiniCard(deal: AirportDealView): string {
       <p><a href="${escapeAttribute(deal.report_url)}">查看测评</a> · <a href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow noreferrer noopener">访问官网</a></p>
       <p class="muted">本活动不影响 GateRank Score。</p>
     </article>
+  `;
+}
+
+function renderDealsGuideSections(): string {
+  return `
+    <section class="content-card">
+      <div class="eyebrow">机场优惠码指南</div>
+      <h2>机场优惠码和活动折扣怎么判断</h2>
+      <div class="card-grid">
+        ${DEALS_CONTENT_SECTIONS.map((section) => `
+          <article class="mini-card">
+            <h3>${escapeHtml(section.title)}</h3>
+            <p>${escapeHtml(section.body)}</p>
+            <p class="muted">${section.facts.map(escapeHtml).join(' · ')}</p>
+          </article>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderDealsFaqSection(): string {
+  return `
+    <section class="content-card">
+      <h2>机场优惠码常见问题</h2>
+      <div class="card-grid">
+        ${DEALS_FAQ_ITEMS.map((item) => `
+          <article class="mini-card">
+            <h3>${escapeHtml(item.question)}</h3>
+            <p>${escapeHtml(item.answer)}</p>
+          </article>
+        `).join('')}
+      </div>
+    </section>
   `;
 }
 

@@ -48,5 +48,21 @@
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
     "vite": "^6.4.2"
-  }
+  },
+  "description": "GateRank 是一个「机场测评与榜单」系统。   目标是基于稳定性、性能、价格、风险四个维度，生成可解释、可追踪的每日评分与榜单。",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/joyefrck/GateRank.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/joyefrck/GateRank/issues"
+  },
+  "homepage": "https://github.com/joyefrck/GateRank#readme"
 }

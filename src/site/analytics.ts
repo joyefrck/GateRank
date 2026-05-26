@@ -3,7 +3,8 @@ const ADMIN_PATH_PREFIX = '/admin';
 const GA_SCRIPT_SELECTOR = 'script[data-gaterank-ga="true"]';
 
 function getMeasurementId(): string {
-  const measurementId = import.meta.env.VITE_GA_MEASUREMENT_ID?.trim();
+  const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
+  const measurementId = env?.VITE_GA_MEASUREMENT_ID?.trim();
   return measurementId || DEFAULT_GA_MEASUREMENT_ID;
 }
 
@@ -41,13 +42,16 @@ export function initializeAnalytics(): void {
   }
 
   window.gtag('js', new Date());
-  window.gtag('config', measurementId, {
-    send_page_view: false,
-  });
+  window.gtag('config', measurementId);
+  lastTrackedPagePath = getCurrentPagePath();
   window.__GATERANK_GA_INITIALIZED__ = true;
 }
 
-let lastTrackedPageView = '';
+let lastTrackedPagePath = '';
+
+function getCurrentPagePath(): string {
+  return `${window.location.pathname}${window.location.search}${window.location.hash}`;
+}
 
 export function trackPageView(): void {
   if (!isAnalyticsEnabled() || !window.__GATERANK_GA_INITIALIZED__) {
@@ -59,16 +63,15 @@ export function trackPageView(): void {
   }
 
   const measurementId = getMeasurementId();
-  const pagePath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  const pagePath = getCurrentPagePath();
   const pageLocation = window.location.href;
   const pageTitle = document.title;
-  const dedupeKey = `${pagePath}|${pageTitle}`;
 
-  if (lastTrackedPageView === dedupeKey) {
+  if (lastTrackedPagePath === pagePath) {
     return;
   }
 
-  lastTrackedPageView = dedupeKey;
+  lastTrackedPagePath = pagePath;
   window.gtag('event', 'page_view', {
     send_to: measurementId,
     page_title: pageTitle,

@@ -5,6 +5,7 @@ import {
   hasFullRankingFilters,
   type FullRankingFilters,
 } from './fullRankingFilters';
+import type { AirportDealView } from './airportAds';
 
 export interface PublicSeoText {
   title: string;
@@ -116,6 +117,17 @@ export interface PublicReportContentSummary {
   chips: string[];
 }
 
+export interface PublicDealsContentSection {
+  title: string;
+  body: string;
+  facts: string[];
+}
+
+export interface PublicDealsFaqItem {
+  question: string;
+  answer: string;
+}
+
 export const PUBLIC_SEO_PATHS = {
   home: '/',
   fullRanking: '/rankings/all',
@@ -127,6 +139,7 @@ export const PUBLIC_SEO_PATHS = {
 } as const;
 
 export const PUBLIC_SEO_STATIC_LASTMOD = '2026-05-17T00:00:00+08:00';
+export const PUBLIC_DEALS_LASTMOD = '2026-05-26T00:00:00+08:00';
 
 export function buildHomeSeo(input?: {
   dateLabel?: string;
@@ -237,13 +250,103 @@ export function buildDealsSeo(input?: {
   activeDeals?: number;
 }): PublicSeoText {
   return {
-    title: `活动优惠专区 | 机场优惠码、限时折扣与免费试用 | ${PUBLIC_SITE_BRAND_NAME}`,
+    title: `机场优惠码大全 | 机场折扣、活动优惠、免费试用与 USDT 支付 | ${PUBLIC_SITE_BRAND_NAME}`,
     description:
       typeof input?.activeDeals === 'number'
-        ? `${PUBLIC_SITE_BRAND_NAME} 活动优惠专区当前展示 ${formatCount(input.activeDeals)} 个机场广告活动，聚合优惠码、限时折扣、免费试用与新用户优惠。优惠信息不影响 GateRank Score 与榜单排序。`
-        : `${PUBLIC_SITE_BRAND_NAME} 活动优惠专区聚合机场服务商发布的优惠码、限时折扣、免费试用与新用户活动。优惠信息不影响 GateRank Score 与榜单排序。`,
-    keywords: '机场优惠码,机场活动,机场折扣,机场免费试用,机场广告,GateRank活动优惠,机场榜GateRank',
+        ? `${PUBLIC_SITE_BRAND_NAME} 机场优惠码大全当前展示 ${formatCount(input.activeDeals)} 个机场广告活动，聚合机场折扣、免费试用、新用户优惠与 USDT 支付优惠。优惠信息不影响 GateRank Score。`
+        : `${PUBLIC_SITE_BRAND_NAME} 机场优惠码大全聚合机场服务商发布的活动折扣、免费试用、新用户优惠与 USDT 支付优惠。优惠信息不影响 GateRank Score。`,
+    keywords: '机场优惠码大全,机场优惠码,机场折扣,机场活动优惠,机场免费试用,USDT支付优惠,GateRank活动优惠,机场榜GateRank',
   };
+}
+
+export const DEALS_CONTENT_SECTIONS: PublicDealsContentSection[] = [
+  {
+    title: '什么是机场优惠码',
+    body: '机场优惠码通常是服务商在新用户购买、续费、节日活动或指定套餐中提供的折扣凭证。它只能说明当前有商业活动，不能替代对稳定性、速度、风险记录和售后能力的判断。',
+    facts: ['先确认适用套餐和时间范围', '再查看测评报告和风险记录', '优惠信息不影响 GateRank Score'],
+  },
+  {
+    title: '机场优惠码和机场推荐有什么区别',
+    body: '优惠码页面展示的是广告活动和公开折扣；机场推荐页面关注测评数据、排名、风险和长期表现。GateRank 不把广告投放、优惠码或活动折扣计入榜单排序。',
+    facts: ['优惠码用于省钱', '推荐用于判断服务质量', '广告标识保持可见'],
+  },
+  {
+    title: '如何判断机场折扣是否值得买',
+    body: '判断折扣时应同时看原价、折后价、套餐周期、退款规则、试用支持和历史可用性。低价不一定代表更合适，长期套餐尤其需要先确认近期表现和风险信号。',
+    facts: ['对比月付折后成本', '优先验证试用或短周期套餐', '关注退款和工单规则'],
+  },
+  {
+    title: '新用户优惠、续费优惠、免费试用有什么区别',
+    body: '新用户优惠通常限制首次购买；续费优惠面向已有账号；免费试用更适合先验证节点、客户端和解锁能力。三类活动的限制不同，购买前应以服务商页面和本页活动时间为准。',
+    facts: ['新用户优惠看首单限制', '续费优惠看账号资格', '免费试用看流量和时长'],
+  },
+  {
+    title: 'USDT 支付优惠需要注意什么',
+    body: 'USDT 支付通常涉及链类型、到账确认、汇率、退款方式和订单备注。使用加密货币前，应确认服务商支持的网络、支付地址、订单有效期和售后处理方式。',
+    facts: ['核对链类型和金额', '保留交易哈希', '确认退款是否支持原路返回'],
+  },
+];
+
+export const DEALS_FAQ_ITEMS: PublicDealsFaqItem[] = [
+  {
+    question: 'GateRank 的机场优惠码会影响排名吗？',
+    answer: '不会。优惠信息、广告投放和优惠码不影响 GateRank Score，也不影响榜单排序。',
+  },
+  {
+    question: '机场优惠码过期了怎么办？',
+    answer: '优惠码可能受活动时间、套餐类型和库存限制影响。若优惠码不可用，应以服务商官网结算页提示为准，并避免为了折扣购买不合适的长期套餐。',
+  },
+  {
+    question: '只看折扣力度可以决定购买吗？',
+    answer: '不建议只看折扣。建议同时查看测评报告、风险记录、近期稳定性、退款规则、试用支持和支付方式。',
+  },
+  {
+    question: 'USDT 支付优惠一定更划算吗？',
+    answer: '不一定。USDT 支付需要考虑网络手续费、汇率、到账确认时间和退款方式，适合能自行核对交易信息的用户。',
+  },
+];
+
+export function buildDealsStructuredData(
+  siteUrl: string,
+  deals: AirportDealView[],
+  canonicalPath: string = PUBLIC_SEO_PATHS.deals,
+): Array<Record<string, unknown>> {
+  const normalizedSiteUrl = siteUrl.replace(/\/+$/, '');
+  const seo = buildDealsSeo({ activeDeals: deals.length });
+  return [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: seo.title,
+      description: seo.description,
+      url: `${normalizedSiteUrl}${canonicalPath}`,
+    },
+    buildBreadcrumbJsonLd(normalizedSiteUrl, [
+      ['今日推荐', '/'],
+      ['活动优惠', canonicalPath],
+    ]),
+    {
+      '@context': 'https://schema.org',
+      '@type': 'ItemList',
+      itemListElement: deals.map((deal, index) => ({
+        '@type': 'ListItem',
+        position: index + 1,
+        item: buildDealOfferJsonLd(normalizedSiteUrl, deal),
+      })),
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: DEALS_FAQ_ITEMS.map((item) => ({
+        '@type': 'Question',
+        name: item.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: item.answer,
+        },
+      })),
+    },
+  ];
 }
 
 export function buildReportSeo(input?: PublicReportSeoView): PublicSeoText {
@@ -709,6 +812,42 @@ function buildBreadcrumbJsonLd(siteUrl: string, items: Array<[string, string]>):
       item: `${siteUrl}${path}`,
     })),
   };
+}
+
+function buildDealOfferJsonLd(siteUrl: string, deal: AirportDealView): Record<string, unknown> {
+  const websiteUrl = normalizeExternalHref(deal.website);
+  const reportUrl = `${siteUrl}${deal.report_url}`;
+  return {
+    '@type': 'Offer',
+    name: `${deal.airport_name} ${deal.discount_title || '机场优惠码'}`,
+    description: deal.discount_description,
+    url: reportUrl,
+    validFrom: deal.starts_at,
+    validThrough: deal.ends_at,
+    availability: 'https://schema.org/InStock',
+    seller: {
+      '@type': 'Organization',
+      name: deal.airport_name,
+      url: websiteUrl,
+    },
+    category: '机场优惠码',
+    itemOffered: {
+      '@type': 'Service',
+      name: deal.airport_name,
+      url: reportUrl,
+      provider: {
+        '@type': 'Organization',
+        name: deal.airport_name,
+        url: websiteUrl,
+      },
+    },
+  };
+}
+
+function normalizeExternalHref(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 function buildReportRankingItemList(siteUrl: string, view: PublicReportSeoView): Record<string, unknown> {
