@@ -16,6 +16,23 @@ export function buildPerformanceNodeKey(node: SubscriptionNodeSnapshotNode): str
   return sha256(identity);
 }
 
+export function buildPerformanceNodeMatchIdentity(node: {
+  name?: string | null;
+  region?: string | null;
+  type?: string | null;
+}): string {
+  const identity = [
+    normalizeIdentityPart(node.name),
+    normalizeIdentityPart(node.region),
+    normalizeIdentityPart(node.type),
+  ].join('|');
+  return sha256(identity);
+}
+
+function normalizeIdentityPart(value: string | null | undefined): string {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex');
 }

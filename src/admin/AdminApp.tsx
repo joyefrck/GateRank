@@ -510,6 +510,7 @@ type PerformanceNodeSelectionNode = {
   name: string;
   region?: string | null;
   type?: string | null;
+  match_identity?: string | null;
 };
 
 type PerformanceNodeSelectionView = {
@@ -9013,7 +9014,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
 
   const openPerformanceNodeSelection = async () => {
     setPerformanceNodeSelectionError('');
-    const data = performanceNodeSelection || await loadPerformanceNodeSelection();
+    const data = await loadPerformanceNodeSelection();
     setPerformanceNodeSelectionDraft(filterPerformanceNodeKeys(data?.selected_keys || [], data?.nodes || []));
     setPerformanceNodeSelectionOpen(true);
   };

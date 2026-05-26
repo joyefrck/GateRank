@@ -7,7 +7,7 @@ import { createAdminRoutes } from '../src/routes/adminRoutes';
 import { SmtpSendError } from '../src/services/mailService';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
 import type { PerformanceRunInput, ProbeSampleInput, ReportView } from '../src/types/domain';
-import { buildPerformanceNodeKey } from '../src/utils/performanceNodeKey';
+import { buildPerformanceNodeKey, buildPerformanceNodeMatchIdentity } from '../src/utils/performanceNodeKey';
 
 test('POST /performance-runs stores run diagnostics and performance samples', async () => {
   const insertedSamples: ProbeSampleInput[] = [];
@@ -335,9 +335,193 @@ test('GET and PATCH /airports/:id/performance-node-selection expose sanitized ca
     assert.deepEqual(patchData.selected_keys, [nodeKey]);
     assert.equal(savedSelections.length, 1);
     assert.equal((savedSelections[0] as { updated_by: string }).updated_by, 'ops');
+    assert.equal(
+      (savedSelections[0] as { selected_nodes: Array<{ match_identity?: string }> }).selected_nodes[0]?.match_identity,
+      buildPerformanceNodeMatchIdentity(snapshotNode),
+    );
     assert.equal(audits[0]?.action, 'update_performance_node_selection');
     assert.equal(JSON.stringify(audits[0]?.payload).includes('secret'), false);
     assert.equal(JSON.stringify(audits[0]?.payload).includes('raw_uri'), false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/performance-node-selection remaps saved selections after snapshot key churn', async () => {
+  const oldNodes = Array.from({ length: 8 }, (_, index) => {
+    const number = index + 1;
+    return {
+      name: `HK-IEPL-${number}`,
+      region: 'HK',
+      type: 'trojan',
+      outbound: { type: 'trojan', server: `hk-${number}.example.com`, server_port: 443, password: 'old-secret' },
+      raw_uri: `trojan://old-secret@hk-${number}.example.com:443#HK-IEPL-${number}`,
+    };
+  });
+  const newNodes = oldNodes.map((node, index) => {
+    const number = index + 1;
+    return {
+      ...node,
+      outbound: { type: 'trojan', server: `hk-${number}.example.com`, server_port: 443, password: 'new-secret' },
+      raw_uri: `trojan://new-secret@hk-${number}.example.com:443#HK-IEPL-${number}`,
+    };
+  });
+  const newKeys = newNodes.map((node) => buildPerformanceNodeKey(node));
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      subscriptionNodeSnapshotRepository: {
+        insert: async () => 1,
+        getLatestByAirport: async (airportId) => ({
+          id: 22,
+          airport_id: airportId,
+          captured_at: '2026-05-27T00:52:12+08:00',
+          source: 'manual-performance',
+          subscription_url: 'https://sub.example.com',
+          subscription_format: 'plain',
+          parsed_nodes_count: newNodes.length,
+          supported_nodes_count: newNodes.length,
+          nodes: newNodes,
+          unsupported_nodes: [],
+          created_at: '2026-05-27T00:52:13+08:00',
+        }),
+      },
+      performanceNodePreferenceRepository: {
+        getByAirport: async () => ({
+          airport_id: 9,
+          selected_nodes: oldNodes.map((node) => ({
+            key: buildPerformanceNodeKey(node),
+            name: node.name,
+            region: node.region,
+            type: node.type,
+          })),
+          updated_by: 'admin',
+          updated_at: '2026-05-26T23:22:29+08:00',
+        }),
+        save: async () => undefined,
+        clear: async () => true,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/9/performance-node-selection`);
+    const data = (await response.json()) as { selected_keys: string[]; mode: string };
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(data.selected_keys, newKeys);
+    assert.equal(data.mode, 'specified');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:id/performance-node-selection does not remap ambiguous duplicate nodes', async () => {
+  const oldNode = {
+    name: 'HK-IEPL',
+    region: 'HK',
+    type: 'trojan',
+    outbound: { type: 'trojan', server: 'old.example.com', server_port: 443, password: 'old-secret' },
+    raw_uri: 'trojan://old-secret@old.example.com:443#HK-IEPL',
+  };
+  const duplicateNodes = [
+    {
+      name: 'HK-IEPL',
+      region: 'HK',
+      type: 'trojan',
+      outbound: { type: 'trojan', server: 'new-a.example.com', server_port: 443, password: 'secret-a' },
+      raw_uri: 'trojan://secret-a@new-a.example.com:443#HK-IEPL',
+    },
+    {
+      name: 'HK-IEPL',
+      region: 'HK',
+      type: 'trojan',
+      outbound: { type: 'trojan', server: 'new-b.example.com', server_port: 443, password: 'secret-b' },
+      raw_uri: 'trojan://secret-b@new-b.example.com:443#HK-IEPL',
+    },
+  ];
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: stubAirportRepository(),
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      subscriptionNodeSnapshotRepository: {
+        insert: async () => 1,
+        getLatestByAirport: async (airportId) => ({
+          id: 23,
+          airport_id: airportId,
+          captured_at: '2026-05-27T00:52:12+08:00',
+          source: 'manual-performance',
+          subscription_url: 'https://sub.example.com',
+          subscription_format: 'plain',
+          parsed_nodes_count: duplicateNodes.length,
+          supported_nodes_count: duplicateNodes.length,
+          nodes: duplicateNodes,
+          unsupported_nodes: [],
+          created_at: '2026-05-27T00:52:13+08:00',
+        }),
+      },
+      performanceNodePreferenceRepository: {
+        getByAirport: async () => ({
+          airport_id: 9,
+          selected_nodes: [{
+            key: buildPerformanceNodeKey(oldNode),
+            name: oldNode.name,
+            region: oldNode.region,
+            type: oldNode.type,
+          }],
+          updated_by: 'admin',
+          updated_at: '2026-05-26T23:22:29+08:00',
+        }),
+        save: async () => undefined,
+        clear: async () => true,
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/9/performance-node-selection`);
+    const data = (await response.json()) as { selected_keys: string[]; mode: string };
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(data.selected_keys, []);
+    assert.equal(data.mode, 'default');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

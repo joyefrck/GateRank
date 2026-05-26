@@ -90,16 +90,21 @@ function normalizeSelectedNodes(value: unknown): PerformanceNodePreferenceNode[]
     const record = item as Record<string, unknown>;
     const key = String(record.key || '').trim();
     const name = String(record.name || '').trim();
+    const matchIdentity = String(record.match_identity || '').trim();
     if (!key || !name || seen.has(key)) {
       continue;
     }
     seen.add(key);
-    nodes.push({
+    const normalizedNode: PerformanceNodePreferenceNode = {
       key,
       name,
       region: record.region == null ? null : String(record.region),
       type: record.type == null ? null : String(record.type),
-    });
+    };
+    if (matchIdentity) {
+      normalizedNode.match_identity = matchIdentity;
+    }
+    nodes.push(normalizedNode);
   }
   return nodes;
 }

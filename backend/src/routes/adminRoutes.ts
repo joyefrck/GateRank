@@ -74,7 +74,7 @@ import {
   isStableDay,
 } from '../utils/stability';
 import { buildPortalLoginUrl, getSiteOrigin } from '../utils/siteUrl';
-import { buildPerformanceNodeKey } from '../utils/performanceNodeKey';
+import { buildPerformanceNodeKey, buildPerformanceNodeMatchIdentity } from '../utils/performanceNodeKey';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
 
 interface AdminDeps {
@@ -1849,10 +1849,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         getPerformanceNodePreferenceRepository(deps).getByAirport(airportId),
       ]);
       const candidates = snapshot ? buildPerformanceNodeSelectionCandidates(snapshot.nodes) : [];
-      const candidateKeys = new Set(candidates.map((node) => node.key));
-      const selectedKeys = (preference?.selected_nodes || [])
-        .map((node) => node.key)
-        .filter((key) => candidateKeys.has(key));
+      const selectedKeys = resolvePerformanceNodeSelectionKeys(preference?.selected_nodes || [], candidates);
 
       res.json({
         airport_id: airportId,
@@ -3645,9 +3642,44 @@ function buildPerformanceNodeSelectionCandidates(nodes: SubscriptionNodeSnapshot
       name: node.name,
       region: node.region ?? null,
       type: node.type ?? null,
+      match_identity: buildPerformanceNodeMatchIdentity(node),
     });
   }
   return candidates;
+}
+
+function resolvePerformanceNodeSelectionKeys(
+  savedNodes: PerformanceNodePreferenceNode[],
+  candidates: PerformanceNodePreferenceNode[],
+): string[] {
+  const candidatesByKey = new Map(candidates.map((node) => [node.key, node]));
+  const candidatesByIdentity = new Map<string, PerformanceNodePreferenceNode[]>();
+  for (const candidate of candidates) {
+    const identity = performanceNodeMatchIdentity(candidate);
+    const group = candidatesByIdentity.get(identity) || [];
+    group.push(candidate);
+    candidatesByIdentity.set(identity, group);
+  }
+
+  const selectedKeys: string[] = [];
+  const seen = new Set<string>();
+  for (const savedNode of savedNodes) {
+    let candidate = candidatesByKey.get(savedNode.key);
+    if (!candidate) {
+      const identityMatches = candidatesByIdentity.get(performanceNodeMatchIdentity(savedNode)) || [];
+      candidate = identityMatches.length === 1 ? identityMatches[0] : undefined;
+    }
+    if (!candidate || seen.has(candidate.key)) {
+      continue;
+    }
+    seen.add(candidate.key);
+    selectedKeys.push(candidate.key);
+  }
+  return selectedKeys;
+}
+
+function performanceNodeMatchIdentity(node: PerformanceNodePreferenceNode): string {
+  return String(node.match_identity || '').trim() || buildPerformanceNodeMatchIdentity(node);
 }
 
 function numberOrNull(value: unknown): number | null {

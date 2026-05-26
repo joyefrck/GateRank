@@ -827,6 +827,7 @@ export interface PerformanceNodePreferenceNode {
   name: string;
   region?: string | null;
   type?: string | null;
+  match_identity?: string | null;
 }
 
 export interface PerformanceNodePreference {
