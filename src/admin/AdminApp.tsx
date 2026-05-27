@@ -3673,7 +3673,7 @@ function NotificationSettingsTab({ refreshTick }: { refreshTick: number }) {
             <ReadField label="最近更新人" value={valueOrDash(settings?.updated_by)} />
             <ReadField label="最近更新时间" value={formatDateTimeInBeijing(settings?.updated_at)} />
             <ReadField label="Telegram Token" value={settings?.telegram_chat.has_bot_token ? `已配置 (${settings?.telegram_chat.bot_token_masked || '-'})` : '未配置'} />
-            <ReadField label="Telegram Chat ID" value={valueOrDash(settings?.telegram_chat.chat_id)} />
+            <ReadField label="Telegram Chat IDs" value={valueOrDash(settings?.telegram_chat.chat_id)} />
             <ReadField label="Webhook Bearer" value={settings?.webhook.has_bearer_token ? `已配置 (${settings?.webhook.bearer_token_masked || '-'})` : '未配置'} />
             <ReadField label="Webhook URL" value={valueOrDash(settings?.webhook.url)} />
           </div>
@@ -3749,10 +3749,10 @@ function NotificationSettingsTab({ refreshTick }: { refreshTick: number }) {
                   </div>
                 </FormField>
 
-                <FormField label="Chat ID" hint="例如群组 chat id 通常是 -100 开头。">
-                  <input
-                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                    placeholder="-1001234567890"
+                <FormField label="Chat IDs" hint="支持一行一个，也可用英文逗号、中文逗号或空格分隔；群组 chat id 通常是 -100 开头。">
+                  <textarea
+                    className="min-h-28 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    placeholder={"-1001234567890\n7545395901"}
                     value={form.telegram_chat.chat_id}
                     onChange={(e) => setForm({
                       ...form,

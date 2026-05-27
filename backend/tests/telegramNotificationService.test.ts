@@ -146,6 +146,78 @@ test('TelegramNotificationService falls back to env config when DB config is abs
   }
 });
 
+test('TelegramNotificationService sends Telegram notifications to unique configured chat ids', async () => {
+  const calls: Array<{ url: string; body: Record<string, unknown> }> = [];
+  const service = new TelegramNotificationService({
+    systemSettingRepository: {
+      getByKey: async () => ({
+        setting_key: 'telegram_notifications',
+        value_json: {
+          enabled: true,
+          delivery_mode: 'telegram_chat',
+          telegram_chat: {
+            bot_token: 'multi-token',
+            chat_id: 'alpha, beta\nalpha，gamma   beta',
+            api_base: 'https://api.telegram.org',
+            timeout_ms: 5000,
+          },
+          webhook: {
+            url: '',
+            bearer_token: '',
+            timeout_ms: 5000,
+          },
+        },
+        updated_by: 'admin',
+        created_at: '2026-03-25 10:00:00',
+        updated_at: '2026-03-25 10:00:00',
+      }),
+      upsert: async () => undefined,
+    },
+    fetchImpl: async (url, init) => {
+      calls.push({
+        url: String(url),
+        body: JSON.parse(String(init?.body || '{}')) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    },
+  });
+
+  await service.notifyNewAirportApplication(sampleApplication);
+
+  assert.equal(calls.length, 3);
+  assert.deepEqual(calls.map((call) => call.body.chat_id), ['alpha', 'beta', 'gamma']);
+  assert.ok(calls.every((call) => call.url === 'https://api.telegram.org/botmulti-token/sendMessage'));
+});
+
+test('TelegramNotificationService sends Telegram test messages to env chat ids', async () => {
+  const originalToken = process.env.TELEGRAM_BOT_TOKEN;
+  const originalChat = process.env.TELEGRAM_CHAT_ID;
+  process.env.TELEGRAM_BOT_TOKEN = 'env-token';
+  process.env.TELEGRAM_CHAT_ID = 'first second,third';
+
+  const calls: Array<{ body: Record<string, unknown> }> = [];
+  const service = new TelegramNotificationService({
+    systemSettingRepository: {
+      getByKey: async () => null,
+      upsert: async () => undefined,
+    },
+    fetchImpl: async (_url, init) => {
+      calls.push({
+        body: JSON.parse(String(init?.body || '{}')) as Record<string, unknown>,
+      });
+      return new Response(JSON.stringify({ ok: true }), { status: 200 });
+    },
+  });
+
+  try {
+    await service.sendTestMessage();
+    assert.deepEqual(calls.map((call) => call.body.chat_id), ['first', 'second', 'third']);
+  } finally {
+    process.env.TELEGRAM_BOT_TOKEN = originalToken;
+    process.env.TELEGRAM_CHAT_ID = originalChat;
+  }
+});
+
 test('TelegramNotificationService sends webhook notifications when webhook mode is enabled', async () => {
   const originalApiBase = process.env.API_BASE;
   process.env.API_BASE = 'https://gaterank.example.com/';

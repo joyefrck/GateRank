@@ -181,7 +181,7 @@ export class TelegramNotificationService {
         [
           'GateRank Telegram 配置测试',
           `发送时间: ${formatDateTimeInTimezoneIso()}`,
-          `Chat ID: ${telegramConfig.chat_id}`,
+          `Chat IDs: ${parseTelegramChatIds(telegramConfig.chat_id).join(', ')}`,
         ].join('\n'),
       );
       return;
@@ -302,7 +302,7 @@ export class TelegramNotificationService {
     if (config.bot_token.trim() === '') {
       throw new TelegramSendError('Telegram Bot Token 未配置');
     }
-    if (config.chat_id.trim() === '') {
+    if (parseTelegramChatIds(config.chat_id).length === 0) {
       throw new TelegramSendError('Telegram Chat ID 未配置');
     }
     return config;
@@ -322,13 +322,23 @@ export class TelegramNotificationService {
     config: TelegramChatConfig,
     text: string,
   ): Promise<void> {
+    for (const chatId of parseTelegramChatIds(config.chat_id)) {
+      await this.sendTelegramMessageToChat(config, chatId, text);
+    }
+  }
+
+  private async sendTelegramMessageToChat(
+    config: TelegramChatConfig,
+    chatId: string,
+    text: string,
+  ): Promise<void> {
     const response = await this.fetchImpl(`${config.api_base}/bot${config.bot_token}/sendMessage`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        chat_id: config.chat_id,
+        chat_id: chatId,
         text,
         disable_web_page_preview: true,
       }),
@@ -528,6 +538,21 @@ function normalizeConfig(value: unknown): NotificationConfig {
 
 function normalizeDeliveryMode(value: unknown): NotificationDeliveryMode {
   return value === 'webhook' ? 'webhook' : 'telegram_chat';
+}
+
+function parseTelegramChatIds(value: string): string[] {
+  const seen = new Set<string>();
+  const chatIds: string[] = [];
+
+  for (const chatId of value.split(/[\s,，]+/).map((item) => item.trim()).filter(Boolean)) {
+    if (seen.has(chatId)) {
+      continue;
+    }
+    seen.add(chatId);
+    chatIds.push(chatId);
+  }
+
+  return chatIds;
 }
 
 function normalizeApiBase(value: unknown): string {

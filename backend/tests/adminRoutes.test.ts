@@ -4201,7 +4201,7 @@ test('PATCH /system-settings/telegram updates settings and writes audit log', as
         enabled: true,
         delivery_mode: 'webhook',
         telegram_chat: {
-          chat_id: '-10012345',
+          chat_id: '-10012345\n7545395901',
           api_base: 'https://api.telegram.org',
           timeout_ms: 5000,
         },
@@ -4218,7 +4218,7 @@ test('PATCH /system-settings/telegram updates settings and writes audit log', as
     assert.equal(updates[0].delivery_mode, 'webhook');
     assert.deepEqual(updates[0].telegram_chat, {
       bot_token: undefined,
-      chat_id: '-10012345',
+      chat_id: '-10012345\n7545395901',
       api_base: 'https://api.telegram.org',
       timeout_ms: 5000,
     });
