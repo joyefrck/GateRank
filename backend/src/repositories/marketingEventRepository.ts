@@ -113,7 +113,7 @@ export class MarketingEventRepository {
         source_type VARCHAR(64) NOT NULL DEFAULT 'direct_or_unknown',
         source_label VARCHAR(255) NOT NULL DEFAULT 'Direct / Unknown',
         airport_id BIGINT UNSIGNED NULL,
-        placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'deal_card') NULL,
+        placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'deal_card', 'news_article') NULL,
         target_kind ENUM('website', 'subscription_url') NULL,
         target_url VARCHAR(2048) NULL,
         utm_source VARCHAR(255) NULL,
@@ -149,7 +149,7 @@ export class MarketingEventRepository {
     await this.pool.query(`
       ALTER TABLE marketing_events
         MODIFY COLUMN page_kind ENUM('home', 'full_ranking', 'risk_monitor', 'report', 'deals', 'methodology', 'news', 'apply', 'publish_token_docs') NOT NULL,
-        MODIFY COLUMN placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'deal_card') NULL
+        MODIFY COLUMN placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'deal_card', 'news_article') NULL
     `);
     await this.ensureIndexExists('idx_marketing_events_source_label_date', 'CREATE INDEX idx_marketing_events_source_label_date ON marketing_events (source_label(191), event_date)');
     await this.ensureIndexExists('idx_marketing_events_country_code_date', 'CREATE INDEX idx_marketing_events_country_code_date ON marketing_events (country_code, event_date)');

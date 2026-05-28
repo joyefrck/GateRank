@@ -537,7 +537,7 @@ CREATE TABLE IF NOT EXISTS marketing_events (
   source_type VARCHAR(64) NOT NULL DEFAULT 'direct_or_unknown',
   source_label VARCHAR(255) NOT NULL DEFAULT 'Direct / Unknown',
   airport_id BIGINT UNSIGNED NULL,
-  placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'deal_card') NULL,
+  placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'deal_card', 'news_article') NULL,
   target_kind ENUM('website', 'subscription_url') NULL,
   target_url VARCHAR(2048) NULL,
   utm_source VARCHAR(255) NULL,

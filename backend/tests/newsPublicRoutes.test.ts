@@ -4,6 +4,7 @@ import { AddressInfo } from 'node:net';
 import express from 'express';
 import { createNewsPublicRoutes } from '../src/routes/newsPublicRoutes';
 import { errorHandler } from '../src/middleware/errorHandler';
+import { renderNewsArticlePage } from '../src/services/newsPageRenderer';
 
 test('GET /api/v1/news returns public news list payload', async () => {
   const app = express();
@@ -179,6 +180,38 @@ function extractMetaDescription(html: string): string {
   return matched[1];
 }
 
+function createPreviewRouteApp() {
+  const router = express.Router();
+  router.get('/news/:id/preview', (req, res) => {
+    res
+      .status(200)
+      .type('html')
+      .send(renderNewsArticlePage({
+        siteUrl: `${req.protocol}://${req.get('host')}`,
+        preview: true,
+        article: {
+          id: Number(req.params.id),
+          title: '机场链接预览',
+          slug: 'airport-link-preview',
+          excerpt: '用于验证 News 预览页不扣费。',
+          cover_image_url: '',
+          published_at: '2026-03-28 18:00:00',
+          reading_minutes: 3,
+          content_html: '<p class="news-paragraph"><a class="news-airport-inline-link" href="/api/v1/outbound/airports/12?target=website&amp;placement=news_article" target="_blank" rel="noreferrer noopener" data-airport-website="https://vip.gsyaff.com/">光速云</a></p>',
+          headings: [],
+          category: null,
+          topics: [],
+          is_featured: false,
+          is_recommended: false,
+          recommend_weight: 0,
+          previous: null,
+          next: null,
+        },
+      }));
+  });
+  return router;
+}
+
 test('GET /publish-token-docs.md returns markdown source', async () => {
   const app = express();
   app.use(
@@ -283,6 +316,78 @@ test('GET /news/:slug returns server-rendered HTML with seo metadata', async () 
     assert.doesNotMatch(html, /\.nav-link\.is-news/);
     assert.doesNotMatch(html, /\.topbar-inner/);
     assert.doesNotMatch(html, /\.nav-link\s*\{/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /news/:slug preserves paid outbound airport links in published article html', async () => {
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async () => ({
+          page: 1,
+          page_size: 12,
+          total: 0,
+          total_pages: 1,
+          featured: null,
+          items: [],
+        }),
+        getArticleViewBySlug: async () => ({
+          id: 8,
+          title: '机场链接测试',
+          slug: 'airport-link-test',
+          excerpt: '用于验证 News 正文机场链接扣费。',
+          cover_image_url: '',
+          published_at: '2026-03-28 18:00:00',
+          reading_minutes: 3,
+          content_html: '<p class="news-paragraph"><a class="news-airport-inline-link" href="/api/v1/outbound/airports/12?target=website&amp;placement=news_article" target="_blank" rel="noreferrer noopener" data-airport-website="https://vip.gsyaff.com/">光速云</a></p>',
+          headings: [],
+          previous: null,
+          next: null,
+        }),
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/news/airport-link-test`, {
+      headers: {
+        host: `127.0.0.1:${port}`,
+      },
+    });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /href="\/api\/v1\/outbound\/airports\/12\?target=website&amp;placement=news_article"/);
+    assert.match(html, /data-airport-website="https:\/\/vip\.gsyaff\.com\/"/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /api/v1/admin/news/:id/preview rewrites airport links to direct websites without paid placement', async () => {
+  const app = express();
+  app.use('/api/v1/admin', createPreviewRouteApp());
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/8/preview`, {
+      headers: {
+        host: `127.0.0.1:${port}`,
+      },
+    });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /href="https:\/\/vip\.gsyaff\.com\/"/);
+    assert.doesNotMatch(html, /placement=news_article/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

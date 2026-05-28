@@ -44,7 +44,7 @@ interface OutboundDeps {
 }
 
 const OUTBOUND_TARGETS = ['website', 'subscription_url'] as const;
-const OUTBOUND_PLACEMENTS = ['home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header'] as const;
+const OUTBOUND_PLACEMENTS = ['home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'news_article'] as const;
 
 export function createOutboundRoutes(deps: OutboundDeps): Router {
   const router = Router();

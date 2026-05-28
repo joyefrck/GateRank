@@ -63,7 +63,8 @@ test('NewsContentService.render converts airport profile blocks into SEO-visible
   assert.match(rendered.html, /<div class="news-airport-profile-rank-value">#2<\/div>/);
   assert.match(rendered.html, /光速云/);
   assert.match(rendered.html, /定价实惠便宜机场梯子工具，支持全平台客户端。/);
-  assert.match(rendered.html, /href="https:\/\/vip\.gsyaff\.com\/"/);
+  assert.match(rendered.html, /href="\/api\/v1\/outbound\/airports\/12\?target=website&amp;placement=news_article"/);
+  assert.match(rendered.html, /data-airport-website="https:\/\/vip\.gsyaff\.com\/"/);
   assert.match(rendered.html, /href="\/airports\/guangsu-cloud"/);
   assert.match(rendered.html, /80\.87/);
   assert.match(rendered.html, /-0\.24/);
@@ -105,6 +106,51 @@ test('NewsContentService.render escapes unsafe airport profile fields', () => {
   assert.doesNotMatch(rendered.html, /<script/i);
   assert.doesNotMatch(rendered.html, /<svg/i);
   assert.doesNotMatch(rendered.html, /<iframe/i);
+});
+
+test('NewsContentService.render converts airport link blocks into inline paid outbound links', () => {
+  const service = new NewsContentService();
+  const rendered = service.render([
+    '正文开头',
+    '',
+    ':::gaterank-airport-link',
+    JSON.stringify({
+      version: 1,
+      airport_id: 12,
+      name: '光速云',
+      website: 'https://vip.gsyaff.com/',
+    }),
+    ':::',
+    '',
+    '正文结尾',
+  ].join('\n'));
+
+  assert.match(
+    rendered.html,
+    /<a class="news-airport-inline-link" href="\/api\/v1\/outbound\/airports\/12\?target=website&amp;placement=news_article" target="_blank" rel="noreferrer noopener" data-airport-website="https:\/\/vip\.gsyaff\.com\/">光速云<\/a>/,
+  );
+  assert.match(rendered.plain_text, /光速云/);
+  assert.doesNotMatch(rendered.html, /gaterank-airport-link/);
+  assert.doesNotMatch(rendered.html, /"airport_id":12/);
+});
+
+test('NewsContentService.render escapes unsafe airport link fields', () => {
+  const service = new NewsContentService();
+  const rendered = service.render([
+    ':::gaterank-airport-link',
+    JSON.stringify({
+      version: 1,
+      airport_id: '<script>alert(1)</script>',
+      name: '<img src=x onerror=alert(1)>',
+      website: 'javascript:alert(2)',
+    }),
+    ':::',
+  ].join('\n'));
+
+  assert.match(rendered.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.doesNotMatch(rendered.html, /javascript:/i);
+  assert.doesNotMatch(rendered.html, /data-airport-website=/);
+  assert.doesNotMatch(rendered.html, /<img/i);
 });
 
 test('stripLeadingMarkdownH1 removes only the first body H1 at document start', () => {

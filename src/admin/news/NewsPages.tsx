@@ -7,6 +7,7 @@ import {
   Clock3,
   Eye,
   ImageUp,
+  Link2,
   Plus,
   Save,
   Search,
@@ -21,6 +22,12 @@ import {
   serializeNewsAirportProfileEmbed,
   type NewsAirportProfileEmbed,
 } from '../../../shared/newsAirportProfile';
+import {
+  extractNewsAirportLinkEmbeds,
+  removeNewsAirportLinkEmbedAt,
+  serializeNewsAirportLinkEmbed,
+  type NewsAirportLinkEmbed,
+} from '../../../shared/newsAirportLink';
 
 const COVER_SEARCH_PER_PAGE = 12;
 
@@ -447,6 +454,7 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   const [coverSearchError, setCoverSearchError] = useState('');
   const [coverPickerOpen, setCoverPickerOpen] = useState(false);
   const [airportProfilePickerOpen, setAirportProfilePickerOpen] = useState(false);
+  const [airportPickerMode, setAirportPickerMode] = useState<'link' | 'profile'>('profile');
   const [airportProfileSearchQuery, setAirportProfileSearchQuery] = useState('');
   const [airportProfileResults, setAirportProfileResults] = useState<FullRankingItemResponse[]>([]);
   const [airportProfileSearchPage, setAirportProfileSearchPage] = useState(1);
@@ -523,6 +531,10 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   const readingMinutes = useMemo(() => estimateReadingMinutes(form.content_markdown), [form.content_markdown]);
   const airportProfileEmbeds = useMemo(
     () => extractNewsAirportProfileEmbeds(form.content_markdown),
+    [form.content_markdown],
+  );
+  const airportLinkEmbeds = useMemo(
+    () => extractNewsAirportLinkEmbeds(form.content_markdown),
     [form.content_markdown],
   );
   const isSlugLocked = form.status !== 'draft';
@@ -791,6 +803,15 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   }
 
   function openAirportProfilePicker(): void {
+    setAirportPickerMode('profile');
+    setAirportProfilePickerOpen(true);
+    if (airportProfileResults.length === 0) {
+      void searchAirportProfiles(1, airportProfileSearchQuery);
+    }
+  }
+
+  function openAirportLinkPicker(): void {
+    setAirportPickerMode('link');
     setAirportProfilePickerOpen(true);
     if (airportProfileResults.length === 0) {
       void searchAirportProfiles(1, airportProfileSearchQuery);
@@ -846,12 +867,42 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
     setAirportProfilePickerOpen(false);
   }
 
+  function insertAirportLink(item: FullRankingItemResponse): void {
+    const embed = buildAirportLinkEmbed(item);
+    const block = serializeNewsAirportLinkEmbed(embed);
+    setForm((current) => {
+      const markdown = current.content_markdown;
+      const target = markdownRef.current;
+      if (!target) {
+        return { ...current, content_markdown: `${markdown}${block}` };
+      }
+      const start = target.selectionStart || markdown.length;
+      const end = target.selectionEnd || markdown.length;
+      return {
+        ...current,
+        content_markdown: `${markdown.slice(0, start)}${block}${markdown.slice(end)}`,
+      };
+    });
+    setNotice(`已插入「${item.name}」机场超链接`);
+    setError('');
+    setAirportProfilePickerOpen(false);
+  }
+
   function removeAirportProfileBlock(start: number): void {
     setForm((current) => ({
       ...current,
       content_markdown: removeNewsAirportProfileEmbedAt(current.content_markdown, start),
     }));
     setNotice('机场简介块已删除');
+    setError('');
+  }
+
+  function removeAirportLinkBlock(start: number): void {
+    setForm((current) => ({
+      ...current,
+      content_markdown: removeNewsAirportLinkEmbedAt(current.content_markdown, start),
+    }));
+    setNotice('机场超链接已删除');
     setError('');
   }
 
@@ -1094,6 +1145,14 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
                 <button
                   type="button"
                   className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+                  onClick={openAirportLinkPicker}
+                >
+                  <Link2 size={14} />
+                  插入机场超链接
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
                   onClick={openAirportProfilePicker}
                 >
                   <Building2 size={14} />
@@ -1125,6 +1184,36 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
               onChange={(event) => setForm((current) => ({ ...current, content_markdown: event.target.value }))}
               placeholder="# 标题&#10;&#10;使用 Markdown 写正文，支持图片、引用、列表和代码块。"
             />
+            {airportLinkEmbeds.length > 0 ? (
+              <div className="mt-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">已插入机场超链接</div>
+                <div className="grid gap-2">
+                  {airportLinkEmbeds.map((match) => (
+                    <div
+                      key={`${match.start}-${match.end}`}
+                      className="flex flex-col gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-neutral-900">
+                          {match.embed?.name || '无法解析的机场超链接'}
+                        </div>
+                        <div className="mt-1 truncate text-xs text-neutral-500">
+                          {match.embed ? match.embed.website || '暂无官网' : '请删除后重新插入'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                        onClick={() => removeAirportLinkBlock(match.start)}
+                      >
+                        <Trash2 size={13} />
+                        整体删除
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null}
             {airportProfileEmbeds.length > 0 ? (
               <div className="mt-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-3">
                 <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">已插入机场简介</div>
@@ -1180,6 +1269,7 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
       />
       <AirportProfilePickerModal
         open={airportProfilePickerOpen}
+        mode={airportPickerMode}
         query={airportProfileSearchQuery}
         page={airportProfileSearchPage}
         totalPages={airportProfileTotalPages}
@@ -1194,7 +1284,7 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
         }}
         onSearch={(page) => void searchAirportProfiles(page)}
         onPageChange={(page) => void searchAirportProfiles(page)}
-        onInsert={insertAirportProfile}
+        onInsert={airportPickerMode === 'link' ? insertAirportLink : insertAirportProfile}
       />
     </section>
   );
@@ -1405,6 +1495,7 @@ function CoverPickerModal({
 
 function AirportProfilePickerModal({
   open,
+  mode,
   query,
   page,
   totalPages,
@@ -1419,6 +1510,7 @@ function AirportProfilePickerModal({
   onInsert,
 }: {
   open: boolean;
+  mode: 'link' | 'profile';
   query: string;
   page: number;
   totalPages: number;
@@ -1450,6 +1542,7 @@ function AirportProfilePickerModal({
   if (!open) {
     return null;
   }
+  const isLinkMode = mode === 'link';
 
   return (
     <div
@@ -1462,8 +1555,12 @@ function AirportProfilePickerModal({
       >
         <div className="flex items-start justify-between gap-4 border-b border-neutral-200 px-5 py-4 md:px-6 md:py-5">
           <div className="space-y-1">
-            <h3 className="text-xl font-bold tracking-tight md:text-2xl">插入机场简介</h3>
-            <p className="text-sm text-neutral-500">从全量榜单选择机场，插入后会在文章页渲染为可索引的机场简介卡片。</p>
+            <h3 className="text-xl font-bold tracking-tight md:text-2xl">{isLinkMode ? '插入机场超链接' : '插入机场简介'}</h3>
+            <p className="text-sm text-neutral-500">
+              {isLinkMode
+                ? '从全量榜单选择机场，插入后正文会显示机场名称，正式发布页点击名称会跳转官网并扣费。'
+                : '从全量榜单选择机场，插入后会在文章页渲染为可索引的机场简介卡片。'}
+            </p>
           </div>
           <button
             type="button"
@@ -1548,7 +1645,7 @@ function AirportProfilePickerModal({
                         onClick={() => onInsert(item)}
                         disabled={loading}
                       >
-                        插入
+                        {isLinkMode ? '插入链接' : '插入'}
                       </button>
                     </div>
                   </div>
@@ -1643,6 +1740,15 @@ function buildAirportProfileEmbed(item: FullRankingItemResponse): NewsAirportPro
     },
     tags: item.tags,
     capability_labels: buildCapabilityLabels(item),
+  };
+}
+
+function buildAirportLinkEmbed(item: FullRankingItemResponse): NewsAirportLinkEmbed {
+  return {
+    version: 1,
+    airport_id: item.airport_id,
+    name: item.name,
+    website: item.website,
   };
 }
 

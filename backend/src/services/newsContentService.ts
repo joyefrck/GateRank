@@ -6,6 +6,10 @@ import {
   replaceNewsAirportProfileEmbeds,
   type NewsAirportProfileEmbed,
 } from '../../../shared/newsAirportProfile';
+import {
+  replaceNewsAirportLinkEmbeds,
+  type NewsAirportLinkEmbed,
+} from '../../../shared/newsAirportLink';
 
 interface HeadingTokenWithId extends Tokens.Heading {
   _newsHeadingId?: string;
@@ -23,8 +27,12 @@ export class NewsContentService {
     const headings: NewsHeading[] = [];
     const headingSlugCount = new Map<string, number>();
     const marked = new Marked();
-    const markdownWithEmbeds = replaceNewsAirportProfileEmbeds(
+    const markdownWithAirportLinks = replaceNewsAirportLinkEmbeds(
       markdown,
+      (embed) => renderAirportLinkEmbed(embed),
+    );
+    const markdownWithEmbeds = replaceNewsAirportProfileEmbeds(
+      markdownWithAirportLinks,
       (embed) => renderAirportProfileEmbed(embed),
     );
 
@@ -142,7 +150,7 @@ export class NewsContentService {
         'ul',
       ],
       allowedAttributes: {
-        a: ['href', 'target', 'rel', 'class'],
+        a: ['href', 'target', 'rel', 'class', 'data-airport-website'],
         article: ['class'],
         blockquote: ['class'],
         code: ['class', 'data-language'],
@@ -189,6 +197,7 @@ export class NewsContentService {
 function renderAirportProfileEmbed(embed: NewsAirportProfileEmbed): string {
   const intro = embed.airport_intro || '该机场已进入正式榜单，当前公开页提供官网入口、标签、成立日期、价格与试用支持信息，便于用户快速完成横向比较。';
   const websiteHref = safeExternalHref(embed.website);
+  const outboundHref = buildOutboundAirportHref(embed.airport_id);
   const reportHref = safeInternalOrExternalHref(embed.report_url || '');
   const metricItems = [
     ['成立日期', formatValue(embed.founded_on)],
@@ -212,8 +221,8 @@ function renderAirportProfileEmbed(embed: NewsAirportProfileEmbed): string {
   const badgesHtml = badges.length > 0
     ? `<div class="news-airport-profile-badges">${badges.map((tag) => `<span class="news-airport-profile-badge">${escapeHtml(tag)}</span>`).join('')}</div>`
     : '';
-  const websiteAction = websiteHref
-    ? `<a class="news-airport-profile-primary-link" href="${escapeAttribute(websiteHref)}" target="_blank" rel="noreferrer noopener">打开官网</a>`
+  const websiteAction = outboundHref
+    ? `<a class="news-airport-profile-primary-link" href="${escapeAttribute(outboundHref)}" target="_blank" rel="noreferrer noopener"${websiteHref ? ` data-airport-website="${escapeAttribute(websiteHref)}"` : ''}>打开官网</a>`
     : '<span class="news-airport-profile-disabled-link">暂无官网</span>';
   const reportAction = reportHref
     ? `<a class="news-airport-profile-secondary-link" href="${escapeAttribute(reportHref)}">查看测评报告</a>`
@@ -250,6 +259,16 @@ function renderAirportProfileEmbed(embed: NewsAirportProfileEmbed): string {
     '</div>',
     '</article>',
   ].join('');
+}
+
+function renderAirportLinkEmbed(embed: NewsAirportLinkEmbed): string {
+  const label = embed.name || '未命名机场';
+  const outboundHref = buildOutboundAirportHref(embed.airport_id);
+  const websiteHref = safeExternalHref(embed.website);
+  if (!outboundHref) {
+    return `<span class="news-airport-inline-link">${escapeHtml(label)}</span>`;
+  }
+  return `<a class="news-airport-inline-link" href="${escapeAttribute(outboundHref)}" target="_blank" rel="noreferrer noopener"${websiteHref ? ` data-airport-website="${escapeAttribute(websiteHref)}"` : ''}>${escapeHtml(label)}</a>`;
 }
 
 function formatAirportStatus(status: string): string {
@@ -306,6 +325,13 @@ function safeInternalOrExternalHref(value: string): string | null {
     return value;
   }
   return safeExternalHref(value);
+}
+
+function buildOutboundAirportHref(airportId: number): string | null {
+  if (!Number.isInteger(airportId) || airportId <= 0) {
+    return null;
+  }
+  return `/api/v1/outbound/airports/${airportId}?target=website&placement=news_article`;
 }
 
 function escapeHtml(value: string): string {

@@ -129,6 +129,7 @@ const MARKETING_PLACEMENTS: MarketingPlacement[] = [
   'risk_monitor_item',
   'report_header',
   'deal_card',
+  'news_article',
 ];
 const MARKETING_TARGET_KINDS: MarketingTargetKind[] = ['website', 'subscription_url'];
 export function createPublicRoutes(deps: PublicDeps): Router {

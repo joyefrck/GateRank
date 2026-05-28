@@ -215,3 +215,93 @@ test('GET /outbound/airports/:id redirects when balance is insufficient', async 
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
 });
+
+test('GET /outbound/airports/:id accepts news article placement for paid links', async () => {
+  const processed: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(
+    createOutboundRoutes({
+      airportRepository: {
+        getById: async () => ({
+          id: 12,
+          name: 'News Airport',
+          website: 'https://news-airport.example.com/',
+          status: 'normal',
+          is_listed: true,
+          plan_price_month: 18,
+          has_trial: false,
+          tags: [],
+          created_at: '2026-05-04',
+        }),
+      },
+      applicantBillingRepository: {
+        processOutboundClick: async (input) => {
+          processed.push(input);
+          return {
+            status: 'billed',
+            billed_amount: 1,
+            airport_name: 'News Airport',
+            balance_after: 9,
+          };
+        },
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/outbound/airports/12?target=website&placement=news_article`, {
+      redirect: 'manual',
+    });
+
+    assert.equal(response.status, 302);
+    assert.equal(processed[0]?.placement, 'news_article');
+    assert.equal(processed[0]?.target_kind, 'website');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /outbound/airports/:id rejects invalid placement', async () => {
+  const app = express();
+  app.use(
+    createOutboundRoutes({
+      airportRepository: {
+        getById: async () => ({
+          id: 12,
+          name: 'News Airport',
+          website: 'https://news-airport.example.com/',
+          status: 'normal',
+          is_listed: true,
+          plan_price_month: 18,
+          has_trial: false,
+          tags: [],
+          created_at: '2026-05-04',
+        }),
+      },
+      applicantBillingRepository: {
+        processOutboundClick: async () => ({
+          status: 'billed',
+          billed_amount: 1,
+          airport_name: 'News Airport',
+          balance_after: 9,
+        }),
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/outbound/airports/12?target=website&placement=bad`, {
+      redirect: 'manual',
+    });
+
+    assert.equal(response.status, 400);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});

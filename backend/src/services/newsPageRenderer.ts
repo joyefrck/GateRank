@@ -418,6 +418,13 @@ const sharedStyles = `
     text-decoration-color: rgba(201,58,46,0.24);
     text-underline-offset: 0.16em;
   }
+  .news-airport-inline-link {
+    color: var(--accent);
+    font-weight: 800;
+    text-decoration: underline;
+    text-decoration-color: rgba(201,58,46,0.28);
+    text-underline-offset: 0.16em;
+  }
   .news-figure {
     margin: 34px 0;
   }
@@ -1176,7 +1183,8 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
   const { siteUrl, article, preview = false } = options;
   const hasCover = Boolean(article.cover_image_url && article.cover_image_url.trim());
   const absoluteCoverImage = hasCover ? toAbsoluteUrl(siteUrl, article.cover_image_url) : null;
-  const articleBodyHtml = demoteBodyH1(article.content_html);
+  const contentHtml = preview ? rewriteAirportPaidLinksForPreview(article.content_html) : article.content_html;
+  const articleBodyHtml = demoteBodyH1(contentHtml);
   const articlePath = preview ? `/api/v1/admin/news/${article.id}/preview` : `/news/${article.slug}`;
   const canonicalUrl = `${siteUrl}${articlePath}`;
   const title = `${article.title} | GateRank News`;
@@ -1365,6 +1373,45 @@ function demoteBodyH1(html: string): string {
   return html
     .replace(/<h1(\s[^>]*)?>/gi, '<h2$1>')
     .replace(/<\/h1>/gi, '</h2>');
+}
+
+function rewriteAirportPaidLinksForPreview(html: string): string {
+  return html.replace(
+    /<a\b([^>]*?)href="\/api\/v1\/outbound\/airports\/\d+\?target=website(?:&amp;|&)placement=news_article"([^>]*?)>/gi,
+    (full, before: string, after: string) => {
+      const attributes = `${before}${after}`;
+      const website = extractAttribute(attributes, 'data-airport-website');
+      const safeWebsite = website ? safePreviewExternalHref(website) : null;
+      if (!safeWebsite) {
+        return full;
+      }
+      return `<a${before}href="${escapeAttribute(safeWebsite)}"${after}>`;
+    },
+  );
+}
+
+function extractAttribute(attributes: string, name: string): string | null {
+  const pattern = new RegExp(`${name}="([^"]*)"`, 'i');
+  const matched = attributes.match(pattern);
+  return matched ? decodeHtmlAttribute(matched[1]) : null;
+}
+
+function decodeHtmlAttribute(value: string): string {
+  return value
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>');
+}
+
+function safePreviewExternalHref(value: string): string | null {
+  try {
+    const url = new URL(value);
+    return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 function buildListH1(listView: PublicNewsListView): string {

@@ -636,7 +636,7 @@ type MarketingAirportSortBy = 'ctr' | 'clicks' | 'impressions' | 'last_clicked_a
 type MarketingSortOrder = 'asc' | 'desc';
 type MarketingSourceType = 'google' | 'baidu' | 'x' | 'bing' | 'reddit' | 'telegram' | 'wechat' | 'direct_or_unknown' | 'other_referral';
 type MarketingPageKind = 'home' | 'full_ranking' | 'risk_monitor' | 'report' | 'methodology' | 'news' | 'apply' | 'publish_token_docs';
-type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header';
+type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header' | 'deal_card' | 'news_article';
 type MarketingTargetKind = 'website' | 'subscription_url';
 
 interface MarketingTrendPoint {
@@ -10754,6 +10754,8 @@ function formatMarketingPlacement(value: MarketingPlacement | null): string {
   if (value === 'full_ranking_item') return '全量榜单条目';
   if (value === 'risk_monitor_item') return '风险榜条目';
   if (value === 'report_header') return '报告头部';
+  if (value === 'deal_card') return '优惠卡片';
+  if (value === 'news_article') return 'News 正文';
   return '-';
 }
 

@@ -11,7 +11,7 @@ export type MarketingPageKind =
   | 'apply'
   | 'publish_token_docs';
 
-export type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header' | 'deal_card';
+export type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header' | 'deal_card' | 'news_article';
 export type MarketingTargetKind = 'website' | 'subscription_url';
 
 interface MarketingEventPayload {
