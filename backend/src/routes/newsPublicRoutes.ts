@@ -138,7 +138,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
 
   router.get('/news/:slug', async (req, res) => {
     try {
-      const article = await deps.newsPublicService.getArticleViewBySlug(String(req.params.slug || ''));
+      const article = await deps.newsPublicService.getArticleViewBySlug(String(req.params.slug || ''), { countView: true });
       if (!article) {
         renderHtmlError(res, 404, '文章不存在或尚未发布');
         return;

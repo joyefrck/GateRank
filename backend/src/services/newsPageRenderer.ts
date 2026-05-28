@@ -1279,6 +1279,7 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
                 </div>
                 <div class="article-meta">
                   <span>${escapeHtml(formatNewsDate(article.published_at))}</span>
+                  <span>${escapeHtml(formatViewCount(article.view_count))}</span>
                   <span>${article.reading_minutes} min read</span>
                   <span>GateRank 编辑部</span>
                 </div>
@@ -1494,7 +1495,7 @@ function renderCompactPanel(title: string, items: PublicNewsListView['items'], w
         ? `<div class="news-panel-list">${items.slice(0, 5).map((item) => `
             <a class="news-panel-link" href="/news/${escapeAttribute(item.slug)}">
               <span class="news-panel-title">${escapeHtml(item.title)}</span>
-              <span class="news-panel-meta">${escapeHtml(item.category?.name || 'GateRank News')} · ${escapeHtml(formatNewsDate(item.published_at))}</span>
+              <span class="news-panel-meta">${escapeHtml(item.category?.name || 'GateRank News')} · ${escapeHtml(formatNewsDate(item.published_at))} · ${escapeHtml(formatViewCount(item.view_count))}</span>
             </a>
           `).join('')}</div>`
         : '<div class="news-panel-meta">暂无内容</div>'
@@ -1525,6 +1526,7 @@ function renderHeroCard(featured: PublicNewsArticleView | PublicNewsListView['fe
         <div style="display:grid; gap: 18px;">
           <div class="hero-meta">
             <span>${escapeHtml(formatNewsDate(featured.published_at))}</span>
+            <span>${escapeHtml(formatViewCount(featured.view_count))}</span>
             <span>${featured.reading_minutes} min read</span>
           </div>
           <a class="hero-cta" href="/news/${escapeAttribute(featured.slug)}">阅读全文</a>
@@ -1552,6 +1554,7 @@ function renderFeedCard(item: PublicNewsListView['items'][number]): string {
         <div class="card-meta">
           ${item.category ? `<span>${escapeHtml(item.category.name)}</span>` : ''}
           <span>${escapeHtml(formatNewsDate(item.published_at))}</span>
+          <span>${escapeHtml(formatViewCount(item.view_count))}</span>
           <span>${item.reading_minutes} min read</span>
         </div>
         <h2 class="feed-card-title"><a href="/news/${escapeAttribute(item.slug)}">${escapeHtml(item.title)}</a></h2>
@@ -1667,6 +1670,11 @@ function toIsoDate(value: string | null): string | undefined {
     return undefined;
   }
   return value.replace(' ', 'T') + '+08:00';
+}
+
+function formatViewCount(value: number | null | undefined): string {
+  const count = Math.max(0, Math.floor(Number(value) || 0));
+  return `${count.toLocaleString('zh-CN')} 次访问`;
 }
 
 function escapeHtml(value: string): string {

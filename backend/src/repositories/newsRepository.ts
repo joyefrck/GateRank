@@ -25,6 +25,7 @@ interface NewsArticleRow extends RowDataPacket {
   recommend_weight: number;
   status: NewsStatus;
   published_at: string | null;
+  view_count: number;
   created_at: string;
   updated_at: string;
   category_name: string | null;
@@ -137,6 +138,7 @@ export class NewsRepository {
         recommend_weight INT NOT NULL DEFAULT 0,
         status ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft',
         published_at DATETIME NULL,
+        view_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
@@ -172,6 +174,7 @@ export class NewsRepository {
       "ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft' AFTER recommend_weight",
     );
     await this.ensureColumn('news_articles', 'published_at', 'DATETIME NULL AFTER status');
+    await this.ensureColumn('news_articles', 'view_count', 'BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER published_at');
     await this.ensureColumn(
       'news_articles',
       'updated_at',
@@ -513,6 +516,14 @@ export class NewsRepository {
     return changed;
   }
 
+  async incrementViewCount(articleId: number): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      'UPDATE news_articles SET view_count = view_count + 1 WHERE id = ?',
+      [articleId],
+    );
+    return result.affectedRows > 0;
+  }
+
   async deleteById(id: number): Promise<boolean> {
     await this.pool.execute('DELETE FROM news_article_topics WHERE article_id = ?', [id]);
     const [result] = await this.pool.execute<ResultSetHeader>(
@@ -752,6 +763,7 @@ function baseSelectSql(): string {
             a.recommend_weight,
             a.status,
             DATE_FORMAT(a.published_at, '%Y-%m-%d %H:%i:%s') AS published_at,
+            a.view_count,
             DATE_FORMAT(a.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
             DATE_FORMAT(a.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at,
             nc.name AS category_name,
@@ -777,6 +789,7 @@ function toNewsArticle(row: NewsArticleRow): NewsArticle {
     recommend_weight: Number(row.recommend_weight || 0),
     status: row.status,
     published_at: row.published_at,
+    view_count: Number(row.view_count || 0),
     created_at: row.created_at,
     updated_at: row.updated_at,
     category: row.category_id && row.category_slug
@@ -805,6 +818,7 @@ function toNewsArticleListItem(article: NewsArticle): NewsArticleListItem {
     recommend_weight: article.recommend_weight,
     status: article.status,
     published_at: article.published_at,
+    view_count: article.view_count,
     created_at: article.created_at,
     updated_at: article.updated_at,
     category: article.category,

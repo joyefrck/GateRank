@@ -541,11 +541,12 @@ test('POST /portal/ad-campaign purchases another campaign when the same airport 
     assert.equal(data.campaign.campaign_id, 99);
     assert.equal(data.ad_status.remaining_slots, 5);
     assert.equal(data.ad_status.slot_limit, 6);
-    assert.equal(purchaseInput?.airport_id, 11);
-    assert.equal(purchaseInput?.applicant_account_id, 1);
-    assert.equal(purchaseInput?.application_id, 7);
-    assert.equal(purchaseInput?.monthly_price, 1288.88);
-    assert.equal(purchaseInput?.coupon_code, 'NEW220');
+    const capturedPurchase = purchaseInput as unknown as Record<string, unknown>;
+    assert.equal(capturedPurchase.airport_id, 11);
+    assert.equal(capturedPurchase.applicant_account_id, 1);
+    assert.equal(capturedPurchase.application_id, 7);
+    assert.equal(capturedPurchase.monthly_price, 1288.88);
+    assert.equal(capturedPurchase.coupon_code, 'NEW220');
     assert.equal(cacheCleared, true);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -682,11 +683,12 @@ test('PATCH /portal/ad-campaign/:campaignId edits an active campaign without ext
     const data = (await response.json()) as { campaign: { coupon_code: string } };
     assert.equal(response.status, 200);
     assert.equal(data.campaign.coupon_code, 'EDIT550');
-    assert.equal(updateInput?.campaign_id, 99);
-    assert.equal(updateInput?.extend_months, 0);
-    assert.equal(updateInput?.monthly_price, 1288.88);
-    assert.equal(updateInput?.airport_id, 11);
-    assert.equal(updateInput?.applicant_account_id, 1);
+    const capturedUpdate = updateInput as unknown as Record<string, unknown>;
+    assert.equal(capturedUpdate.campaign_id, 99);
+    assert.equal(capturedUpdate.extend_months, 0);
+    assert.equal(capturedUpdate.monthly_price, 1288.88);
+    assert.equal(capturedUpdate.airport_id, 11);
+    assert.equal(capturedUpdate.applicant_account_id, 1);
     assert.equal(cacheCleared, true);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -799,8 +801,9 @@ test('PATCH /portal/ad-campaign/:campaignId forwards extension months for paid r
       }),
     });
     assert.equal(response.status, 200);
-    assert.equal(updateInput?.extend_months, 1);
-    assert.equal(updateInput?.monthly_price, 1288.88);
+    const capturedUpdate = updateInput as unknown as Record<string, unknown>;
+    assert.equal(capturedUpdate.extend_months, 1);
+    assert.equal(capturedUpdate.monthly_price, 1288.88);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -915,10 +918,11 @@ test('POST /portal/ad-campaign/:campaignId/cancel marks campaign canceled withou
     };
 
     assert.equal(response.status, 200);
-    assert.equal(cancelInput?.campaign_id, 99);
-    assert.equal(cancelInput?.airport_id, 11);
-    assert.equal(cancelInput?.applicant_account_id, 1);
-    assert.equal(cancelInput?.application_id, 7);
+    const capturedCancel = cancelInput as unknown as Record<string, unknown>;
+    assert.equal(capturedCancel.campaign_id, 99);
+    assert.equal(capturedCancel.airport_id, 11);
+    assert.equal(capturedCancel.applicant_account_id, 1);
+    assert.equal(capturedCancel.application_id, 7);
     assert.equal(cacheCleared, true);
     assert.equal(data.wallet.balance, 500);
     assert.equal(data.ad_status.remaining_slots, 6);

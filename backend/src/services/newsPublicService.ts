@@ -14,6 +14,7 @@ export interface PublicNewsCardView {
   excerpt: string;
   cover_image_url: string;
   published_at: string | null;
+  view_count: number;
   reading_minutes: number;
   category: NewsCategorySummary | null;
   topics: NewsTopicSummary[];
@@ -111,12 +112,14 @@ export class NewsPublicService {
     };
   }
 
-  async getArticleViewBySlug(slug: string): Promise<PublicNewsArticleView | null> {
+  async getArticleViewBySlug(slug: string, options: { countView?: boolean } = {}): Promise<PublicNewsArticleView | null> {
     const article = await this.newsRepository.getPublishedBySlug(slug);
     if (!article) {
       return null;
     }
-    return this.buildArticleView(article);
+    const counted = options.countView ? await this.newsRepository.incrementViewCount(article.id) : false;
+    const view = await this.buildArticleView(article);
+    return counted ? { ...view, view_count: view.view_count + 1 } : view;
   }
 
   async getPreviewArticleView(articleId: number): Promise<PublicNewsArticleView | null> {
@@ -166,6 +169,7 @@ export class NewsPublicService {
       excerpt: article.excerpt,
       cover_image_url: article.cover_image_url,
       published_at: article.published_at,
+      view_count: article.view_count,
       reading_minutes: this.newsContentService.render(markdown).reading_minutes,
       category: article.category,
       topics: article.topics,

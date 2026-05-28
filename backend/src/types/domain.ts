@@ -658,6 +658,7 @@ export interface NewsArticle {
   recommend_weight: number;
   status: NewsStatus;
   published_at: string | null;
+  view_count: number;
   created_at: string;
   updated_at: string;
   category: NewsCategorySummary | null;
@@ -676,6 +677,7 @@ export interface NewsArticleListItem {
   recommend_weight: number;
   status: NewsStatus;
   published_at: string | null;
+  view_count: number;
   created_at: string;
   updated_at: string;
   category: NewsCategorySummary | null;

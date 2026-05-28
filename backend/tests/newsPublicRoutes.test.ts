@@ -23,6 +23,7 @@ test('GET /api/v1/news returns public news list payload', async () => {
             excerpt: '头条摘要',
             cover_image_url: '/uploads/news/headline.jpg',
             published_at: '2026-03-28 10:00:00',
+            view_count: 42,
             reading_minutes: 5,
           },
           items: [
@@ -33,6 +34,7 @@ test('GET /api/v1/news returns public news list payload', async () => {
               excerpt: '次条摘要',
               cover_image_url: '/uploads/news/follow-up.jpg',
               published_at: '2026-03-27 10:00:00',
+              view_count: 87,
               reading_minutes: 4,
             },
           ],
@@ -75,9 +77,21 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
             excerpt: '头条摘要',
             cover_image_url: '/uploads/news/headline.jpg',
             published_at: '2026-03-28 10:00:00',
+            view_count: 42,
             reading_minutes: 5,
           },
-          items: [],
+          items: [
+            {
+              id: 2,
+              title: '次条文章',
+              slug: 'follow-up',
+              excerpt: '次条摘要',
+              cover_image_url: '',
+              published_at: '2026-03-27 10:00:00',
+              view_count: 87,
+              reading_minutes: 4,
+            },
+          ],
         }),
         getArticleViewBySlug: async () => null,
         getPreviewArticleView: async () => null,
@@ -112,7 +126,61 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
     assert.doesNotMatch(html, /\.nav-link\s*\{/);
     assert.match(html, /<h1 class="news-index-title">机场榜资讯中心：机场推荐、跑路预警与科学上网指南<\/h1>/);
     assert.match(html, /<h2 class="hero-title"><a href="\/news\/headline">头条文章<\/a><\/h2>/);
+    assert.match(html, /42 次访问/);
+    assert.match(html, /87 次访问/);
     assert.doesNotMatch(html, /<h1 class="hero-title">/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /api/v1/news/:slug returns article without incrementing view count', async () => {
+  const calls: Array<{ slug: string; options?: { countView?: boolean } }> = [];
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async () => ({
+          page: 1,
+          page_size: 12,
+          total: 0,
+          total_pages: 1,
+          featured: null,
+          items: [],
+        }),
+        getArticleViewBySlug: async (slug: string, options?: { countView?: boolean }) => {
+          calls.push({ slug, options });
+          return {
+            id: 8,
+            title: 'API 文章',
+            slug,
+            excerpt: '用于验证 API 不计数。',
+            cover_image_url: '',
+            published_at: '2026-03-28 18:00:00',
+            view_count: 9,
+            reading_minutes: 2,
+            content_html: '<p class="news-paragraph">api</p>',
+            headings: [],
+            previous: null,
+            next: null,
+          };
+        },
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/news/api-test`);
+    assert.equal(response.status, 200);
+    const data = (await response.json()) as { slug: string; view_count: number };
+    assert.equal(data.slug, 'api-test');
+    assert.equal(data.view_count, 9);
+    assert.deepEqual(calls, [{ slug: 'api-test', options: undefined }]);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -196,6 +264,7 @@ function createPreviewRouteApp() {
           excerpt: '用于验证 News 预览页不扣费。',
           cover_image_url: '',
           published_at: '2026-03-28 18:00:00',
+          view_count: 0,
           reading_minutes: 3,
           content_html: '<p class="news-paragraph"><a class="news-airport-inline-link" href="/api/v1/outbound/airports/12?target=website&amp;placement=news_article" target="_blank" rel="noreferrer noopener" data-airport-website="https://vip.gsyaff.com/">光速云</a></p>',
           headings: [],
@@ -254,6 +323,7 @@ test('GET /publish-token-docs.md returns markdown source', async () => {
 });
 
 test('GET /news/:slug returns server-rendered HTML with seo metadata', async () => {
+  const calls: Array<{ slug: string; options?: { countView?: boolean } }> = [];
   const app = express();
   app.use(
     createNewsPublicRoutes({
@@ -266,19 +336,23 @@ test('GET /news/:slug returns server-rendered HTML with seo metadata', async () 
           featured: null,
           items: [],
         }),
-        getArticleViewBySlug: async () => ({
-          id: 8,
-          title: '服务端 SEO 测试',
-          slug: 'seo-test',
-          excerpt: '用于验证文章详情页 meta、canonical 和 JSON-LD。',
-          cover_image_url: '/uploads/news/cover.webp',
-          published_at: '2026-03-28 18:00:00',
-          reading_minutes: 6,
-          content_html: '<p class="news-paragraph">hello world</p>',
-          headings: [{ id: 'hello', level: 2, text: 'Hello' }],
-          previous: null,
-          next: null,
-        }),
+        getArticleViewBySlug: async (slug: string, options?: { countView?: boolean }) => {
+          calls.push({ slug, options });
+          return {
+            id: 8,
+            title: '服务端 SEO 测试',
+            slug: 'seo-test',
+            excerpt: '用于验证文章详情页 meta、canonical 和 JSON-LD。',
+            cover_image_url: '/uploads/news/cover.webp',
+            published_at: '2026-03-28 18:00:00',
+            view_count: 123,
+            reading_minutes: 6,
+            content_html: '<p class="news-paragraph">hello world</p>',
+            headings: [{ id: 'hello', level: 2, text: 'Hello' }],
+            previous: null,
+            next: null,
+          };
+        },
         getPreviewArticleView: async () => null,
         getSitemapItems: async () => [{ slug: 'seo-test' }],
       } as never,
@@ -307,6 +381,8 @@ test('GET /news/:slug returns server-rendered HTML with seo metadata', async () 
     assert.match(html, /"@type":"Article"/);
     assert.match(html, /"image":\["http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/cover\.webp"\]/);
     assert.match(html, /分享到 Reddit/);
+    assert.match(html, /123 次访问/);
+    assert.deepEqual(calls, [{ slug: 'seo-test', options: { countView: true } }]);
     assert.match(html, /\.public-top-nav-inner\s*\{[\s\S]*height:\s*72px;/);
     assert.match(html, /<span class="public-top-nav-brand-title">机场榜GateRank<\/span>/);
     assert.match(html, /<a class="public-top-nav-link is-active" href="\/news">News<\/a>/);
