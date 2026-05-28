@@ -4029,7 +4029,6 @@ function ReportSnapshotGrid({ data }: { data: ReportViewResponse }) {
       <ReportMetricTile icon={Clock} label="数据日期" value={data.date} tone="blue" />
       <ReportMetricTile icon={CheckCircle2} label="健康记录" value={`${data.metrics.healthy_days_streak} 天`} tone="rose" />
       <ReportMetricTile icon={Zap} label="稳定性" value={getStabilityTierLabel(data.metrics.stability_tier)} tone="cyan" />
-      <ReportMetricTile icon={AlertTriangle} label="风险惩罚" value={formatMetric(data.score_breakdown.risk_penalty)} tone="red" />
     </section>
   );
 }

@@ -361,7 +361,6 @@ export function renderReportPublicPage(
           ${renderSnapshotCard('数据日期', view.date)}
           ${renderSnapshotCard('健康记录', `${view.metrics.healthy_days_streak} 天`)}
           ${renderSnapshotCard('稳定性', formatStabilityTier(view.metrics.stability_tier))}
-        ${renderSnapshotCard('风险惩罚', formatMetric(view.score_breakdown.risk_penalty))}
         </section>
         ${renderReportSummary(view)}
         ${renderReportFaq(faqItems)}

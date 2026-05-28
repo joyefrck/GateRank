@@ -410,6 +410,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /<span>总分 98\.60\/100<\/span>/);
     assert.match(okHtml, /<span>状态 正常<\/span>/);
     assert.match(okHtml, /<span>风险惩罚 0<\/span>/);
+    assert.doesNotMatch(okHtml, /<article class="snapshot-card">\s*<div>风险惩罚<\/div>\s*<strong>0<\/strong>\s*<\/article>/);
     assert.match(okHtml, /<span>官网扣分 0<\/span>/);
     assert.match(okHtml, /<span>SSL 扣分 0<\/span>/);
     assert.match(okHtml, /<span>30 天可用率 99\.90%<\/span>/);
