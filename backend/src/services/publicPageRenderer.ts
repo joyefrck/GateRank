@@ -661,7 +661,7 @@ export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: Pu
   const methodologyFaq = [
     {
       question: '低价机场一定高分吗？',
-      answer: '不会。价格只占总分 20%，还要结合速度价格比、试用支持、稳定性、性能和风险表现。',
+      answer: '不会。价格只占总分 10%，并且 PriceScore 只按 1-30 元、30-50 元、50 元以上三档计算；如果稳定性、性能或风险表现较弱，低价不会单独决定推荐位置。',
     },
     {
       question: '测速快就一定推荐吗？',
@@ -715,19 +715,19 @@ export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: Pu
           <p>${escapeHtml(METHODOLOGY_SEO.description)}</p>
           <div class="metric-grid">
             ${renderMetric('评分维度', '4')}
-            ${renderMetric('主公式', '0.4S + 0.3P + 0.2C + 0.1R')}
+            ${renderMetric('主公式', '0.4S + 0.3P + 0.1C + 0.2R')}
             ${renderMetric('更新频率', '每日重算')}
-            ${renderMetric('价格 / 风险', '20% / 10%')}
+            ${renderMetric('价格 / 风险', '10% / 20%')}
           </div>
         </section>
         <section class="content-card">
           <h2>总公式与评分目标</h2>
-          <p>最终分 = 0.4 × 稳定性 S + 0.3 × 性能 P + 0.2 × 价格 C + 0.1 × 风险 R。GateRank 用这套固定权重生成每日机场推荐，目标是让稳定性、性能、价格和信任风险在同一框架内被解释。</p>
+          <p>最终分 = 0.4 × 稳定性 S + 0.3 × 性能 P + 0.1 × 价格 C + 0.2 × 风险 R。GateRank 用这套固定权重生成每日机场推荐，目标是让稳定性、性能、价格和信任风险在同一框架内被解释。</p>
           <div class="card-grid">
             ${renderInfoCard('稳定性 S · 40%', '综合可用率、稳健波动值 effective_latency_cv 和连续健康天数，降低偶发测速对结论的影响。')}
             ${renderInfoCard('性能 P · 30%', '使用中位延迟、下载速率和丢包率，衡量真实连接体验而非单次峰值。')}
-            ${renderInfoCard('价格 C · 20%', '结合月付价格、试用支持和速度价格比，校正低价与高价的价值差异。')}
-            ${renderInfoCard('风险 R · 10%', '纳入域名、SSL、投诉与历史异常，避免高性能样本掩盖信任风险。')}
+            ${renderInfoCard('价格 C · 10%', '结合月付价格档位和速度价格比，校正低价与高价的价值差异。')}
+            ${renderInfoCard('风险 R · 20%', '纳入域名、SSL、投诉与历史异常，避免高性能样本掩盖信任风险。')}
           </div>
         </section>
         <section class="content-card">
@@ -736,7 +736,7 @@ export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: Pu
           <div class="card-grid">
             ${renderInfoCard('稳定性公式', 'S = 0.5 × UptimeScore + 0.3 × StabilityScore + 0.2 × StreakScore。')}
             ${renderInfoCard('性能公式', 'P = 0.4 × LatencyScore + 0.4 × SpeedScore + 0.2 × LossScore。')}
-            ${renderInfoCard('价格公式', 'C = 0.6 × PriceScore + 0.2 × TrialScore + 0.2 × ValueScore。')}
+            ${renderInfoCard('价格公式', 'C = 0.8 × PriceScore + 0.2 × ValueScore；PriceScore 三档为 1-30 元 100 分、30-50 元 80 分、50 元以上 60 分。')}
             ${renderInfoCard('风险公式', 'R = 100 - RiskPenalty。风险扣分来自域名、SSL、近期投诉和历史异常。')}
           </div>
         </section>

@@ -169,7 +169,7 @@ export function MethodologyPage() {
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div>
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">Final Score</div>
-                  <div className="mt-2 whitespace-normal text-[clamp(1.5rem,2.2vw,1.8rem)] font-black text-neutral-900 sm:whitespace-nowrap">0.4S + 0.3P + 0.2C + 0.1R</div>
+                  <div className="mt-2 whitespace-normal text-[clamp(1.5rem,2.2vw,1.8rem)] font-black text-neutral-900 sm:whitespace-nowrap">0.4S + 0.3P + 0.1C + 0.2R</div>
                 </div>
                 <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-left shadow-sm">
                   <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">核心原则</div>
@@ -223,7 +223,7 @@ export function MethodologyPage() {
               <div className="mt-6 rounded-3xl bg-neutral-950 px-5 py-6 text-white">
                 <div className="text-[11px] uppercase tracking-[0.18em] font-black text-white/50">公开主公式</div>
                 <div className="mt-3 break-words text-2xl md:text-[32px] font-black leading-tight sm:whitespace-nowrap">
-                  FinalScore = 0.4S + 0.3P + 0.2C + 0.1R
+                  FinalScore = 0.4S + 0.3P + 0.1C + 0.2R
                 </div>
                 <p className="mt-4 text-sm leading-7 text-white/68">
                   前三项衡量表现与价值，风险项作为独立约束进入总分。这样可以避免高性能或低价格掩盖基础信任问题。
@@ -248,7 +248,7 @@ export function MethodologyPage() {
                 </div>
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
                   <div className="text-sm font-black text-neutral-900">低价不能绕过质量约束</div>
-                  <p className="mt-2 text-sm leading-6 text-neutral-600">价格只占一部分，还要看速度价格比、试用支持和基础风险。</p>
+                  <p className="mt-2 text-sm leading-6 text-neutral-600">价格只占一部分，还要看月付价格档位、速度价格比和基础风险。</p>
                 </div>
                 <div className="rounded-2xl border border-neutral-200 bg-white p-4">
                   <div className="text-sm font-black text-neutral-900">风险必须显式进入模型</div>
@@ -353,7 +353,7 @@ export function MethodologyPage() {
                     <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-300">Step 1</div>
                     <div className="mt-2 whitespace-nowrap text-lg font-black text-neutral-900">先算当天综合分</div>
                     <div className="mt-2 text-sm leading-6 text-neutral-600">
-                      CurrentScore = 0.4S + 0.3P + 0.2C + 0.1R
+                      CurrentScore = 0.4S + 0.3P + 0.1C + 0.2R
                     </div>
                   </div>
                   <div className="rounded-2xl border border-neutral-200 bg-white p-4">
@@ -450,15 +450,15 @@ export function MethodologyPage() {
 
             <div className="rounded-[32px] border border-neutral-200 bg-white p-6 md:p-8">
               <div className="grid gap-4 md:grid-cols-2">
-                <ScoreTile label="S 稳定性" value={exampleCase.breakdown.s} detail={`92 / 89 / 80 -> ${formatNumber(exampleCase.breakdown.s)}`} tone="emerald" />
+                <ScoreTile label="S 稳定性" value={exampleCase.breakdown.s} detail={`92 / 96 / 80 -> ${formatNumber(exampleCase.breakdown.s)}`} tone="emerald" />
                 <ScoreTile label="P 性能" value={exampleCase.breakdown.p} detail={`95.93 / 72.41 / 88 -> ${formatNumber(exampleCase.breakdown.p)}`} tone="sky" />
-                <ScoreTile label="C 价格" value={exampleCase.breakdown.c} detail={`88.57 / 100 / 24.44 -> ${formatNumber(exampleCase.breakdown.c)}`} tone="amber" />
+                <ScoreTile label="C 价格" value={exampleCase.breakdown.c} detail={`100 / 24.44 -> ${formatNumber(exampleCase.breakdown.c)}`} tone="amber" />
                 <ScoreTile label="R 风险" value={exampleCase.breakdown.r} detail={`风险罚分 ${formatNumber(exampleCase.breakdown.riskPenalty)} -> ${formatNumber(exampleCase.breakdown.r)}`} tone="rose" />
               </div>
               <div className="mt-6 rounded-[28px] border border-neutral-200 bg-neutral-950 p-5 text-white">
                 <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/50">How The Numbers Close</div>
                 <div className="mt-3 space-y-3 text-sm leading-7 text-white/72">
-                  <p>当日综合分 = 0.4 × {formatNumber(exampleCase.breakdown.s)} + 0.3 × {formatNumber(exampleCase.breakdown.p)} + 0.2 × {formatNumber(exampleCase.breakdown.c)} + 0.1 × {formatNumber(exampleCase.breakdown.r)} = <span className="font-black text-white">{formatNumber(exampleCase.breakdown.currentScore)}</span></p>
+                  <p>当日综合分 = 0.4 × {formatNumber(exampleCase.breakdown.s)} + 0.3 × {formatNumber(exampleCase.breakdown.p)} + 0.1 × {formatNumber(exampleCase.breakdown.c)} + 0.2 × {formatNumber(exampleCase.breakdown.r)} = <span className="font-black text-white">{formatNumber(exampleCase.breakdown.currentScore)}</span></p>
                   <p>最终分 = 0.7 × {formatNumber(exampleCase.breakdown.currentScore)} + 0.3 × {formatNumber(exampleCase.input.historicalScore)} = <span className="font-black text-white">{formatNumber(exampleCase.breakdown.finalScore)}</span></p>
                 </div>
               </div>

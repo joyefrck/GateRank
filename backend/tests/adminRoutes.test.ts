@@ -2363,7 +2363,7 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
     assert.equal(data.performance.node_unavailability_percent, 100);
     assert.equal(data.performance.tested_nodes_count, 1);
     assert.equal((data.performance.selected_nodes as Array<{ name: string }>)[0].name, 'JP-1');
-    assert.equal(data.base.price_score, 80);
+    assert.equal(data.base.price_score, 100);
     assert.equal(data.base.score_data_days, null);
     assert.equal(data.base.total_score, null);
     assert.deepEqual(data.base.manual_tags, ['老牌机场']);
@@ -2562,7 +2562,7 @@ test('GET /airports/:id/dashboard exposes manual total score override metadata',
     const data = (await response.json()) as { base: Record<string, unknown> };
     assert.equal(data.base.total_score, 66.66);
     assert.equal(data.base.manual_total_score, 66.66);
-    assert.equal(data.base.formula_total_score, 11.06);
+    assert.equal(data.base.formula_total_score, 11.34);
     assert.equal(data.base.total_score_source, 'manual');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

@@ -199,8 +199,8 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
   assert.equal(replaced.size, 5);
   assert.ok((replaced.get('today') || 0) >= 1);
   assert.equal(storedScores.get('1:2026-03-22')?.historical_score, 92.62);
-  assert.equal(storedScores.get('1:2026-03-22')?.final_score, 89);
-  assert.equal(storedScores.get('1:2026-03-22')?.details.total_score, 37.28);
+  assert.equal(storedScores.get('1:2026-03-22')?.final_score, 90.14);
+  assert.equal(storedScores.get('1:2026-03-22')?.details.total_score, 38.14);
 });
 
 test('recomputeForDate preserves manual total score while refreshing formula score for rankings', async () => {

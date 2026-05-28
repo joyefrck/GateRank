@@ -71,13 +71,7 @@ export function computeScore(
     THRESHOLDS.packet_loss_percent.higherIsBetter,
   );
 
-  const priceScore = normalizeLinear(
-    airport.plan_price_month,
-    THRESHOLDS.price_month.good,
-    THRESHOLDS.price_month.bad,
-    THRESHOLDS.price_month.higherIsBetter,
-  );
-  const trialScore = airport.has_trial ? 100 : 0;
+  const priceScore = calcPriceScore(airport.plan_price_month);
   const valueRatio = metrics.median_download_mbps / Math.max(airport.plan_price_month, 1);
   const valueScore = normalizeLinear(
     valueRatio,
@@ -104,7 +98,6 @@ export function computeScore(
 
   const c =
     priceScore * SCORE_WEIGHTS.cost.price +
-    trialScore * SCORE_WEIGHTS.cost.trial +
     valueScore * SCORE_WEIGHTS.cost.value;
 
   const r = round2(clamp(100 - riskPenalty, 0, 100));
@@ -138,7 +131,6 @@ export function computeScore(
       speed_score: round2(speedScore),
       loss_score: round2(lossScore),
       price_score: round2(priceScore),
-      trial_score: round2(trialScore),
       value_score: round2(valueScore),
       value_ratio: round2(valueRatio),
       domain_penalty: round2(domainPenalty),
@@ -221,7 +213,16 @@ export interface FinalEngineScoreResult {
 }
 
 export function calcPriceScore(pricePer100gb: number): number {
-  return round2(clamp(100 - pricePer100gb, 0, 100));
+  if (!Number.isFinite(pricePer100gb) || pricePer100gb <= 0) {
+    return 60;
+  }
+  if (pricePer100gb <= 30) {
+    return 100;
+  }
+  if (pricePer100gb <= 50) {
+    return 80;
+  }
+  return 60;
 }
 
 export function coldStartFactor(days: number): number {

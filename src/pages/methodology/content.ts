@@ -4,8 +4,8 @@ import { METHODOLOGY_SEO } from '../../../shared/publicSeo';
 const SCORE_WEIGHTS = {
   stability: { uptime: 0.5, stability: 0.3, streak: 0.2 },
   performance: { latency: 0.4, speed: 0.4, loss: 0.2 },
-  cost: { price: 0.6, trial: 0.2, value: 0.2 },
-  final: { s: 0.4, p: 0.3, c: 0.2, r: 0.1 },
+  cost: { price: 0.8, value: 0.2 },
+  final: { s: 0.4, p: 0.3, c: 0.1, r: 0.2 },
   decay: { recent: 0.7, historical: 0.3 },
 } as const;
 
@@ -13,7 +13,6 @@ const THRESHOLDS = {
   latencyMs: { good: 60, bad: 600, higherIsBetter: false },
   downloadMbps: { good: 300, bad: 10, higherIsBetter: true },
   packetLossPercent: { good: 0, bad: 5, higherIsBetter: false },
-  priceMonth: { good: 10, bad: 80, higherIsBetter: false },
   valueRatio: { good: 50, bad: 0, higherIsBetter: true },
 } as const;
 
@@ -35,7 +34,7 @@ export const methodologySeo = METHODOLOGY_SEO;
 
 export const heroStats = [
   { label: '评分维度', value: '4', note: '稳定性 / 性能 / 价格 / 风险' },
-  { label: '主公式', value: 'S / P / C / R', note: '0.4 / 0.3 / 0.2 / 0.1 权重' },
+  { label: '主公式', value: 'S / P / C / R', note: '0.4 / 0.3 / 0.1 / 0.2 权重' },
   { label: '更新频率', value: '每日重算', note: '近期样本优先，历史表现保留' },
 ] as const;
 
@@ -65,8 +64,8 @@ export const totalScoreParts = [
     label: 'C',
     title: '价格',
     weight: SCORE_WEIGHTS.final.c,
-    percent: 20,
-    description: '结合月付价格、试用支持和速度价格比，校正低价与高价的价值差异。',
+    percent: 10,
+    description: '结合月付价格档位和速度价格比，校正低价与高价的价值差异。',
     accentClass: 'bg-amber-500',
     softClass: 'bg-amber-50 border-amber-200 text-amber-800',
   },
@@ -75,7 +74,7 @@ export const totalScoreParts = [
     label: 'R',
     title: '风险',
     weight: SCORE_WEIGHTS.final.r,
-    percent: 10,
+    percent: 20,
     description: '纳入域名、SSL、投诉与历史异常，避免高性能样本掩盖信任风险。',
     accentClass: 'bg-rose-500',
     softClass: 'bg-rose-50 border-rose-200 text-rose-800',
@@ -115,11 +114,10 @@ export const dimensionCards = [
   {
     code: 'C',
     title: '价格',
-    summary: '把价格、试用门槛和速度价格比放在同一价值框架内。',
-    formula: 'C = 0.6 × PriceScore + 0.2 × TrialScore + 0.2 × ValueScore',
+    summary: '把月付价格档位和速度价格比放在同一价值框架内。',
+    formula: 'C = 0.8 × PriceScore + 0.2 × ValueScore',
     bullets: [
-      'PriceScore 对低月付更友好，但不会让低价脱离稳定性和风险独立登顶。',
-      'TrialScore 只在支持试用时给满分，降低首次决策门槛。',
+      'PriceScore 采用三档：1-30 元为 100 分，30-50 元为 80 分，50 元以上为 60 分。',
       'ValueScore 使用速度价格比，让高价高性能和低价低性能都得到校正。',
     ],
     accentClass: 'from-amber-500/12 to-white',
@@ -176,7 +174,7 @@ export const trustPrinciples = [
 export const methodologyFaq = [
   {
     question: '低价机场一定高分吗？',
-    answer: '不会。价格只占总分 20%，还要结合速度价格比和试用支持；如果稳定性、性能或风险表现较弱，低价不会单独决定推荐位置。',
+    answer: '不会。价格只占总分 10%，并且 PriceScore 只按 1-30 元、30-50 元、50 元以上三档计算；如果稳定性、性能或风险表现较弱，低价不会单独决定推荐位置。',
   },
   {
     question: '测速快就一定推荐吗？',
@@ -252,6 +250,19 @@ function computeStreakScore(stableDaysStreak: number): number {
   return round2(clamp((stableDaysStreak / STABILITY_RULES.streakCapDays) * 100, 0, 100));
 }
 
+function calcPriceScore(priceMonth: number): number {
+  if (!Number.isFinite(priceMonth) || priceMonth <= 0) {
+    return 60;
+  }
+  if (priceMonth <= 30) {
+    return 100;
+  }
+  if (priceMonth <= 50) {
+    return 80;
+  }
+  return 60;
+}
+
 function describeStabilityTier(uptimePercent: number, latencyCv: number | null): '稳定' | '轻微波动' | '异常波动' {
   if (
     uptimePercent >= STABILITY_RULES.minDailyUptimePercent &&
@@ -319,7 +330,6 @@ const exampleInput = {
   medianDownloadMbps: 220,
   packetLossPercent: 0.6,
   priceMonth: 18,
-  hasTrial: true,
   domainOk: true,
   sslDaysLeft: 45,
   recentComplaintsCount: 1,
@@ -366,15 +376,7 @@ const p = round2(
     lossScore * SCORE_WEIGHTS.performance.loss,
 );
 
-const priceScore = round2(
-  normalizeLinear(
-    exampleInput.priceMonth,
-    THRESHOLDS.priceMonth.good,
-    THRESHOLDS.priceMonth.bad,
-    THRESHOLDS.priceMonth.higherIsBetter,
-  ),
-);
-const trialScore = exampleInput.hasTrial ? 100 : 0;
+const priceScore = calcPriceScore(exampleInput.priceMonth);
 const valueRatio = round2(exampleInput.medianDownloadMbps / exampleInput.priceMonth);
 const valueScore = round2(
   normalizeLinear(
@@ -386,7 +388,6 @@ const valueScore = round2(
 );
 const c = round2(
   priceScore * SCORE_WEIGHTS.cost.price +
-    trialScore * SCORE_WEIGHTS.cost.trial +
     valueScore * SCORE_WEIGHTS.cost.value,
 );
 
@@ -421,7 +422,6 @@ export const exampleCase = {
     speedScore,
     lossScore,
     priceScore,
-    trialScore,
     valueRatio,
     valueScore,
     domainPenalty,

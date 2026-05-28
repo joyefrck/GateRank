@@ -146,7 +146,7 @@ test('GET /methodology includes expanded methodology SEO body and FAQ structured
     const html = await response.text();
 
     assert.match(html, /总公式与评分目标/);
-    assert.match(html, /0\.4 × 稳定性 S \+ 0\.3 × 性能 P \+ 0\.2 × 价格 C \+ 0\.1 × 风险 R/);
+    assert.match(html, /0\.4 × 稳定性 S \+ 0\.3 × 性能 P \+ 0\.1 × 价格 C \+ 0\.2 × 风险 R/);
     assert.match(html, /四个维度的子项公式/);
     assert.match(html, /S = 0\.5 × UptimeScore \+ 0\.3 × StabilityScore \+ 0\.2 × StreakScore/);
     assert.match(html, /风险扣分如何进入排名/);

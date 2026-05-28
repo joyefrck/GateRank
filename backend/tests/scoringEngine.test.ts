@@ -55,14 +55,66 @@ test('computeFinalEngineScore combines S/P/R and price with cold start factor', 
     referenceDate: '2026-03-20',
   });
 
-  assert.equal(calcPriceScore(20), 80);
+  assert.equal(calcPriceScore(20), 100);
   assert.equal(coldStartFactor(1), 0.14);
   assert.equal(out.s, 80);
   assert.equal(out.p, 70);
   assert.equal(out.r, 90);
-  assert.equal(out.c, 80);
+  assert.equal(out.c, 100);
   assert.equal(out.data_days, 1);
-  assert.equal(out.final_score, 11.06);
+  assert.equal(out.final_score, 11.34);
+});
+
+test('calcPriceScore uses three monthly price bands', () => {
+  assert.equal(calcPriceScore(1), 100);
+  assert.equal(calcPriceScore(20), 100);
+  assert.equal(calcPriceScore(30), 100);
+  assert.equal(calcPriceScore(31), 80);
+  assert.equal(calcPriceScore(40), 80);
+  assert.equal(calcPriceScore(50), 80);
+  assert.equal(calcPriceScore(51), 60);
+  assert.equal(calcPriceScore(80), 60);
+});
+
+test('computeScore does not use trial support in the price dimension', () => {
+  const baseAirport: Airport = {
+    id: 1,
+    name: 'A',
+    website: 'https://a.example.com',
+    status: 'normal',
+    is_listed: true,
+    plan_price_month: 40,
+    has_trial: true,
+    tags: [],
+    created_at: '2026-03-20',
+  };
+
+  const metrics: DailyMetrics = {
+    airport_id: 1,
+    date: '2026-03-22',
+    uptime_percent_30d: 99,
+    uptime_percent_today: 99,
+    latency_samples_ms: [100, 120],
+    median_latency_ms: 110,
+    median_download_mbps: 100,
+    packet_loss_percent: 1,
+    stable_days_streak: 15,
+    healthy_days_streak: 15,
+    domain_ok: true,
+    ssl_days_left: 30,
+    recent_complaints_count: 0,
+    history_incidents: 0,
+  };
+
+  const withTrial = computeScore(baseAirport, metrics, 0);
+  const withoutTrial = computeScore({ ...baseAirport, has_trial: false }, metrics, 0);
+
+  assert.equal(withTrial.details.price_score, 80);
+  assert.equal(withTrial.details.value_score, 5);
+  assert.equal(withTrial.c, 65);
+  assert.equal(withTrial.c, withoutTrial.c);
+  assert.equal(withTrial.score, withoutTrial.score);
+  assert.equal(Object.prototype.hasOwnProperty.call(withTrial.details, 'trial_score'), false);
 });
 
 test('computeScore returns bounded and weighted output', () => {
@@ -101,7 +153,7 @@ test('computeScore returns bounded and weighted output', () => {
   assert.ok(out.c >= 0 && out.c <= 100);
   assert.ok(out.r >= 0 && out.r <= 100);
   assert.ok(out.score >= 0 && out.score <= 100);
-  assert.equal(out.final_score, Number((out.recent_score * 0.7 + 88 * 0.3).toFixed(2)));
+  assert.equal(out.final_score, 91.17);
   assert.equal(out.details.ssl_penalty, 0);
   assert.equal(out.details.complaint_penalty, 3);
   assert.equal(out.details.history_penalty, 0);

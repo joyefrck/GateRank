@@ -5,8 +5,8 @@ export const SHANGHAI_TIMEZONE = 'Asia/Shanghai';
 export const SCORE_WEIGHTS = {
   stability: { uptime: 0.5, stability: 0.3, streak: 0.2 },
   performance: { latency: 0.4, speed: 0.4, loss: 0.2 },
-  cost: { price: 0.6, trial: 0.2, value: 0.2 },
-  final: { s: 0.4, p: 0.3, c: 0.2, r: 0.1 },
+  cost: { price: 0.8, value: 0.2 },
+  final: { s: 0.4, p: 0.3, c: 0.1, r: 0.2 },
   decay: { recent: 0.7, historical: 0.3 },
 } as const;
 
@@ -14,8 +14,8 @@ export const TIME_DECAY_LAMBDA = 0.1;
 export const FINAL_ENGINE_WEIGHTS = {
   s: 0.4,
   p: 0.3,
-  r: 0.2,
   c: 0.1,
+  r: 0.2,
 } as const;
 
 export const STABILITY_RULES = {
