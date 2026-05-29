@@ -53,6 +53,7 @@ DEFAULT_LATENCY_SAMPLE_INTERVAL_SECONDS = 3
 DEFAULT_SPEED_TIMEOUT = 20
 DEFAULT_SPEED_CONNECTIONS = 4
 DEFAULT_PERFORMANCE_CONCURRENCY = 4
+DEFAULT_NODE_AVAILABILITY_CHECK = "proxy_http"
 DEFAULT_SOURCE = "cron-performance"
 DEFAULT_TEST_URL_LATENCY = "https://www.google.com/generate_204"
 DEFAULT_TEST_URL_SPEED = "https://speed.cloudflare.com/__down?bytes=5000000"
@@ -92,6 +93,7 @@ class Config:
     sing_box_bin: str
     trigger_aggregate: bool
     trigger_recompute: bool
+    node_availability_check: str = DEFAULT_NODE_AVAILABILITY_CHECK
 
 
 @dataclass
@@ -120,6 +122,9 @@ class NodeAvailabilityResult:
     node: ParsedNode
     available: bool
     error_code: str | None = None
+    check: str = "tcp"
+    tcp_reachable: bool | None = None
+    tcp_error_code: str | None = None
 
 
 @dataclass
@@ -229,6 +234,11 @@ def build_config() -> Config:
         type=int,
         default=int(os.getenv("PERFORMANCE_CONCURRENCY", str(DEFAULT_PERFORMANCE_CONCURRENCY))),
     )
+    parser.add_argument(
+        "--node-availability-check",
+        choices=("proxy_http", "tcp"),
+        default=os.getenv("NODE_AVAILABILITY_CHECK", DEFAULT_NODE_AVAILABILITY_CHECK),
+    )
     parser.add_argument("--page-size", type=int, default=int(os.getenv("PAGE_SIZE", "100")))
     parser.add_argument("--source", default=os.getenv("SOURCE", DEFAULT_SOURCE))
     parser.add_argument(
@@ -271,6 +281,7 @@ def build_config() -> Config:
         speed_timeout=max(1, args.speed_timeout),
         speed_connections=max(1, args.speed_connections),
         performance_concurrency=max(1, args.performance_concurrency),
+        node_availability_check=args.node_availability_check,
         page_size=max(1, args.page_size),
         source=args.source,
         test_url_latency=args.test_url_latency,
@@ -458,6 +469,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
     selection_config = get_performance_node_selection(config, airport_id)
     availability_results = check_nodes_availability(config, parsed_nodes)
     availability_summary = summarize_node_availability(availability_results)
+    availability_error_summary = summarize_availability_errors(availability_results)
     selection_result = resolve_selected_nodes(parsed_nodes, selection_config, availability_results)
     selected_nodes = selection_result.selected_nodes
     tested_nodes: list[dict[str, Any]] = []
@@ -489,6 +501,8 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             diagnostics={
                 **diagnostics,
                 "node_selection_mode": selection_result.mode,
+                "node_availability_check": config.node_availability_check,
+                "node_availability_error_summary": availability_error_summary,
                 "configured_node_count": selection_result.configured_node_count,
                 "skipped_configured_nodes": selection_result.skipped_configured_nodes or [],
                 "node_selection_error": selection_result.error,
@@ -580,6 +594,8 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             "speed_test_url": config.test_url_speed,
             "speed_test_connections": config.speed_connections,
             "node_selection_mode": selection_result.mode,
+            "node_availability_check": config.node_availability_check,
+            "node_availability_error_summary": availability_error_summary,
             "configured_node_count": selection_result.configured_node_count,
             "skipped_configured_nodes": selection_result.skipped_configured_nodes or [],
             "node_selection_error": selection_result.error,
@@ -1365,16 +1381,41 @@ def apply_tls(
 
 
 def select_nodes(nodes: list[ParsedNode], rng: Any = random) -> list[ParsedNode]:
+    candidates = [node for node in nodes if is_default_test_candidate(node)]
+    if not candidates:
+        candidates = [node for node in nodes if not is_informational_node(node)]
     selected: list[ParsedNode] = []
     used_names: set[str] = set()
-    for region in ordered_regions(nodes):
-        candidates = [item for item in nodes if region_key(item) == region and item.name not in used_names]
-        if not candidates:
+    for region in ordered_regions(candidates):
+        region_candidates = [item for item in candidates if region_key(item) == region and item.name not in used_names]
+        if not region_candidates:
             continue
-        node = rng.choice(candidates)
+        node = rng.choice(region_candidates)
         selected.append(node)
         used_names.add(node.name)
     return selected
+
+
+def is_default_test_candidate(node: ParsedNode) -> bool:
+    return bool(node.region) and not is_informational_node(node)
+
+
+def is_informational_node(node: ParsedNode) -> bool:
+    name = node.name.strip().lower()
+    informational_markers = (
+        "剩余流量",
+        "套餐到期",
+        "官网",
+        "节点不通",
+        "刷新",
+        "重导订阅",
+        "订阅",
+        "traffic",
+        "expire",
+        "official",
+        "website",
+    )
+    return any(marker in name for marker in informational_markers)
 
 
 def resolve_selected_nodes(
@@ -1477,7 +1518,10 @@ def check_nodes_availability(
     nodes: list[ParsedNode],
     probe_fn: Any | None = None,
 ) -> list[NodeAvailabilityResult]:
-    probe = probe_fn or probe_node_availability
+    if probe_fn:
+        probe = probe_fn
+    else:
+        probe = probe_node_proxy_http_availability if config.node_availability_check == "proxy_http" else probe_node_availability
     return [probe(config, node) for node in nodes]
 
 
@@ -1487,9 +1531,52 @@ def probe_node_availability(config: Config, node: ParsedNode) -> NodeAvailabilit
         with socket.socket(address[0], socket.SOCK_STREAM) as sock:
             sock.settimeout(config.http_timeout)
             sock.connect(address[4])
-        return NodeAvailabilityResult(node=node, available=True)
+        return NodeAvailabilityResult(node=node, available=True, check="tcp", tcp_reachable=True)
     except Exception as exc:
-        return NodeAvailabilityResult(node=node, available=False, error_code=str(exc))
+        error_code = str(exc)
+        return NodeAvailabilityResult(
+            node=node,
+            available=False,
+            error_code=error_code,
+            check="tcp",
+            tcp_reachable=False,
+            tcp_error_code=error_code,
+        )
+
+
+def probe_node_proxy_http_availability(config: Config, node: ParsedNode) -> NodeAvailabilityResult:
+    tcp_result = probe_node_availability(config, node)
+    if not tcp_result.available:
+        return NodeAvailabilityResult(
+            node=node,
+            available=False,
+            error_code=f"tcp_unreachable:{tcp_result.error_code}",
+            check="proxy_http",
+            tcp_reachable=False,
+            tcp_error_code=tcp_result.error_code,
+        )
+
+    config_path = ""
+    proc: subprocess.Popen[Any] | None = None
+    try:
+        proc, config_path = run_sing_box(config, node)
+        test_proxy_http_once(config)
+        return NodeAvailabilityResult(
+            node=node,
+            available=True,
+            check="proxy_http",
+            tcp_reachable=True,
+        )
+    except Exception as exc:
+        return NodeAvailabilityResult(
+            node=node,
+            available=False,
+            error_code=str(exc),
+            check="proxy_http",
+            tcp_reachable=True,
+        )
+    finally:
+        stop_sing_box(proc, config_path)
 
 
 def summarize_node_availability(results: list[NodeAvailabilityResult]) -> dict[str, Any]:
@@ -1508,10 +1595,26 @@ def summarize_node_availability(results: list[NodeAvailabilityResult]) -> dict[s
                 **node_to_summary(item.node),
                 "status": "available" if item.available else "unavailable",
                 "error_code": item.error_code,
+                "check": item.check,
+                "tcp_reachable": item.tcp_reachable,
+                "tcp_error_code": item.tcp_error_code,
             }
             for item in results
         ],
     }
+
+
+def summarize_availability_errors(results: list[NodeAvailabilityResult]) -> list[dict[str, Any]]:
+    counts: dict[str, int] = {}
+    for item in results:
+        if item.available:
+            continue
+        code = item.error_code or "unknown"
+        counts[code] = counts.get(code, 0) + 1
+    return [
+        {"error_code": code, "count": count}
+        for code, count in sorted(counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
 
 
 def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
@@ -1647,6 +1750,13 @@ def test_proxy_http_latency(config: Config) -> tuple[list[float], int, int]:
         if index < config.latency_attempts - 1:
             time.sleep(config.latency_sample_interval_seconds)
     return latencies, failures, config.latency_attempts
+
+
+def test_proxy_http_once(config: Config) -> None:
+    opener = build_proxy_opener(config)
+    request = Request(config.test_url_latency, method="GET", headers={"User-Agent": "GateRank-Performance-Monitor/1.0"})
+    with opener.open(request, timeout=config.http_timeout) as response:
+        response.read(1)
 
 
 def test_speed(config: Config) -> float | None:

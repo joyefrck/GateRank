@@ -2304,7 +2304,11 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
           packet_loss_percent: null,
           error_code: 'no_successful_probes',
           error_message: 'all selected nodes failed',
-          diagnostics: {},
+          diagnostics: {
+            node_availability_check: 'proxy_http',
+            node_availability_error_summary: [{ error_code: 'tcp_unreachable:timed out', count: 1 }],
+            speed_test_url: 'https://speed.cloudflare.com/__down?bytes=5000000',
+          },
         }),
         getLatestByAirportBeforeDate: async () => ({
           id: 9,
@@ -2326,7 +2330,11 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
           packet_loss_percent: null,
           error_code: 'no_successful_probes',
           error_message: 'all selected nodes failed',
-          diagnostics: {},
+          diagnostics: {
+            node_availability_check: 'proxy_http',
+            node_availability_error_summary: [{ error_code: 'tcp_unreachable:timed out', count: 1 }],
+            speed_test_url: 'https://speed.cloudflare.com/__down?bytes=5000000',
+          },
         }),
       },
       metricsRepository: stubMetricsRepository(),
@@ -2362,6 +2370,11 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
     assert.equal(data.performance.unavailable_nodes_count, 1);
     assert.equal(data.performance.node_unavailability_percent, 100);
     assert.equal(data.performance.tested_nodes_count, 1);
+    assert.equal(data.performance.node_availability_check, 'proxy_http');
+    assert.deepEqual(data.performance.node_availability_error_summary, [
+      { error_code: 'tcp_unreachable:timed out', count: 1 },
+    ]);
+    assert.equal(data.performance.speed_test_url, 'https://speed.cloudflare.com/__down?bytes=5000000');
     assert.equal((data.performance.selected_nodes as Array<{ name: string }>)[0].name, 'JP-1');
     assert.equal(data.base.price_score, 100);
     assert.equal(data.base.score_data_days, null);

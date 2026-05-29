@@ -504,7 +504,7 @@ ADMIN_API_KEY=gaterank_admin_key \
 - 检查 `sing-box` 是否可执行，并为代表节点启动临时本地代理
 - 解析普通 URI / Base64 订阅，以及 Clash YAML / Clash Meta 中的 `vmess`、`ss`、`trojan`、`vless`、`anytls` 节点；`anytls` 需要 `sing-box >= 1.12.0`
 - 按订阅解析出的每个地区随机选择 1 个代表节点，采集代理链路延迟、下载速度与代理探测失败率
-- 对全部支持节点执行轻量可用性检查，统计可用节点数、不可用节点数、可用率与不可用率
+- 对全部支持节点执行可用性检查，默认通过本地 `sing-box` 代理访问探测 URL，并保留 TCP 直连结果作为诊断
 - 调用后端 `performance-runs` 接口写入运行状态与原始性能样本
 - 调用后端 `aggregate` 与 `recompute`，刷新当日 P 分与榜单
 
@@ -541,6 +541,7 @@ SING_BOX_BIN=sing-box \
 - `PROXY_PORT`: 本地 HTTP 代理端口，默认 `7890`
 - `PROXY_STARTUP_TIMEOUT`: 等待 `sing-box` 启动秒数，默认 `8`
 - `LATENCY_ATTEMPTS`: 每节点延迟探测次数，默认 `3`
+- `NODE_AVAILABILITY_CHECK`: 节点可用性口径，`proxy_http` 或 `tcp`，默认 `proxy_http`
 - `TEST_URL_LATENCY`: 代理 HTTP 诊断 URL，默认 `https://www.google.com/generate_204`
 - `TEST_URL_SPEED`: 下载测速 URL，默认 `https://speed.cloudflare.com/__down?bytes=5000000`
 - `SPEED_CONNECTIONS`: 下载测速并发连接数，默认 `4`
@@ -550,9 +551,9 @@ SING_BOX_BIN=sing-box \
 说明：
 
 - `median_latency_ms` 现在按“节点服务器 TCP 建连延迟”计算，用于性能评分，更接近代理客户端里的节点延迟口径。
-- `TEST_URL_LATENCY` 只用于记录代理 HTTP 诊断耗时，不再直接参与 `P` 评分。
+- `TEST_URL_LATENCY` 用于代理 HTTP 诊断耗时，也用于默认 `proxy_http` 节点可用性探测；不直接参与 `P` 评分。
 - `median_download_mbps` 现在按“多连接并发下载”计算，比之前的单连接下载更接近 Speedtest 的测速口径。
-- 节点可用性作为风险维度参与 `R` 评分：不可用率越高，`node_availability_penalty` 越高，最高扣 30 分。
+- 节点可用性作为风险维度参与 `R` 评分：默认口径为完整代理 HTTP 探测，不可用率越高，`node_availability_penalty` 越高，最高扣 30 分。需要回退旧口径时可设 `NODE_AVAILABILITY_CHECK=tcp`。
 
 ## 当前 MVP 边界
 

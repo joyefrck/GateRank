@@ -2171,7 +2171,13 @@ export function createAdminRoutes(deps: AdminDeps): Router {
             performanceDiagnostics.proxy_http_median_latency_ms,
           ),
           speed_measurement: stringOrNull(performanceDiagnostics.speed_measurement),
+          speed_test_url: stringOrNull(performanceDiagnostics.speed_test_url),
           speed_test_connections: numberOrNull(performanceDiagnostics.speed_test_connections),
+          node_availability_check: stringOrNull(performanceDiagnostics.node_availability_check),
+          node_availability_error_summary:
+            Array.isArray(performanceDiagnostics.node_availability_error_summary)
+              ? performanceDiagnostics.node_availability_error_summary
+              : [],
         },
         risk: {
           domain_ok: boolOrNull(metricsObj.domain_ok),

@@ -403,7 +403,10 @@ interface AirportDashboardView {
     proxy_http_test_url: string | null;
     proxy_http_median_latency_ms: number | null;
     speed_measurement: string | null;
+    speed_test_url: string | null;
     speed_test_connections: number | null;
+    node_availability_check: string | null;
+    node_availability_error_summary: Array<{ error_code: string; count: number }>;
   };
   risk: {
     domain_ok: boolean | null;
@@ -9500,7 +9503,9 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <ReadField label="延迟口径" value={valueOrDash(dashboard.performance.latency_measurement)} />
               <ReadField label="延迟探测目标" value={valueOrDash(dashboard.performance.latency_probe_target)} />
               <ReadField label="测速口径" value={valueOrDash(dashboard.performance.speed_measurement)} />
+              <ReadField label="测速URL" value={valueOrDash(dashboard.performance.speed_test_url)} />
               <ReadField label="测速并发连接数" value={valueOrDash(dashboard.performance.speed_test_connections)} />
+              <ReadField label="节点可用性口径" value={valueOrDash(dashboard.performance.node_availability_check)} />
                 <ReadField label="解析节点数" value={valueOrDash(dashboard.performance.parsed_nodes_count)} />
                 <ReadField label="支持节点数" value={valueOrDash(dashboard.performance.supported_nodes_count)} />
                 <ReadField label="可用节点数" value={valueOrDash(dashboard.performance.available_nodes_count)} />
@@ -9517,6 +9522,14 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                 />
                 <ReadField label="错误码" value={valueOrDash(dashboard.performance.error_code)} />
                 <ReadField label="错误摘要" value={valueOrDash(dashboard.performance.error_message)} />
+                <ReadField
+                  label="不可用错误分布"
+                  value={valueOrDash(
+                    (dashboard.performance.node_availability_error_summary || [])
+                      .map((item) => `${item.error_code} × ${item.count}`)
+                      .join(', ') || '-',
+                  )}
+                />
               </div>
             </div>
 

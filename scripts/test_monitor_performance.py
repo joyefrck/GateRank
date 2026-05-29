@@ -270,7 +270,7 @@ proxies:
         selected = select_nodes([node for node in nodes if node is not None], rng=PickLastRandom())
         self.assertEqual([node.name for node in selected], ["HK-B", "JP-B", "SG-A", "硅谷-A"])
 
-    def test_select_nodes_groups_unknown_regions_as_other(self) -> None:
+    def test_select_nodes_skips_other_when_detected_regions_exist(self) -> None:
         uris = [
             "trojan://password@hk.example.com:443#HK-A",
             "trojan://password@de.example.com:443#DE-A",
@@ -278,7 +278,21 @@ proxies:
         ]
         nodes = [parse_node_line(uri) for uri in uris]
         selected = select_nodes([node for node in nodes if node is not None], rng=PickLastRandom())
-        self.assertEqual([node.name for node in selected], ["HK-A", "NL-A"])
+        self.assertEqual([node.name for node in selected], ["HK-A"])
+
+    def test_select_nodes_skips_informational_and_other_nodes_by_default(self) -> None:
+        nodes = [
+            node for node in [
+                parse_node_line("trojan://password@info.example.com:443#剩余流量：1008.61 GB"),
+                parse_node_line("trojan://password@hk.example.com:443#香港IEPL专线 01"),
+                parse_node_line("trojan://password@nl.example.com:443#荷兰BGP多线 01"),
+            ]
+            if node is not None
+        ]
+
+        selected = select_nodes(nodes, rng=PickLastRandom())
+
+        self.assertEqual([node.name for node in selected], ["香港IEPL专线 01"])
 
     def test_resolve_selected_nodes_keeps_default_region_selection_without_preferences(self) -> None:
         nodes = [
@@ -338,6 +352,27 @@ proxies:
         self.assertEqual(round(available / len(results) * 100, 2), 75.0)
         self.assertEqual(round(unavailable / len(results) * 100, 2), 25.0)
 
+    def test_check_nodes_availability_uses_proxy_http_mode_when_configured(self) -> None:
+        config = self.make_config()
+        config.node_availability_check = "proxy_http"
+        node = parse_node_line("trojan://password@hk.example.com:443#HK-A")
+        assert node is not None
+
+        with patch("scripts.monitor_performance.probe_node_proxy_http_availability") as proxy_probe:
+            proxy_probe.return_value = NodeAvailabilityResult(
+                node=node,
+                available=True,
+                error_code=None,
+                check="proxy_http",
+                tcp_reachable=True,
+            )
+            results = check_nodes_availability(config, [node])
+
+        self.assertEqual(results[0].available, True)
+        self.assertEqual(results[0].check, "proxy_http")
+        self.assertEqual(results[0].tcp_reachable, True)
+        proxy_probe.assert_called_once_with(config, node)
+
     def test_build_config_defaults_to_six_latency_attempts_and_three_second_interval(self) -> None:
         env = {
             "ADMIN_API_KEY": "test-key",
@@ -349,6 +384,18 @@ proxies:
         self.assertEqual(config.latency_attempts, 6)
         self.assertEqual(config.latency_sample_interval_seconds, 3)
         self.assertEqual(config.performance_concurrency, 4)
+        self.assertEqual(config.node_availability_check, "proxy_http")
+
+    def test_build_config_accepts_tcp_node_availability_check(self) -> None:
+        env = {
+            "ADMIN_API_KEY": "test-key",
+            "AIRPORT_ID": "1",
+            "NODE_AVAILABILITY_CHECK": "tcp",
+        }
+        with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", ["monitor_performance.py"]):
+            config = build_config()
+
+        self.assertEqual(config.node_availability_check, "tcp")
 
     def test_build_config_rejects_non_ascii_admin_api_key(self) -> None:
         env = {
@@ -463,6 +510,10 @@ proxies:
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["diagnostics"]["node_source"], "fresh_subscription")
         self.assertEqual(payload["diagnostics"]["snapshot_id"], 9)
+        self.assertEqual(payload["diagnostics"]["node_availability_check"], "proxy_http")
+        self.assertEqual(payload["diagnostics"]["node_availability_error_summary"], [])
+        self.assertEqual(payload["diagnostics"]["node_availability"][0]["check"], "tcp")
+        self.assertEqual(payload["diagnostics"]["node_availability"][0]["tcp_reachable"], None)
         self.assertEqual(saved_snapshots[0]["nodes"][0]["raw_uri"], "trojan://secret@hk.example.com:443#HK-1")
         self.assertEqual(saved_snapshots[0]["nodes"][0]["outbound"]["server"], "hk.example.com")
 
