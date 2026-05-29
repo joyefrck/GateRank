@@ -4063,7 +4063,6 @@ function ReportScoreBreakdown({ data }: { data: ReportViewResponse }) {
     { label: '价格 (C)', value: data.score_breakdown.c, color: 'bg-orange-500', suffix: 'C' },
     { label: '风险 (R)', value: data.score_breakdown.r, color: 'bg-purple-500', suffix: 'R' },
     { label: '最终分', value: data.score_breakdown.final_score, color: 'bg-emerald-500', suffix: '' },
-    { label: '风险惩罚', value: data.score_breakdown.risk_penalty, color: 'bg-slate-400', suffix: '' },
   ];
   return (
     <section id="report-score" className="scroll-mt-36">

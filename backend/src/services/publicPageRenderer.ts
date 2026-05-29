@@ -434,7 +434,6 @@ function renderReportSummary(view: ReportView): string {
         ${renderScoreMetric('价格 (C)', view.score_breakdown.c, 'orange')}
         ${renderScoreMetric('风险 (R)', view.score_breakdown.r, 'purple')}
         ${renderScoreMetric('最终分', view.score_breakdown.final_score, 'emerald')}
-        ${renderScoreMetric('风险惩罚', view.score_breakdown.risk_penalty, 'slate')}
       </div>
     </section>
     <section id="report-metrics" class="report-section report-anchor-target">

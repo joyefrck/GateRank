@@ -453,6 +453,17 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /香港 · 6 节点 · IEPL/);
     assert.match(okHtml, /🇭🇰/);
     assert.match(okHtml, /评分拆解/);
+    const scoreSectionStart = okHtml.indexOf('<section id="report-score"');
+    assert.notEqual(scoreSectionStart, -1);
+    const scoreSectionEnd = okHtml.indexOf('<section id="report-metrics"', scoreSectionStart);
+    assert.notEqual(scoreSectionEnd, -1);
+    const scoreSection = okHtml.slice(scoreSectionStart, scoreSectionEnd);
+    assert.match(scoreSection, /<div>稳定性 \(S\)<\/div>/);
+    assert.match(scoreSection, /<div>性能 \(P\)<\/div>/);
+    assert.match(scoreSection, /<div>价格 \(C\)<\/div>/);
+    assert.match(scoreSection, /<div>风险 \(R\)<\/div>/);
+    assert.match(scoreSection, /<div>最终分<\/div>/);
+    assert.doesNotMatch(scoreSection, /<div>风险惩罚<\/div>/);
     assert.match(okHtml, /核心监测指标/);
     assert.match(okHtml, /30 天可用率/);
     assert.match(okHtml, /30 天趋势/);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
-test('React report snapshot grid omits risk penalty while score breakdown keeps it', async () => {
+test('React report card grids omit risk penalty metric cards', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
 
   const snapshotStart = source.indexOf('function ReportSnapshotGrid');
@@ -24,5 +24,5 @@ test('React report snapshot grid omits risk penalty while score breakdown keeps 
   assert.notEqual(scoreEnd, -1);
   const scoreBreakdown = source.slice(scoreStart, scoreEnd);
 
-  assert.match(scoreBreakdown, /label: '风险惩罚'/);
+  assert.doesNotMatch(scoreBreakdown, /label: '风险惩罚'/);
 });
