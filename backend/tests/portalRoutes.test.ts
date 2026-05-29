@@ -4125,7 +4125,18 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
         payment_crypto_other: 'USDC',
         profile: {
           plan: { supports_monthly: true, supports_annual: true },
-          clients: { clash: true },
+          telegram: {
+            has_group: true,
+            group_url: 'https://t.me/cloudgroup',
+            has_channel: true,
+            channel_url: 'https://t.me/cloudchannel',
+            group_allows_speaking: false,
+            group_member_count: 1234,
+            recent_active_at: '2026-05-01',
+            has_customer_service_bot: true,
+            has_ticket_system: false,
+          },
+          clients: { clash: true, clash_mi: true, clash_party: true },
           import_methods: { one_click_import: true },
         },
         subscription_url: 'https://subscribe-new.example.com',
@@ -4166,7 +4177,18 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
     assert.equal((updatedAirports[0].profile as any).plan.supports_annual, true);
     assert.equal((updatedAirports[0].profile as any).plan.lowest_monthly_price, 1888);
     assert.equal((updatedAirports[0].profile as any).plan.has_trial_plan, false);
+    assert.equal((updatedAirports[0].profile as any).telegram.has_group, true);
+    assert.equal((updatedAirports[0].profile as any).telegram.group_url, 'https://t.me/cloudgroup');
+    assert.equal((updatedAirports[0].profile as any).telegram.has_channel, true);
+    assert.equal((updatedAirports[0].profile as any).telegram.channel_url, 'https://t.me/cloudchannel');
+    assert.equal((updatedAirports[0].profile as any).telegram.group_allows_speaking, false);
+    assert.equal((updatedAirports[0].profile as any).telegram.group_member_count, 1234);
+    assert.equal((updatedAirports[0].profile as any).telegram.recent_active_at, '2026-05-01');
+    assert.equal((updatedAirports[0].profile as any).telegram.has_customer_service_bot, true);
+    assert.equal((updatedAirports[0].profile as any).telegram.has_ticket_system, false);
     assert.equal((updatedAirports[0].profile as any).clients.clash, true);
+    assert.equal((updatedAirports[0].profile as any).clients.clash_mi, true);
+    assert.equal((updatedAirports[0].profile as any).clients.clash_party, true);
     assert.equal((updatedAirports[0].profile as any).import_methods.one_click_import, true);
     assert.equal(cacheClears, 1);
     const data = (await response.json()) as {

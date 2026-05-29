@@ -413,6 +413,8 @@ type AirportProfileClientKey =
   | 'self_built_client'
   | 'clash'
   | 'clash_verge'
+  | 'clash_mi'
+  | 'clash_party'
   | 'shadowrocket'
   | 'quantumult_x'
   | 'stash'
@@ -437,7 +439,7 @@ type AirportProfileRegionKey =
   | 'argentina'
   | 'india';
 type AirportProfileLineType = 'iepl' | 'iplc' | 'cn2' | 'bgp' | 'relay';
-type PortalProfileTab = 'basic' | 'review' | 'plan' | 'nodes' | 'clients' | 'import';
+type PortalProfileTab = 'basic' | 'review' | 'plan' | 'telegram' | 'nodes' | 'clients' | 'import';
 
 interface AirportProfilePlan {
   supports_monthly: boolean | null;
@@ -540,6 +542,8 @@ const AIRPORT_PROFILE_CLIENT_OPTIONS: Array<{ value: AirportProfileClientKey; la
   { value: 'self_built_client', label: '自建客户端' },
   { value: 'clash', label: 'Clash' },
   { value: 'clash_verge', label: 'Clash Verge' },
+  { value: 'clash_mi', label: 'Clash Mi' },
+  { value: 'clash_party', label: 'Clash Party' },
   { value: 'shadowrocket', label: 'Shadowrocket' },
   { value: 'quantumult_x', label: 'Quantumult X' },
   { value: 'stash', label: 'Stash' },
@@ -579,6 +583,7 @@ const PORTAL_PROFILE_TABS: Array<{ key: PortalProfileTab; label: string }> = [
   { key: 'basic', label: '基础信息' },
   { key: 'review', label: '申报信息' },
   { key: 'plan', label: '套餐信息' },
+  { key: 'telegram', label: '电报信息' },
   { key: 'nodes', label: '节点覆盖' },
   { key: 'clients', label: '客户端支持' },
   { key: 'import', label: '导入教程' },
@@ -6087,6 +6092,12 @@ function PortalPage() {
         profile: { ...current.profile, clients: { ...current.profile.clients, [key]: value } },
       }));
     };
+    const updateProfileTelegram = <K extends keyof AirportProfileTelegram>(key: K, value: AirportProfileTelegram[K]) => {
+      setApplicationForm((current) => ({
+        ...current,
+        profile: { ...current.profile, telegram: { ...current.profile.telegram, [key]: value } },
+      }));
+    };
     const updateImportMethod = <K extends keyof AirportProfileImportMethods>(key: K, value: AirportProfileImportMethods[K]) => {
       setApplicationForm((current) => ({
         ...current,
@@ -6324,6 +6335,48 @@ function PortalPage() {
                       step="0.01"
                       value={applicationForm.profile.plan.lowest_annual_monthly_price ?? ''}
                       onChange={(e) => updateProfilePlan('lowest_annual_monthly_price', parseOptionalNumberInput(e.target.value))}
+                    />
+                  </PublicFormField>
+                </div>
+              )}
+
+              {applicationProfileTab === 'telegram' && (
+                <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-2">
+                  <PortalNullableBooleanRadioGroup label="是否有 Telegram 群" name="portal_profile_has_group" value={applicationForm.profile.telegram.has_group} onChange={(value) => updateProfileTelegram('has_group', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否有 Telegram 频道" name="portal_profile_has_channel" value={applicationForm.profile.telegram.has_channel} onChange={(value) => updateProfileTelegram('has_channel', value)} />
+                  <PortalNullableBooleanRadioGroup label="群是否允许发言" name="portal_profile_group_allows_speaking" value={applicationForm.profile.telegram.group_allows_speaking} onChange={(value) => updateProfileTelegram('group_allows_speaking', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否有客服 Bot" name="portal_profile_has_customer_service_bot" value={applicationForm.profile.telegram.has_customer_service_bot} onChange={(value) => updateProfileTelegram('has_customer_service_bot', value)} />
+                  <PortalNullableBooleanRadioGroup label="是否有工单系统" name="portal_profile_has_ticket_system" value={applicationForm.profile.telegram.has_ticket_system} onChange={(value) => updateProfileTelegram('has_ticket_system', value)} />
+                  <PublicFormField label="Telegram 群链接">
+                    <input
+                      className={portalInputClass}
+                      value={applicationForm.profile.telegram.group_url || ''}
+                      onChange={(e) => updateProfileTelegram('group_url', e.target.value || null)}
+                    />
+                  </PublicFormField>
+                  <PublicFormField label="Telegram 频道链接">
+                    <input
+                      className={portalInputClass}
+                      value={applicationForm.profile.telegram.channel_url || ''}
+                      onChange={(e) => updateProfileTelegram('channel_url', e.target.value || null)}
+                    />
+                  </PublicFormField>
+                  <PublicFormField label="群人数">
+                    <input
+                      className={portalInputClass}
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={applicationForm.profile.telegram.group_member_count ?? ''}
+                      onChange={(e) => updateProfileTelegram('group_member_count', normalizeOptionalInteger(e.target.value))}
+                    />
+                  </PublicFormField>
+                  <PublicFormField label="最近活跃时间">
+                    <input
+                      className={portalInputClass}
+                      type="date"
+                      value={applicationForm.profile.telegram.recent_active_at || ''}
+                      onChange={(e) => updateProfileTelegram('recent_active_at', e.target.value || null)}
                     />
                   </PublicFormField>
                 </div>

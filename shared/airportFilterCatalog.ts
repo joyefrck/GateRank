@@ -38,6 +38,8 @@ export const AIRPORT_CLIENT_FILTERS: AirportFilterOption[] = [
   { key: 'self_built_client', label: '自建客户端', seoLabel: '自建客户端' },
   { key: 'clash', label: 'Clash', seoLabel: '支持 Clash' },
   { key: 'clash_verge', label: 'Clash Verge', seoLabel: '支持 Clash Verge' },
+  { key: 'clash_mi', label: 'Clash Mi', seoLabel: '支持 Clash Mi' },
+  { key: 'clash_party', label: 'Clash Party', seoLabel: '支持 Clash Party' },
   { key: 'shadowrocket', label: 'Shadowrocket', seoLabel: '支持 Shadowrocket' },
   { key: 'quantumult_x', label: 'Quantumult X', seoLabel: '支持 Quantumult X' },
   { key: 'stash', label: 'Stash', seoLabel: '支持 Stash' },

@@ -23,6 +23,8 @@ export type AirportProfileClientKey =
   | 'self_built_client'
   | 'clash'
   | 'clash_verge'
+  | 'clash_mi'
+  | 'clash_party'
   | 'shadowrocket'
   | 'quantumult_x'
   | 'stash'

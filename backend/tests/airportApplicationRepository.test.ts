@@ -187,6 +187,8 @@ test('AirportApplicationRepository.updateApplicantOperations saves capability pr
         self_built_client: null,
         clash: true,
         clash_verge: null,
+        clash_mi: null,
+        clash_party: null,
         shadowrocket: null,
         quantumult_x: null,
         stash: null,

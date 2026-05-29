@@ -70,6 +70,8 @@ type AirportProfileClientKey =
   | 'self_built_client'
   | 'clash'
   | 'clash_verge'
+  | 'clash_mi'
+  | 'clash_party'
   | 'shadowrocket'
   | 'quantumult_x'
   | 'stash'
@@ -275,6 +277,8 @@ const AIRPORT_PROFILE_CLIENT_OPTIONS: Array<{ value: AirportProfileClientKey; la
   { value: 'self_built_client', label: '自建客户端' },
   { value: 'clash', label: 'Clash' },
   { value: 'clash_verge', label: 'Clash Verge' },
+  { value: 'clash_mi', label: 'Clash Mi' },
+  { value: 'clash_party', label: 'Clash Party' },
   { value: 'shadowrocket', label: 'Shadowrocket' },
   { value: 'quantumult_x', label: 'Quantumult X' },
   { value: 'stash', label: 'Stash' },
