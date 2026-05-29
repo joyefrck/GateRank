@@ -31,7 +31,7 @@ import {
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
-import { TagBadge, TagBadgeGroup } from './components/TagBadge';
+import { TagBadge, TagBadgeGroup, getTagBadgeTone } from './components/TagBadge';
 import {
   buildAbsoluteUrl,
   buildDealsHref,
@@ -1655,11 +1655,14 @@ function FullRankingCapabilitySummary({ item }: { item: FullRankingItemResponse 
 
   return (
     <div className="mt-4 flex flex-wrap gap-2">
-      {capabilities.slice(0, 10).map((label) => (
-        <span key={label} className="inline-flex min-h-8 items-center rounded-full border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-800">
-          {label}
-        </span>
-      ))}
+      {capabilities.slice(0, 10).map((label) => {
+        const tone = getTagBadgeTone(label);
+        return (
+          <span key={label} className={`inline-flex min-h-8 items-center rounded-full border px-3 text-xs font-black ${tone.className}`}>
+            {label}
+          </span>
+        );
+      })}
     </div>
   );
 }
@@ -4188,11 +4191,14 @@ function ReportConclusion({
         建议结合官网可达性、近期投诉、风险惩罚和 30 天趋势一起判断，不仅按单次测速决定是否长期使用。
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
-        {rankPairs.map((item) => (
-          <span key={item.label} className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-black text-slate-600">
-            {item.label} {item.value ? `#${item.value}` : '未入榜'}
-          </span>
-        ))}
+        {rankPairs.map((item) => {
+          const tone = getTagBadgeTone(item.label);
+          return (
+            <span key={item.label} className={`rounded-full border px-3 py-1 text-xs font-black ${tone.className}`}>
+              {item.label} {item.value ? `#${item.value}` : '未入榜'}
+            </span>
+          );
+        })}
       </div>
     </section>
   );
@@ -4204,9 +4210,9 @@ function ReportSectionTitle({ title }: { title: string }) {
 
 function ReportTag({ label, tone }: { label: string; tone: 'green' | 'blue' | 'emerald' }) {
   const classes = {
-    green: 'border-emerald-100 bg-emerald-50 text-emerald-700',
-    blue: 'border-blue-100 bg-blue-50 text-blue-700',
-    emerald: 'border-teal-100 bg-teal-50 text-teal-700',
+    green: 'border-emerald-300/90 bg-[linear-gradient(135deg,#ecfdf5_0%,#d1fae5_55%,#a7f3d0_100%)] text-emerald-900 shadow-[0_10px_24px_-18px_rgba(5,150,105,0.82)]',
+    blue: 'border-blue-300/90 bg-[linear-gradient(135deg,#eff6ff_0%,#dbeafe_55%,#bfdbfe_100%)] text-blue-900 shadow-[0_10px_24px_-18px_rgba(37,99,235,0.82)]',
+    emerald: 'border-teal-300/90 bg-[linear-gradient(135deg,#f0fdfa_0%,#ccfbf1_55%,#99f6e4_100%)] text-teal-900 shadow-[0_10px_24px_-18px_rgba(13,148,136,0.82)]',
   };
   return <span className={`rounded-full border px-3 py-1 text-xs font-black ${classes[tone]}`}>{label}</span>;
 }

@@ -16,7 +16,7 @@ interface TagBadgeGroupProps {
   className?: string;
 }
 
-interface TagTone {
+export interface TagTone {
   className: string;
   dotClassName: string;
 }
@@ -64,8 +64,8 @@ const TAG_TONES: Record<string, TagTone> = {
   },
   观察中: {
     className:
-      'border-slate-300/90 bg-[linear-gradient(135deg,#f8fafc_0%,#f1f5f9_55%,#e2e8f0_100%)] text-slate-700 shadow-[0_10px_24px_-18px_rgba(100,116,139,0.7)]',
-    dotClassName: 'bg-slate-400 shadow-[0_0_0_4px_rgba(148,163,184,0.14)]',
+      'border-fuchsia-300/90 bg-[linear-gradient(135deg,#fdf4ff_0%,#fae8ff_52%,#f5d0fe_100%)] text-fuchsia-900 shadow-[0_10px_24px_-18px_rgba(192,38,211,0.86)]',
+    dotClassName: 'bg-fuchsia-500 shadow-[0_0_0_4px_rgba(217,70,239,0.14)]',
   },
   流媒体友好: {
     className:
@@ -82,6 +82,31 @@ const TAG_TONES: Record<string, TagTone> = {
       'border-cyan-300/90 bg-[linear-gradient(135deg,#ecfeff_0%,#cffafe_55%,#a5f3fc_100%)] text-cyan-900 shadow-[0_10px_24px_-18px_rgba(8,145,178,0.88)]',
     dotClassName: 'bg-cyan-500 shadow-[0_0_0_4px_rgba(6,182,212,0.14)]',
   },
+  专线能力: {
+    className:
+      'border-blue-300/90 bg-[linear-gradient(135deg,#eff6ff_0%,#dbeafe_52%,#bfdbfe_100%)] text-blue-900 shadow-[0_10px_24px_-18px_rgba(37,99,235,0.9)]',
+    dotClassName: 'bg-blue-500 shadow-[0_0_0_4px_rgba(59,130,246,0.14)]',
+  },
+  AI解锁: {
+    className:
+      'border-violet-300/90 bg-[linear-gradient(135deg,#f5f3ff_0%,#ede9fe_52%,#ddd6fe_100%)] text-violet-900 shadow-[0_10px_24px_-18px_rgba(124,58,237,0.88)]',
+    dotClassName: 'bg-violet-500 shadow-[0_0_0_4px_rgba(139,92,246,0.14)]',
+  },
+  支付友好: {
+    className:
+      'border-lime-300/90 bg-[linear-gradient(135deg,#f7fee7_0%,#ecfccb_52%,#d9f99d_100%)] text-lime-900 shadow-[0_10px_24px_-18px_rgba(101,163,13,0.86)]',
+    dotClassName: 'bg-lime-500 shadow-[0_0_0_4px_rgba(132,204,22,0.14)]',
+  },
+  客户端支持: {
+    className:
+      'border-pink-300/90 bg-[linear-gradient(135deg,#fdf2f8_0%,#fce7f3_52%,#fbcfe8_100%)] text-pink-900 shadow-[0_10px_24px_-18px_rgba(219,39,119,0.82)]',
+    dotClassName: 'bg-pink-500 shadow-[0_0_0_4px_rgba(236,72,153,0.14)]',
+  },
+  地区节点: {
+    className:
+      'border-emerald-300/90 bg-[linear-gradient(135deg,#ecfdf5_0%,#d1fae5_52%,#a7f3d0_100%)] text-emerald-900 shadow-[0_10px_24px_-18px_rgba(5,150,105,0.88)]',
+    dotClassName: 'bg-emerald-500 shadow-[0_0_0_4px_rgba(16,185,129,0.14)]',
+  },
 };
 
 const KEYWORD_TONES: Array<{ keywords: string[]; tone: TagTone }> = [
@@ -93,25 +118,43 @@ const KEYWORD_TONES: Array<{ keywords: string[]; tone: TagTone }> = [
   { keywords: ['性价比', '便宜', '省钱'], tone: TAG_TONES.性价比高 },
   { keywords: ['高性能', '速度', '游戏', '低延迟'], tone: TAG_TONES.高性能 },
   { keywords: ['高端', '旗舰', 'VIP'], tone: TAG_TONES.高端路线 },
-  { keywords: ['流媒体', '奈飞', '解锁'], tone: TAG_TONES.流媒体友好 },
+  { keywords: ['IEPL', 'IPLC', 'CN2', 'BGP', '专线', '中转'], tone: TAG_TONES.专线能力 },
+  { keywords: ['AI', 'ChatGPT', 'GPT', '全解锁', '解锁'], tone: TAG_TONES.AI解锁 },
+  { keywords: ['微信', '支付宝', 'USDT', 'TRC20', 'ERC20', 'BEP20', '银行卡', 'PayPal', '支付'], tone: TAG_TONES.支付友好 },
+  { keywords: ['Clash', 'Shadowrocket', 'Quantumult', 'Stash', 'Surge', 'sing-box', 'v2ray', 'NekoBox', '客户端', '导入', '订阅'], tone: TAG_TONES.客户端支持 },
+  { keywords: ['香港', '台湾', '日本', '新加坡', '美国', '韩国', '英国', '德国', '地区'], tone: TAG_TONES.地区节点 },
+  { keywords: ['流媒体', '奈飞', 'Netflix', 'Disney', 'YouTube', 'TikTok', 'Spotify'], tone: TAG_TONES.流媒体友好 },
   { keywords: ['老牌', '成熟'], tone: TAG_TONES.老牌机场 },
   { keywords: ['备用', '线路', '节点'], tone: TAG_TONES.备用线路多 },
 ];
 
-const DEFAULT_TONE: TagTone = {
-  className:
-    'border-neutral-300/90 bg-[linear-gradient(135deg,#ffffff_0%,#f5f5f5_55%,#e5e5e5_100%)] text-neutral-800 shadow-[0_10px_24px_-18px_rgba(38,38,38,0.45)]',
-  dotClassName: 'bg-neutral-700 shadow-[0_0_0_4px_rgba(64,64,64,0.08)]',
-};
+const FALLBACK_TONES: TagTone[] = [
+  TAG_TONES.AI解锁,
+  TAG_TONES.支付友好,
+  TAG_TONES.客户端支持,
+  TAG_TONES.地区节点,
+  TAG_TONES.专线能力,
+  TAG_TONES.流媒体友好,
+  TAG_TONES.新入榜,
+  TAG_TONES.高性能,
+];
 
-function resolveTone(tag: string): TagTone {
+function getFallbackTone(tag: string): TagTone {
+  let hash = 0;
+  for (let index = 0; index < tag.length; index += 1) {
+    hash = (hash * 31 + tag.charCodeAt(index)) >>> 0;
+  }
+  return FALLBACK_TONES[hash % FALLBACK_TONES.length];
+}
+
+export function getTagBadgeTone(tag: string): TagTone {
   const exactMatch = TAG_TONES[tag];
   if (exactMatch) {
     return exactMatch;
   }
 
   const keywordMatch = KEYWORD_TONES.find((entry) => entry.keywords.some((keyword) => tag.includes(keyword)));
-  return keywordMatch?.tone || DEFAULT_TONE;
+  return keywordMatch?.tone || getFallbackTone(tag);
 }
 
 export function TagBadge({
@@ -119,7 +162,7 @@ export function TagBadge({
   size = 'md',
   className = '',
 }: TagBadgeProps): React.JSX.Element {
-  const tone = resolveTone(tag);
+  const tone = getTagBadgeTone(tag);
   const sizeClassName =
     size === 'sm'
       ? 'gap-1.5 px-2.5 py-1 text-[11px] tracking-[0.08em]'
@@ -147,8 +190,9 @@ export function TagBadgeGroup({
   className = '',
 }: TagBadgeGroupProps): React.JSX.Element {
   if (tags.length === 0) {
+    const tone = getTagBadgeTone(emptyLabel);
     return (
-      <span className="inline-flex items-center rounded-full border border-dashed border-neutral-300 px-3 py-1 text-[11px] font-black tracking-[0.1em] text-neutral-400">
+      <span className={['inline-flex items-center rounded-full border border-dashed px-3 py-1 text-[11px] font-black tracking-[0.1em]', tone.className].join(' ')}>
         {emptyLabel}
       </span>
     );
