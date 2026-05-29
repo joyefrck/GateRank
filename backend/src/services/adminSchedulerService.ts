@@ -319,9 +319,6 @@ export class AdminSchedulerService {
         message: result.message,
         detailJson: result.detail,
       });
-      if (shouldTriggerAggregateAfterTask(taskKey, triggerSource, result.status)) {
-        await this.executeTask('aggregate_recompute', 'schedule');
-      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       await this.deps.schedulerRunRepository.markFinished({
@@ -370,14 +367,6 @@ function resolveRunDate(
     return getDateInTimezone(task.timezone || SHANGHAI_TIMEZONE, scheduledRunAt);
   }
   return getDateInTimezone(task.timezone || SHANGHAI_TIMEZONE, startedAt);
-}
-
-function shouldTriggerAggregateAfterTask(
-  taskKey: SchedulerTaskKey,
-  triggerSource: SchedulerTriggerSource,
-  status: SchedulerTaskExecutionResult['status'],
-): boolean {
-  return taskKey === 'risk' && triggerSource === 'schedule' && status === 'succeeded';
 }
 
 export function computeNextRunAt(scheduleTime: string, now: Date, timezone: string): Date {

@@ -326,7 +326,7 @@ test('AdminSchedulerService scheduled midnight execution uses scheduled slot dat
   assert.deepEqual(runDates, ['2026-03-31']);
 });
 
-test('AdminSchedulerService scheduled risk execution auto-triggers aggregate_recompute', async () => {
+test('AdminSchedulerService scheduled risk execution does not trigger aggregate_recompute', async () => {
   const tasks = [
     createTask({ task_key: 'risk', name: '风险体检', schedule_time: '00:20' }),
     createTask({ task_key: 'aggregate_recompute', name: '聚合重算', schedule_time: '00:30' }),
@@ -375,8 +375,5 @@ test('AdminSchedulerService scheduled risk execution auto-triggers aggregate_rec
     'create:risk',
     'run:risk',
     'finish:1:succeeded',
-    'create:aggregate_recompute',
-    'run:aggregate_recompute',
-    'finish:4:succeeded',
   ]);
 });
