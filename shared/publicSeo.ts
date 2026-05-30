@@ -5,6 +5,7 @@ import {
   hasFullRankingFilters,
   type FullRankingFilters,
 } from './fullRankingFilters';
+import { AIRPORT_PAYMENT_FILTERS, AIRPORT_STREAMING_FILTERS } from './airportFilterCatalog';
 import type { AirportDealView } from './airportAds';
 
 export interface PublicSeoText {
@@ -115,6 +116,11 @@ export interface PublicReportContentSection {
 export interface PublicReportContentSummary {
   body: string;
   chips: string[];
+}
+
+export interface PublicReportComparisonLink {
+  label: string;
+  href: string;
 }
 
 export interface PublicDealsContentSection {
@@ -355,9 +361,10 @@ export function buildReportSeo(input?: PublicReportSeoView): PublicSeoText {
   const airportKeywords = airportName
     ? `${airportName}怎么样,${airportName}测评,${airportName}跑路,${airportName}官网,${airportName}机场测评,`
     : '';
+  const searchName = airportName ? buildReportSearchName(airportName) : undefined;
   return {
     title: airportName
-      ? `${airportName} 测评报告 | ${PUBLIC_SITE_BRAND_NAME}`
+      ? `${searchName}怎么样？${searchName}测评、官网入口、稳定性与跑路风险分析 | ${PUBLIC_SITE_BRAND_NAME}`
       : `机场测评报告 | ${PUBLIC_SITE_BRAND_NAME}`,
     description:
       input && airportName && statusLabel
@@ -369,30 +376,44 @@ export function buildReportSeo(input?: PublicReportSeoView): PublicSeoText {
 
 function buildReportDescription(view: PublicReportSeoView, airportName: string, statusLabel: string): string {
   const score = formatPublicScoreText(view);
-  const website = view.airport.website || '未收录';
-  const riskText =
-    view.airport.status === 'down'
-      ? '已标记跑路风险'
-      : view.airport.status === 'risk'
-        ? '存在风险观察'
-        : `风险惩罚 ${formatMetric(view.score_breakdown.risk_penalty)}`;
-  const trendText = buildReportTrendText(view);
+  const trendLabel = buildReportTrendLabel(view);
 
-  return `${airportName}机场测评：当前公开总分${score}，状态${statusLabel}，官网为 ${website}。报告结合${riskText}、${trendText}和稳定性数据，帮助判断${airportName}是否适合作为机场 VPN 选择。`;
+  return `${buildReportSearchName(airportName)}测评包含评分${score}、状态${statusLabel}、官网入口、稳定性、下载速度${formatMetric(view.metrics.median_download_mbps)} Mbps、延迟${formatMetric(view.metrics.median_latency_ms)} ms、丢包率${formatMetric(view.metrics.packet_loss_percent)}%、${trendLabel}和跑路风险分析，帮助判断是否值得使用。`;
+}
+
+export function buildReportTrendLabel(view: PublicReportSeoView): string {
+  const observedDays = getReportObservationDays(view);
+  if (observedDays >= 30) {
+    return '30 天趋势';
+  }
+  if (observedDays >= 2) {
+    return `近 ${observedDays} 天趋势`;
+  }
+  return '近期趋势';
+}
+
+export function getReportObservationDays(view: PublicReportSeoView): number {
+  return Math.max(
+    view.trends.score_30d.length,
+    view.trends.uptime_30d.length,
+    view.trends.latency_30d.length,
+    view.trends.download_30d.length,
+  );
 }
 
 function buildReportTrendText(view: PublicReportSeoView): string {
   const scoreTrend = view.trends.score_30d;
+  const trendLabel = buildReportTrendLabel(view);
   if (scoreTrend.length >= 2) {
     const first = scoreTrend[0]?.value;
     const last = scoreTrend[scoreTrend.length - 1]?.value;
     if (typeof first === 'number' && typeof last === 'number') {
       const delta = last - first;
       const direction = delta > 0 ? '上升' : delta < 0 ? '下降' : '持平';
-      return `30 天趋势${direction}`;
+      return `${trendLabel}${direction}`;
     }
   }
-  return '30 天趋势';
+  return trendLabel;
 }
 
 export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqItem[] {
@@ -402,6 +423,9 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
   const planText = buildPlanSummaryText(view);
   const regionText = buildRegionSummaryText(view);
   const clientText = buildListSummary(view.capabilities.clients, '客户端未收录');
+  const streamingText = buildListSummary(view.capabilities.streaming, '流媒体解锁能力未收录');
+  const chatGptSupport = view.capabilities.streaming.some((item) => item.key === 'chatgpt' || /chatgpt/i.test(item.label));
+  const trialText = formatNullableSupportText(view.capabilities.plan.has_trial_plan);
 
   return [
     {
@@ -432,6 +456,32 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
       question: `${airportName}支持哪些套餐、客户端和地区？`,
       answer: `${airportName} 套餐情况：${planText}。客户端支持：${clientText}。节点覆盖：${regionText}。`,
     },
+    {
+      question: `${airportName}适合新手使用吗？`,
+      answer: `${airportName} 当前客户端支持记录为 ${clientText}，导入方式为 ${buildListSummary(view.capabilities.import_methods, '导入方式未收录')}，试用记录为${trialText}。新手使用前建议先核对官网入口、教程和订阅导入方式。`,
+    },
+    {
+      question: `${airportName}支持流媒体吗？`,
+      answer: `${airportName} 当前流媒体和解锁能力记录为 ${streamingText}。这些能力来自公开资料与监测整理，具体节点在不同时间的可用性仍需以实际测试为准。`,
+    },
+    {
+      question: `${airportName}支持 ChatGPT 和 AI 工具吗？`,
+      answer: chatGptSupport
+        ? `${airportName} 当前能力记录包含 ChatGPT，可作为 AI 工具访问场景的候选；仍建议结合延迟 ${formatMetric(view.metrics.median_latency_ms)} ms、丢包率 ${formatMetric(view.metrics.packet_loss_percent)}% 和近期趋势判断。`
+        : `${airportName} 当前未收录 ChatGPT 支持记录，是否适合 AI 工具访问需要以官网说明和实际节点测试为准。`,
+    },
+    {
+      question: `${airportName}速度怎么样？`,
+      answer: `${airportName} 当前中位延迟为 ${formatMetric(view.metrics.median_latency_ms)} ms，下载速率为 ${formatMetric(view.metrics.median_download_mbps)} Mbps，丢包率为 ${formatMetric(view.metrics.packet_loss_percent)}%，可结合${buildReportTrendLabel(view)}继续观察。`,
+    },
+    {
+      question: `${airportName}和其他机场相比有什么优势？`,
+      answer: `${airportName} 当前公开总分${formatPublicScoreText(view)}，稳定性 S=${formatMetric(view.score_breakdown.s)}、性能 P=${formatMetric(view.score_breakdown.p)}、价格 C=${formatMetric(view.score_breakdown.c)}、风险 R=${formatMetric(view.score_breakdown.r)}。它的优势需要放到全量榜单、稳定榜和性价比筛选中横向比较。`,
+    },
+    {
+      question: `选择${airportName}前要注意什么？`,
+      answer: `选择${airportName}前，建议核对官网入口、当前状态${statusLabel}、风险惩罚 ${formatMetric(view.score_breakdown.risk_penalty)}、近期投诉 ${view.metrics.recent_complaints_count} 条、历史异常 ${view.metrics.history_incidents} 次、套餐价格和${buildReportTrendLabel(view)}，不要只按单次测速或单日分数决定长期使用。`,
+    },
   ];
 }
 
@@ -440,6 +490,7 @@ export function buildReportContentSections(view: PublicReportSeoView): PublicRep
   const statusLabel = formatAirportStatusLabel(view.airport.status);
   const score = formatPublicScoreText(view);
   const trendText = buildReportTrendText(view);
+  const trendLabel = buildReportTrendLabel(view);
   const scoreDeltaText = buildTrendDeltaText(view.trends.score_30d, '分');
   const uptimeTrendText = buildTrendDeltaText(view.trends.uptime_30d, '个百分点');
   const latencyTrendText = buildTrendDeltaText(view.trends.latency_30d, ' ms');
@@ -458,7 +509,7 @@ export function buildReportContentSections(view: PublicReportSeoView): PublicRep
       body: `${airportName} 当前 GateRank 公开总分${score}，状态为${statusLabel}。本页把 ${airportName} 机场测评拆成评分、风险、稳定性、性能、套餐、节点和售后信息，适合在选择机场 VPN 前做事实核对。${view.summary_card.conclusion}`,
       facts: [
         `数据日期 ${view.date}`,
-        `30 天趋势${trendText.replace(/^30 天趋势/, '') || '持平'}`,
+        `${trendLabel}${trendText.replace(trendLabel, '') || '持平'}`,
         `综合评级 ${buildScoreGradeText(view.summary_card.score)}`,
       ],
     },
@@ -512,6 +563,26 @@ export function buildReportContentSections(view: PublicReportSeoView): PublicRep
         `工单系统 ${formatNullableSupportText(view.capabilities.telegram.has_ticket_system)}`,
       ],
     },
+    {
+      title: '适合哪些用户',
+      body: buildReportFitText(view),
+      facts: [
+        `稳定性 ${formatStabilityTierLabel(view.metrics.stability_tier)}`,
+        `延迟 ${formatMetric(view.metrics.median_latency_ms)} ms`,
+        `下载 ${formatMetric(view.metrics.median_download_mbps)} Mbps`,
+        `解锁 ${streamingText}`,
+      ],
+    },
+    {
+      title: '选择前要注意什么',
+      body: `选择 ${airportName} 前，建议重点核对当前评分是否持续、${trendLabel}是否稳定、官网入口是否可访问、延迟和丢包率是否异常、投诉与历史异常是否增加，以及套餐、退款、试用、USDT、流媒体和 AI 工具支持是否符合自己的使用场景。GateRank 分数只能作为辅助决策依据，不能替代用户自己的试用和判断。`,
+      facts: [
+        `近期投诉 ${view.metrics.recent_complaints_count} 条`,
+        `历史异常 ${view.metrics.history_incidents} 次`,
+        `支付方式 ${paymentText}`,
+        `试用 ${formatNullableSupportText(view.capabilities.plan.has_trial_plan)}`,
+      ],
+    },
   ];
 }
 
@@ -531,6 +602,30 @@ export function buildReportContentSummary(view: PublicReportSeoView): PublicRepo
       `试用 ${formatNullableSupportText(view.capabilities.plan.has_trial_plan)}`,
     ],
   };
+}
+
+export function buildReportComparisonLinks(view: PublicReportSeoView): PublicReportComparisonLink[] {
+  const links: PublicReportComparisonLink[] = [
+    { label: '机场推荐榜', href: PUBLIC_SEO_PATHS.fullRanking },
+  ];
+
+  if (typeof view.ranking.most_stable_rank === 'number') {
+    links.push({ label: '稳定机场榜', href: PUBLIC_SEO_PATHS.fullRanking });
+  }
+  if (typeof view.ranking.best_value_rank === 'number') {
+    links.push({ label: '性价比机场榜', href: PUBLIC_SEO_PATHS.fullRanking });
+  }
+  if (view.capabilities.payment_methods.some((item) => item.key === 'usdt_trc20')) {
+    links.push({ label: '支持 USDT 的机场', href: buildFullRankingFilterHref('payment', 'usdt_trc20') });
+  }
+  if (view.capabilities.streaming.some((item) => item.key === 'netflix')) {
+    links.push({ label: '支持流媒体的机场', href: buildFullRankingFilterHref('streaming', 'netflix') });
+  }
+  if (view.capabilities.streaming.some((item) => item.key === 'chatgpt')) {
+    links.push({ label: '支持 AI 工具的机场', href: buildFullRankingFilterHref('streaming', 'chatgpt') });
+  }
+
+  return dedupeReportComparisonLinks(links).slice(0, 6);
 }
 
 export function buildReportStructuredData(
@@ -576,6 +671,7 @@ export function buildReportStructuredData(
       [view.airport.name, canonicalPath],
     ]),
     buildReportRankingItemList(siteUrl, view),
+    buildReportProductReviewJsonLd(siteUrl, canonicalPath, seo, view),
     {
       '@context': 'https://schema.org',
       '@type': 'FAQPage',
@@ -589,6 +685,61 @@ export function buildReportStructuredData(
       })),
     },
   ];
+}
+
+export function buildReportProductReviewJsonLd(
+  siteUrl: string,
+  canonicalPath: string,
+  seo: PublicSeoText,
+  view: PublicReportSeoView,
+): Record<string, unknown> {
+  const canonicalUrl = `${siteUrl}${canonicalPath}`;
+  const ratingValue = view.summary_card.score_hidden || view.summary_card.score === null
+    ? null
+    : formatMetric(view.summary_card.score);
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: buildReportSearchName(view.airport.name),
+    description: seo.description,
+    url: canonicalUrl,
+    category: '机场 VPN 服务',
+    brand: {
+      '@type': 'Brand',
+      name: view.airport.name,
+    },
+    sameAs: view.airport.website,
+    additionalProperty: [
+      buildPropertyValue('GateRank算法评分说明', 'GateRank Score 是公开监测算法评分，不是用户评分或付费排名。'),
+      buildPropertyValue('稳定性S', formatMetric(view.score_breakdown.s)),
+      buildPropertyValue('性能P', formatMetric(view.score_breakdown.p)),
+      buildPropertyValue('价格C', formatMetric(view.score_breakdown.c)),
+      buildPropertyValue('风险R', formatMetric(view.score_breakdown.r)),
+      buildPropertyValue('风险惩罚', formatMetric(view.score_breakdown.risk_penalty)),
+      buildPropertyValue('近期趋势', buildReportTrendLabel(view)),
+    ],
+    review: {
+      '@type': 'Review',
+      author: {
+        '@type': 'Organization',
+        name: PUBLIC_SITE_BRAND_NAME,
+      },
+      name: `${view.airport.name} GateRank 算法测评`,
+      reviewBody: `GateRank 算法评分基于公开监测数据生成，当前总分${formatPublicScoreText(view)}，状态${formatAirportStatusLabel(view.airport.status)}，稳定性 S=${formatMetric(view.score_breakdown.s)}，性能 P=${formatMetric(view.score_breakdown.p)}，价格 C=${formatMetric(view.score_breakdown.c)}，风险 R=${formatMetric(view.score_breakdown.r)}。该结论不是用户评价，也不是付费排名。`,
+      datePublished: view.date,
+      ...(ratingValue
+        ? {
+          reviewRating: {
+            '@type': 'Rating',
+            ratingValue,
+            bestRating: '100',
+            worstRating: '0',
+          },
+        }
+        : {}),
+    },
+  };
 }
 
 export const METHODOLOGY_SEO: PublicSeoText = {
@@ -649,6 +800,41 @@ function slugFromWebsite(website: string): string {
   } catch {
     return normalizeAirportSlug(raw);
   }
+}
+
+function buildReportSearchName(airportName: string): string {
+  return airportName.endsWith('机场') ? airportName : `${airportName}机场`;
+}
+
+function buildReportFitText(view: PublicReportSeoView): string {
+  const airportName = view.airport.name;
+  const stableText = formatStabilityTierLabel(view.metrics.stability_tier);
+  const streamingText = buildListSummary(view.capabilities.streaming, '流媒体解锁能力未收录');
+  const clientText = buildListSummary(view.capabilities.clients, '客户端未收录');
+  const scoreText = formatPublicScoreText(view);
+  const cautionText = getReportObservationDays(view) < 30
+    ? `但当前${buildReportTrendLabel(view)}样本仍短于 30 天，长期可靠性需要继续跟踪。`
+    : `同时仍需结合后续数据、官网状态和风险记录继续判断长期可靠性。`;
+
+  return `${airportName} 更适合重视稳定性、低延迟、日常网页访问、流媒体或 AI 工具访问的用户。当前公开总分${scoreText}，稳定性评级为${stableText}，中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms，下载速率 ${formatMetric(view.metrics.median_download_mbps)} Mbps，丢包率 ${formatMetric(view.metrics.packet_loss_percent)}%，客户端支持记录为 ${clientText}，解锁能力记录为 ${streamingText}。${cautionText}`;
+}
+
+function buildFullRankingFilterHref(category: 'payment' | 'streaming', key: string): string {
+  const catalog = category === 'payment' ? AIRPORT_PAYMENT_FILTERS : AIRPORT_STREAMING_FILTERS;
+  const supported = catalog.some((item) => item.key === key);
+  return supported ? `${PUBLIC_SEO_PATHS.fullRanking}${buildQuery({ [category]: key })}` : PUBLIC_SEO_PATHS.fullRanking;
+}
+
+function dedupeReportComparisonLinks(links: PublicReportComparisonLink[]): PublicReportComparisonLink[] {
+  const seen = new Set<string>();
+  return links.filter((link) => {
+    const key = `${link.label}|${link.href}`;
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
 }
 
 export function buildQuery(params: Record<string, string | number | undefined | null>): string {

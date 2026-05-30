@@ -51,10 +51,12 @@ import {
   buildFullRankingHeading,
   buildFullRankingSeo,
   buildHomeSeo,
+  buildReportComparisonLinks,
   buildReportContentSections,
   buildReportContentSummary,
   buildReportSeo,
   buildReportStructuredData,
+  buildReportTrendLabel,
   buildRiskMonitorSeo,
   formatAirportStatusLabel,
 } from '../shared/publicSeo';
@@ -810,7 +812,7 @@ const reportAnchorSections = [
   { id: 'report-capabilities', label: '服务能力' },
   { id: 'report-score', label: '评分拆解' },
   { id: 'report-metrics', label: '核心指标' },
-  { id: 'report-trends', label: '30天趋势' },
+  { id: 'report-trends', label: '趋势' },
   { id: 'report-plan-telegram', label: '套餐电报' },
   { id: 'report-conclusion', label: '结论建议' },
 ] as const;
@@ -3892,6 +3894,7 @@ function ReportContentV2({
 }
 
 function ReportHeroV2({ data }: { data: ReportViewResponse }) {
+  const searchName = data.airport.name.endsWith('机场') ? data.airport.name : `${data.airport.name}机场`;
   return (
     <section id="report-overview" className={`scroll-mt-36 grid gap-6 rounded-[8px] border border-slate-200 bg-[linear-gradient(135deg,#f8fbff_0%,#ffffff_54%,#eef6ff_100%)] p-5 shadow-sm md:grid-cols-[minmax(0,1fr)_320px] md:p-8 lg:grid-cols-[minmax(0,1fr)_380px] ${reportCardInteractiveClass}`}>
       <div className="min-w-0">
@@ -3911,7 +3914,7 @@ function ReportHeroV2({ data }: { data: ReportViewResponse }) {
         </div>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-black tracking-tight text-slate-950 md:text-4xl">
-            {data.airport.name} 测评报告
+            {searchName}测评：官网入口、稳定性、速度与跑路风险分析
           </h1>
           <span className={`rounded-full border px-3 py-1 text-xs font-black ${getAirportStatusTone(data.airport.status)}`}>
             {formatAirportStatus(data.airport.status)}
@@ -3919,7 +3922,7 @@ function ReportHeroV2({ data }: { data: ReportViewResponse }) {
         </div>
         <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
           基于 GateRank 全球节点监测数据，从稳定性、性能、价格与风险四个维度综合评估。
-          本页展示 {data.airport.name} 的综合评分、服务能力、关键指标与 30 天趋势，帮助判断是否适合作为机场 VPN 选择。
+          本页展示 {data.airport.name} 的综合评分、服务能力、关键指标与 {buildReportTrendLabel(data)}，帮助判断是否适合作为机场 VPN 选择。
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
           {data.airport.tags.map((tag) => (
@@ -3997,7 +4000,31 @@ function ReportContentNarrative({ data }: { data: ReportViewResponse }) {
           </details>
         ))}
       </div>
+      <ReportComparisonLinks data={data} />
     </section>
+  );
+}
+
+function ReportComparisonLinks({ data }: { data: ReportViewResponse }) {
+  const links = buildReportComparisonLinks(data);
+  if (links.length === 0) {
+    return null;
+  }
+  return (
+    <div className={`mt-4 rounded-[8px] border border-slate-200 bg-white p-4 ${reportInnerTileInteractiveClass}`}>
+      <h3 className="text-sm font-black text-slate-950">继续对比更多机场</h3>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {links.map((link) => (
+          <a
+            key={`${link.label}-${link.href}`}
+            href={link.href}
+            className="inline-flex min-h-8 items-center rounded-full border border-blue-100 bg-blue-50 px-3 text-xs font-black text-blue-700 transition hover:border-blue-200 hover:bg-white"
+          >
+            {link.label}
+          </a>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -4101,7 +4128,7 @@ function ReportCoreMetrics({ data }: { data: ReportViewResponse }) {
 function ReportTrendSection({ data }: { data: ReportViewResponse }) {
   return (
     <section id="report-trends" className="scroll-mt-36">
-      <ReportSectionTitle title="30天趋势" />
+      <ReportSectionTitle title={buildReportTrendLabel(data)} />
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <ReportTrendCard title="评分趋势" points={data.summary_card.score_hidden ? [] : data.trends.score_30d} color="#22c55e" hidden={data.summary_card.score_hidden} />
         <ReportTrendCard title="可用率趋势" points={data.trends.uptime_30d} color="#0ea5e9" suffix="%" />

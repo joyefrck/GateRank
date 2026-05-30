@@ -380,7 +380,8 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
       'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
     );
     const okHtml = await okResponse.text();
-    assert.match(okHtml, /<h1>星云机场 测评报告<\/h1>/);
+    assert.match(okHtml, /<title>星云机场怎么样？星云机场测评、官网入口、稳定性与跑路风险分析 \| 机场榜GateRank<\/title>/);
+    assert.match(okHtml, /<h1>星云机场测评：官网入口、稳定性、速度与跑路风险分析<\/h1>/);
     assert.match(okHtml, /id="report-top"/);
     assert.match(okHtml, /报告日期：2026-03-23/);
     assert.match(okHtml, /<div class="breadcrumb"><a href="\/">首页<\/a><span>\/<\/span>星云机场<\/div>/);
@@ -424,6 +425,8 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /<summary>套餐与试用<\/summary>/);
     assert.match(okHtml, /<summary>节点、客户端与解锁<\/summary>/);
     assert.match(okHtml, /<summary>Telegram 与售后<\/summary>/);
+    assert.match(okHtml, /<summary>适合哪些用户<\/summary>/);
+    assert.match(okHtml, /<summary>选择前要注意什么<\/summary>/);
     assert.match(okHtml, /综合结论/);
     assert.match(okHtml, /星云机场 当前 GateRank 公开总分98\.60\/100，状态为正常。本页把 星云机场 机场测评拆成评分/);
     assert.doesNotMatch(okHtml, /星云机场 当前 GateRank 公开分数为 98\.60\/100，状态为正常，官网为/);
@@ -466,13 +469,19 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.doesNotMatch(scoreSection, /<div>风险惩罚<\/div>/);
     assert.match(okHtml, /核心监测指标/);
     assert.match(okHtml, /30 天可用率/);
-    assert.match(okHtml, /30 天趋势/);
+    assert.doesNotMatch(okHtml, /<h2>30 天趋势<\/h2>/);
+    assert.match(okHtml, /<h2>近 2 天趋势<\/h2>/);
     assert.match(okHtml, /套餐信息/);
     assert.match(okHtml, /电报信息/);
     assert.match(okHtml, /最低年付折算月价/);
     assert.match(okHtml, /https:\/\/t\.me\/nebula_group/);
     assert.doesNotMatch(okHtml, /导入与配置/);
     assert.match(okHtml, /结论与建议/);
+    assert.match(okHtml, /继续对比更多机场/);
+    assert.match(okHtml, /href="\/rankings\/all"/);
+    assert.match(okHtml, /href="\/rankings\/all\?streaming=chatgpt"/);
+    assert.match(okHtml, /href="\/rankings\/all\?streaming=netflix"/);
+    assert.match(okHtml, /href="\/rankings\/all\?payment=usdt_trc20"/);
     assert.doesNotMatch(okHtml, /GateRank Pro 数据看板/);
     assert.match(okHtml, /常见问题/);
     assert.match(okHtml, /星云机场怎么样/);
@@ -482,9 +491,21 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /星云机场适合长期使用吗/);
     assert.match(okHtml, /星云机场风险主要来自哪里/);
     assert.match(okHtml, /星云机场支持哪些套餐、客户端和地区/);
+    assert.match(okHtml, /星云机场适合新手使用吗/);
+    assert.match(okHtml, /星云机场支持流媒体吗/);
+    assert.match(okHtml, /星云机场支持 ChatGPT 和 AI 工具吗/);
+    assert.match(okHtml, /星云机场速度怎么样/);
+    assert.match(okHtml, /星云机场和其他机场相比有什么优势/);
+    assert.match(okHtml, /选择星云机场前要注意什么/);
+    const faqQuestionCount = Array.from(okHtml.matchAll(/"@type":"Question"/g)).length;
+    assert.ok(faqQuestionCount >= 8, `expected at least 8 FAQ questions, got ${faqQuestionCount}`);
     assert.match(okHtml, /<script type="application\/ld\+json">/);
     assert.match(okHtml, /"@type":"FAQPage"/);
     assert.match(okHtml, /"@type":"ItemList"/);
+    assert.match(okHtml, /"@type":"Product"/);
+    assert.match(okHtml, /"reviewRating":\{"@type":"Rating","ratingValue":"98\.60","bestRating":"100","worstRating":"0"\}/);
+    assert.match(okHtml, /"reviewBody":"GateRank 算法评分/);
+    assert.doesNotMatch(okHtml, /"name":"用户评分"/);
     assert.match(okHtml, /"name":"官网探测扣分","value":"0"/);
     assert.match(okHtml, /"name":"SSL扣分","value":"0"/);
     assert.match(okHtml, /"name":"套餐信息","value":"月付支持/);
@@ -497,12 +518,15 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.ok(description.length <= 180, `report description too long: ${description.length}`);
     assert.match(description, /星云机场/);
     assert.match(description, /机场测评/);
-    assert.match(description, /总分/);
-    assert.match(description, /状态/);
-    assert.match(description, /风险/);
-    assert.match(description, /官网/);
-    assert.match(description, /30 天趋势/);
-    assert.match(description, /机场 VPN 选择/);
+    assert.match(description, /官网入口/);
+    assert.match(description, /稳定性/);
+    assert.match(description, /下载速度/);
+    assert.match(description, /延迟/);
+    assert.match(description, /丢包率/);
+    assert.match(description, /近 2 天趋势/);
+    assert.match(description, /跑路风险分析/);
+    assert.match(description, /是否值得使用/);
+    assert.doesNotMatch(description, /https:\/\/nebula\.example\.com/);
 
     const legacyResponse = await fetch(`http://127.0.0.1:${port}/reports/7?date=2026-03-23`, {
       redirect: 'manual',

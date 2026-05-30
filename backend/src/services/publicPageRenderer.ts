@@ -20,11 +20,13 @@ import {
   buildHomeSeo,
   buildQuery,
   buildAirportReportPath,
+  buildReportComparisonLinks,
   buildReportContentSections,
   buildReportContentSummary,
   buildReportFaqItems,
   buildReportSeo,
   buildReportStructuredData,
+  buildReportTrendLabel,
   buildRiskMonitorSeo,
   formatAirportStatusLabel,
   formatMetric,
@@ -86,7 +88,7 @@ const reportAnchorSections = [
   { id: 'report-capabilities', label: '服务能力' },
   { id: 'report-score', label: '评分拆解' },
   { id: 'report-metrics', label: '核心指标' },
-  { id: 'report-trends', label: '30天趋势' },
+  { id: 'report-trends', label: '趋势' },
   { id: 'report-plan-telegram', label: '套餐电报' },
   { id: 'report-conclusion', label: '结论建议' },
 ];
@@ -344,14 +346,14 @@ export function renderReportPublicPage(
         <section id="report-overview" class="report-hero report-anchor-target">
           <div class="report-hero-copy">
             <div class="breadcrumb"><a href="/">首页</a><span>/</span>${escapeHtml(view.airport.name)}</div>
-            <h1>${escapeHtml(view.airport.name)} 测评报告</h1>
+            <h1>${escapeHtml(buildReportPageHeading(view))}</h1>
             <p>${escapeHtml(seo.description)}</p>
             <div class="report-tags">
               ${view.airport.tags.map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}
               <span>${escapeHtml(formatAirportStatusLabel(view.airport.status))}</span>
               <span>${escapeHtml(view.capabilities.plan.has_trial_plan ? '免费试用' : '试用未收录')}</span>
             </div>
-            <p><a class="primary-link" href="${escapeAttribute(view.airport.website)}" rel="nofollow noreferrer">访问官网</a></p>
+            <p><a class="primary-link" href="${escapeAttribute(normalizeExternalHref(view.airport.website))}" target="_blank" rel="nofollow noreferrer noopener">访问官网</a></p>
           </div>
           ${renderReportScoreCard(view)}
         </section>
@@ -409,6 +411,7 @@ function renderReportContentSections(view: ReportView): string {
           </details>
         `).join('')}
       </div>
+      ${renderReportComparisonLinks(view)}
     </section>
   `;
 }
@@ -446,7 +449,7 @@ function renderReportSummary(view: ReportView): string {
       </div>
     </section>
     <section id="report-trends" class="report-section report-anchor-target">
-      <h2>30 天趋势</h2>
+      <h2>${escapeHtml(buildReportTrendLabel(view))}</h2>
       <div class="metric-grid">
         ${renderInfoCard('评分趋势', view.summary_card.score_hidden ? '暂不公开' : buildTrendSummary(view.trends.score_30d, '分'))}
         ${renderInfoCard('可用率趋势', buildTrendSummary(view.trends.uptime_30d, '%'))}
@@ -464,6 +467,26 @@ function renderReportSummary(view: ReportView): string {
       <h2>结论与建议</h2>
       <p>本次评测数据显示 ${escapeHtml(view.airport.name)} 当前公开总分${escapeHtml(formatPublicScoreText(view))}，状态为 ${escapeHtml(formatAirportStatusLabel(view.airport.status))}，稳定性评级为 ${escapeHtml(formatStabilityTier(view.metrics.stability_tier))}。${escapeHtml(view.summary_card.conclusion)}</p>
     </section>
+  `;
+}
+
+function buildReportPageHeading(view: ReportView): string {
+  const searchName = view.airport.name.endsWith('机场') ? view.airport.name : `${view.airport.name}机场`;
+  return `${searchName}测评：官网入口、稳定性、速度与跑路风险分析`;
+}
+
+function renderReportComparisonLinks(view: ReportView): string {
+  const links = buildReportComparisonLinks(view);
+  if (links.length === 0) {
+    return '';
+  }
+  return `
+    <div class="report-comparison-links">
+      <h3>继续对比更多机场</h3>
+      <div>
+        ${links.map((link) => `<a href="${escapeAttribute(link.href)}">${escapeHtml(link.label)}</a>`).join('')}
+      </div>
+    </div>
   `;
 }
 
@@ -1480,6 +1503,10 @@ const styles = `
   .report-content-detail { min-width: 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 14px 16px; }
   .report-content-detail summary { cursor: pointer; color: #020617; font-size: 15px; font-weight: 900; }
   .report-content-detail p { margin: 12px 0 0; color: #475569; font-size: 14px; line-height: 1.9; }
+  .report-comparison-links { margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 16px; }
+  .report-comparison-links h3 { margin: 0 0 12px; color: #020617; font-size: 15px; }
+  .report-comparison-links div { display: flex; flex-wrap: wrap; gap: 8px; }
+  .report-comparison-links a { display: inline-flex; min-height: 34px; align-items: center; border: 1px solid #dbeafe; border-radius: 999px; background: #eff6ff; padding: 0 12px; color: #1d4ed8; font-size: 12px; font-weight: 900; text-decoration: none; }
   .report-info-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
   .report-info-panel { padding: 24px; }
   .report-info-panel h2 { margin: 0 0 16px; }

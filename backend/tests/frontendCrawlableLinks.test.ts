@@ -15,3 +15,25 @@ test('React full ranking report action remains a crawlable anchor', async () => 
   assert.match(fullRankingActionPanel, /data-event="ranking_report_click"/);
   assert.doesNotMatch(fullRankingActionPanel, /navigate\(item\.report_url\)/);
 });
+
+test('React report page keeps outbound CTA and comparison links as anchors', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+
+  const heroStart = source.indexOf('function ReportHeroV2');
+  assert.notEqual(heroStart, -1);
+  const heroEnd = source.indexOf('function ReportContentNarrative', heroStart);
+  assert.notEqual(heroEnd, -1);
+  const heroSource = source.slice(heroStart, heroEnd);
+  assert.match(heroSource, /href=\{buildOutboundAirportHref\(data\.airport\.id, 'website', 'report_header'\)\}/);
+  assert.match(heroSource, /target="_blank"/);
+  assert.match(heroSource, /createTrackedOutboundClickHandler/);
+
+  const comparisonStart = source.indexOf('function ReportComparisonLinks');
+  assert.notEqual(comparisonStart, -1);
+  const comparisonEnd = source.indexOf('function ReportScoreCard', comparisonStart);
+  assert.notEqual(comparisonEnd, -1);
+  const comparisonSource = source.slice(comparisonStart, comparisonEnd);
+  assert.match(comparisonSource, /<a/);
+  assert.match(comparisonSource, /href=\{link\.href\}/);
+  assert.doesNotMatch(comparisonSource, /navigate\(link\.href\)/);
+});
