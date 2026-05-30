@@ -57,14 +57,7 @@ export class AggregationService {
     }
 
     const daySamples = samples.filter((s) => s.sampled_at.slice(0, 10) === date);
-    const stabilityLatencies = daySamples
-      .filter(
-        (s) =>
-          s.sample_type === 'latency' &&
-          s.probe_scope === 'stability' &&
-          typeof s.latency_ms === 'number',
-      )
-      .map((s) => round2(Number(s.latency_ms)));
+    const stabilityLatencies = getLatestStabilityLatencyBatch(daySamples);
     const performanceLatencies = daySamples
       .filter(
         (s) =>
@@ -204,21 +197,95 @@ function calcUptimePercent(availByDay: Map<string, number[]>): number {
 }
 
 function buildLatencyMap(samples: ProbeSample[], probeScope: ProbeSample['probe_scope']): Map<string, number[]> {
-  const latenciesByDay = new Map<string, number[]>();
+  const samplesByDay = new Map<string, ProbeSample[]>();
   for (const sample of samples) {
-    if (
-      sample.sample_type !== 'latency' ||
-      sample.probe_scope !== probeScope ||
-      typeof sample.latency_ms !== 'number'
-    ) {
+    if (sample.probe_scope !== probeScope) {
       continue;
     }
     const key = sample.sampled_at.slice(0, 10);
-    const list = latenciesByDay.get(key) || [];
-    list.push(round2(Number(sample.latency_ms)));
-    latenciesByDay.set(key, list);
+    const list = samplesByDay.get(key) || [];
+    list.push(sample);
+    samplesByDay.set(key, list);
+  }
+
+  const latenciesByDay = new Map<string, number[]>();
+  for (const [day, daySamples] of samplesByDay.entries()) {
+    latenciesByDay.set(day, getLatestLatencyBatch(daySamples, probeScope));
   }
   return latenciesByDay;
+}
+
+function getLatestStabilityLatencyBatch(samples: ProbeSample[]): number[] {
+  return getLatestLatencyBatch(samples, 'stability');
+}
+
+function getLatestLatencyBatch(samples: ProbeSample[], probeScope: ProbeSample['probe_scope']): number[] {
+  const scopedSamples = samples
+    .filter((sample) => sample.probe_scope === probeScope)
+    .slice()
+    .sort((left, right) => sampleTimeMs(left) - sampleTimeMs(right));
+  const latestRunMarker = latestAvailabilitySample(scopedSamples);
+  const latencySamples = scopedSamples.filter(
+    (sample) => sample.sample_type === 'latency' && typeof sample.latency_ms === 'number',
+  );
+
+  if (!latestRunMarker) {
+    return latencySamples.map((sample) => round2(Number(sample.latency_ms)));
+  }
+
+  const latestRunTime = sampleTimeMs(latestRunMarker);
+  const samplesAfterMarker = latencySamples.filter((sample) => sampleTimeMs(sample) >= latestRunTime);
+  if (samplesAfterMarker.length > 0 || isStabilityScriptSource(latestRunMarker.source)) {
+    return samplesAfterMarker.map((sample) => round2(Number(sample.latency_ms)));
+  }
+
+  const previousRunMarkerTime = latestPreviousAvailabilitySampleTime(scopedSamples, latestRunTime);
+  return latencySamples
+    .filter((sample) => {
+      const sampledAt = sampleTimeMs(sample);
+      return sampledAt <= latestRunTime && (previousRunMarkerTime === null || sampledAt > previousRunMarkerTime);
+    })
+    .map((sample) => round2(Number(sample.latency_ms)));
+}
+
+function latestAvailabilitySample(samples: ProbeSample[]): ProbeSample | null {
+  let latestSample: ProbeSample | null = null;
+  for (const sample of samples) {
+    if (sample.sample_type !== 'availability' || sample.availability === null) {
+      continue;
+    }
+    const sampledAt = sampleTimeMs(sample);
+    if (!latestSample || sampledAt > sampleTimeMs(latestSample)) {
+      latestSample = sample;
+    }
+  }
+  return latestSample;
+}
+
+function latestPreviousAvailabilitySampleTime(samples: ProbeSample[], beforeTimeMs: number): number | null {
+  let latestTime: number | null = null;
+  for (const sample of samples) {
+    if (sample.sample_type !== 'availability' || sample.availability === null) {
+      continue;
+    }
+    const sampledAt = sampleTimeMs(sample);
+    if (sampledAt >= beforeTimeMs) {
+      continue;
+    }
+    if (latestTime === null || sampledAt > latestTime) {
+      latestTime = sampledAt;
+    }
+  }
+  return latestTime;
+}
+
+function isStabilityScriptSource(source: string): boolean {
+  return source === 'manual-stability' || source === 'cron-stability' || source === 'scheduler-stability';
+}
+
+function sampleTimeMs(sample: ProbeSample): number {
+  const parsed = Date.parse(sample.sampled_at);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function calcStreakByTier(

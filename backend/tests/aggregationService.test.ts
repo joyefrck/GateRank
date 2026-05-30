@@ -341,6 +341,99 @@ test('aggregateForDate keeps raw latency_cv and classifies healthy jitter separa
   assert.equal(written[0].stability_tier, 'stable');
 });
 
+test('aggregateForDate uses the latest stability latency batch for current-day latency metrics', async () => {
+  const written: DailyMetrics[] = [];
+  const samples: ProbeSample[] = [
+    {
+      id: 1,
+      airport_id: 1,
+      sampled_at: '2026-05-31T05:35:26+08:00',
+      sample_type: 'availability',
+      probe_scope: 'stability',
+      latency_ms: null,
+      download_mbps: null,
+      availability: true,
+      source: 'manual-stability',
+    },
+    {
+      id: 2,
+      airport_id: 1,
+      sampled_at: '2026-05-31T05:35:29+08:00',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 51.62,
+      download_mbps: null,
+      availability: null,
+      source: 'manual-stability',
+    },
+    {
+      id: 3,
+      airport_id: 1,
+      sampled_at: '2026-05-31T05:35:32+08:00',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 43.62,
+      download_mbps: null,
+      availability: null,
+      source: 'manual-stability',
+    },
+    {
+      id: 4,
+      airport_id: 1,
+      sampled_at: '2026-05-31T05:48:47+08:00',
+      sample_type: 'availability',
+      probe_scope: 'stability',
+      latency_ms: null,
+      download_mbps: null,
+      availability: true,
+      source: 'manual-stability',
+    },
+    {
+      id: 5,
+      airport_id: 1,
+      sampled_at: '2026-05-31T05:48:50+08:00',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 3.55,
+      download_mbps: null,
+      availability: null,
+      source: 'manual-stability',
+    },
+    {
+      id: 6,
+      airport_id: 1,
+      sampled_at: '2026-05-31T05:48:53+08:00',
+      sample_type: 'latency',
+      probe_scope: 'stability',
+      latency_ms: 3.45,
+      download_mbps: null,
+      availability: null,
+      source: 'manual-stability',
+    },
+  ];
+
+  const service = new AggregationService({
+    airportRepository: {
+      listAll: async () => [{ id: 1 }],
+    },
+    probeSampleRepository: {
+      getProbeSamplesInRange: async () => samples,
+      getPacketLossSamplesByDate: async () => [],
+    },
+    metricsRepository: {
+      getLatestByAirportBeforeDate: async () => null,
+      upsertDaily: async (input) => {
+        written.push(input);
+      },
+    },
+  });
+
+  const result = await service.aggregateForDate('2026-05-31');
+  assert.equal(result.aggregated, 1);
+  assert.deepEqual(written[0].latency_samples_ms, [3.55, 3.45]);
+  assert.equal(written[0].latency_mean_ms, 3.5);
+});
+
 test('aggregateForDate keeps healthy streak across minor fluctuation days while strict streak resets', async () => {
   const written: DailyMetrics[] = [];
   const samples: ProbeSample[] = [
