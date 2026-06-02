@@ -704,6 +704,11 @@ def resolve_cached_nodes_or_raise(
     except Exception:
         raise refresh_error
 
+    snapshot_subscription_url = str(snapshot.get("subscription_url") or "").strip()
+    current_subscription_url = subscription_url.strip()
+    if snapshot_subscription_url != current_subscription_url:
+        raise refresh_error
+
     nodes, invalid_nodes = nodes_from_snapshot(snapshot)
     if not nodes:
         raise refresh_error
@@ -712,10 +717,9 @@ def resolve_cached_nodes_or_raise(
         "node_source": "cached_snapshot",
         "cache_snapshot_id": snapshot.get("id"),
         "cache_captured_at": snapshot.get("captured_at"),
-        "cache_subscription_url": snapshot.get("subscription_url"),
+        "cache_subscription_url_matches_current": True,
         "subscription_refresh_error_code": refresh_error.error_code,
         "subscription_refresh_error_message": refresh_error.error_message,
-        "subscription_refresh_url": subscription_url,
     }
     if invalid_nodes:
         diagnostics["invalid_cached_nodes_count"] = len(invalid_nodes)

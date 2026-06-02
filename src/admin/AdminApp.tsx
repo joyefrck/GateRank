@@ -379,6 +379,12 @@ interface AirportDashboardView {
     last_sampled_at: string | null;
     last_source: string | null;
     subscription_format: string | null;
+    node_source: string | null;
+    cache_snapshot_id: number | null;
+    cache_captured_at: string | null;
+    cache_subscription_url_matches_current: boolean | null;
+    subscription_refresh_error_code: string | null;
+    subscription_refresh_error_message: string | null;
     parsed_nodes_count: number | null;
     supported_nodes_count: number | null;
     available_nodes_count: number | null;
@@ -9504,6 +9510,12 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <ReadField label="最近采集时间" value={formatDateTimeInBeijing(dashboard.performance.last_sampled_at)} />
               <ReadField label="来源" value={valueOrDash(dashboard.performance.last_source)} />
               <ReadField label="订阅格式" value={valueOrDash(dashboard.performance.subscription_format)} />
+              <ReadField label="节点来源" value={valueOrDash(dashboard.performance.node_source)} />
+              <ReadField label="缓存快照 ID" value={valueOrDash(dashboard.performance.cache_snapshot_id)} />
+              <ReadField label="缓存快照时间" value={formatDateTimeInBeijing(dashboard.performance.cache_captured_at)} />
+              <ReadField label="缓存匹配当前订阅" value={valueOrDash(dashboard.performance.cache_subscription_url_matches_current)} />
+              <ReadField label="订阅刷新错误码" value={valueOrDash(dashboard.performance.subscription_refresh_error_code)} />
+              <ReadField label="订阅刷新错误" value={valueOrDash(dashboard.performance.subscription_refresh_error_message)} />
               <ReadField label="延迟口径" value={valueOrDash(dashboard.performance.latency_measurement)} />
               <ReadField label="延迟探测目标" value={valueOrDash(dashboard.performance.latency_probe_target)} />
               <ReadField label="测速口径" value={valueOrDash(dashboard.performance.speed_measurement)} />

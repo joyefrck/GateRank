@@ -2152,6 +2152,18 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           last_sampled_at: stringOrNull(latestPerformanceRunObj.sampled_at),
           last_source: stringOrNull(latestPerformanceRunObj.source),
           subscription_format: stringOrNull(latestPerformanceRunObj.subscription_format),
+          node_source: stringOrNull(performanceDiagnostics.node_source),
+          cache_snapshot_id: numberOrNull(performanceDiagnostics.cache_snapshot_id),
+          cache_captured_at: stringOrNull(performanceDiagnostics.cache_captured_at),
+          cache_subscription_url_matches_current: boolOrNull(
+            performanceDiagnostics.cache_subscription_url_matches_current,
+          ),
+          subscription_refresh_error_code: stringOrNull(
+            performanceDiagnostics.subscription_refresh_error_code,
+          ),
+          subscription_refresh_error_message: stringOrNull(
+            performanceDiagnostics.subscription_refresh_error_message,
+          ),
           parsed_nodes_count: numberOrNull(latestPerformanceRunObj.parsed_nodes_count),
           supported_nodes_count: numberOrNull(latestPerformanceRunObj.supported_nodes_count),
           available_nodes_count: numberOrNull(latestPerformanceRunObj.available_nodes_count),

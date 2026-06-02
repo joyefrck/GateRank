@@ -2305,6 +2305,12 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
           error_code: 'no_successful_probes',
           error_message: 'all selected nodes failed',
           diagnostics: {
+            node_source: 'cached_snapshot',
+            cache_snapshot_id: 17,
+            cache_captured_at: '2026-03-22T10:30:00.000Z',
+            cache_subscription_url_matches_current: true,
+            subscription_refresh_error_code: 'subscription_fetch_failed',
+            subscription_refresh_error_message: 'fetch timed out',
             node_availability_check: 'proxy_http',
             node_availability_error_summary: [{ error_code: 'tcp_unreachable:timed out', count: 1 }],
             speed_test_url: 'https://speed.cloudflare.com/__down?bytes=5000000',
@@ -2331,6 +2337,12 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
           error_code: 'no_successful_probes',
           error_message: 'all selected nodes failed',
           diagnostics: {
+            node_source: 'cached_snapshot',
+            cache_snapshot_id: 17,
+            cache_captured_at: '2026-03-22T10:30:00.000Z',
+            cache_subscription_url_matches_current: true,
+            subscription_refresh_error_code: 'subscription_fetch_failed',
+            subscription_refresh_error_message: 'fetch timed out',
             node_availability_check: 'proxy_http',
             node_availability_error_summary: [{ error_code: 'tcp_unreachable:timed out', count: 1 }],
             speed_test_url: 'https://speed.cloudflare.com/__down?bytes=5000000',
@@ -2370,6 +2382,12 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
     assert.equal(data.performance.unavailable_nodes_count, 1);
     assert.equal(data.performance.node_unavailability_percent, 100);
     assert.equal(data.performance.tested_nodes_count, 1);
+    assert.equal(data.performance.node_source, 'cached_snapshot');
+    assert.equal(data.performance.cache_snapshot_id, 17);
+    assert.equal(data.performance.cache_captured_at, '2026-03-22T10:30:00.000Z');
+    assert.equal(data.performance.cache_subscription_url_matches_current, true);
+    assert.equal(data.performance.subscription_refresh_error_code, 'subscription_fetch_failed');
+    assert.equal(data.performance.subscription_refresh_error_message, 'fetch timed out');
     assert.equal(data.performance.node_availability_check, 'proxy_http');
     assert.deepEqual(data.performance.node_availability_error_summary, [
       { error_code: 'tcp_unreachable:timed out', count: 1 },
