@@ -186,6 +186,161 @@ test('GET /api/v1/news/:slug returns article without incrementing view count', a
   }
 });
 
+test('GET /news/topic/:slug returns independent topic SEO page with pinned articles and FAQ JSON-LD', async () => {
+  const calls: Array<{ slug: string; page: number; pageSize: number; q?: string }> = [];
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async () => ({
+          page: 1,
+          page_size: 12,
+          total: 0,
+          total_pages: 1,
+          query: '',
+          category: null,
+          topic: null,
+          categories: [],
+          topics: [],
+          featured: null,
+          items: [],
+          recommended: [],
+          risk_watch: [],
+          guides: [],
+        }),
+        getTopicPageView: async (slug: string, page: number, pageSize: number, filters?: { q?: string }) => {
+          calls.push({ slug, page, pageSize, q: filters?.q });
+          return {
+            page,
+            page_size: pageSize,
+            total: 2,
+            total_pages: 1,
+            query: filters?.q || '',
+            topic: {
+              id: 10,
+              name: '2026机场推荐专题',
+              slug,
+              description: '默认专题描述',
+              seo_title: '2026机场推荐专题 SEO 标题',
+              seo_description: '2026 机场推荐专题 SEO 描述，覆盖选择标准、稳定性和风险。',
+              h1: '2026 机场推荐专题独立页',
+              intro: '这里是后台维护的专题导语。',
+              cover_image_url: '/uploads/news/topic-cover.webp',
+              accent_color: '#d43d31',
+              faq_items: [{ question: '怎么选择机场？', answer: '优先交叉查看稳定性、价格和风险记录。' }],
+              sort_order: 10,
+              is_active: true,
+              updated_at: '2026-04-02 09:30:00',
+            },
+            categories: [],
+            topics: [],
+            pinned: [
+              {
+                id: 3,
+                title: '置顶专题文章',
+                slug: 'pinned-story',
+                excerpt: '置顶摘要',
+                cover_image_url: '',
+                published_at: '2026-04-01 10:00:00',
+                view_count: 12,
+                reading_minutes: 3,
+                category: null,
+                topics: [],
+                is_featured: false,
+                is_recommended: false,
+                recommend_weight: 0,
+              },
+            ],
+            items: [
+              {
+                id: 4,
+                title: '普通专题文章',
+                slug: 'regular-story',
+                excerpt: '普通摘要',
+                cover_image_url: '/uploads/news/regular-cover.webp',
+                published_at: '2026-03-31 10:00:00',
+                view_count: 8,
+                reading_minutes: 2,
+                category: null,
+                topics: [],
+                is_featured: false,
+                is_recommended: false,
+                recommend_weight: 0,
+              },
+            ],
+            recommended: [],
+          };
+        },
+        getArticleViewBySlug: async () => null,
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/news/topic/airport-recommendations-2026`, {
+      headers: {
+        host: `127.0.0.1:${port}`,
+      },
+    });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.deepEqual(calls, [{ slug: 'airport-recommendations-2026', page: 1, pageSize: 12, q: undefined }]);
+    assert.match(html, /<title>2026机场推荐专题 SEO 标题<\/title>/);
+    assert.match(html, /<meta name="description" content="2026 机场推荐专题 SEO 描述，覆盖选择标准、稳定性和风险。"/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/news\/topic\/airport-recommendations-2026"/);
+    assert.match(html, /<h1 class="topic-hero-title">2026 机场推荐专题独立页<\/h1>/);
+    assert.match(html, /这里是后台维护的专题导语。/);
+    assert.match(html, /置顶专题文章/);
+    assert.match(html, /普通专题文章/);
+    assert.match(html, /"@type":"FAQPage"/);
+    assert.match(html, /怎么选择机场？/);
+    assert.match(html, /<meta property="og:image" content="http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/topic-cover\.webp"/);
+    assert.match(html, /<img src="\/uploads\/news\/topic-cover\.webp" alt="2026机场推荐专题" loading="eager" decoding="async" fetchpriority="high"/);
+    assert.match(html, /<img src="\/uploads\/news\/regular-cover\.webp" alt="普通专题文章" loading="lazy" decoding="async"/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /news/topic/:slug returns 404 html for inactive or missing topic', async () => {
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async () => ({
+          page: 1,
+          page_size: 12,
+          total: 0,
+          total_pages: 1,
+          featured: null,
+          items: [],
+        }),
+        getTopicPageView: async () => null,
+        getArticleViewBySlug: async () => null,
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/news/topic/inactive-topic`);
+    assert.equal(response.status, 404);
+    const html = await response.text();
+    assert.match(html, /专题不存在或尚未发布/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /publish-token-docs returns server-rendered HTML with crawlable doc content', async () => {
   const app = express();
   app.use(
@@ -380,6 +535,7 @@ test('GET /news/:slug returns server-rendered HTML with seo metadata', async () 
     assert.match(html, /<meta name="twitter:image:alt" content="服务端 SEO 测试"/);
     assert.match(html, /"@type":"Article"/);
     assert.match(html, /"image":\["http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/cover\.webp"\]/);
+    assert.match(html, /<img src="\/uploads\/news\/cover\.webp" alt="服务端 SEO 测试" loading="eager" decoding="async" fetchpriority="high"/);
     assert.match(html, /分享到 Reddit/);
     assert.match(html, /123 次访问/);
     assert.deepEqual(calls, [{ slug: 'seo-test', options: { countView: true } }]);
@@ -530,6 +686,29 @@ test('GET /sitemap.xml includes published news urls', async () => {
             updated_at: '2026-03-28 18:00:00',
           },
         ],
+        getSitemapTaxonomy: async () => ({
+          categories: [],
+          topics: [
+            {
+              id: 10,
+              name: 'Active Topic',
+              slug: 'active-topic',
+              description: 'active',
+              sort_order: 10,
+              is_active: true,
+              updated_at: '2026-04-02 09:30:00',
+            },
+            {
+              id: 11,
+              name: 'Inactive Topic',
+              slug: 'inactive-topic',
+              description: 'inactive',
+              sort_order: 20,
+              is_active: false,
+              updated_at: '2026-04-03 09:30:00',
+            },
+          ],
+        }),
       } as never,
       publicViewService: {
         getFullRankingView: async () => ({
@@ -559,7 +738,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
     );
     const xml = await response.text();
     const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) || [];
-    assert.equal(urlBlocks.length, 57);
+    assert.equal(urlBlocks.length, 60);
     urlBlocks.forEach((block) => {
       assert.match(block, /<lastmod>[^<]+<\/lastmod>/);
     });
@@ -575,6 +754,8 @@ test('GET /sitemap.xml includes published news urls', async () => {
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/for-ai<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/publish-token-docs<\/loc>\n    <lastmod>2026-05-24T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/airports\/nebula<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/topic\/active-topic<\/loc>\n    <lastmod>2026-04-02T09:30:00\+08:00<\/lastmod>/);
+    assert.doesNotMatch(xml, /\/news\/topic\/inactive-topic/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>\n    <lastmod>2026-03-28T18:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news<\/loc>\n    <lastmod>2026-03-28T18:00:00\+08:00<\/lastmod>/);
   } finally {

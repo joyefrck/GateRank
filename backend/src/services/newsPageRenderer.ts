@@ -1,4 +1,4 @@
-import type { PublicNewsArticleView, PublicNewsListView } from './newsPublicService';
+import type { PublicNewsArticleView, PublicNewsListView, PublicNewsTopicPageView } from './newsPublicService';
 import { formatNewsDate, formatNewsDateTime } from '../utils/news';
 import { PUBLIC_TOP_NAV_STYLES, renderPublicTopNav } from '../../../shared/publicTopNav';
 
@@ -11,6 +11,11 @@ interface RenderArticlePageOptions {
   siteUrl: string;
   article: PublicNewsArticleView;
   preview?: boolean;
+}
+
+interface RenderTopicPageOptions {
+  siteUrl: string;
+  topicView: PublicNewsTopicPageView;
 }
 
 const sharedStyles = `
@@ -951,6 +956,102 @@ const sharedStyles = `
     gap: 26px;
     align-items: start;
   }
+  .topic-page-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(340px, 0.72fr);
+    gap: 20px;
+    align-items: stretch;
+    border-radius: 34px;
+    background: linear-gradient(135deg, var(--topic-accent-soft, rgba(201,58,46,0.10)) 0%, #ffffff 54%, #ffffff 100%);
+    border: 1px solid rgba(17,17,17,0.08);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }
+  .topic-page-hero.no-cover {
+    grid-template-columns: 1fr;
+  }
+  .topic-hero-copy {
+    padding: 48px;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 36px;
+  }
+  .topic-hero-title {
+    margin: 14px 0 0;
+    max-width: 850px;
+    font-size: clamp(38px, 5vw, 68px);
+    line-height: 1.02;
+    letter-spacing: -0.03em;
+    font-weight: 900;
+    text-wrap: balance;
+  }
+  .topic-hero-intro {
+    max-width: 66ch;
+    margin: 22px 0 0;
+    color: rgba(17,17,17,0.72);
+    font-size: 17px;
+    line-height: 1.9;
+  }
+  .topic-hero-cover {
+    min-height: 420px;
+    overflow: hidden;
+  }
+  .topic-hero-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .topic-stat-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+  .topic-stat-pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    border-radius: 999px;
+    background: #111111;
+    color: #ffffff;
+    padding: 0 14px;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .topic-section-block {
+    margin-top: 42px;
+  }
+  .topic-featured-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+  .topic-faq-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 14px;
+  }
+  .topic-faq-item {
+    border: 1px solid rgba(17,17,17,0.10);
+    border-radius: 22px;
+    background: #ffffff;
+    padding: 22px;
+    box-shadow: 0 16px 38px rgba(17,17,17,0.04);
+  }
+  .topic-faq-question {
+    margin: 0;
+    font-size: 16px;
+    line-height: 1.45;
+    font-weight: 900;
+  }
+  .topic-faq-answer {
+    margin: 10px 0 0;
+    color: rgba(17,17,17,0.68);
+    font-size: 14px;
+    line-height: 1.75;
+  }
   .news-section-heading {
     margin: 0 0 18px;
     font-size: 24px;
@@ -971,6 +1072,7 @@ const sharedStyles = `
     .hero-card,
     .feed-card,
     .article-grid,
+    .topic-page-hero,
     .news-hub-grid,
     .news-content-grid {
       grid-template-columns: 1fr;
@@ -988,6 +1090,7 @@ const sharedStyles = `
       width: min(100vw - 20px, 1280px);
     }
     .hero-copy,
+    .topic-hero-copy,
     .article-header,
     .article-content,
     .feed-card-body {
@@ -995,6 +1098,7 @@ const sharedStyles = `
       padding-right: 20px;
     }
     .hero-card,
+    .topic-page-hero,
     .article-shell,
     .feed-card,
     .aside-card {
@@ -1027,6 +1131,13 @@ const sharedStyles = `
     }
     .topic-grid {
       grid-template-columns: 1fr;
+    }
+    .topic-featured-grid,
+    .topic-faq-grid {
+      grid-template-columns: 1fr;
+    }
+    .topic-hero-cover {
+      min-height: 240px;
     }
     .hero-title,
     .article-title {
@@ -1179,6 +1290,156 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
   });
 }
 
+export function renderNewsTopicPage(options: RenderTopicPageOptions): string {
+  const { siteUrl, topicView } = options;
+  const { topic } = topicView;
+  const basePath = `/news/topic/${topic.slug}`;
+  const query = topicView.query || '';
+  const canonicalUrl = `${siteUrl}${buildPagedHref(basePath, topicView.page, query)}`;
+  const titleBase = topic.seo_title?.trim() || `${topic.name} | GateRank News`;
+  const title = topicView.page > 1 ? `${titleBase} 第 ${topicView.page} 页` : titleBase;
+  const description = topic.seo_description?.trim() || topic.description;
+  const h1 = topic.h1?.trim() || topic.name;
+  const intro = topic.intro?.trim() || topic.description;
+  const coverImage = toAbsoluteUrl(siteUrl, topic.cover_image_url || '');
+  const faqItems = (topic.faq_items || []).filter((item) => item.question.trim() && item.answer.trim()).slice(0, 8);
+  const accentColor = normalizeTopicAccent(topic.accent_color);
+  const pinnedHtml = topicView.pinned.map((item) => renderFeedCard(item)).join('');
+  const itemHtml = topicView.items.map((item) => renderFeedCard(item)).join('');
+  const isSearch = Boolean(query);
+  const jsonLd: unknown[] = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: title,
+      description,
+      url: canonicalUrl,
+      mainEntity: {
+        '@type': 'ItemList',
+        itemListElement: [...topicView.pinned, ...topicView.items].map((item, index) => ({
+          '@type': 'ListItem',
+          position: index + 1,
+          url: `${siteUrl}/news/${item.slug}`,
+          name: item.title,
+        })),
+      },
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        {
+          '@type': 'ListItem',
+          position: 1,
+          name: '首页',
+          item: `${siteUrl}/`,
+        },
+        {
+          '@type': 'ListItem',
+          position: 2,
+          name: 'News',
+          item: `${siteUrl}/news`,
+        },
+        {
+          '@type': 'ListItem',
+          position: 3,
+          name: topic.name,
+          item: `${siteUrl}${basePath}`,
+        },
+      ],
+    },
+  ];
+  if (faqItems.length > 0) {
+    jsonLd.push({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: faqItems.map((item) => ({
+        '@type': 'Question',
+        name: item.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: item.answer,
+        },
+      })),
+    });
+  }
+
+  return renderDocument({
+    title,
+    description,
+    canonicalUrl,
+    ogImage: coverImage,
+    ogImageAlt: coverImage ? topic.name : null,
+    ogImageType: coverImage ? inferImageMimeType(coverImage) : null,
+    ogType: 'website',
+    robots: isSearch ? 'noindex,follow,max-image-preview:large' : 'index,follow,max-image-preview:large',
+    jsonLd,
+    body: `
+      <div class="page-shell" style="--topic-accent:${escapeAttribute(accentColor)};--topic-accent-soft:${escapeAttribute(hexToRgba(accentColor, 0.10))};">
+        ${renderPublicTopNav('news')}
+        <main class="main-wrap">
+          <section class="topic-page-hero${coverImage ? '' : ' no-cover'}">
+            <div class="topic-hero-copy">
+              <div>
+                <div class="eyebrow">GateRank Topic</div>
+                <h1 class="topic-hero-title">${escapeHtml(h1)}</h1>
+                <p class="topic-hero-intro">${escapeHtml(intro)}</p>
+              </div>
+              <div class="topic-stat-row">
+                <span class="topic-stat-pill">${topicView.total + topicView.pinned.length} 篇内容</span>
+                <span class="topic-stat-pill">专题</span>
+                ${topic.updated_at ? `<span class="topic-stat-pill">${escapeHtml(formatNewsDate(topic.updated_at))} 更新</span>` : ''}
+              </div>
+            </div>
+            ${coverImage ? `
+              <div class="topic-hero-cover">
+                <img src="${escapeAttribute(topic.cover_image_url || '')}" alt="${escapeAttribute(topic.name)}" ${renderImageLoadingAttrs('priority')} />
+              </div>
+            ` : ''}
+          </section>
+
+          ${topicView.pinned.length > 0 && !isSearch ? `
+            <section class="topic-section-block">
+              <h2 class="news-section-heading">专题精选</h2>
+              <div class="topic-featured-grid">${pinnedHtml}</div>
+            </section>
+          ` : ''}
+
+          ${faqItems.length > 0 ? `
+            <section class="topic-section-block">
+              <h2 class="news-section-heading">专题问答</h2>
+              <div class="topic-faq-grid">
+                ${faqItems.map((item) => `
+                  <article class="topic-faq-item">
+                    <h3 class="topic-faq-question">${escapeHtml(item.question)}</h3>
+                    <p class="topic-faq-answer">${escapeHtml(item.answer)}</p>
+                  </article>
+                `).join('')}
+              </div>
+            </section>
+          ` : ''}
+
+          <section class="news-content-grid">
+            <div>
+              <h2 class="news-section-heading">${isSearch ? '专题搜索结果' : '专题最新文章'}</h2>
+              ${itemHtml ? `<div class="feed-grid">${itemHtml}</div>` : `
+                <div class="empty-state">
+                  <p style="margin:0; font-size:16px; line-height:1.8;">当前专题暂无更多已发布文章。</p>
+                </div>
+              `}
+              ${renderPagination(basePath, topicView.page, topicView.total_pages, query)}
+            </div>
+            <aside class="news-panel">
+              ${renderCompactPanel('热门文章', topicView.recommended, false)}
+            </aside>
+          </section>
+        </main>
+        ${renderFooter()}
+      </div>
+    `,
+  });
+}
+
 export function renderNewsArticlePage(options: RenderArticlePageOptions): string {
   const { siteUrl, article, preview = false } = options;
   const hasCover = Boolean(article.cover_image_url && article.cover_image_url.trim());
@@ -1286,7 +1547,7 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
               </header>
               ${hasCover ? `
                 <div class="article-cover">
-                  <img src="${escapeAttribute(article.cover_image_url)}" alt="${escapeAttribute(article.title)}" />
+                  <img src="${escapeAttribute(article.cover_image_url)}" alt="${escapeAttribute(article.title)}" ${renderImageLoadingAttrs('priority')} />
                 </div>
               ` : ''}
               <div class="article-content">
@@ -1487,6 +1748,19 @@ function renderTopicCard(topic: PublicNewsListView['topics'][number], index: num
   `;
 }
 
+function normalizeTopicAccent(value: string | null | undefined): string {
+  const input = String(value || '').trim();
+  return /^#[0-9a-fA-F]{6}$/.test(input) ? input : '#d43d31';
+}
+
+function hexToRgba(hex: string, alpha: number): string {
+  const normalized = normalizeTopicAccent(hex);
+  const red = Number.parseInt(normalized.slice(1, 3), 16);
+  const green = Number.parseInt(normalized.slice(3, 5), 16);
+  const blue = Number.parseInt(normalized.slice(5, 7), 16);
+  return `rgba(${red},${green},${blue},${Math.min(1, Math.max(0, alpha)).toFixed(2)})`;
+}
+
 function renderCompactPanel(title: string, items: PublicNewsListView['items'], wrap = true): string {
   const content = `
     <p class="section-label">${escapeHtml(title)}</p>
@@ -1534,7 +1808,7 @@ function renderHeroCard(featured: PublicNewsArticleView | PublicNewsListView['fe
       </div>
       ${hasCover ? `
         <div class="hero-cover">
-          <img src="${escapeAttribute(featured.cover_image_url)}" alt="${escapeAttribute(featured.title)}" />
+          <img src="${escapeAttribute(featured.cover_image_url)}" alt="${escapeAttribute(featured.title)}" ${renderImageLoadingAttrs('priority')} />
         </div>
       ` : ''}
     </article>
@@ -1547,7 +1821,7 @@ function renderFeedCard(item: PublicNewsListView['items'][number]): string {
     <article class="feed-card${hasCover ? '' : ' no-cover'}">
       ${hasCover ? `
         <a class="feed-card-media" href="/news/${escapeAttribute(item.slug)}">
-          <img src="${escapeAttribute(item.cover_image_url)}" alt="${escapeAttribute(item.title)}" />
+          <img src="${escapeAttribute(item.cover_image_url)}" alt="${escapeAttribute(item.title)}" ${renderImageLoadingAttrs('lazy')} />
         </a>
       ` : ''}
       <div class="feed-card-body">
@@ -1563,6 +1837,13 @@ function renderFeedCard(item: PublicNewsListView['items'][number]): string {
       </div>
     </article>
   `;
+}
+
+function renderImageLoadingAttrs(mode: 'priority' | 'lazy'): string {
+  if (mode === 'priority') {
+    return 'loading="eager" decoding="async" fetchpriority="high" width="1280" height="720"';
+  }
+  return 'loading="lazy" decoding="async" width="1280" height="720"';
 }
 
 function renderPagination(basePath: string, currentPage: number, totalPages: number, query = ''): string {

@@ -692,6 +692,8 @@ export interface NewsCategorySummary {
   slug: string;
   description: string;
   sort_order: number;
+  is_active?: boolean;
+  updated_at?: string | null;
 }
 
 export interface NewsTopicSummary {
@@ -699,7 +701,16 @@ export interface NewsTopicSummary {
   name: string;
   slug: string;
   description: string;
+  seo_title?: string;
+  seo_description?: string;
+  h1?: string;
+  intro?: string;
+  cover_image_url?: string;
+  accent_color?: string;
+  faq_items?: Array<{ question: string; answer: string }>;
   sort_order: number;
+  is_active?: boolean;
+  updated_at?: string | null;
 }
 
 export interface ProbeSample {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
@@ -29,8 +29,47 @@ test('news cover image service compresses large images to webp within max bounds
 
     const metadata = await sharp(path.join(uploadRoot, result.url.replace('/uploads/', ''))).metadata();
     assert.equal(metadata.format, 'webp');
-    assert.ok((metadata.width || 0) <= 1600);
-    assert.ok((metadata.height || 0) <= 900);
+    assert.ok((metadata.width || 0) <= 1280);
+    assert.ok((metadata.height || 0) <= 720);
+  } finally {
+    delete process.env.NEWS_UPLOAD_ROOT_DIR;
+    rmSync(uploadRoot, { recursive: true, force: true });
+  }
+});
+
+test('news cover image service creates SEO compressed pexels covers', async () => {
+  const uploadRoot = mkdtempSync(path.join(os.tmpdir(), 'gaterank-cover-'));
+  process.env.NEWS_UPLOAD_ROOT_DIR = uploadRoot;
+
+  try {
+    const service = new NewsCoverImageService();
+    const width = 1800;
+    const height = 1200;
+    const raw = Buffer.alloc(width * height * 3);
+    for (let index = 0; index < raw.length; index += 3) {
+      const pixel = index / 3;
+      raw[index] = pixel % 251;
+      raw[index + 1] = (pixel * 7) % 241;
+      raw[index + 2] = (pixel * 13) % 239;
+    }
+    const source = await sharp(raw, { raw: { width, height, channels: 3 } })
+      .png()
+      .toBuffer();
+
+    const result = await service.compressCoverBuffer(source, {
+      contextSlug: '../Runaway Airport Monitoring!!',
+      pexelsId: 123456,
+      alt: 'Runway skyline at dusk',
+    });
+
+    assert.match(result.url, /^\/uploads\/news\/runaway-airport-monitoring-pexels-123456\.webp$/);
+    const outputPath = path.join(uploadRoot, result.url.replace('/uploads/', ''));
+    const metadata = await sharp(outputPath).metadata();
+    assert.equal(metadata.format, 'webp');
+    assert.equal(metadata.width, 1280);
+    assert.equal(metadata.height, 720);
+    assert.equal(Math.round(((metadata.width || 0) / (metadata.height || 1)) * 100), 178);
+    assert.ok(statSync(outputPath).size < source.byteLength);
   } finally {
     delete process.env.NEWS_UPLOAD_ROOT_DIR;
     rmSync(uploadRoot, { recursive: true, force: true });

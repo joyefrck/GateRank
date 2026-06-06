@@ -868,6 +868,13 @@ test('news admin routes return pexels configuration error', async () => {
 test('news admin routes import pexels cover image', async () => {
   const app = express();
   const auditEntries: Array<Record<string, unknown>> = [];
+  let importInput: {
+    id: number;
+    download_url: string;
+    context_slug?: string;
+    alt?: string;
+    target?: string;
+  } | null = null;
   app.use(express.json());
   app.use((req, _res, next) => {
     req.requestId = 'test-request-id';
@@ -899,7 +906,10 @@ test('news admin routes import pexels cover image', async () => {
         getPreviewArticleView: async () => null,
       } as never,
       pexelsCoverService: createPexelsServiceStub({
-        importCoverImage: async () => ({ url: '/uploads/news/imported-cover.webp' }),
+        importCoverImage: async (input) => {
+          importInput = input;
+          return { url: '/uploads/news/imported-cover.webp' };
+        },
       }),
       newsCoverImageService: createNewsCoverImageServiceStub(),
     }),
@@ -917,11 +927,21 @@ test('news admin routes import pexels cover image', async () => {
       body: JSON.stringify({
         id: 123,
         download_url: 'https://images.pexels.com/photos/123/pexels-photo-123.jpeg',
+        context_slug: '../Runaway Airport Monitoring!!',
+        alt: 'Runway skyline at dusk',
+        target: 'topic',
       }),
     });
     assert.equal(response.status, 201);
     const data = await response.json() as { url: string };
     assert.equal(data.url, '/uploads/news/imported-cover.webp');
+    assert.deepEqual(importInput, {
+      id: 123,
+      download_url: 'https://images.pexels.com/photos/123/pexels-photo-123.jpeg',
+      context_slug: '../Runaway Airport Monitoring!!',
+      alt: 'Runway skyline at dusk',
+      target: 'topic',
+    });
     assert.equal(auditEntries.length, 1);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -982,6 +1002,301 @@ test('news admin routes reject invalid pexels image import', async () => {
     assert.equal(response.status, 400);
     const data = await response.json() as { message: string };
     assert.equal(data.message, '远程图片格式不受支持');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('news admin routes create, update and archive manually managed topics', async () => {
+  const topics: Array<{
+    id: number;
+    name: string;
+    slug: string;
+    description: string;
+    seo_title: string;
+    seo_description: string;
+    h1: string;
+    intro: string;
+    cover_image_url: string;
+    accent_color: string;
+    faq_items: Array<{ question: string; answer: string }>;
+    sort_order: number;
+    is_active: boolean;
+    pinned_article_ids: number[];
+  }> = [];
+  let nextId = 1;
+  const audits: string[] = [];
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.requestId = 'test-request-id';
+    next();
+  });
+  app.use(
+    '/api/v1/admin',
+    createNewsAdminRoutes({
+      auditRepository: {
+        log: async (action: string) => {
+          audits.push(action);
+        },
+      } as never,
+      newsRepository: {
+        listByQuery: async () => ({ items: [], total: 0 }),
+        listTopics: async () => topics,
+        getById: async () => null,
+        getTopicById: async (id: number) => topics.find((topic) => topic.id === id) || null,
+        createTopic: async (input: Omit<(typeof topics)[number], 'id'>) => {
+          const topic = { ...input, id: nextId++ };
+          topics.push(topic);
+          return topic.id;
+        },
+        updateTopic: async (id: number, input: Partial<(typeof topics)[number]>) => {
+          const index = topics.findIndex((topic) => topic.id === id);
+          if (index === -1) {
+            return false;
+          }
+          topics[index] = { ...topics[index], ...input };
+          return true;
+        },
+        archiveTopic: async (id: number) => {
+          const topic = topics.find((item) => item.id === id);
+          if (!topic) {
+            return false;
+          }
+          topic.is_active = false;
+          return true;
+        },
+        validateTopicPinnedArticleIds: async (_topicId: number, ids: number[]) => ids.every((id) => [1, 3, 8].includes(id)),
+        create: async () => 1,
+        update: async () => true,
+      } as never,
+      newsContentService: {
+        render: (markdown: string) => ({
+          html: markdown,
+          headings: [],
+          reading_minutes: 1,
+          plain_text: markdown,
+        }),
+      } as never,
+      newsPublicService: {
+        getPreviewArticleView: async () => null,
+      } as never,
+      pexelsCoverService: createPexelsServiceStub(),
+      newsCoverImageService: createNewsCoverImageServiceStub(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const createResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/topics`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: '2026 推荐专题',
+        slug: 'airport-recommendations-2026',
+        description: '专题描述',
+        seo_title: '2026 机场推荐专题 SEO',
+        seo_description: '专题 SEO 描述',
+        h1: '2026 机场推荐专题',
+        intro: '专题导语',
+        cover_image_url: '/uploads/news/topic.webp',
+        accent_color: '#d43d31',
+        faq_items: [{ question: '怎么选？', answer: '优先看稳定性。' }],
+        sort_order: 10,
+        is_active: true,
+        pinned_article_ids: [3, 1],
+      }),
+    });
+    assert.equal(createResponse.status, 201);
+    const created = await createResponse.json() as { id: number; pinned_article_ids: number[] };
+    assert.deepEqual(created.pinned_article_ids, [3, 1]);
+
+    const updateResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/topics/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: '2026 推荐专题更新',
+        accent_color: '#0f766e',
+        faq_items: [{ question: '是否收录 FAQ？', answer: '是。' }],
+        pinned_article_ids: [8],
+      }),
+    });
+    assert.equal(updateResponse.status, 200);
+    const updated = await updateResponse.json() as { name: string; accent_color: string; pinned_article_ids: number[] };
+    assert.equal(updated.name, '2026 推荐专题更新');
+    assert.equal(updated.accent_color, '#0f766e');
+    assert.deepEqual(updated.pinned_article_ids, [8]);
+
+    const archiveResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/topics/${created.id}/archive`, {
+      method: 'POST',
+    });
+    assert.equal(archiveResponse.status, 200);
+    const archived = await archiveResponse.json() as { is_active: boolean };
+    assert.equal(archived.is_active, false);
+    assert.deepEqual(audits, ['create_news_topic', 'update_news_topic', 'archive_news_topic']);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('news admin routes keep saved topic slug immutable', async () => {
+  const topic = {
+    id: 12,
+    name: '跑路机场监测专题',
+    slug: 'runaway-airport-monitoring',
+    description: '现有专题描述',
+    seo_title: '',
+    seo_description: '',
+    h1: '',
+    intro: '',
+    cover_image_url: '',
+    accent_color: '#0f766e',
+    faq_items: [],
+    sort_order: 20,
+    is_active: true,
+    pinned_article_ids: [],
+  };
+  const app = express();
+  app.use(express.json());
+  app.use(
+    '/api/v1/admin',
+    createNewsAdminRoutes({
+      auditRepository: { log: async () => undefined } as never,
+      newsRepository: {
+        listByQuery: async () => ({ items: [], total: 0 }),
+        listTopics: async () => [topic],
+        getById: async () => null,
+        getTopicById: async (id: number) => (id === topic.id ? topic : null),
+        validateTopicPinnedArticleIds: async () => true,
+        createTopic: async () => 1,
+        updateTopic: async (id: number, input: Partial<typeof topic>) => {
+          if (id !== topic.id) {
+            return false;
+          }
+          Object.assign(topic, input);
+          return true;
+        },
+        create: async () => 1,
+        update: async () => true,
+      } as never,
+      newsContentService: {
+        render: (markdown: string) => ({
+          html: markdown,
+          headings: [],
+          reading_minutes: 1,
+          plain_text: markdown,
+        }),
+      } as never,
+      newsPublicService: {
+        getPreviewArticleView: async () => null,
+      } as never,
+      pexelsCoverService: createPexelsServiceStub(),
+      newsCoverImageService: createNewsCoverImageServiceStub(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const updateWithoutSlugResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/topics/${topic.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: '跑路机场监测专题更新',
+      }),
+    });
+    assert.equal(updateWithoutSlugResponse.status, 200);
+    assert.equal(topic.name, '跑路机场监测专题更新');
+    assert.equal(topic.slug, 'runaway-airport-monitoring');
+
+    const changeSlugResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/topics/${topic.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        slug: 'changed-topic-slug',
+      }),
+    });
+    assert.equal(changeSlugResponse.status, 400);
+    const data = await changeSlugResponse.json() as { message: string };
+    assert.equal(data.message, '专题保存后 slug 不能修改');
+    assert.equal(topic.slug, 'runaway-airport-monitoring');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('news admin routes reject invalid topic color and pinned article ids', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    '/api/v1/admin',
+    createNewsAdminRoutes({
+      auditRepository: { log: async () => undefined } as never,
+      newsRepository: {
+        listByQuery: async () => ({ items: [], total: 0 }),
+        listTopics: async () => [],
+        getById: async () => null,
+        getTopicById: async (id: number) => ({
+          id,
+          name: '现有专题',
+          slug: 'existing-topic',
+          description: '现有描述',
+          sort_order: 10,
+          is_active: true,
+        }),
+        validateTopicPinnedArticleIds: async () => false,
+        createTopic: async () => 1,
+        updateTopic: async () => true,
+        create: async () => 1,
+        update: async () => true,
+      } as never,
+      newsContentService: {
+        render: (markdown: string) => ({
+          html: markdown,
+          headings: [],
+          reading_minutes: 1,
+          plain_text: markdown,
+        }),
+      } as never,
+      newsPublicService: {
+        getPreviewArticleView: async () => null,
+      } as never,
+      pexelsCoverService: createPexelsServiceStub(),
+      newsCoverImageService: createNewsCoverImageServiceStub(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const badColorResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/topics`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        name: '坏颜色',
+        slug: 'bad-color',
+        description: '描述',
+        accent_color: 'red',
+      }),
+    });
+    assert.equal(badColorResponse.status, 400);
+    const badColor = await badColorResponse.json() as { message: string };
+    assert.equal(badColor.message, 'accent_color 必须是 #RRGGBB 格式');
+
+    const badPinResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/topics/1`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        pinned_article_ids: [999],
+      }),
+    });
+    assert.equal(badPinResponse.status, 400);
+    const badPin = await badPinResponse.json() as { message: string };
+    assert.equal(badPin.message, '置顶文章必须是当前专题下的已发布文章');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

@@ -39,7 +39,16 @@ interface NewsTaxonomyRow extends RowDataPacket {
   name: string;
   slug: string;
   description: string;
+  seo_title?: string;
+  seo_description?: string;
+  h1?: string;
+  intro?: string;
+  cover_image_url?: string;
+  accent_color?: string;
+  faq_json?: string | null;
   sort_order: number;
+  is_active?: number | boolean;
+  updated_at?: string | null;
 }
 
 interface NewsArticleTopicRow extends NewsTaxonomyRow {
@@ -83,9 +92,33 @@ export interface NewsListQuery {
   status?: NewsStatus;
   category_slug?: string;
   topic_slug?: string;
+  exclude_ids?: number[];
   page?: number;
   pageSize?: number;
 }
+
+export interface NewsTopicFaqItem {
+  question: string;
+  answer: string;
+}
+
+export interface NewsTopicInput {
+  name: string;
+  slug: string;
+  description: string;
+  seo_title?: string;
+  seo_description?: string;
+  h1?: string;
+  intro?: string;
+  cover_image_url?: string;
+  accent_color?: string;
+  faq_items?: NewsTopicFaqItem[];
+  sort_order?: number;
+  is_active?: boolean;
+  pinned_article_ids?: number[];
+}
+
+export type UpdateNewsTopicInput = Partial<NewsTopicInput>;
 
 export class NewsRepository {
   constructor(private readonly pool: Pool) {}
@@ -113,6 +146,13 @@ export class NewsRepository {
         name VARCHAR(160) NOT NULL,
         slug VARCHAR(180) NOT NULL,
         description TEXT NOT NULL,
+        seo_title VARCHAR(255) NOT NULL DEFAULT '',
+        seo_description TEXT NULL,
+        h1 VARCHAR(255) NOT NULL DEFAULT '',
+        intro TEXT NULL,
+        cover_image_url VARCHAR(1024) NOT NULL DEFAULT '',
+        accent_color VARCHAR(16) NOT NULL DEFAULT '#d43d31',
+        faq_json JSON NULL,
         sort_order INT NOT NULL DEFAULT 0,
         is_active TINYINT(1) NOT NULL DEFAULT 1,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -120,6 +160,18 @@ export class NewsRepository {
         PRIMARY KEY (id),
         UNIQUE KEY uk_news_topics_slug (slug),
         INDEX idx_news_topics_active_sort (is_active, sort_order, id)
+      )
+    `);
+
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS news_topic_pinned_articles (
+        topic_id BIGINT UNSIGNED NOT NULL,
+        article_id BIGINT UNSIGNED NOT NULL,
+        position INT NOT NULL DEFAULT 0,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (topic_id, article_id),
+        INDEX idx_news_topic_pinned_articles_topic_position (topic_id, position, article_id),
+        INDEX idx_news_topic_pinned_articles_article (article_id)
       )
     `);
 
@@ -180,6 +232,13 @@ export class NewsRepository {
       'updated_at',
       'DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP AFTER created_at',
     );
+    await this.ensureColumn('news_topics', 'seo_title', "VARCHAR(255) NOT NULL DEFAULT '' AFTER description");
+    await this.ensureColumn('news_topics', 'seo_description', 'TEXT NULL AFTER seo_title');
+    await this.ensureColumn('news_topics', 'h1', "VARCHAR(255) NOT NULL DEFAULT '' AFTER seo_description");
+    await this.ensureColumn('news_topics', 'intro', 'TEXT NULL AFTER h1');
+    await this.ensureColumn('news_topics', 'cover_image_url', "VARCHAR(1024) NOT NULL DEFAULT '' AFTER intro");
+    await this.ensureColumn('news_topics', 'accent_color', "VARCHAR(16) NOT NULL DEFAULT '#d43d31' AFTER cover_image_url");
+    await this.ensureColumn('news_topics', 'faq_json', 'JSON NULL AFTER accent_color');
     await this.ensureIndex(
       'news_articles',
       'idx_news_articles_category_status',
@@ -203,14 +262,15 @@ export class NewsRepository {
     return rows.map(toTaxonomySummary);
   }
 
-  async listTopics(): Promise<NewsTopicSummary[]> {
+  async listTopics(options: { includeInactive?: boolean } = {}): Promise<NewsTopicSummary[]> {
+    const where = options.includeInactive ? '' : 'WHERE is_active = 1';
     const [rows] = await this.pool.query<NewsTaxonomyRow[]>(
-      `SELECT id, name, slug, description, sort_order
+      `SELECT ${topicSelectColumns()}
          FROM news_topics
-        WHERE is_active = 1
+        ${where}
         ORDER BY sort_order ASC, id ASC`,
     );
-    return rows.map(toTaxonomySummary);
+    return rows.map(toTopicSummary);
   }
 
   async getCategoryBySlug(slug: string): Promise<NewsCategorySummary | null> {
@@ -227,14 +287,166 @@ export class NewsRepository {
 
   async getTopicBySlug(slug: string): Promise<NewsTopicSummary | null> {
     const [rows] = await this.pool.query<NewsTaxonomyRow[]>(
-      `SELECT id, name, slug, description, sort_order
+      `SELECT ${topicSelectColumns()}
          FROM news_topics
         WHERE slug = ?
           AND is_active = 1
         LIMIT 1`,
       [slug],
     );
-    return rows[0] ? toTaxonomySummary(rows[0]) : null;
+    return rows[0] ? toTopicSummary(rows[0]) : null;
+  }
+
+  async getTopicById(id: number): Promise<NewsTopicSummary | null> {
+    const [rows] = await this.pool.query<NewsTaxonomyRow[]>(
+      `SELECT ${topicSelectColumns()}
+         FROM news_topics
+        WHERE id = ?
+        LIMIT 1`,
+      [id],
+    );
+    return rows[0] ? toTopicSummary(rows[0]) : null;
+  }
+
+  async createTopic(input: NewsTopicInput): Promise<number> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `INSERT INTO news_topics (
+         name,
+         slug,
+         description,
+         seo_title,
+         seo_description,
+         h1,
+         intro,
+         cover_image_url,
+         accent_color,
+         faq_json,
+         sort_order,
+         is_active
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        input.name,
+        input.slug,
+        input.description,
+        input.seo_title || '',
+        input.seo_description || '',
+        input.h1 || '',
+        input.intro || '',
+        input.cover_image_url || '',
+        input.accent_color || '#d43d31',
+        JSON.stringify(input.faq_items || []),
+        input.sort_order || 0,
+        input.is_active === false ? 0 : 1,
+      ],
+    );
+    const id = Number(result.insertId);
+    if (input.pinned_article_ids) {
+      await this.setTopicPinnedArticleIds(id, input.pinned_article_ids);
+    }
+    return id;
+  }
+
+  async updateTopic(id: number, input: UpdateNewsTopicInput): Promise<boolean> {
+    const updates: string[] = [];
+    const params: Array<string | number | null> = [];
+    const pushString = (column: string, value: string | undefined): void => {
+      if (value !== undefined) {
+        updates.push(`${column} = ?`);
+        params.push(value);
+      }
+    };
+    pushString('name', input.name);
+    pushString('slug', input.slug);
+    pushString('description', input.description);
+    pushString('seo_title', input.seo_title);
+    pushString('seo_description', input.seo_description);
+    pushString('h1', input.h1);
+    pushString('intro', input.intro);
+    pushString('cover_image_url', input.cover_image_url);
+    pushString('accent_color', input.accent_color);
+    if (input.faq_items !== undefined) {
+      updates.push('faq_json = ?');
+      params.push(JSON.stringify(input.faq_items));
+    }
+    if (input.sort_order !== undefined) {
+      updates.push('sort_order = ?');
+      params.push(input.sort_order);
+    }
+    if (input.is_active !== undefined) {
+      updates.push('is_active = ?');
+      params.push(input.is_active ? 1 : 0);
+    }
+
+    let changed = false;
+    if (updates.length > 0) {
+      params.push(id);
+      const [result] = await this.pool.execute<ResultSetHeader>(
+        `UPDATE news_topics
+            SET ${updates.join(', ')},
+                updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`,
+        params,
+      );
+      changed = result.affectedRows > 0;
+    }
+
+    if (input.pinned_article_ids !== undefined) {
+      await this.setTopicPinnedArticleIds(id, input.pinned_article_ids);
+      changed = true;
+    }
+    return changed;
+  }
+
+  async archiveTopic(id: number): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      'UPDATE news_topics SET is_active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+      [id],
+    );
+    return result.affectedRows > 0;
+  }
+
+  async getTopicPinnedArticleIds(topicId: number): Promise<number[]> {
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT article_id
+         FROM news_topic_pinned_articles
+        WHERE topic_id = ?
+        ORDER BY position ASC, article_id ASC`,
+      [topicId],
+    );
+    return rows.map((row) => Number(row.article_id)).filter((id) => id > 0);
+  }
+
+  async setTopicPinnedArticleIds(topicId: number, articleIds: number[]): Promise<void> {
+    await this.pool.execute('DELETE FROM news_topic_pinned_articles WHERE topic_id = ?', [topicId]);
+    const cleanIds = Array.from(new Set(articleIds.map((id) => Math.floor(Number(id))).filter((id) => id > 0)));
+    if (cleanIds.length === 0) {
+      return;
+    }
+    const placeholders = cleanIds.map(() => '(?, ?, ?)').join(', ');
+    const params = cleanIds.flatMap((articleId, index) => [topicId, articleId, index + 1]);
+    await this.pool.execute(
+      `INSERT INTO news_topic_pinned_articles (topic_id, article_id, position) VALUES ${placeholders}`,
+      params,
+    );
+  }
+
+  async validateTopicPinnedArticleIds(topicId: number, articleIds: number[]): Promise<boolean> {
+    const cleanIds = Array.from(new Set(articleIds.map((id) => Math.floor(Number(id))).filter((id) => id > 0)));
+    if (cleanIds.length === 0) {
+      return true;
+    }
+    const placeholders = cleanIds.map(() => '?').join(', ');
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT DISTINCT a.id
+         FROM news_articles a
+         INNER JOIN news_article_topics nat ON nat.article_id = a.id
+        WHERE nat.topic_id = ?
+          AND a.id IN (${placeholders})
+          AND a.status = 'published'
+          AND a.published_at IS NOT NULL`,
+      [topicId, ...cleanIds],
+    );
+    return rows.length === cleanIds.length;
   }
 
   async listByQuery(query: NewsListQuery): Promise<{ items: NewsArticleListItem[]; total: number }> {
@@ -314,6 +526,19 @@ export class NewsRepository {
       total: Number(totalRows[0]?.total || 0),
       items: await this.attachTopics(rows.map((row) => toNewsArticle(row))),
     };
+  }
+
+  async listPublishedPinnedByTopic(topicId: number): Promise<NewsArticle[]> {
+    const [rows] = await this.pool.query<NewsArticleRow[]>(
+      `${baseSelectSql()}
+       INNER JOIN news_topic_pinned_articles ntpa ON ntpa.article_id = a.id
+       WHERE ntpa.topic_id = ?
+         AND a.status = 'published'
+         AND a.published_at IS NOT NULL
+       ORDER BY ntpa.position ASC, ntpa.article_id ASC`,
+      [topicId],
+    );
+    return this.attachTopics(rows.map((row) => toNewsArticle(row)));
   }
 
   async getFeaturedPublished(options: Pick<NewsListQuery, 'category_slug' | 'topic_slug' | 'keyword'> = {}): Promise<NewsArticle | null> {
@@ -688,13 +913,8 @@ export class NewsRepository {
 
     for (const topic of DEFAULT_NEWS_TOPICS) {
       await this.pool.execute(
-        `INSERT INTO news_topics (name, slug, description, sort_order)
-         VALUES (?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE
-           name = VALUES(name),
-           description = VALUES(description),
-           sort_order = VALUES(sort_order),
-           is_active = 1`,
+        `INSERT IGNORE INTO news_topics (name, slug, description, sort_order)
+         VALUES (?, ?, ?, ?)`,
         [topic.name, topic.slug, topic.description, topic.sort_order],
       );
     }
@@ -741,6 +961,13 @@ function buildListFilters(query: NewsListQuery): {
     where.push('(a.title LIKE ? OR a.slug LIKE ? OR a.excerpt LIKE ? OR a.content_markdown LIKE ?)');
     const keyword = `%${query.keyword}%`;
     args.push(keyword, keyword, keyword, keyword);
+  }
+  if (query.exclude_ids && query.exclude_ids.length > 0) {
+    const excludeIds = Array.from(new Set(query.exclude_ids.map((id) => Math.floor(Number(id))).filter((id) => id > 0)));
+    if (excludeIds.length > 0) {
+      where.push(`a.id NOT IN (${excludeIds.map(() => '?').join(', ')})`);
+      args.push(...excludeIds);
+    }
   }
 
   filters.joinSql = join.join('\n');
@@ -826,6 +1053,23 @@ function toNewsArticleListItem(article: NewsArticle): NewsArticleListItem {
   };
 }
 
+function topicSelectColumns(): string {
+  return `id,
+          name,
+          slug,
+          description,
+          seo_title,
+          seo_description,
+          h1,
+          intro,
+          cover_image_url,
+          accent_color,
+          faq_json,
+          sort_order,
+          is_active,
+          DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at`;
+}
+
 function toTaxonomySummary(row: NewsTaxonomyRow): NewsCategorySummary {
   return {
     id: Number(row.id),
@@ -834,6 +1078,53 @@ function toTaxonomySummary(row: NewsTaxonomyRow): NewsCategorySummary {
     description: row.description,
     sort_order: Number(row.sort_order || 0),
   };
+}
+
+function toTopicSummary(row: NewsTaxonomyRow): NewsTopicSummary {
+  return {
+    id: Number(row.id),
+    name: row.name,
+    slug: row.slug,
+    description: row.description,
+    seo_title: row.seo_title || '',
+    seo_description: row.seo_description || '',
+    h1: row.h1 || '',
+    intro: row.intro || '',
+    cover_image_url: row.cover_image_url || '',
+    accent_color: row.accent_color || '#d43d31',
+    faq_items: parseFaqItems(row.faq_json),
+    sort_order: Number(row.sort_order || 0),
+    is_active: row.is_active === undefined ? true : toBoolean(row.is_active),
+    updated_at: row.updated_at || null,
+  };
+}
+
+function parseFaqItems(value: unknown): NewsTopicFaqItem[] {
+  if (!value) {
+    return [];
+  }
+  let parsed: unknown = value;
+  if (typeof value === 'string') {
+    try {
+      parsed = JSON.parse(value);
+    } catch {
+      return [];
+    }
+  }
+  if (!Array.isArray(parsed)) {
+    return [];
+  }
+  return parsed
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+      const record = item as Record<string, unknown>;
+      const question = String(record.question || '').trim();
+      const answer = String(record.answer || '').trim();
+      return question && answer ? { question, answer } : null;
+    })
+    .filter((item): item is NewsTopicFaqItem => Boolean(item));
 }
 
 function toBoolean(value: number | boolean): boolean {

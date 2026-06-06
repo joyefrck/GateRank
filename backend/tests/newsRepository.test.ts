@@ -11,7 +11,7 @@ test('NewsRepository.ensureSchema creates news_articles table and missing column
       calls.push({ sql, params });
       if (sql.includes('FROM information_schema.COLUMNS')) {
         schemaChecks += 1;
-        return [schemaChecks <= 12 ? [] : [{ 1: 1 }]];
+        return [schemaChecks <= 19 ? [] : [{ 1: 1 }]];
       }
       return [[]];
     },
@@ -51,8 +51,19 @@ test('NewsRepository.ensureSchema creates news_articles table and missing column
     calls.some((call) => call.sql.includes('INSERT INTO news_categories')),
   );
   assert.ok(
-    calls.some((call) => call.sql.includes('INSERT INTO news_topics')),
+    calls.some((call) => call.sql.includes('INSERT IGNORE INTO news_topics')),
   );
+  assert.ok(
+    calls.some((call) => call.sql.includes('CREATE TABLE IF NOT EXISTS news_topic_pinned_articles')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE news_topics ADD COLUMN seo_title VARCHAR(255) NOT NULL DEFAULT')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE news_topics ADD COLUMN faq_json JSON NULL')),
+  );
+  const topicSeedCalls = calls.filter((call) => call.sql.includes('INSERT INTO news_topics'));
+  assert.ok(topicSeedCalls.every((call) => call.sql.includes('INSERT IGNORE INTO news_topics')));
 });
 
 test('NewsRepository.incrementViewCount increments article view count by id', async () => {
@@ -75,4 +86,40 @@ test('NewsRepository.incrementViewCount increments article view count by id', as
       params: [42],
     },
   ]);
+});
+
+test('NewsRepository.createTopic stores SEO, FAQ and pinned article fields', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new NewsRepository({
+    query: async () => [[]],
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql.includes('INSERT INTO news_topics')) {
+        return [{ insertId: 88, affectedRows: 1 }];
+      }
+      return [{ affectedRows: 1 }];
+    },
+  } as never);
+
+  const id = await repository.createTopic({
+    name: '年度推荐专题',
+    slug: 'annual-recommendations',
+    description: '专题描述',
+    seo_title: '年度推荐专题 SEO 标题',
+    seo_description: '年度推荐专题 SEO 描述',
+    h1: '年度推荐专题 H1',
+    intro: '专题导语',
+    cover_image_url: '/uploads/news/topic.webp',
+    accent_color: '#d43d31',
+    faq_items: [{ question: '怎么选？', answer: '看稳定性。' }],
+    sort_order: 15,
+    is_active: true,
+    pinned_article_ids: [3, 1],
+  });
+
+  assert.equal(id, 88);
+  assert.ok(calls.some((call) => call.sql.includes('INSERT INTO news_topics')));
+  assert.ok(
+    calls.some((call) => call.sql.includes('INSERT INTO news_topic_pinned_articles') && JSON.stringify(call.params) === JSON.stringify([88, 3, 1, 88, 1, 2])),
+  );
 });

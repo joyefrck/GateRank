@@ -40,6 +40,20 @@ export interface PublicNewsListView {
   guides: PublicNewsCardView[];
 }
 
+export interface PublicNewsTopicPageView {
+  page: number;
+  page_size: number;
+  total: number;
+  total_pages: number;
+  query: string;
+  topic: NewsTopicSummary;
+  categories: NewsCategorySummary[];
+  topics: NewsTopicSummary[];
+  pinned: PublicNewsCardView[];
+  items: PublicNewsCardView[];
+  recommended: PublicNewsCardView[];
+}
+
 export interface PublicNewsArticleView extends PublicNewsCardView {
   content_html: string;
   headings: Array<{ id: string; level: number; text: string }>;
@@ -109,6 +123,51 @@ export class NewsPublicService {
       recommended,
       risk_watch: riskItems.map((item) => this.toCardView(item)),
       guides: guideItems.map((item) => this.toCardView(item)),
+    };
+  }
+
+  async getTopicPageView(
+    slug: string,
+    page = 1,
+    pageSize = 12,
+    filters: { q?: string } = {},
+  ): Promise<PublicNewsTopicPageView | null> {
+    const safePage = Math.max(1, page);
+    const safePageSize = Math.min(24, Math.max(1, pageSize));
+    const keyword = String(filters.q || '').trim();
+    const [categories, topics, topic, recommendedItems] = await Promise.all([
+      this.newsRepository.listCategories(),
+      this.newsRepository.listTopics(),
+      this.newsRepository.getTopicBySlug(slug),
+      this.newsRepository.listRecommendedPublished(6),
+    ]);
+    if (!topic) {
+      return null;
+    }
+    const resolvedPinnedArticles = safePage === 1 && !keyword
+      ? await this.newsRepository.listPublishedPinnedByTopic(topic.id)
+      : [];
+    const pinnedIds = resolvedPinnedArticles.map((article) => article.id);
+    const result = await this.newsRepository.listPublishedDetailed({
+      page: safePage,
+      pageSize: safePageSize,
+      topic_slug: topic.slug,
+      keyword,
+      exclude_ids: pinnedIds,
+    });
+
+    return {
+      page: safePage,
+      page_size: safePageSize,
+      total: result.total,
+      total_pages: Math.max(1, Math.ceil(result.total / safePageSize)),
+      query: keyword,
+      topic,
+      categories,
+      topics,
+      pinned: resolvedPinnedArticles.map((article) => this.toCardView(article)),
+      items: result.items.map((article) => this.toCardView(article)),
+      recommended: recommendedItems.map((item) => this.toCardView(item)),
     };
   }
 

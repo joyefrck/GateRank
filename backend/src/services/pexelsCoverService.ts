@@ -59,6 +59,9 @@ export interface PexelsCoverSearchResult {
 export interface ImportPexelsCoverInput {
   id: number;
   download_url: string;
+  context_slug?: string;
+  alt?: string;
+  target?: string;
 }
 
 export class PexelsCoverService {
@@ -124,7 +127,11 @@ export class PexelsCoverService {
       chunks.push(chunk);
     }
 
-    return await this.newsCoverImageService.compressCoverBuffer(Buffer.concat(chunks));
+    return await this.newsCoverImageService.compressCoverBuffer(Buffer.concat(chunks), {
+      contextSlug: input.context_slug,
+      pexelsId: input.id,
+      alt: input.alt,
+    });
   }
 
   private normalizePhoto(photo: PexelsPhoto): PexelsCoverCandidate | null {

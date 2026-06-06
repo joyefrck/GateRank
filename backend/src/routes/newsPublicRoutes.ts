@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { HttpError } from '../middleware/errorHandler';
 import type { NewsArticleListItem } from '../types/domain';
-import { renderNewsArticlePage, renderNewsIndexPage } from '../services/newsPageRenderer';
+import { renderNewsArticlePage, renderNewsIndexPage, renderNewsTopicPage } from '../services/newsPageRenderer';
 import { renderPublishTokenDocsPage, renderPublishTokenDocsRawMarkdown } from '../services/publishTokenDocsPageRenderer';
 import type { NewsPublicService } from '../services/newsPublicService';
 import { buildServerPageViewRecord } from '../utils/marketing';
@@ -117,11 +117,10 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
     try {
       const page = toPositiveInt(req.query.page, 1);
       const q = optionalString(req.query.q);
-      const view = await deps.newsPublicService.getListView(page, 12, {
-        topic_slug: String(req.params.slug || ''),
-        q,
-      });
-      if (!view.topic) {
+      const view = typeof deps.newsPublicService.getTopicPageView === 'function'
+        ? await deps.newsPublicService.getTopicPageView(String(req.params.slug || ''), page, 12, { q })
+        : null;
+      if (!view) {
         renderHtmlError(res, 404, '专题不存在或尚未发布');
         return;
       }
@@ -130,7 +129,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
         .status(200)
         .type('html')
         .set(setHtmlCacheHeaders())
-        .send(renderNewsIndexPage({ siteUrl: getSiteUrl(req), listView: view }));
+        .send(renderNewsTopicPage({ siteUrl: getSiteUrl(req), topicView: view }));
     } catch {
       renderHtmlError(res, 500, '专题页面加载失败');
     }
@@ -186,6 +185,8 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
     const reportEntries = await getReportSitemapEntries(deps);
     const dataLastmod = reportEntries[0]?.lastmod || formatSitemapLastmodDate(getDateInTimezone());
     const newsLastmod = getNewsIndexLastmod(items);
+    const activeCategories = taxonomy.categories.filter((item) => item.is_active !== false);
+    const activeTopics = taxonomy.topics.filter((item) => item.is_active !== false);
     const urls = [
       '/',
       '/rankings/all',
@@ -197,8 +198,8 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       '/for-ai',
       '/publish-token-docs',
       '/news',
-      ...taxonomy.categories.map((item) => `/news/category/${item.slug}`),
-      ...taxonomy.topics.map((item) => `/news/topic/${item.slug}`),
+      ...activeCategories.map((item) => `/news/category/${item.slug}`),
+      ...activeTopics.map((item) => `/news/topic/${item.slug}`),
       ...reportEntries.map((entry) => entry.path),
       ...items.map((item) => `/news/${item.slug}`),
     ];
@@ -213,8 +214,8 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       '/for-ai': PUBLIC_SEO_STATIC_LASTMOD,
       '/publish-token-docs': PUBLISH_TOKEN_DOCS_LAST_UPDATED,
       '/news': newsLastmod,
-      ...Object.fromEntries(taxonomy.categories.map((item) => [`/news/category/${item.slug}`, newsLastmod])),
-      ...Object.fromEntries(taxonomy.topics.map((item) => [`/news/topic/${item.slug}`, newsLastmod])),
+      ...Object.fromEntries(activeCategories.map((item) => [`/news/category/${item.slug}`, formatTaxonomyLastmod(item.updated_at || newsLastmod)])),
+      ...Object.fromEntries(activeTopics.map((item) => [`/news/topic/${item.slug}`, formatTaxonomyLastmod(item.updated_at || newsLastmod)])),
       ...Object.fromEntries(reportEntries.map((entry) => [entry.path, entry.lastmod])),
     };
     const xml = buildSitemapXml(siteUrl, urls, items, staticLastmodByPath);
@@ -257,6 +258,13 @@ function formatSitemapLastmodDate(date: string): string {
 
 function formatSitemapLastmodDateTime(dateTime: string): string {
   return dateTime.includes('T') ? dateTime : `${dateTime.replace(' ', 'T')}+08:00`;
+}
+
+function formatTaxonomyLastmod(value: string): string {
+  if (value.includes('T') || value.includes(' ')) {
+    return formatSitemapLastmodDateTime(value);
+  }
+  return formatSitemapLastmodDate(value);
 }
 
 function getSiteUrl(req: Request): string {

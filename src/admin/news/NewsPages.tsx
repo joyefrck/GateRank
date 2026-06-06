@@ -56,7 +56,17 @@ interface NewsTaxonomyItem {
   name: string;
   slug: string;
   description: string;
+  seo_title?: string;
+  seo_description?: string;
+  h1?: string;
+  intro?: string;
+  cover_image_url?: string;
+  accent_color?: string;
+  faq_items?: Array<{ question: string; answer: string }>;
   sort_order: number;
+  is_active?: boolean;
+  updated_at?: string | null;
+  pinned_article_ids?: number[];
 }
 
 interface NewsListResponse {
@@ -172,6 +182,23 @@ interface NewsFormState {
   published_at: string | null;
 }
 
+interface TopicFormState {
+  id: number | null;
+  name: string;
+  slug: string;
+  description: string;
+  seo_title: string;
+  seo_description: string;
+  h1: string;
+  intro: string;
+  cover_image_url: string;
+  accent_color: string;
+  faq_items: Array<{ question: string; answer: string }>;
+  sort_order: number;
+  is_active: boolean;
+  pinned_article_ids_text: string;
+}
+
 const emptyForm: NewsFormState = {
   title: '',
   slug: '',
@@ -187,6 +214,23 @@ const emptyForm: NewsFormState = {
   published_at: null,
 };
 
+const emptyTopicForm: TopicFormState = {
+  id: null,
+  name: '',
+  slug: '',
+  description: '',
+  seo_title: '',
+  seo_description: '',
+  h1: '',
+  intro: '',
+  cover_image_url: '',
+  accent_color: '#d43d31',
+  faq_items: [],
+  sort_order: 0,
+  is_active: true,
+  pinned_article_ids_text: '',
+};
+
 export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
   const [items, setItems] = useState<NewsListResponse['items']>([]);
   const [categories, setCategories] = useState<NewsTaxonomyItem[]>([]);
@@ -199,6 +243,7 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [activePanel, setActivePanel] = useState<'articles' | 'topics'>('articles');
 
   useEffect(() => {
     void apiFetch<{ items: NewsTaxonomyItem[] }>('/api/v1/admin/news/categories')
@@ -287,15 +332,38 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
             这里统一管理草稿、已发布文章和已下线内容。列表按发布时间和更新时间排序，方便运营回看最近改动。
           </p>
         </div>
+        {activePanel === 'articles' ? (
+          <button
+            className="inline-flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white"
+            onClick={onCreate}
+          >
+            <Plus size={16} />
+            新建文章
+          </button>
+        ) : null}
+      </div>
+
+      <div className="inline-flex w-fit rounded-2xl border border-neutral-200 bg-white p-1 text-sm font-semibold">
         <button
-          className="inline-flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white"
-          onClick={onCreate}
+          className={`rounded-xl px-4 py-2 ${activePanel === 'articles' ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:text-neutral-900'}`}
+          onClick={() => setActivePanel('articles')}
+          type="button"
         >
-          <Plus size={16} />
-          新建文章
+          文章
+        </button>
+        <button
+          className={`rounded-xl px-4 py-2 ${activePanel === 'topics' ? 'bg-neutral-900 text-white' : 'text-neutral-500 hover:text-neutral-900'}`}
+          onClick={() => setActivePanel('topics')}
+          type="button"
+        >
+          专题
         </button>
       </div>
 
+      {activePanel === 'topics' ? (
+        <TopicManagementPanel />
+      ) : (
+        <>
       <div className="grid gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4 md:grid-cols-[minmax(0,1fr)_180px_180px]">
         <label className="flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2">
           <Search size={15} className="text-neutral-400" />
@@ -432,7 +500,508 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
           </button>
         </div>
       </div>
+        </>
+      )}
     </section>
+  );
+}
+
+function TopicManagementPanel() {
+  const [topics, setTopics] = useState<NewsTaxonomyItem[]>([]);
+  const [form, setForm] = useState<TopicFormState>(emptyTopicForm);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+  const [coverSearchQuery, setCoverSearchQuery] = useState('');
+  const [coverSearchResults, setCoverSearchResults] = useState<PexelsCoverCandidate[]>([]);
+  const [coverSearchPage, setCoverSearchPage] = useState(1);
+  const [coverSearchPerPage, setCoverSearchPerPage] = useState(COVER_SEARCH_PER_PAGE);
+  const [coverSearchTotal, setCoverSearchTotal] = useState(0);
+  const [coverSearchLoading, setCoverSearchLoading] = useState(false);
+  const [coverSearchImportingId, setCoverSearchImportingId] = useState<number | null>(null);
+  const [coverSearchError, setCoverSearchError] = useState('');
+  const [coverPickerOpen, setCoverPickerOpen] = useState(false);
+
+  useEffect(() => {
+    void loadTopics();
+  }, []);
+
+  async function loadTopics(): Promise<void> {
+    setLoading(true);
+    setError('');
+    try {
+      const response = await apiFetch<{ items: NewsTaxonomyItem[] }>('/api/v1/admin/news/topics?include_inactive=1');
+      setTopics(response.items);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '专题列表加载失败');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function resetForm(): void {
+    setForm(emptyTopicForm);
+    setNotice('');
+    setError('');
+  }
+
+  async function saveTopic(): Promise<void> {
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const payload = topicFormToPayload(form);
+      const saved = form.id
+        ? await apiFetch<NewsTaxonomyItem>(`/api/v1/admin/news/topics/${form.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          })
+        : await apiFetch<NewsTaxonomyItem>('/api/v1/admin/news/topics', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+      setForm(topicToForm(saved));
+      setNotice('专题已保存');
+      await loadTopics();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '专题保存失败');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function archiveTopic(): Promise<void> {
+    if (!form.id) {
+      return;
+    }
+    const confirmed = window.confirm(`确认下线「${form.name || '未命名专题'}」？公开专题页会返回 404，文章关联不会删除。`);
+    if (!confirmed) {
+      return;
+    }
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const archived = await apiFetch<NewsTaxonomyItem>(`/api/v1/admin/news/topics/${form.id}/archive`, {
+        method: 'POST',
+      });
+      setForm(topicToForm(archived));
+      setNotice('专题已下线');
+      await loadTopics();
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : '专题下线失败');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function updateFaqItem(index: number, key: 'question' | 'answer', value: string): void {
+    setForm((current) => ({
+      ...current,
+      faq_items: current.faq_items.map((item, itemIndex) => (
+        itemIndex === index ? { ...item, [key]: value } : item
+      )),
+    }));
+  }
+
+  async function searchPexelsCovers(targetPage = 1): Promise<void> {
+    const query = coverSearchQuery.trim();
+    if (!query) {
+      setCoverSearchError('请输入封面关键词');
+      setCoverSearchResults([]);
+      setCoverSearchPage(1);
+      setCoverSearchTotal(0);
+      return;
+    }
+
+    setCoverSearchLoading(true);
+    setCoverSearchError('');
+    try {
+      const search = new URLSearchParams({
+        q: query,
+        page: String(targetPage),
+        per_page: String(coverSearchPerPage),
+      });
+      const result = await apiFetch<PexelsCoverSearchResponse>(`/api/v1/admin/news/cover-search?${search.toString()}`);
+      setCoverSearchResults(result.items);
+      setCoverSearchPage(result.page);
+      setCoverSearchPerPage(result.per_page);
+      setCoverSearchTotal(result.total);
+      if (result.items.length === 0) {
+        setCoverSearchError('没有找到合适的横版封面');
+      }
+    } catch (err: unknown) {
+      setCoverSearchResults([]);
+      setCoverSearchTotal(0);
+      setCoverSearchError(err instanceof Error ? err.message : '封面搜索失败');
+    } finally {
+      setCoverSearchLoading(false);
+    }
+  }
+
+  async function importPexelsCover(item: PexelsCoverCandidate): Promise<void> {
+    setCoverSearchImportingId(item.id);
+    setCoverSearchError('');
+    setError('');
+    setNotice('');
+    try {
+      const result = await apiFetch<{ url: string }>('/api/v1/admin/news/import-cover-image', {
+        method: 'POST',
+        body: JSON.stringify({
+          id: item.id,
+          download_url: item.download_url,
+          context_slug: form.slug,
+          alt: item.alt,
+          target: 'topic',
+        }),
+      });
+      setForm((current) => ({ ...current, cover_image_url: result.url }));
+      setNotice('Pexels 专题封面已导入');
+      setCoverPickerOpen(false);
+    } catch (err: unknown) {
+      setCoverSearchError(err instanceof Error ? err.message : '封面导入失败');
+    } finally {
+      setCoverSearchImportingId(null);
+    }
+  }
+
+  const isTopicSlugLocked = Boolean(form.id);
+
+  return (
+    <>
+    <div className="grid gap-5 xl:grid-cols-[340px_minmax(0,1fr)]">
+      <aside className="rounded-2xl border border-neutral-200 bg-white">
+        <div className="flex items-center justify-between border-b border-neutral-100 px-4 py-3">
+          <div>
+            <div className="text-sm font-black text-neutral-900">专题列表</div>
+            <div className="text-xs text-neutral-500">{loading ? '加载中...' : `${topics.length} 个专题`}</div>
+          </div>
+          <button
+            className="inline-flex items-center gap-1.5 rounded-lg bg-neutral-900 px-3 py-2 text-xs font-semibold text-white"
+            onClick={resetForm}
+            type="button"
+          >
+            <Plus size={14} />
+            新建
+          </button>
+        </div>
+        <div className="max-h-[720px] overflow-y-auto p-2">
+          {topics.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-neutral-200 px-4 py-8 text-center text-sm text-neutral-400">
+              暂无专题
+            </div>
+          ) : (
+            topics.map((topic) => (
+              <button
+                key={topic.id}
+                className={`mb-2 w-full rounded-xl border px-3 py-3 text-left transition ${
+                  form.id === topic.id ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-white hover:bg-neutral-50'
+                }`}
+                onClick={() => {
+                  setForm(topicToForm(topic));
+                  setNotice('');
+                  setError('');
+                }}
+                type="button"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-black">{topic.name}</div>
+                    <div className={`mt-1 truncate text-xs ${form.id === topic.id ? 'text-neutral-300' : 'text-neutral-500'}`}>
+                      /news/topic/{topic.slug}
+                    </div>
+                  </div>
+                  <span className={`shrink-0 rounded-full px-2 py-1 text-[11px] font-bold ${
+                    topic.is_active === false ? 'bg-rose-50 text-rose-700' : 'bg-emerald-50 text-emerald-700'
+                  }`}>
+                    {topic.is_active === false ? '下线' : '启用'}
+                  </span>
+                </div>
+              </button>
+            ))
+          )}
+        </div>
+      </aside>
+
+      <section className="space-y-4 rounded-2xl border border-neutral-200 bg-white p-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-neutral-400">Topic Operations</div>
+            <h2 className="mt-1 text-2xl font-black tracking-tight">{form.id ? '编辑专题' : '新建专题'}</h2>
+            <p className="mt-2 text-sm leading-6 text-neutral-500">
+              专题页公开地址固定为 /news/topic/:slug，保存后会进入 sitemap；下线只隐藏专题页，不删除文章关联。
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {form.slug ? (
+              <a
+                className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 px-4 py-2.5 text-sm font-medium hover:bg-neutral-50"
+                href={`/news/topic/${form.slug}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <Link2 size={16} />
+                打开专题
+              </a>
+            ) : null}
+            <button
+              className="inline-flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={() => void saveTopic()}
+              disabled={saving}
+              type="button"
+            >
+              <Save size={16} />
+              保存专题
+            </button>
+            {form.id && form.is_active ? (
+              <button
+                className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700 disabled:opacity-50"
+                onClick={() => void archiveTopic()}
+                disabled={saving}
+                type="button"
+              >
+                <Archive size={16} />
+                下线专题
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
+        {notice ? <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{notice}</div> : null}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Field label="专题名称">
+            <input
+              className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+              value={form.name}
+              onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+              placeholder="例如：2026机场推荐专题"
+            />
+          </Field>
+          <Field label="Slug">
+            <input
+              className={`w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400 ${
+                isTopicSlugLocked ? 'cursor-not-allowed bg-neutral-50 text-neutral-500' : ''
+              }`}
+              value={form.slug}
+              onChange={(event) => {
+                if (isTopicSlugLocked) {
+                  return;
+                }
+                setForm((current) => ({ ...current, slug: event.target.value }));
+              }}
+              placeholder="airport-recommendations-2026"
+              spellCheck={false}
+              autoCapitalize="none"
+              autoCorrect="off"
+              readOnly={isTopicSlugLocked}
+            />
+            <div className="mt-2 text-xs leading-5 text-neutral-500">
+              {isTopicSlugLocked ? '专题保存后 slug 已锁定，避免已公开链接失效。' : '用于专题公开链接，保存后不可修改。'}
+            </div>
+          </Field>
+        </div>
+
+        <Field label="专题描述">
+          <textarea
+            className="min-h-[88px] w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+            value={form.description}
+            onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+            placeholder="用于专题卡片和缺省 meta description。"
+          />
+        </Field>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Field label="SEO Title">
+            <input
+              className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+              value={form.seo_title}
+              onChange={(event) => setForm((current) => ({ ...current, seo_title: event.target.value }))}
+              placeholder="留空则使用 专题名 | GateRank News"
+            />
+          </Field>
+          <Field label="SEO Description">
+            <input
+              className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+              value={form.seo_description}
+              onChange={(event) => setForm((current) => ({ ...current, seo_description: event.target.value }))}
+              placeholder="搜索结果摘要"
+            />
+          </Field>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <Field label="页面 H1">
+            <input
+              className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+              value={form.h1}
+              onChange={(event) => setForm((current) => ({ ...current, h1: event.target.value }))}
+              placeholder="留空则使用专题名称"
+            />
+          </Field>
+          <Field
+            label="专题封面"
+            action={(
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+                  onClick={() => setCoverPickerOpen(true)}
+                >
+                  <Search size={14} />
+                  从图库选择专题封面
+                </button>
+                {form.cover_image_url ? (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-lg border border-rose-200 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                    onClick={() => setForm((current) => ({ ...current, cover_image_url: '' }))}
+                  >
+                    <X size={14} />
+                    清除封面
+                  </button>
+                ) : null}
+              </div>
+            )}
+          >
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3 text-xs leading-6 text-neutral-500">
+              点击“从图库选择专题封面”搜索 Pexels 图片，导入后会转存到本站 `/uploads/news`。
+            </div>
+            {form.cover_image_url ? (
+              <div className="mt-3 overflow-hidden rounded-2xl border border-neutral-200 bg-neutral-100">
+                <img className="h-48 w-full object-cover" src={form.cover_image_url} alt="专题封面预览" />
+              </div>
+            ) : (
+              <div className="mt-3 flex h-48 items-center justify-center rounded-2xl border border-dashed border-neutral-200 bg-neutral-50 text-sm text-neutral-400">
+                暂未选择专题封面
+              </div>
+            )}
+          </Field>
+        </div>
+
+        <Field label="专题导语">
+          <textarea
+            className="min-h-[108px] w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+            value={form.intro}
+            onChange={(event) => setForm((current) => ({ ...current, intro: event.target.value }))}
+            placeholder="展示在专题独立页首屏，用于解释专题边界和搜索意图。"
+          />
+        </Field>
+
+        <div className="grid gap-4 lg:grid-cols-[180px_160px_minmax(0,1fr)]">
+          <Field label="主题色">
+            <input
+              className="h-[42px] w-full rounded-xl border border-neutral-200 px-3 py-2 text-sm outline-none focus:border-neutral-400"
+              value={form.accent_color}
+              onChange={(event) => setForm((current) => ({ ...current, accent_color: event.target.value }))}
+              placeholder="#d43d31"
+            />
+          </Field>
+          <Field label="排序">
+            <input
+              className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+              type="number"
+              value={form.sort_order}
+              onChange={(event) => setForm((current) => ({ ...current, sort_order: Number(event.target.value || 0) }))}
+            />
+          </Field>
+          <Field label="置顶文章 ID">
+            <input
+              className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+              value={form.pinned_article_ids_text}
+              onChange={(event) => setForm((current) => ({ ...current, pinned_article_ids_text: event.target.value }))}
+              placeholder="例如：12, 8, 3"
+            />
+          </Field>
+        </div>
+
+        <label className="inline-flex items-center gap-2 text-sm font-medium text-neutral-700">
+          <input
+            type="checkbox"
+            checked={form.is_active}
+            onChange={(event) => setForm((current) => ({ ...current, is_active: event.target.checked }))}
+          />
+          启用专题并允许进入 sitemap
+        </label>
+
+        <section className="space-y-3 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-sm font-black text-neutral-900">FAQ</div>
+              <div className="text-xs text-neutral-500">最多 8 条，会输出 FAQPage JSON-LD。</div>
+            </div>
+            <button
+              className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-xs font-semibold hover:bg-neutral-50 disabled:opacity-50"
+              onClick={() => setForm((current) => ({
+                ...current,
+                faq_items: [...current.faq_items, { question: '', answer: '' }].slice(0, 8),
+              }))}
+              disabled={form.faq_items.length >= 8}
+              type="button"
+            >
+              添加 FAQ
+            </button>
+          </div>
+          {form.faq_items.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-neutral-200 bg-white px-4 py-6 text-center text-sm text-neutral-400">
+              暂无 FAQ
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {form.faq_items.map((item, index) => (
+                <div key={index} className="grid gap-3 rounded-xl border border-neutral-200 bg-white p-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)_40px]">
+                  <input
+                    className="rounded-lg border border-neutral-200 px-3 py-2 text-sm outline-none focus:border-neutral-400"
+                    value={item.question}
+                    onChange={(event) => updateFaqItem(index, 'question', event.target.value)}
+                    placeholder="问题"
+                  />
+                  <input
+                    className="rounded-lg border border-neutral-200 px-3 py-2 text-sm outline-none focus:border-neutral-400"
+                    value={item.answer}
+                    onChange={(event) => updateFaqItem(index, 'answer', event.target.value)}
+                    placeholder="答案"
+                  />
+                  <button
+                    className="inline-flex items-center justify-center rounded-lg border border-rose-200 text-rose-700 hover:bg-rose-50"
+                    onClick={() => setForm((current) => ({
+                      ...current,
+                      faq_items: current.faq_items.filter((_, itemIndex) => itemIndex !== index),
+                    }))}
+                    type="button"
+                    aria-label="删除 FAQ"
+                  >
+                    <X size={16} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </section>
+    </div>
+    <CoverPickerModal
+      open={coverPickerOpen}
+      query={coverSearchQuery}
+      page={coverSearchPage}
+      perPage={coverSearchPerPage}
+      total={coverSearchTotal}
+      results={coverSearchResults}
+      loading={coverSearchLoading}
+      importingId={coverSearchImportingId}
+      error={coverSearchError}
+      onClose={() => setCoverPickerOpen(false)}
+      onQueryChange={(value) => {
+        setCoverSearchQuery(value);
+        setCoverSearchPage(1);
+      }}
+      onSearch={(page) => void searchPexelsCovers(page)}
+      onPageChange={(page) => void searchPexelsCovers(page)}
+      onImport={(item) => void importPexelsCover(item)}
+    />
+    </>
   );
 }
 
@@ -790,6 +1359,9 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
         body: JSON.stringify({
           id: item.id,
           download_url: item.download_url,
+          context_slug: form.slug,
+          alt: item.alt,
+          target: 'article',
         }),
       });
       setForm((current) => ({ ...current, cover_image_url: result.url }));
@@ -1686,6 +2258,57 @@ function AirportProfilePickerModal({
       </div>
     </div>
   );
+}
+
+function topicToForm(topic: NewsTaxonomyItem): TopicFormState {
+  return {
+    id: topic.id,
+    name: topic.name || '',
+    slug: topic.slug || '',
+    description: topic.description || '',
+    seo_title: topic.seo_title || '',
+    seo_description: topic.seo_description || '',
+    h1: topic.h1 || '',
+    intro: topic.intro || '',
+    cover_image_url: topic.cover_image_url || '',
+    accent_color: topic.accent_color || '#d43d31',
+    faq_items: topic.faq_items || [],
+    sort_order: topic.sort_order || 0,
+    is_active: topic.is_active !== false,
+    pinned_article_ids_text: (topic.pinned_article_ids || []).join(', '),
+  };
+}
+
+function topicFormToPayload(form: TopicFormState) {
+  return {
+    name: form.name,
+    slug: form.slug,
+    description: form.description,
+    seo_title: form.seo_title,
+    seo_description: form.seo_description,
+    h1: form.h1,
+    intro: form.intro,
+    cover_image_url: form.cover_image_url,
+    accent_color: form.accent_color,
+    faq_items: form.faq_items
+      .map((item) => ({
+        question: item.question.trim(),
+        answer: item.answer.trim(),
+      }))
+      .filter((item) => item.question && item.answer),
+    sort_order: form.sort_order,
+    is_active: form.is_active,
+    pinned_article_ids: parsePinnedArticleIdsText(form.pinned_article_ids_text),
+  };
+}
+
+function parsePinnedArticleIdsText(value: string): number[] {
+  return Array.from(new Set(
+    value
+      .split(/[,\s]+/)
+      .map((item) => Number(item.trim()))
+      .filter((item) => Number.isInteger(item) && item > 0),
+  ));
 }
 
 function Field({
