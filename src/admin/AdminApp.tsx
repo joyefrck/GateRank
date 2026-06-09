@@ -28,6 +28,10 @@ import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
 import { buildPublishTokenDocsHref } from '../site/publicSite';
 import { manualTotalScoreInputValue } from './scoreInput';
+import {
+  buildSubscriptionNodeViewRows,
+  type SubscriptionNodeSnapshotViewNode,
+} from './subscriptionNodeSnapshotView';
 
 type AirportStatus = 'normal' | 'risk' | 'down';
 type AirportListedFilter = '' | 'listed' | 'unlisted';
@@ -166,6 +170,7 @@ interface AirportFormState {
   has_lifetime_plan: boolean | null;
   profile: AirportProfile;
   subscription_url: string;
+  saved_subscription_url: string;
   applicant_email: string;
   applicant_password_reset_email: string;
   applicant_account_email: string;
@@ -326,6 +331,12 @@ const EMPTY_AIRPORT_NODE_PROFILE: AirportNodeProfileState = {
   >,
   node_availability_percent: null,
 };
+const EMPTY_SUBSCRIPTION_NODE_SNAPSHOT_VIEWER: SubscriptionNodeSnapshotViewerState = {
+  open: false,
+  loading: false,
+  error: '',
+  snapshot: null,
+};
 
 interface PaginatedResponse<T> {
   page: number;
@@ -445,13 +456,27 @@ interface AirportDashboardView {
 }
 
 interface AirportSubscriptionNodeSnapshot {
-  nodes: Array<{
-    name: string;
-    region?: string | null;
-    type?: string | null;
-    outbound?: Record<string, unknown>;
-    raw_uri?: string;
-  }>;
+  id: number;
+  airport_id: number;
+  captured_at: string;
+  source?: string | null;
+  subscription_url?: string | null;
+  subscription_format?: string | null;
+  parsed_nodes_count?: number | null;
+  supported_nodes_count?: number | null;
+  unsupported_nodes?: Array<{ reason?: string | null }>;
+  created_at?: string | null;
+  nodes: SubscriptionNodeSnapshotViewNode[];
+}
+
+interface SubscriptionNodeCaptureResult {
+  airport_id: number;
+  snapshot_id: number;
+  captured_at: string;
+  subscription_format: string | null;
+  parsed_nodes_count: number;
+  supported_nodes_count: number;
+  unsupported_nodes_count: number;
 }
 
 interface AirportNodeProfileState {
@@ -462,6 +487,13 @@ interface AirportNodeProfileState {
   node_transports: string[];
   region_counts: Record<AirportProfileRegionKey, number>;
   node_availability_percent: number | null;
+}
+
+interface SubscriptionNodeSnapshotViewerState {
+  open: boolean;
+  loading: boolean;
+  error: string;
+  snapshot: AirportSubscriptionNodeSnapshot | null;
 }
 
 interface AirportApplication {
@@ -6137,7 +6169,9 @@ function AirportsPage({
   const [slugEditing, setSlugEditing] = useState(false);
   const [manualTagInput, setManualTagInput] = useState('');
   const [formError, setFormError] = useState('');
+  const [formMessage, setFormMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [capturingSubscriptionNodes, setCapturingSubscriptionNodes] = useState(false);
   const [balanceAdjustmentMode, setBalanceAdjustmentMode] = useState<BalanceAdjustmentMode>('add');
   const [balanceAmount, setBalanceAmount] = useState('');
   const [balanceDescription, setBalanceDescription] = useState('');
@@ -6148,6 +6182,9 @@ function AirportsPage({
   const [passwordResetError, setPasswordResetError] = useState('');
   const [passwordResetMessage, setPasswordResetMessage] = useState('');
   const [nodeProfile, setNodeProfile] = useState<AirportNodeProfileState>(EMPTY_AIRPORT_NODE_PROFILE);
+  const [subscriptionNodeSnapshotViewer, setSubscriptionNodeSnapshotViewer] = useState<SubscriptionNodeSnapshotViewerState>(
+    EMPTY_SUBSCRIPTION_NODE_SNAPSHOT_VIEWER,
+  );
   const [billingAirport, setBillingAirport] = useState<Airport | null>(null);
   const [billingTab, setBillingTab] = useState<BillingDetailTab>('recharge');
   const [reportExportAirport, setReportExportAirport] = useState<Airport | null>(null);
@@ -6235,6 +6272,8 @@ function AirportsPage({
     setAirportEditTab('basic');
     setSlugEditing(false);
     setManualTagInput(editing ? formatTagInput(editing.manual_tags) : '');
+    setFormError('');
+    setFormMessage('');
     setBalanceAdjustmentMode('add');
     setBalanceAmount('');
     setBalanceDescription('');
@@ -6242,6 +6281,7 @@ function AirportsPage({
     setBalanceMessage('');
     setPasswordResetError('');
     setPasswordResetMessage('');
+    setSubscriptionNodeSnapshotViewer(EMPTY_SUBSCRIPTION_NODE_SNAPSHOT_VIEWER);
   }, [editing?.id ?? (editing ? 'new' : 'none')]);
 
   useEffect(() => {
@@ -6255,24 +6295,11 @@ function AirportsPage({
     setNodeProfile({ ...EMPTY_AIRPORT_NODE_PROFILE, loading: true });
 
     const loadNodeProfile = async () => {
-      const [snapshotResult, dashboardResult] = await Promise.allSettled([
-        apiFetch(`/api/v1/admin/airports/${airportId}/subscription-node-snapshots/latest`) as Promise<AirportSubscriptionNodeSnapshot>,
-        apiFetch(`/api/v1/admin/airports/${airportId}/dashboard?date=${today()}`) as Promise<AirportDashboardView>,
-      ]);
-
+      const nextNodeProfile = await fetchAirportNodeProfileState(airportId);
       if (cancelled) {
         return;
       }
-
-      const snapshot = snapshotResult.status === 'fulfilled' ? snapshotResult.value : null;
-      const dashboard = dashboardResult.status === 'fulfilled' ? dashboardResult.value : null;
-      setNodeProfile({
-        ...buildAirportNodeProfile(snapshot, dashboard),
-        loading: false,
-        error: snapshotResult.status === 'rejected' && dashboardResult.status === 'rejected'
-          ? '节点信息加载失败'
-          : '',
-      });
+      setNodeProfile(nextNodeProfile);
     };
 
     void loadNodeProfile();
@@ -6333,6 +6360,7 @@ function AirportsPage({
 
     setSaving(true);
     setFormError('');
+    setFormMessage('');
     try {
       if (!editing.id) {
         await apiFetch('/api/v1/admin/airports', { method: 'POST', body: JSON.stringify(body) });
@@ -6350,6 +6378,59 @@ function AirportsPage({
     } finally {
       setSaving(false);
     }
+  };
+
+  const captureNodesForEditingAirport = async () => {
+    if (!editing?.id) return;
+    const blocker = getSubscriptionCaptureBlocker(editing);
+    if (blocker) {
+      setFormError(blocker);
+      setFormMessage('');
+      return;
+    }
+
+    setCapturingSubscriptionNodes(true);
+    setFormError('');
+    setFormMessage('');
+    try {
+      const result = await captureSubscriptionNodes(editing.id);
+      setFormMessage(formatSubscriptionCaptureMessage(result));
+      setNodeProfile({ ...EMPTY_AIRPORT_NODE_PROFILE, loading: true });
+      setNodeProfile(await fetchAirportNodeProfileState(editing.id));
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : '获取节点失败');
+    } finally {
+      setCapturingSubscriptionNodes(false);
+    }
+  };
+
+  const viewNodesForEditingAirport = async () => {
+    if (!editing?.id) return;
+    const blocker = getSubscriptionCaptureBlocker(editing);
+    if (blocker) {
+      setFormError(blocker);
+      setFormMessage('');
+      return;
+    }
+
+    setFormError('');
+    setFormMessage('');
+    setSubscriptionNodeSnapshotViewer({ open: true, loading: true, error: '', snapshot: null });
+    try {
+      const snapshot = await fetchAirportSubscriptionNodeSnapshot(editing.id);
+      setSubscriptionNodeSnapshotViewer({ open: true, loading: false, error: '', snapshot });
+    } catch (err) {
+      setSubscriptionNodeSnapshotViewer({
+        open: true,
+        loading: false,
+        error: formatSubscriptionNodeSnapshotViewerError(err),
+        snapshot: null,
+      });
+    }
+  };
+
+  const closeSubscriptionNodeSnapshotViewer = () => {
+    setSubscriptionNodeSnapshotViewer((current) => ({ ...current, open: false }));
   };
 
   const adjustWalletBalance = async () => {
@@ -7184,12 +7265,21 @@ function AirportsPage({
                   </button>
 
                   <FormField label="订阅链接" hint="可选。如果和官网不同，单独录入更方便运营排查。">
-                    <input
-                      className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                      placeholder="https://example.com/subscribe"
-                      value={editing.subscription_url}
-                      onChange={(e) => setEditing({ ...editing, subscription_url: e.target.value })}
-                    />
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+                      <input
+                        className="min-w-0 flex-1 rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                        placeholder="https://example.com/subscribe"
+                        value={editing.subscription_url}
+                        onChange={(e) => setEditing({ ...editing, subscription_url: e.target.value })}
+                      />
+                      <SubscriptionNodeActions
+                        editing={editing}
+                        capturing={capturingSubscriptionNodes}
+                        viewing={subscriptionNodeSnapshotViewer.loading}
+                        onCapture={() => void captureNodesForEditingAirport()}
+                        onView={() => void viewNodesForEditingAirport()}
+                      />
+                    </div>
                   </FormField>
                 </div>
 
@@ -7413,6 +7503,7 @@ function AirportsPage({
               )}
 
               {formError && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{formError}</div>}
+              {formMessage && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{formMessage}</div>}
             </div>
 
             <div className="border-t border-neutral-200 px-6 py-5 flex items-center justify-end gap-3 bg-white">
@@ -7430,6 +7521,11 @@ function AirportsPage({
           </div>
         </div>
       )}
+      <SubscriptionNodeSnapshotModal
+        airportName={editing?.name || '当前机场'}
+        state={subscriptionNodeSnapshotViewer}
+        onClose={closeSubscriptionNodeSnapshotViewer}
+      />
     </div>
   );
 }
@@ -7451,6 +7547,7 @@ function AirportEditorPage({
   const [error, setError] = useState('');
   const [message, setMessage] = useState('');
   const [saving, setSaving] = useState(false);
+  const [capturingSubscriptionNodes, setCapturingSubscriptionNodes] = useState(false);
   const [balanceAdjustmentMode, setBalanceAdjustmentMode] = useState<BalanceAdjustmentMode>('add');
   const [balanceAmount, setBalanceAmount] = useState('');
   const [balanceDescription, setBalanceDescription] = useState('');
@@ -7461,6 +7558,9 @@ function AirportEditorPage({
   const [passwordResetError, setPasswordResetError] = useState('');
   const [passwordResetMessage, setPasswordResetMessage] = useState('');
   const [nodeProfile, setNodeProfile] = useState<AirportNodeProfileState>(EMPTY_AIRPORT_NODE_PROFILE);
+  const [subscriptionNodeSnapshotViewer, setSubscriptionNodeSnapshotViewer] = useState<SubscriptionNodeSnapshotViewerState>(
+    EMPTY_SUBSCRIPTION_NODE_SNAPSHOT_VIEWER,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -7475,6 +7575,7 @@ function AirportEditorPage({
     setPasswordResetMessage('');
     setSlugEditing(false);
     setTab('basic');
+    setSubscriptionNodeSnapshotViewer(EMPTY_SUBSCRIPTION_NODE_SNAPSHOT_VIEWER);
 
     if (!airportId) {
       const form = createAirportForm();
@@ -7521,23 +7622,11 @@ function AirportEditorPage({
     let cancelled = false;
     setNodeProfile({ ...EMPTY_AIRPORT_NODE_PROFILE, loading: true });
     void (async () => {
-      const [snapshotResult, dashboardResult] = await Promise.allSettled([
-        apiFetch(`/api/v1/admin/airports/${id}/subscription-node-snapshots/latest`) as Promise<AirportSubscriptionNodeSnapshot>,
-        apiFetch(`/api/v1/admin/airports/${id}/dashboard?date=${today()}`) as Promise<AirportDashboardView>,
-      ]);
-
+      const nextNodeProfile = await fetchAirportNodeProfileState(id);
       if (cancelled) {
         return;
       }
-      const snapshot = snapshotResult.status === 'fulfilled' ? snapshotResult.value : null;
-      const dashboard = dashboardResult.status === 'fulfilled' ? dashboardResult.value : null;
-      setNodeProfile({
-        ...buildAirportNodeProfile(snapshot, dashboard),
-        loading: false,
-        error: snapshotResult.status === 'rejected' && dashboardResult.status === 'rejected'
-          ? '节点信息加载失败'
-          : '',
-      });
+      setNodeProfile(nextNodeProfile);
     })();
 
     return () => {
@@ -7638,6 +7727,10 @@ function AirportEditorPage({
           method: 'PATCH',
           body: JSON.stringify(body),
         });
+        setEditing({
+          ...editing,
+          saved_subscription_url: editing.subscription_url.trim(),
+        });
         setMessage('机场资料已保存');
       }
     } catch (err) {
@@ -7645,6 +7738,59 @@ function AirportEditorPage({
     } finally {
       setSaving(false);
     }
+  };
+
+  const captureNodesForEditingAirport = async () => {
+    if (!editing?.id) return;
+    const blocker = getSubscriptionCaptureBlocker(editing);
+    if (blocker) {
+      setError(blocker);
+      setMessage('');
+      return;
+    }
+
+    setCapturingSubscriptionNodes(true);
+    setError('');
+    setMessage('');
+    try {
+      const result = await captureSubscriptionNodes(editing.id);
+      setMessage(formatSubscriptionCaptureMessage(result));
+      setNodeProfile({ ...EMPTY_AIRPORT_NODE_PROFILE, loading: true });
+      setNodeProfile(await fetchAirportNodeProfileState(editing.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '获取节点失败');
+    } finally {
+      setCapturingSubscriptionNodes(false);
+    }
+  };
+
+  const viewNodesForEditingAirport = async () => {
+    if (!editing?.id) return;
+    const blocker = getSubscriptionCaptureBlocker(editing);
+    if (blocker) {
+      setError(blocker);
+      setMessage('');
+      return;
+    }
+
+    setError('');
+    setMessage('');
+    setSubscriptionNodeSnapshotViewer({ open: true, loading: true, error: '', snapshot: null });
+    try {
+      const snapshot = await fetchAirportSubscriptionNodeSnapshot(editing.id);
+      setSubscriptionNodeSnapshotViewer({ open: true, loading: false, error: '', snapshot });
+    } catch (err) {
+      setSubscriptionNodeSnapshotViewer({
+        open: true,
+        loading: false,
+        error: formatSubscriptionNodeSnapshotViewerError(err),
+        snapshot: null,
+      });
+    }
+  };
+
+  const closeSubscriptionNodeSnapshotViewer = () => {
+    setSubscriptionNodeSnapshotViewer((current) => ({ ...current, open: false }));
   };
 
   const adjustWalletBalance = async () => {
@@ -7839,12 +7985,21 @@ function AirportEditorPage({
             <span className="inline-flex items-center gap-2"><Plus size={14} />继续添加官网链接</span>
           </button>
           <FormField label="订阅链接" hint="可选。如果和官网不同，单独录入更方便运营排查。">
-            <input
-              className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
-              placeholder="https://example.com/subscribe"
-              value={editing.subscription_url}
-              onChange={(e) => setEditing({ ...editing, subscription_url: e.target.value })}
-            />
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
+              <input
+                className="min-w-0 flex-1 rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                placeholder="https://example.com/subscribe"
+                value={editing.subscription_url}
+                onChange={(e) => setEditing({ ...editing, subscription_url: e.target.value })}
+              />
+              <SubscriptionNodeActions
+                editing={editing}
+                capturing={capturingSubscriptionNodes}
+                viewing={subscriptionNodeSnapshotViewer.loading}
+                onCapture={() => void captureNodesForEditingAirport()}
+                onView={() => void viewNodesForEditingAirport()}
+              />
+            </div>
           </FormField>
           <div className="grid gap-4 md:grid-cols-2">
             <FormField label="联系邮箱" hint="用于运营联系或回查申请记录。">
@@ -8187,6 +8342,11 @@ function AirportEditorPage({
           <NullableBooleanRadioGroup label="是否提供教程" name="import_tutorials" value={editing.profile.import_methods.tutorials} onChange={(value) => updateImportMethod('tutorials', value)} />
         </section>
       )}
+      <SubscriptionNodeSnapshotModal
+        airportName={editing.name || '当前机场'}
+        state={subscriptionNodeSnapshotViewer}
+        onClose={closeSubscriptionNodeSnapshotViewer}
+      />
     </div>
   );
 }
@@ -10245,6 +10405,7 @@ function createAirportForm(): AirportFormState {
     has_lifetime_plan: null,
     profile: createDefaultAirportProfile(),
     subscription_url: '',
+    saved_subscription_url: '',
     applicant_email: '',
     applicant_password_reset_email: '',
     applicant_account_email: '',
@@ -10286,6 +10447,7 @@ function toAirportForm(airport: Airport): AirportFormState {
     has_lifetime_plan: normalizeNullableBoolean(airport.has_lifetime_plan),
     profile,
     subscription_url: airport.subscription_url || '',
+    saved_subscription_url: airport.subscription_url || '',
     applicant_email: airport.applicant_email || '',
     applicant_password_reset_email: airport.applicant_email || '',
     applicant_account_email: airport.applicant_account_email || '',
@@ -10556,6 +10718,205 @@ function buildAirportNodeProfile(
     region_counts: countAirportRegions(snapshot),
     node_availability_percent: dashboard?.performance.node_availability_percent ?? null,
   };
+}
+
+async function fetchAirportSubscriptionNodeSnapshot(airportId: number): Promise<AirportSubscriptionNodeSnapshot> {
+  return apiFetch(`/api/v1/admin/airports/${airportId}/subscription-node-snapshots/latest`) as Promise<
+    AirportSubscriptionNodeSnapshot
+  >;
+}
+
+async function fetchAirportNodeProfileState(airportId: number): Promise<AirportNodeProfileState> {
+  const [snapshotResult, dashboardResult] = await Promise.allSettled([
+    fetchAirportSubscriptionNodeSnapshot(airportId),
+    apiFetch(`/api/v1/admin/airports/${airportId}/dashboard?date=${today()}`) as Promise<AirportDashboardView>,
+  ]);
+  const snapshot = snapshotResult.status === 'fulfilled' ? snapshotResult.value : null;
+  const dashboard = dashboardResult.status === 'fulfilled' ? dashboardResult.value : null;
+  return {
+    ...buildAirportNodeProfile(snapshot, dashboard),
+    loading: false,
+    error: snapshotResult.status === 'rejected' && dashboardResult.status === 'rejected'
+      ? '节点信息加载失败'
+      : '',
+  };
+}
+
+async function captureSubscriptionNodes(airportId: number): Promise<SubscriptionNodeCaptureResult> {
+  return apiFetch(`/api/v1/admin/airports/${airportId}/subscription-node-snapshots/capture`, {
+    method: 'POST',
+  }) as Promise<SubscriptionNodeCaptureResult>;
+}
+
+function getSubscriptionCaptureBlocker(editing: AirportFormState): string {
+  if (!editing.id) return '请先保存机场';
+  const savedSubscriptionUrl = editing.saved_subscription_url.trim();
+  const currentSubscriptionUrl = editing.subscription_url.trim();
+  if (!savedSubscriptionUrl) return '请先保存订阅链接';
+  if (currentSubscriptionUrl !== savedSubscriptionUrl) return '订阅链接已修改，请先保存机场';
+  return '';
+}
+
+function formatSubscriptionCaptureMessage(result: SubscriptionNodeCaptureResult): string {
+  const unsupported = result.unsupported_nodes_count > 0 ? `，跳过 ${result.unsupported_nodes_count} 个不支持节点` : '';
+  return `已获取 ${result.supported_nodes_count} 个可用节点${unsupported}`;
+}
+
+function formatSubscriptionNodeSnapshotViewerError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error || '');
+  if (/not found|snapshot/i.test(message)) {
+    return '暂无节点快照，请先获取节点';
+  }
+  return message || '节点快照加载失败';
+}
+
+function SubscriptionNodeActions({
+  editing,
+  capturing,
+  viewing,
+  onCapture,
+  onView,
+}: {
+  editing: AirportFormState;
+  capturing: boolean;
+  viewing: boolean;
+  onCapture: () => void;
+  onView: () => void;
+}) {
+  const blocker = getSubscriptionCaptureBlocker(editing);
+  return (
+    <div className="space-y-1">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded border border-neutral-300 px-3 text-sm font-medium text-neutral-700 transition hover:border-neutral-900 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={capturing || Boolean(blocker)}
+          title={blocker || '获取并存储订阅节点'}
+          onClick={onCapture}
+        >
+          <RefreshCw size={14} className={capturing ? 'animate-spin' : ''} />
+          {capturing ? '获取中...' : '获取节点'}
+        </button>
+        <button
+          type="button"
+          className="inline-flex h-11 shrink-0 items-center justify-center gap-2 rounded border border-neutral-300 px-3 text-sm font-medium text-neutral-700 transition hover:border-neutral-900 hover:text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={viewing || Boolean(blocker)}
+          title={blocker || '查看已保存的订阅节点'}
+          onClick={onView}
+        >
+          <Eye size={14} />
+          {viewing ? '加载中...' : '查看节点'}
+        </button>
+      </div>
+      {blocker && <div className="text-xs text-neutral-500">{blocker}</div>}
+    </div>
+  );
+}
+
+function SubscriptionNodeSnapshotModal({
+  airportName,
+  state,
+  onClose,
+}: {
+  airportName: string;
+  state: SubscriptionNodeSnapshotViewerState;
+  onClose: () => void;
+}) {
+  if (!state.open) {
+    return null;
+  }
+  const snapshot = state.snapshot;
+  const rows = buildSubscriptionNodeViewRows(snapshot?.nodes || []);
+  const unsupportedCount = Math.max(
+    0,
+    Number(snapshot?.parsed_nodes_count ?? rows.length) - Number(snapshot?.supported_nodes_count ?? rows.length),
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-[24px] border border-neutral-200 bg-white shadow-[0_28px_100px_-36px_rgba(0,0,0,0.55)]"
+        role="dialog"
+        aria-modal="true"
+        aria-label="订阅节点快照"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-neutral-200 px-6 py-5">
+          <div>
+            <h3 className="text-xl font-bold tracking-tight">订阅节点快照</h3>
+            <p className="mt-1 text-sm text-neutral-500">
+              {airportName}
+              {snapshot ? ` · 快照 #${snapshot.id} · ${formatDateTimeInBeijing(snapshot.captured_at)}` : ''}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 hover:text-neutral-900"
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        </div>
+        <div className="max-h-[65vh] space-y-4 overflow-y-auto px-6 py-5">
+          {state.loading ? (
+            <div className="rounded-2xl border border-neutral-200 px-4 py-8 text-center text-sm text-neutral-500">
+              节点快照加载中...
+            </div>
+          ) : state.error ? (
+            <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-8 text-center text-sm text-neutral-500">
+              {state.error}
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-neutral-200 px-4 py-8 text-center text-sm text-neutral-500">
+              暂无节点快照，请先获取节点
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <ReadField label="订阅格式" value={valueOrDash(snapshot?.subscription_format)} />
+                <ReadField label="解析节点数" value={valueOrDash(snapshot?.parsed_nodes_count)} />
+                <ReadField label="可用节点数" value={valueOrDash(snapshot?.supported_nodes_count ?? rows.length)} />
+                <ReadField label="跳过节点数" value={valueOrDash(unsupportedCount)} />
+              </div>
+              <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+                <table className="min-w-full divide-y divide-neutral-200 text-sm">
+                  <thead className="bg-neutral-50 text-left text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    <tr>
+                      <th className="px-4 py-3">节点名称</th>
+                      <th className="px-4 py-3">地区</th>
+                      <th className="px-4 py-3">类型</th>
+                      <th className="px-4 py-3">服务器</th>
+                      <th className="px-4 py-3">端口</th>
+                      <th className="px-4 py-3">传输/TLS</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-neutral-100">
+                    {rows.map((row, index) => (
+                      <tr key={`${row.name}-${row.server}-${row.port}-${index}`} className="align-top">
+                        <td className="max-w-[260px] px-4 py-3 font-medium text-neutral-900">
+                          <span className="block truncate" title={row.name}>{row.name}</span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-neutral-600">{row.region}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-neutral-600">{row.type}</td>
+                        <td className="max-w-[240px] px-4 py-3 font-mono text-xs text-neutral-700">
+                          <span className="block truncate" title={row.server}>{row.server}</span>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-neutral-700">{row.port}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-neutral-600">{row.transportSecurity}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function extractNodeTransports(snapshot: AirportSubscriptionNodeSnapshot | null): string[] {

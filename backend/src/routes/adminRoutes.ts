@@ -33,6 +33,7 @@ import type {
 } from '../repositories/applicantBillingRepository';
 import type { AirportListSortBy, AirportListSortOrder } from '../repositories/airportRepository';
 import type { AccessTokenScope } from '../utils/accessToken';
+import type { SubscriptionNodeCaptureResult } from '../services/subscriptionNodeCaptureService';
 import { createRandomPassword, hashPassword } from '../utils/password';
 import type {
   AirportApplicationReviewStatus,
@@ -243,6 +244,9 @@ interface AdminDeps {
   subscriptionNodeSnapshotRepository?: {
     insert(input: SubscriptionNodeSnapshotInput): Promise<number>;
     getLatestByAirport(airportId: number): Promise<SubscriptionNodeSnapshot | null>;
+  };
+  subscriptionNodeCaptureService?: {
+    capture(airportId: number, actor: string): Promise<SubscriptionNodeCaptureResult>;
   };
   performanceNodePreferenceRepository?: {
     getByAirport(airportId: number): Promise<PerformanceNodePreference | null>;
@@ -1836,6 +1840,29 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         throw new HttpError(404, 'SUBSCRIPTION_NODE_SNAPSHOT_NOT_FOUND', 'subscription node snapshot not found');
       }
       res.json(snapshot);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/airports/:id/subscription-node-snapshots/capture', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const airport = await deps.airportRepository.getById(airportId);
+      if (!airport) {
+        throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
+      }
+      const savedSubscriptionUrl = airport && typeof airport === 'object'
+        ? stringOrNull((airport as { subscription_url?: unknown }).subscription_url)
+        : null;
+      if (!savedSubscriptionUrl) {
+        throw new HttpError(400, 'MISSING_SUBSCRIPTION_URL', '请先保存订阅链接后再获取节点');
+      }
+
+      const result = await getSubscriptionNodeCaptureService(deps).capture(airportId, actorFromReq(req));
+      const safeResult = toSafeSubscriptionNodeCaptureResult(result);
+      await deps.auditRepository.log('capture_subscription_nodes', actorFromReq(req), req.requestId, safeResult);
+      res.status(201).json(safeResult);
     } catch (error) {
       next(error);
     }
@@ -3637,6 +3664,25 @@ function getSubscriptionNodeSnapshotRepository(deps: AdminDeps): NonNullable<Adm
     throw new Error('subscriptionNodeSnapshotRepository is not configured');
   }
   return deps.subscriptionNodeSnapshotRepository;
+}
+
+function getSubscriptionNodeCaptureService(deps: AdminDeps): NonNullable<AdminDeps['subscriptionNodeCaptureService']> {
+  if (!deps.subscriptionNodeCaptureService) {
+    throw new Error('subscriptionNodeCaptureService is not configured');
+  }
+  return deps.subscriptionNodeCaptureService;
+}
+
+function toSafeSubscriptionNodeCaptureResult(result: SubscriptionNodeCaptureResult): SubscriptionNodeCaptureResult {
+  return {
+    airport_id: Number(result.airport_id),
+    snapshot_id: Number(result.snapshot_id),
+    captured_at: String(result.captured_at || ''),
+    subscription_format: result.subscription_format == null ? null : String(result.subscription_format),
+    parsed_nodes_count: Number(result.parsed_nodes_count || 0),
+    supported_nodes_count: Number(result.supported_nodes_count || 0),
+    unsupported_nodes_count: Number(result.unsupported_nodes_count || 0),
+  };
 }
 
 function getPerformanceNodePreferenceRepository(deps: AdminDeps): NonNullable<AdminDeps['performanceNodePreferenceRepository']> {

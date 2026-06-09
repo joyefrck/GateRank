@@ -136,6 +136,7 @@ class SubscriptionRefreshError(Exception):
     parsed_nodes_count: int = 0
     supported_nodes_count: int = 0
     unsupported_nodes: list[dict[str, str]] | None = None
+    diagnostics: dict[str, Any] | None = None
 
 
 @dataclass
@@ -439,8 +440,8 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         node_source = resolve_nodes_for_airport(config, airport_id, subscription_url, sampled_at)
     except SubscriptionRefreshError as exc:
         diagnostics: dict[str, Any] = {
-            "subscription_url": subscription_url,
             "node_source": "none",
+            **(exc.diagnostics or {}),
         }
         if exc.unsupported_nodes:
             diagnostics["unsupported_nodes_count"] = len(exc.unsupported_nodes)
@@ -618,77 +619,78 @@ def resolve_nodes_for_airport(
     subscription_url: str,
     sampled_at: str,
 ) -> NodeSourceResult:
+    del sampled_at
+    return resolve_stored_snapshot_nodes_or_raise(config, airport_id, subscription_url)
+
+
+def resolve_stored_snapshot_nodes_or_raise(
+    config: Config,
+    airport_id: int,
+    subscription_url: str,
+) -> NodeSourceResult:
     try:
-        subscription_text = fetch_subscription(config, subscription_url)
+        snapshot = get_latest_subscription_node_snapshot(config, airport_id)
     except Exception as exc:
-        return resolve_cached_nodes_or_raise(
-            config,
-            airport_id,
-            subscription_url,
-            SubscriptionRefreshError(
-                status="failed",
-                error_code="subscription_fetch_failed",
-                error_message=str(exc),
-            ),
-        )
+        raise SubscriptionRefreshError(
+            status="skipped",
+            error_code="missing_subscription_node_snapshot",
+            error_message="subscription node snapshot not found; capture nodes from admin first",
+            diagnostics={
+                "node_source": "none",
+                "subscription_snapshot_error": str(exc),
+            },
+        ) from exc
 
-    normalized_subscription, subscription_format = normalize_subscription_text(subscription_text)
-    if not normalized_subscription:
-        return resolve_cached_nodes_or_raise(
-            config,
-            airport_id=airport_id,
-            subscription_url=subscription_url,
-            refresh_error=SubscriptionRefreshError(
-                status="skipped",
-                error_code="unsupported_subscription_format",
-                error_message="subscription content is not a supported URL list",
-                subscription_format=subscription_format,
-            ),
-        )
-
-    parsed_nodes, unsupported_nodes = parse_nodes(normalized_subscription, subscription_format)
-    if not parsed_nodes:
-        return resolve_cached_nodes_or_raise(
-            config,
-            airport_id=airport_id,
-            subscription_url=subscription_url,
-            refresh_error=SubscriptionRefreshError(
-                status="skipped",
-                error_code="no_supported_nodes",
-                error_message="no testable nodes selected from subscription",
-                subscription_format=subscription_format,
-                parsed_nodes_count=0,
-                supported_nodes_count=0,
-                unsupported_nodes=unsupported_nodes,
-            ),
-        )
-
-    diagnostics: dict[str, Any] = {"node_source": "fresh_subscription"}
-    try:
-        snapshot = post_subscription_node_snapshot(
-            config,
-            airport_id,
-            {
-                "airport_id": airport_id,
-                "captured_at": sampled_at,
-                "source": config.source,
-                "subscription_url": subscription_url,
-                "subscription_format": subscription_format,
-                "parsed_nodes_count": len(parsed_nodes),
-                "supported_nodes_count": len(parsed_nodes),
-                "nodes": [node_to_snapshot(node) for node in parsed_nodes],
-                "unsupported_nodes": unsupported_nodes,
+    snapshot_subscription_url = str(snapshot.get("subscription_url") or "").strip()
+    current_subscription_url = subscription_url.strip()
+    if snapshot_subscription_url != current_subscription_url:
+        raise SubscriptionRefreshError(
+            status="skipped",
+            error_code="stale_subscription_node_snapshot",
+            error_message="stored subscription node snapshot does not match current subscription url; capture nodes again",
+            subscription_format=str(snapshot.get("subscription_format") or "") or None,
+            parsed_nodes_count=int(snapshot.get("parsed_nodes_count") or 0),
+            supported_nodes_count=int(snapshot.get("supported_nodes_count") or 0),
+            diagnostics={
+                "node_source": "none",
+                "cache_snapshot_id": snapshot.get("id"),
+                "cache_captured_at": snapshot.get("captured_at"),
+                "cache_subscription_url_matches_current": False,
             },
         )
-        diagnostics["snapshot_id"] = snapshot.get("snapshot_id")
-    except Exception as exc:
-        diagnostics["snapshot_save_error"] = str(exc)
+
+    nodes, invalid_nodes = nodes_from_snapshot(snapshot)
+    if not nodes:
+        raise SubscriptionRefreshError(
+            status="skipped",
+            error_code="empty_subscription_node_snapshot",
+            error_message="stored subscription node snapshot has no reusable nodes; capture nodes again",
+            subscription_format=str(snapshot.get("subscription_format") or "") or None,
+            parsed_nodes_count=int(snapshot.get("parsed_nodes_count") or 0),
+            supported_nodes_count=int(snapshot.get("supported_nodes_count") or 0),
+            diagnostics={
+                "node_source": "none",
+                "cache_snapshot_id": snapshot.get("id"),
+                "cache_captured_at": snapshot.get("captured_at"),
+                "cache_subscription_url_matches_current": True,
+            },
+        )
+
+    diagnostics: dict[str, Any] = {
+        "node_source": "stored_snapshot",
+        "cache_snapshot_id": snapshot.get("id"),
+        "cache_captured_at": snapshot.get("captured_at"),
+        "cache_subscription_url_matches_current": True,
+    }
+    if invalid_nodes:
+        diagnostics["invalid_cached_nodes_count"] = len(invalid_nodes)
+        diagnostics["invalid_cached_nodes"] = invalid_nodes
 
     return NodeSourceResult(
-        nodes=parsed_nodes,
-        unsupported_nodes=unsupported_nodes,
-        subscription_format=subscription_format,
-        node_source="fresh_subscription",
+        nodes=nodes,
+        unsupported_nodes=[],
+        subscription_format=str(snapshot.get("subscription_format") or "stored_snapshot"),
+        node_source="stored_snapshot",
         diagnostics=diagnostics,
     )
 
@@ -699,39 +701,8 @@ def resolve_cached_nodes_or_raise(
     subscription_url: str,
     refresh_error: SubscriptionRefreshError,
 ) -> NodeSourceResult:
-    try:
-        snapshot = get_latest_subscription_node_snapshot(config, airport_id)
-    except Exception:
-        raise refresh_error
-
-    snapshot_subscription_url = str(snapshot.get("subscription_url") or "").strip()
-    current_subscription_url = subscription_url.strip()
-    if snapshot_subscription_url != current_subscription_url:
-        raise refresh_error
-
-    nodes, invalid_nodes = nodes_from_snapshot(snapshot)
-    if not nodes:
-        raise refresh_error
-
-    diagnostics: dict[str, Any] = {
-        "node_source": "cached_snapshot",
-        "cache_snapshot_id": snapshot.get("id"),
-        "cache_captured_at": snapshot.get("captured_at"),
-        "cache_subscription_url_matches_current": True,
-        "subscription_refresh_error_code": refresh_error.error_code,
-        "subscription_refresh_error_message": refresh_error.error_message,
-    }
-    if invalid_nodes:
-        diagnostics["invalid_cached_nodes_count"] = len(invalid_nodes)
-        diagnostics["invalid_cached_nodes"] = invalid_nodes
-
-    return NodeSourceResult(
-        nodes=nodes,
-        unsupported_nodes=[],
-        subscription_format=str(snapshot.get("subscription_format") or refresh_error.subscription_format or "cached_snapshot"),
-        node_source="cached_snapshot",
-        diagnostics=diagnostics,
-    )
+    del refresh_error
+    return resolve_stored_snapshot_nodes_or_raise(config, airport_id, subscription_url)
 
 
 def build_run_payload(

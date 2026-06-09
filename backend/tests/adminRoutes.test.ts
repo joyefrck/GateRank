@@ -237,6 +237,146 @@ test('GET /airports/:id/subscription-node-snapshots/latest returns latest reusab
   }
 });
 
+test('POST /airports/:id/subscription-node-snapshots/capture captures saved subscription nodes and audits safely', async () => {
+  const audits: Array<{ action: string; payload: unknown }> = [];
+  const captureCalls: Array<{ airportId: number; actor: string }> = [];
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: {
+        ...stubAirportRepository(),
+        getById: async () => ({
+          ...(await stubAirportRepository().getById()),
+          id: 9,
+          subscription_url: 'https://sub.example.com/one-time',
+        }),
+      },
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      subscriptionNodeSnapshotRepository: {
+        insert: async () => 1,
+        getLatestByAirport: async () => null,
+      },
+      subscriptionNodeCaptureService: {
+        capture: async (airportId: number, actor: string) => {
+          captureCalls.push({ airportId, actor });
+          return {
+            airport_id: airportId,
+            snapshot_id: 77,
+            captured_at: '2026-05-13T12:34:56+08:00',
+            subscription_format: 'plain',
+            parsed_nodes_count: 2,
+            supported_nodes_count: 1,
+            unsupported_nodes_count: 1,
+            nodes: [{
+              raw_uri: 'trojan://secret@hk.example.com:443#HK-1',
+              outbound: { password: 'secret' },
+            }],
+          };
+        },
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: {
+        log: async (action, _actor, _requestId, payload) => {
+          audits.push({ action, payload });
+        },
+      },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/9/subscription-node-snapshots/capture`, {
+      method: 'POST',
+      headers: { 'x-admin-actor': 'ops' },
+    });
+    const data = (await response.json()) as {
+      snapshot_id: number;
+      supported_nodes_count: number;
+      nodes?: unknown[];
+    };
+
+    assert.equal(response.status, 201);
+    assert.equal(data.snapshot_id, 77);
+    assert.equal(data.supported_nodes_count, 1);
+    assert.equal(data.nodes, undefined);
+    assert.deepEqual(captureCalls, [{ airportId: 9, actor: 'ops' }]);
+    assert.equal(audits[0]?.action, 'capture_subscription_nodes');
+    assert.equal(JSON.stringify(audits[0]?.payload).includes('secret'), false);
+    assert.equal(JSON.stringify(audits[0]?.payload).includes('raw_uri'), false);
+    assert.equal(JSON.stringify(audits[0]?.payload).includes('one-time'), false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /airports/:id/subscription-node-snapshots/capture rejects airports without saved subscription url', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: {
+        ...stubAirportRepository(),
+        getById: async () => ({
+          ...(await stubAirportRepository().getById()),
+          subscription_url: null,
+        }),
+      },
+      airportApplicationRepository: stubAirportApplicationRepository(),
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      subscriptionNodeSnapshotRepository: {
+        insert: async () => 1,
+        getLatestByAirport: async () => null,
+      },
+      subscriptionNodeCaptureService: {
+        capture: async () => {
+          throw new Error('capture should not run without saved subscription url');
+        },
+      },
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/9/subscription-node-snapshots/capture`, {
+      method: 'POST',
+    });
+    const data = (await response.json()) as { code: string; message: string };
+
+    assert.equal(response.status, 400);
+    assert.equal(data.code, 'MISSING_SUBSCRIPTION_URL');
+    assert.match(data.message, /订阅链接/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET and PATCH /airports/:id/performance-node-selection expose sanitized candidates and save selected keys', async () => {
   const savedSelections: unknown[] = [];
   const audits: Array<{ action: string; payload: unknown }> = [];

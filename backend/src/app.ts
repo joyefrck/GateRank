@@ -64,6 +64,7 @@ import { RiskCheckService } from './services/riskCheckService';
 import { SmtpSettingsService } from './services/smtpSettingsService';
 import { AdminSchedulerService } from './services/adminSchedulerService';
 import { SchedulerTaskExecutor } from './services/schedulerTaskExecutor';
+import { SubscriptionNodeCaptureService } from './services/subscriptionNodeCaptureService';
 import { TelegramNotificationService } from './services/telegramNotificationService';
 import { UserTelegramBotMessageService } from './services/userTelegramBotMessageService';
 import { UserTelegramBotSettingsService } from './services/userTelegramBotSettingsService';
@@ -102,6 +103,7 @@ export async function createApp() {
   await performanceRunRepository.ensureSchema();
   const subscriptionNodeSnapshotRepository = new SubscriptionNodeSnapshotRepository(pool);
   await subscriptionNodeSnapshotRepository.ensureSchema();
+  const subscriptionNodeCaptureService = new SubscriptionNodeCaptureService();
   const performanceNodePreferenceRepository = new PerformanceNodePreferenceRepository(pool);
   await performanceNodePreferenceRepository.ensureSchema();
   const manualJobRepository = new ManualJobRepository(pool);
@@ -338,6 +340,7 @@ export async function createApp() {
       probeSampleRepository,
       performanceRunRepository,
       subscriptionNodeSnapshotRepository,
+      subscriptionNodeCaptureService,
       performanceNodePreferenceRepository,
       metricsRepository,
       scoreRepository,
