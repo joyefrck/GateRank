@@ -226,14 +226,7 @@ export async function createApp() {
   const applicationNotificationService = new TelegramNotificationService({
     systemSettingRepository,
   });
-  const publicApiPageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
-  const publicHtmlPageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
-  const publicPageCache = {
-    clear(): void {
-      publicApiPageCache.clear();
-      publicHtmlPageCache.clear();
-    },
-  };
+  const publicPageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
 
   const app = express();
   app.disable('x-powered-by');
@@ -262,7 +255,7 @@ export async function createApp() {
       scoreRepository,
       rankingRepository,
       publicViewService,
-      pageCache: publicApiPageCache,
+      pageCache: publicPageCache,
       marketingRepository: marketingEventRepository,
       marketingSettingsService,
     }),
@@ -395,7 +388,7 @@ export async function createApp() {
     createPublicPageRoutes({
       publicViewService,
       airportAdCampaignRepository,
-      pageCache: publicHtmlPageCache,
+      pageCache: publicPageCache,
     }),
   );
 

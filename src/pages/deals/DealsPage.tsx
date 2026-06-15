@@ -18,14 +18,10 @@ import { DEALS_CONTENT_SECTIONS, DEALS_FAQ_ITEMS, buildDealsSeo, buildDealsStruc
 import type { AirportDealView } from '../../../shared/airportAds';
 import { buildAbsoluteUrl, buildDealsHref, navigate, PageFrame, usePageSeo } from '../../site/publicSite';
 import { createTrackedOutboundClickHandler, trackMarketingPageView } from '../../site/marketing';
-
-interface DealsResponse {
-  items: AirportDealView[];
-  total: number;
-}
+import { readDealsInitialData, shouldFetchDealsData, type DealsResponse } from './dealsInitialData';
 
 export function DealsPage() {
-  const initialData = useMemo(() => readInitialDealsData(), []);
+  const initialData = useMemo(() => readDealsInitialData(), []);
   const [data, setData] = useState<DealsResponse | null>(initialData);
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState('');
@@ -38,8 +34,16 @@ export function DealsPage() {
   }, []);
 
   useEffect(() => {
+    if (!shouldFetchDealsData(initialData)) {
+      setData(initialData);
+      setLoading(false);
+      setError('');
+      return undefined;
+    }
+
     let active = true;
     setLoading(true);
+    setError('');
     fetch('/api/v1/pages/deals')
       .then(async (response) => {
         if (!response.ok) {
@@ -66,7 +70,7 @@ export function DealsPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [initialData]);
 
   const deals = useMemo(() => data?.items ?? [], [data?.items]);
   const structuredData = useMemo(
@@ -300,17 +304,4 @@ function normalizeExternalHref(value: string): string {
 
 function formatDate(value: string): string {
   return value.slice(0, 10);
-}
-
-function readInitialDealsData(): DealsResponse | null {
-  const element = document.getElementById('__GATERANK_INITIAL_DATA__');
-  if (!element?.textContent) {
-    return null;
-  }
-  try {
-    const envelope = JSON.parse(element.textContent) as { kind?: string; payload?: DealsResponse };
-    return envelope.kind === 'deals' && envelope.payload ? envelope.payload : null;
-  } catch {
-    return null;
-  }
 }

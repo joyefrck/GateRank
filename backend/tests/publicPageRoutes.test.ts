@@ -3,7 +3,9 @@ import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
 import express from 'express';
 import { createPublicPageRoutes } from '../src/routes/publicPageRoutes';
+import { createPublicRoutes } from '../src/routes/publicRoutes';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../src/types/domain';
+import { createTimedPromiseCache } from '../src/utils/publicCache';
 import type { AirportDealView } from '../../shared/airportAds';
 import { getDateInTimezone } from '../src/utils/time';
 
@@ -129,6 +131,59 @@ test('GET /deals returns crawlable advertising deal HTML', async () => {
     assert.match(html, /"itemOffered":\{"@type":"Service","name":"星云机场","url":"http:\/\/127\.0\.0\.1:\d+\/airports\/nebula"/);
     assert.doesNotMatch(html, /最佳|官方推荐|最强|永久稳定/);
     assert.match(html, /"kind":"deals"/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /deals and GET /api/v1/pages/deals reuse a shared active deals cache', async () => {
+  let dealsCalls = 0;
+  const pageCache = createTimedPromiseCache(60_000);
+  const airportAdCampaignRepository = {
+    listActiveDeals: async (): Promise<AirportDealView[]> => {
+      dealsCalls += 1;
+      return [createDealView(1)];
+    },
+  };
+  const publicViewService = createPublicViewServiceStub();
+  const app = express();
+  app.use('/api/v1', createPublicRoutes({
+    airportRepository: {
+      getById: async () => null,
+    },
+    airportApplicationRepository: {
+      create: async () => 1,
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => null,
+    },
+    scoreRepository: {
+      getByAirportAndDate: async () => null,
+      getTrend: async () => [],
+    },
+    rankingRepository: {
+      getRanking: async () => [],
+    },
+    publicViewService,
+    airportAdCampaignRepository,
+    pageCache,
+  }));
+  app.use(createPublicPageRoutes({
+    publicViewService,
+    airportAdCampaignRepository,
+    frontendAssets: TEST_FRONTEND_ASSETS,
+    pageCache,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const htmlResponse = await fetch(`http://127.0.0.1:${port}/deals`);
+    const apiResponse = await fetch(`http://127.0.0.1:${port}/api/v1/pages/deals`);
+
+    assert.equal(htmlResponse.status, 200);
+    assert.equal(apiResponse.status, 200);
+    assert.equal(dealsCalls, 1);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
