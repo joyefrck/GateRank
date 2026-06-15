@@ -8,6 +8,7 @@ import {
   Eye,
   ImageUp,
   Link2,
+  Newspaper,
   Plus,
   Save,
   Search,
@@ -28,6 +29,10 @@ import {
   serializeNewsAirportLinkEmbed,
   type NewsAirportLinkEmbed,
 } from '../../../shared/newsAirportLink';
+import {
+  normalizeNewsArticleLinkUrl,
+  serializeNewsArticleLink,
+} from '../../../shared/newsArticleLink';
 
 const COVER_SEARCH_PER_PAGE = 12;
 
@@ -1022,6 +1027,10 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
   const [coverSearchImportingId, setCoverSearchImportingId] = useState<number | null>(null);
   const [coverSearchError, setCoverSearchError] = useState('');
   const [coverPickerOpen, setCoverPickerOpen] = useState(false);
+  const [articleLinkModalOpen, setArticleLinkModalOpen] = useState(false);
+  const [articleLinkTitle, setArticleLinkTitle] = useState('');
+  const [articleLinkUrl, setArticleLinkUrl] = useState('');
+  const [articleLinkError, setArticleLinkError] = useState('');
   const [airportProfilePickerOpen, setAirportProfilePickerOpen] = useState(false);
   const [airportPickerMode, setAirportPickerMode] = useState<'link' | 'profile'>('profile');
   const [airportProfileSearchQuery, setAirportProfileSearchQuery] = useState('');
@@ -1390,6 +1399,56 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
     }
   }
 
+  function openArticleLinkModal(): void {
+    setArticleLinkTitle('');
+    setArticleLinkUrl('');
+    setArticleLinkError('');
+    setArticleLinkModalOpen(true);
+  }
+
+  function closeArticleLinkModal(): void {
+    setArticleLinkModalOpen(false);
+    setArticleLinkError('');
+  }
+
+  function insertArticleLink(): void {
+    const title = articleLinkTitle.trim();
+    if (!title) {
+      setArticleLinkError('文章标题必填');
+      return;
+    }
+
+    if (!articleLinkUrl.trim()) {
+      setArticleLinkError('文章链接必填');
+      return;
+    }
+
+    const url = normalizeNewsArticleLinkUrl(articleLinkUrl);
+    if (!url) {
+      setArticleLinkError('请输入以 http:// 或 https:// 开头的文章链接');
+      return;
+    }
+
+    const block = serializeNewsArticleLink({ title, url });
+    setForm((current) => {
+      const markdown = current.content_markdown;
+      const target = markdownRef.current;
+      if (!target) {
+        return { ...current, content_markdown: `${markdown}${block}` };
+      }
+      const start = target.selectionStart || markdown.length;
+      const end = target.selectionEnd || markdown.length;
+      return {
+        ...current,
+        content_markdown: `${markdown.slice(0, start)}${block}${markdown.slice(end)}`,
+      };
+    });
+    setNotice(`已插入文章「${title}」`);
+    setError('');
+    setArticleLinkModalOpen(false);
+    setArticleLinkError('');
+  }
+
   async function searchAirportProfiles(targetPage = 1, queryOverride = airportProfileSearchQuery): Promise<void> {
     setAirportProfileSearchLoading(true);
     setAirportProfileSearchError('');
@@ -1717,6 +1776,14 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
                 <button
                   type="button"
                   className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
+                  onClick={openArticleLinkModal}
+                >
+                  <Newspaper size={14} />
+                  插入文章
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-2 rounded-lg border border-neutral-200 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50"
                   onClick={openAirportLinkPicker}
                 >
                   <Link2 size={14} />
@@ -1857,6 +1924,16 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
         onSearch={(page) => void searchAirportProfiles(page)}
         onPageChange={(page) => void searchAirportProfiles(page)}
         onInsert={airportPickerMode === 'link' ? insertAirportLink : insertAirportProfile}
+      />
+      <ArticleLinkModal
+        open={articleLinkModalOpen}
+        title={articleLinkTitle}
+        url={articleLinkUrl}
+        error={articleLinkError}
+        onClose={closeArticleLinkModal}
+        onTitleChange={setArticleLinkTitle}
+        onUrlChange={setArticleLinkUrl}
+        onConfirm={insertArticleLink}
       />
     </section>
   );
@@ -2256,6 +2333,126 @@ function AirportProfilePickerModal({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function ArticleLinkModal({
+  open,
+  title,
+  url,
+  error,
+  onClose,
+  onTitleChange,
+  onUrlChange,
+  onConfirm,
+}: {
+  open: boolean;
+  title: string;
+  url: string;
+  error: string;
+  onClose: () => void;
+  onTitleChange: (value: string) => void;
+  onUrlChange: (value: string) => void;
+  onConfirm: () => void;
+}) {
+  useEffect(() => {
+    if (!open) {
+      return undefined;
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        onClose();
+      }
+    }
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) {
+    return null;
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-0 backdrop-blur-sm md:items-center md:p-4"
+      onClick={onClose}
+    >
+      <form
+        className="flex w-full flex-col overflow-hidden rounded-t-[28px] border-0 bg-white shadow-none md:max-w-lg md:rounded-[28px] md:border md:border-neutral-200 md:shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)]"
+        onClick={(event) => event.stopPropagation()}
+        onSubmit={(event) => {
+          event.preventDefault();
+          onConfirm();
+        }}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-neutral-200 px-5 py-4 md:px-6 md:py-5">
+          <div className="space-y-1">
+            <h3 className="text-xl font-bold tracking-tight">插入文章</h3>
+            <p className="text-sm text-neutral-500">填写标题和链接后会插入为正文 Markdown 链接。</p>
+          </div>
+          <button
+            type="button"
+            className="flex h-10 w-10 items-center justify-center rounded-full border border-neutral-200 text-neutral-500 hover:text-neutral-900"
+            onClick={onClose}
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="space-y-4 px-5 py-5 md:px-6 md:py-6">
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-neutral-700">标题</span>
+            <input
+              className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+              value={title}
+              onChange={(event) => onTitleChange(event.target.value)}
+              placeholder="OpenAI 发布新功能"
+              required
+              autoFocus
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-2 block text-sm font-semibold text-neutral-700">链接</span>
+            <input
+              className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+              value={url}
+              onChange={(event) => onUrlChange(event.target.value)}
+              placeholder="https://example.com/news/openai-update"
+              required
+              inputMode="url"
+              spellCheck={false}
+              autoCapitalize="none"
+              autoCorrect="off"
+            />
+          </label>
+
+          {error ? (
+            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">
+              {error}
+            </div>
+          ) : null}
+        </div>
+
+        <div className="flex justify-end gap-2 border-t border-neutral-200 bg-neutral-50 px-5 py-4 md:px-6">
+          <button
+            type="button"
+            className="inline-flex items-center justify-center rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-medium hover:bg-neutral-100"
+            onClick={onClose}
+          >
+            取消
+          </button>
+          <button
+            type="submit"
+            className="inline-flex items-center justify-center rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white"
+          >
+            确认插入
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

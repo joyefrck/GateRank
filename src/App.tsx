@@ -4374,12 +4374,11 @@ function CapabilityLine({
   category: CapabilityIconCategory;
 }) {
   return (
-    <div className={`flex items-center justify-between gap-2 rounded-[8px] border border-transparent bg-slate-50 px-2.5 py-2 text-sm ${reportInnerTileInteractiveClass}`}>
+    <div className={`flex items-center gap-2 rounded-[8px] border border-transparent bg-slate-50 px-2.5 py-2 text-sm ${reportInnerTileInteractiveClass}`}>
       <span className="flex min-w-0 items-center gap-2">
         <CapabilityIcon capabilityKey={capabilityKey} category={category} />
         <span className="min-w-0 truncate font-bold text-slate-700">{label}</span>
       </span>
-      <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
     </div>
   );
 }

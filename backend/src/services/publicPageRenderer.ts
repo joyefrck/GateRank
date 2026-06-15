@@ -527,7 +527,6 @@ function renderCapabilityLine(
         ${renderCapabilityIcon(icon)}
         <span class="capability-label">${escapeHtml(displayLabel)}</span>
       </span>
-      <span class="capability-check">✓</span>
     </p>
   `;
 }
@@ -1524,7 +1523,6 @@ const styles = `
   .capability-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .capability-icon { display: inline-flex; width: 28px; height: 28px; flex: 0 0 28px; align-items: center; justify-content: center; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; font-weight: 900; line-height: 1; }
   .capability-icon svg { width: 17px; height: 17px; }
-  .capability-check { flex: 0 0 auto; color: #10b981; }
   .capability-footnote { margin-top: 10px; color: #94a3b8; font-size: 12px; font-weight: 800; }
   .score-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
   .score-metric { padding: 16px; }

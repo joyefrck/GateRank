@@ -14,6 +14,16 @@ test('NewsContentService.render supports markdown lists', () => {
   assert.deepEqual(rendered.headings, [{ id: slugifyNewsText('清单'), level: 2, text: '清单' }]);
 });
 
+test('NewsContentService.render opens article markdown links in a new tab', () => {
+  const service = new NewsContentService();
+  const rendered = service.render('[OpenAI 发布新功能](<https://example.com/a>)');
+
+  assert.match(
+    rendered.html,
+    /<a class="news-link" href="https:\/\/example\.com\/a" target="_blank" rel="noreferrer noopener">OpenAI 发布新功能<\/a>/,
+  );
+});
+
 test('NewsContentService.render strips dangerous raw HTML from markdown', () => {
   const service = new NewsContentService();
   const rendered = service.render([

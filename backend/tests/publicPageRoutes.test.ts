@@ -502,6 +502,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /Telegram 群支持/);
     assert.match(okHtml, /群人数 1,200 人/);
     assert.match(okHtml, /服务能力详情/);
+    assert.doesNotMatch(okHtml, /capability-check/);
     assert.match(okHtml, /Netflix/);
     assert.match(okHtml, /<svg viewBox="0 0 24 24" fill="currentColor"/);
     assert.match(okHtml, /支付宝/);
