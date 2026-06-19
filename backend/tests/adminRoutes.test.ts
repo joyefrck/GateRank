@@ -789,9 +789,10 @@ test('GET /scheduler/tasks returns task list', async () => {
     const response = await fetch(`http://127.0.0.1:${port}/scheduler/tasks`);
     assert.equal(response.status, 200);
     const data = (await response.json()) as { items: Array<{ task_key: string }> };
-    assert.equal(data.items.length, 5);
+    assert.equal(data.items.length, 6);
     assert.equal(data.items[0]?.task_key, 'stability');
     assert.equal(data.items[4]?.task_key, 'billing_listing_sync');
+    assert.equal(data.items[5]?.task_key, 'stability_resample_guard');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -7036,6 +7037,22 @@ function stubSchedulerService(): any {
         updated_at: '2026-03-30T00:00:00+08:00',
         description: '余额同步描述',
         next_run_at: '2026-03-31T03:00:00+08:00',
+        is_running: false,
+        latest_run: null,
+      },
+      {
+        task_key: 'stability_resample_guard',
+        name: '稳定性复测保护',
+        enabled: true,
+        schedule_time: '06:00',
+        timezone: 'Asia/Shanghai',
+        last_restarted_at: null,
+        last_restarted_by: null,
+        updated_by: 'system',
+        created_at: '2026-03-30T00:00:00+08:00',
+        updated_at: '2026-03-30T00:00:00+08:00',
+        description: '复测保护描述',
+        next_run_at: '2026-03-31T06:00:00+08:00',
         is_running: false,
         latest_run: null,
       },

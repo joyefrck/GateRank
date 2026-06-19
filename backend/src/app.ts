@@ -167,6 +167,7 @@ export async function createApp() {
     marketingSettingsService,
     recomputeService,
     riskCheckService,
+    scoreRepository,
   });
   const adminSchedulerService = new AdminSchedulerService({
     schedulerTaskRepository,

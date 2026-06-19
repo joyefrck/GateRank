@@ -7,8 +7,8 @@ import type {
 } from '../types/domain';
 import { formatDateOnly, formatDateTimeInTimezoneIso } from '../utils/time';
 
-const SCHEDULER_TASK_ENUM = "ENUM('stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync')";
-const SCHEDULER_TASK_ORDER = "'stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync'";
+const SCHEDULER_TASK_ENUM = "ENUM('stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard')";
+const SCHEDULER_TASK_ORDER = "'stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard'";
 
 interface SchedulerRunRow extends RowDataPacket {
   id: number;
@@ -144,6 +144,7 @@ export class SchedulerRunRepository {
       risk: null,
       aggregate_recompute: null,
       billing_listing_sync: null,
+      stability_resample_guard: null,
     } as Record<SchedulerTaskKey, SchedulerRun | null>;
 
     if (taskKeys.length === 0) {

@@ -21,10 +21,11 @@ const DEFAULT_TASKS: Array<Pick<SchedulerTask, 'task_key' | 'name' | 'schedule_t
   { task_key: 'risk', name: '风险体检', schedule_time: '00:20' },
   { task_key: 'aggregate_recompute', name: '聚合重算', schedule_time: '00:30' },
   { task_key: 'billing_listing_sync', name: '余额展示同步', schedule_time: '03:00' },
+  { task_key: 'stability_resample_guard', name: '稳定性复测保护', schedule_time: '06:00' },
 ];
 
-const SCHEDULER_TASK_ENUM = "ENUM('stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync')";
-const SCHEDULER_TASK_ORDER = "'stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync'";
+const SCHEDULER_TASK_ENUM = "ENUM('stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard')";
+const SCHEDULER_TASK_ORDER = "'stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard'";
 
 export class SchedulerTaskRepository {
   constructor(private readonly pool: Pool) {}

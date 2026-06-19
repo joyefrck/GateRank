@@ -20,7 +20,8 @@ test('SchedulerTaskRepository.ensureSchema creates tasks table and seeds default
   await repository.ensureSchema();
 
   assert.ok(queries.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS admin_scheduler_tasks')));
-  assert.ok(queries.some((sql) => sql.includes('MODIFY COLUMN task_key') && sql.includes('billing_listing_sync')));
-  assert.equal(executes.filter((call) => call.sql.includes('INSERT IGNORE INTO admin_scheduler_tasks')).length, 5);
+  assert.ok(queries.some((sql) => sql.includes('MODIFY COLUMN task_key') && sql.includes('stability_resample_guard')));
+  assert.equal(executes.filter((call) => call.sql.includes('INSERT IGNORE INTO admin_scheduler_tasks')).length, 6);
   assert.ok(executes.some((call) => call.params?.[0] === 'billing_listing_sync' && call.params?.[2] === 0 && call.params?.[3] === '03:00'));
+  assert.ok(executes.some((call) => call.params?.[0] === 'stability_resample_guard' && call.params?.[2] === 0 && call.params?.[3] === '06:00'));
 });

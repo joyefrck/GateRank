@@ -7,7 +7,7 @@ import {
   resolveBinaryPath,
 } from '../utils/runtimeBinary';
 import { getAdminAuthConfig } from '../utils/adminAuthConfig';
-import type { SchedulerTaskKey } from '../types/domain';
+import type { AirportScoreDaily, SchedulerTaskKey } from '../types/domain';
 import { signAdminToken } from '../utils/token';
 import type { BillingMailNotificationEvent } from '../repositories/applicantBillingRepository';
 import { sendBillingMailNotificationsSafely, type BillingMailService } from './billingMailNotificationService';
@@ -15,6 +15,7 @@ import {
   sendUserTelegramBotBillingNotificationsSafely,
   type UserTelegramBotBillingNotificationService,
 } from './userTelegramBotMessageService';
+import { dateDaysAgo } from '../utils/time';
 
 const execFileAsync = promisify(execFile);
 
@@ -36,6 +37,10 @@ interface SchedulerTaskExecutorDeps {
   };
   recomputeService: {
     recomputeForDate(date: string): Promise<{ recomputed: number }>;
+  };
+  scoreRepository: {
+    getLatestAvailableDate(onOrBefore: string): Promise<string | null>;
+    getByDate(date: string): Promise<Array<Pick<AirportScoreDaily, 'airport_id' | 's'>>>;
   };
   applicantBillingRepository: {
     syncListingStatusByBalance(clickChargeAmount: number): Promise<{
@@ -118,6 +123,9 @@ export class SchedulerTaskExecutor {
     if (taskKey === 'billing_listing_sync') {
       return this.runBillingListingSync();
     }
+    if (taskKey === 'stability_resample_guard') {
+      return this.runStabilityResampleGuard(date);
+    }
     return this.runAggregateRecompute(date);
   }
 
@@ -197,6 +205,115 @@ export class SchedulerTaskExecutor {
     };
   }
 
+  async runStabilityResampleGuard(date: string): Promise<SchedulerTaskExecutionResult> {
+    const threshold = 20;
+    const previousDate = await this.deps.scoreRepository.getLatestAvailableDate(dateDaysAgo(date, 1));
+    if (!previousDate) {
+      return {
+        status: 'succeeded',
+        message: '稳定性复测保护完成：没有上一期分数，跳过复测',
+        detail: {
+          stage: 'stability_resample_guard',
+          threshold,
+          date,
+          previous_date: null,
+          checked_count: 0,
+          flagged_count: 0,
+          retested_count: 0,
+          failures: [],
+          flagged_airports: [],
+        },
+      };
+    }
+
+    const [currentScores, previousScores] = await Promise.all([
+      this.deps.scoreRepository.getByDate(date),
+      this.deps.scoreRepository.getByDate(previousDate),
+    ]);
+    const previousByAirport = new Map<number, number>();
+    for (const score of previousScores) {
+      const s = Number(score.s);
+      if (Number.isFinite(s)) {
+        previousByAirport.set(score.airport_id, s);
+      }
+    }
+
+    const flaggedAirports: Array<{
+      airport_id: number;
+      current_s: number;
+      previous_s: number;
+      delta: number;
+    }> = [];
+    let checkedCount = 0;
+    for (const score of currentScores) {
+      const currentS = Number(score.s);
+      const previousS = previousByAirport.get(score.airport_id);
+      if (!Number.isFinite(currentS) || previousS === undefined || !Number.isFinite(previousS)) {
+        continue;
+      }
+      checkedCount += 1;
+      const delta = round2(Math.abs(currentS - previousS));
+      if (delta >= threshold) {
+        flaggedAirports.push({
+          airport_id: score.airport_id,
+          current_s: round2(currentS),
+          previous_s: round2(previousS),
+          delta,
+        });
+      }
+    }
+
+    const failures: Array<{ airport_id: number; error: string }> = [];
+    let retestedCount = 0;
+    const retestedAirports: number[] = [];
+    for (const airport of flaggedAirports) {
+      try {
+        await this.runStabilityResampleForAirport(airport.airport_id);
+        retestedCount += 1;
+        retestedAirports.push(airport.airport_id);
+      } catch (error) {
+        failures.push({
+          airport_id: airport.airport_id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    let aggregate: { stage: string; status: 'succeeded' | 'failed'; detail: string } | null = null;
+    let recompute: { stage: string; status: 'succeeded' | 'failed'; detail: string } | null = null;
+    if (retestedCount > 0) {
+      aggregate = await this.runAggregateStage(date);
+      recompute = await this.runRecomputeStage(date);
+    }
+
+    const aggregateFailed = aggregate?.status === 'failed';
+    const recomputeFailed = recompute?.status === 'failed';
+    const status = failures.length > 0 || aggregateFailed || recomputeFailed ? 'failed' : 'succeeded';
+    const message =
+      status === 'succeeded'
+        ? `稳定性复测保护完成：检查 ${checkedCount}，触发复测 ${flaggedAirports.length}，成功 ${retestedCount}`
+        : `稳定性复测保护失败：检查 ${checkedCount}，触发复测 ${flaggedAirports.length}，成功 ${retestedCount}，失败 ${failures.length}`;
+
+    return {
+      status,
+      message,
+      detail: {
+        stage: 'stability_resample_guard',
+        threshold,
+        date,
+        previous_date: previousDate,
+        checked_count: checkedCount,
+        flagged_count: flaggedAirports.length,
+        retested_count: retestedCount,
+        flagged_airports: flaggedAirports,
+        retested_airports: retestedAirports,
+        failures,
+        aggregate,
+        recompute,
+      },
+    };
+  }
+
   private async runScriptStage(
     stage: 'stability' | 'performance',
     scriptName: 'monitor_stability.py' | 'monitor_performance.py',
@@ -241,6 +358,40 @@ export class SchedulerTaskExecutor {
       const detail = summarizeScriptFailure(error, this.singBoxBin);
       this.logger.error(`[scheduler] ${stage} stage failed`, error);
       return { stage, status: 'failed', detail };
+    }
+  }
+
+  private async runStabilityResampleForAirport(airportId: number): Promise<void> {
+    if (!this.adminApiKey && !this.adminBearerToken) {
+      throw new Error('ADMIN_API_KEY / ADMIN_BEARER_TOKEN 未配置');
+    }
+
+    const scriptPath = path.resolve(this.repoRoot, 'scripts', 'monitor_stability.py');
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: this.runtimePath,
+      API_BASE: this.apiBase,
+      ADMIN_API_KEY: this.adminApiKey,
+      ADMIN_BEARER_TOKEN: this.adminBearerToken,
+      AIRPORT_ID: String(airportId),
+      SOURCE: 'scheduler-stability-resample',
+      SING_BOX_BIN: this.singBoxBin,
+      SKIP_AGGREGATE: '1',
+      SKIP_RECOMPUTE: '1',
+    };
+
+    try {
+      await this.execFileFn(this.pythonBin, [scriptPath], {
+        cwd: this.repoRoot,
+        env,
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: this.scriptTimeoutMs,
+      });
+      this.logger.log(`[scheduler] stability resample succeeded for airport ${airportId}`);
+    } catch (error) {
+      const detail = summarizeScriptFailure(error, this.singBoxBin);
+      this.logger.error(`[scheduler] stability resample failed for airport ${airportId}`, error);
+      throw new Error(detail);
     }
   }
 
@@ -374,6 +525,10 @@ function summarizeScriptFailureOutput(stdout?: string, stderr?: string): string 
   } catch {
     return output.split('\n').slice(-1)[0].slice(0, 240);
   }
+}
+
+function round2(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function asExecFailure(error: unknown): { stdout?: string; stderr?: string } | null {

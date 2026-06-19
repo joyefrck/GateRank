@@ -72,6 +72,7 @@ const TASK_DESCRIPTIONS: Record<SchedulerTaskKey, string> = {
   risk: '逐机场串行执行风险体检，刷新官网可用性与 SSL 检查结果。',
   aggregate_recompute: '执行全量聚合和时间衰减重算，统一刷新每日分数与榜单。',
   billing_listing_sync: '按余额规则同步公开总分展示、榜单排序和申请人余额提醒状态。',
+  stability_resample_guard: '对比当日与上一期稳定性 S 分，差异过大时自动复测一次并刷新聚合重算。',
 };
 
 export class AdminSchedulerService {

@@ -280,7 +280,10 @@ function latestPreviousAvailabilitySampleTime(samples: ProbeSample[], beforeTime
 }
 
 function isStabilityScriptSource(source: string): boolean {
-  return source === 'manual-stability' || source === 'cron-stability' || source === 'scheduler-stability';
+  return source === 'manual-stability'
+    || source === 'cron-stability'
+    || source === 'scheduler-stability'
+    || source === 'scheduler-stability-resample';
 }
 
 function sampleTimeMs(sample: ProbeSample): number {

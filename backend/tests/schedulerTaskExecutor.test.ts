@@ -2,6 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SchedulerTaskExecutor } from '../src/services/schedulerTaskExecutor';
 
+type ExecOptions = {
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  maxBuffer: number;
+  timeout: number;
+};
+
 function createSchedulerTaskExecutor(overrides: Partial<ConstructorParameters<typeof SchedulerTaskExecutor>[0]> = {}) {
   return new SchedulerTaskExecutor({
     airportRepository: {
@@ -27,6 +34,10 @@ function createSchedulerTaskExecutor(overrides: Partial<ConstructorParameters<ty
     },
     marketingSettingsService: {
       getConfig: async () => ({ click_charge_amount: 0.6 }),
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => null,
+      getByDate: async () => [],
     },
     sleep: async () => undefined,
     logger: {
@@ -128,4 +139,252 @@ test('SchedulerTaskExecutor.runTask syncs billing listing status', async () => {
   assert.equal(result.detail.restored, 1);
   assert.match(result.message, /恢复公开总分 1/);
   assert.match(result.message, /总分暂不公开 1/);
+});
+
+test('SchedulerTaskExecutor.runStabilityResampleGuard skips when score data is unavailable', async () => {
+  const scriptCalls: string[] = [];
+  let aggregateCount = 0;
+  let recomputeCount = 0;
+  const executor = createSchedulerTaskExecutor({
+    scoreRepository: {
+      getLatestAvailableDate: async () => null,
+      getByDate: async () => [],
+    },
+    execFileAsync: async (_file: string, args: readonly string[]) => {
+      scriptCalls.push(String(args[0]));
+      return {
+        stdout: JSON.stringify({ airport_count: 1, success_count: 1, failure_count: 0 }),
+        stderr: '',
+      };
+    },
+    aggregationService: {
+      aggregateForDate: async () => {
+        aggregateCount += 1;
+        return { aggregated: 1 };
+      },
+    },
+    recomputeService: {
+      recomputeForDate: async () => {
+        recomputeCount += 1;
+        return { recomputed: 1 };
+      },
+    },
+  });
+
+  const result = await executor.runTask('stability_resample_guard', '2026-06-19');
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.detail.previous_date, null);
+  assert.equal(result.detail.checked_count, 0);
+  assert.equal(result.detail.flagged_count, 0);
+  assert.equal(result.detail.retested_count, 0);
+  assert.deepEqual(scriptCalls, []);
+  assert.equal(aggregateCount, 0);
+  assert.equal(recomputeCount, 0);
+});
+
+test('SchedulerTaskExecutor.runStabilityResampleGuard skips deltas below threshold', async () => {
+  const scriptCalls: string[] = [];
+  let aggregateCount = 0;
+  let recomputeCount = 0;
+  const executor = createSchedulerTaskExecutor({
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-06-18',
+      getByDate: async (date: string) => date === '2026-06-19'
+        ? [{ airport_id: 1, s: 87 }]
+        : [{ airport_id: 1, s: 70 }],
+    },
+    execFileAsync: async (_file: string, args: readonly string[]) => {
+      scriptCalls.push(String(args[0]));
+      return {
+        stdout: JSON.stringify({ airport_count: 1, success_count: 1, failure_count: 0 }),
+        stderr: '',
+      };
+    },
+    aggregationService: {
+      aggregateForDate: async () => {
+        aggregateCount += 1;
+        return { aggregated: 1 };
+      },
+    },
+    recomputeService: {
+      recomputeForDate: async () => {
+        recomputeCount += 1;
+        return { recomputed: 1 };
+      },
+    },
+  });
+
+  const result = await executor.runTask('stability_resample_guard', '2026-06-19');
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.detail.checked_count, 1);
+  assert.equal(result.detail.flagged_count, 0);
+  assert.equal(result.detail.retested_count, 0);
+  assert.deepEqual(scriptCalls, []);
+  assert.equal(aggregateCount, 0);
+  assert.equal(recomputeCount, 0);
+});
+
+test('SchedulerTaskExecutor.runStabilityResampleGuard retests delta at threshold and recomputes once', async () => {
+  const envs: NodeJS.ProcessEnv[] = [];
+  let aggregateCount = 0;
+  let recomputeCount = 0;
+  const executor = createSchedulerTaskExecutor({
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-06-18',
+      getByDate: async (date: string) => date === '2026-06-19'
+        ? [{ airport_id: 1, s: 50 }]
+        : [{ airport_id: 1, s: 70 }],
+    },
+    execFileAsync: async (_file: string, _args: readonly string[], options: ExecOptions) => {
+      envs.push(options.env);
+      return {
+        stdout: JSON.stringify({ airport_count: 1, success_count: 1, failure_count: 0 }),
+        stderr: '',
+      };
+    },
+    aggregationService: {
+      aggregateForDate: async (date: string) => {
+        assert.equal(date, '2026-06-19');
+        aggregateCount += 1;
+        return { aggregated: 1 };
+      },
+    },
+    recomputeService: {
+      recomputeForDate: async (date: string) => {
+        assert.equal(date, '2026-06-19');
+        recomputeCount += 1;
+        return { recomputed: 1 };
+      },
+    },
+  });
+
+  const result = await executor.runTask('stability_resample_guard', '2026-06-19');
+
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.detail.checked_count, 1);
+  assert.equal(result.detail.flagged_count, 1);
+  assert.equal(result.detail.retested_count, 1);
+  assert.equal(envs[0]?.AIRPORT_ID, '1');
+  assert.equal(envs[0]?.SOURCE, 'scheduler-stability-resample');
+  assert.equal(envs[0]?.SKIP_AGGREGATE, '1');
+  assert.equal(envs[0]?.SKIP_RECOMPUTE, '1');
+  assert.equal(aggregateCount, 1);
+  assert.equal(recomputeCount, 1);
+});
+
+test('SchedulerTaskExecutor.runStabilityResampleGuard retests multiple flagged airports with one final recompute', async () => {
+  const airportIds: string[] = [];
+  let aggregateCount = 0;
+  let recomputeCount = 0;
+  const executor = createSchedulerTaskExecutor({
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-06-18',
+      getByDate: async (date: string) => date === '2026-06-19'
+        ? [
+          { airport_id: 1, s: 50 },
+          { airport_id: 2, s: 95 },
+          { airport_id: 3, s: 80 },
+        ]
+        : [
+          { airport_id: 1, s: 70 },
+          { airport_id: 2, s: 70 },
+          { airport_id: 3, s: 70 },
+        ],
+    },
+    execFileAsync: async (_file: string, _args: readonly string[], options: ExecOptions) => {
+      airportIds.push(String(options.env.AIRPORT_ID));
+      return {
+        stdout: JSON.stringify({ airport_count: 1, success_count: 1, failure_count: 0 }),
+        stderr: '',
+      };
+    },
+    aggregationService: {
+      aggregateForDate: async () => {
+        aggregateCount += 1;
+        return { aggregated: 3 };
+      },
+    },
+    recomputeService: {
+      recomputeForDate: async () => {
+        recomputeCount += 1;
+        return { recomputed: 3 };
+      },
+    },
+  });
+
+  const result = await executor.runTask('stability_resample_guard', '2026-06-19');
+
+  assert.equal(result.status, 'succeeded');
+  assert.deepEqual(airportIds, ['1', '2']);
+  assert.equal(result.detail.checked_count, 3);
+  assert.equal(result.detail.flagged_count, 2);
+  assert.equal(result.detail.retested_count, 2);
+  assert.equal(aggregateCount, 1);
+  assert.equal(recomputeCount, 1);
+});
+
+test('SchedulerTaskExecutor.runStabilityResampleGuard continues after one airport retest fails', async () => {
+  const airportIds: string[] = [];
+  let aggregateCount = 0;
+  let recomputeCount = 0;
+  const executor = createSchedulerTaskExecutor({
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-06-18',
+      getByDate: async (date: string) => date === '2026-06-19'
+        ? [
+          { airport_id: 1, s: 50 },
+          { airport_id: 2, s: 95 },
+        ]
+        : [
+          { airport_id: 1, s: 70 },
+          { airport_id: 2, s: 70 },
+        ],
+    },
+    execFileAsync: async (_file: string, _args: readonly string[], options: ExecOptions) => {
+      airportIds.push(String(options.env.AIRPORT_ID));
+      if (options.env.AIRPORT_ID === '1') {
+        const error = new Error('Command failed: python3 monitor_stability.py') as Error & {
+          stdout: string;
+          stderr: string;
+        };
+        error.stdout = JSON.stringify({
+          airport_count: 1,
+          success_count: 0,
+          failure_count: 1,
+          failures: [{ airport_id: 1, airport_name: 'Bad', error: 'temporary timeout' }],
+        });
+        error.stderr = '';
+        throw error;
+      }
+      return {
+        stdout: JSON.stringify({ airport_count: 1, success_count: 1, failure_count: 0 }),
+        stderr: '',
+      };
+    },
+    aggregationService: {
+      aggregateForDate: async () => {
+        aggregateCount += 1;
+        return { aggregated: 2 };
+      },
+    },
+    recomputeService: {
+      recomputeForDate: async () => {
+        recomputeCount += 1;
+        return { recomputed: 2 };
+      },
+    },
+  });
+
+  const result = await executor.runTask('stability_resample_guard', '2026-06-19');
+
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(airportIds, ['1', '2']);
+  assert.equal(result.detail.flagged_count, 2);
+  assert.equal(result.detail.retested_count, 1);
+  assert.equal((result.detail.failures as unknown[]).length, 1);
+  assert.match(String((result.detail.failures as Array<{ error: string }>)[0]?.error), /temporary timeout/);
+  assert.equal(aggregateCount, 1);
+  assert.equal(recomputeCount, 1);
 });

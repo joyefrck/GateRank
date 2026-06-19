@@ -104,7 +104,13 @@ export type PerformanceRunStatus = 'success' | 'partial' | 'skipped' | 'failed';
 export type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
 export type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 export type NewsStatus = 'draft' | 'published' | 'archived';
-export type SchedulerTaskKey = 'stability' | 'performance' | 'risk' | 'aggregate_recompute' | 'billing_listing_sync';
+export type SchedulerTaskKey =
+  | 'stability'
+  | 'performance'
+  | 'risk'
+  | 'aggregate_recompute'
+  | 'billing_listing_sync'
+  | 'stability_resample_guard';
 export type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
 export type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
 

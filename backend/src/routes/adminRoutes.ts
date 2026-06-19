@@ -2813,10 +2813,11 @@ function toSchedulerTaskKey(value: unknown): SchedulerTaskKey {
     || taskKey === 'risk'
     || taskKey === 'aggregate_recompute'
     || taskKey === 'billing_listing_sync'
+    || taskKey === 'stability_resample_guard'
   ) {
     return taskKey;
   }
-  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|performance|risk|aggregate_recompute|billing_listing_sync');
+  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|performance|risk|aggregate_recompute|billing_listing_sync|stability_resample_guard');
 }
 
 function toSchedulerRunStatus(value: unknown): SchedulerRunStatus {
