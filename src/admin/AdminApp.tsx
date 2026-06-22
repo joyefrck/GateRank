@@ -2100,6 +2100,7 @@ function MarketingPage() {
   const [selectedAirportId, setSelectedAirportId] = useState<number | null>(null);
   const [selectedDetail, setSelectedDetail] = useState<MarketingAirportDetailResponse | null>(null);
   const [isAirportDetailOpen, setIsAirportDetailOpen] = useState(false);
+  const [isPopularPagesOpen, setIsPopularPagesOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [error, setError] = useState('');
@@ -2561,47 +2562,6 @@ function MarketingPage() {
         </div>
       </section>
 
-      <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
-        <div className="flex items-center justify-between gap-3 flex-wrap">
-          <div>
-            <h3 className="text-base font-semibold">热门页面</h3>
-            <p className="mt-1 text-sm text-neutral-500">按页面路径聚合展示访问量，并补充页面上发生的机场外链点击。</p>
-          </div>
-          <div className="text-sm text-neutral-500">页面数：{formatCountValue(pageItems.length)}</div>
-        </div>
-        <div className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200">
-          <table className="min-w-full text-sm">
-            <thead className="bg-neutral-50 text-neutral-600">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">页面类型</th>
-                <th className="px-4 py-3 text-left font-medium">路径</th>
-                <th className="px-4 py-3 text-left font-medium">PV</th>
-                <th className="px-4 py-3 text-left font-medium">UV</th>
-                <th className="px-4 py-3 text-left font-medium">相关点击</th>
-                <th className="px-4 py-3 text-left font-medium">最近访问</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageItems.length === 0 && !loading && (
-                <tr>
-                  <td className="px-4 py-6 text-neutral-500" colSpan={6}>暂无页面访问统计</td>
-                </tr>
-              )}
-              {pageItems.map((item) => (
-                <tr key={`${item.page_kind}-${item.page_path}`} className="border-t border-neutral-200">
-                  <td className="px-4 py-3">{formatMarketingPageKind(item.page_kind)}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-neutral-700">{item.page_path}</td>
-                  <td className="px-4 py-3">{formatCountValue(item.page_views)}</td>
-                  <td className="px-4 py-3">{formatCountValue(item.unique_visitors)}</td>
-                  <td className="px-4 py-3">{formatCountValue(item.outbound_clicks)}</td>
-                  <td className="px-4 py-3">{formatDateTimeInBeijing(item.last_visited_at)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
       <section className="rounded-[30px] border border-neutral-200 bg-white p-5 space-y-4 shadow-[0_24px_80px_-52px_rgba(15,23,42,0.28)]">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div>
@@ -2675,6 +2635,67 @@ function MarketingPage() {
             下一页
           </button>
         </div>
+      </section>
+
+      <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-4">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h3 className="text-base font-semibold">热门页面</h3>
+            <p className="mt-1 text-sm text-neutral-500">按页面路径聚合展示访问量，并补充页面上发生的机场外链点击。</p>
+          </div>
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="text-sm text-neutral-500">页面数：{formatCountValue(pageItems.length)}</div>
+            <button
+              type="button"
+              className="inline-flex items-center justify-center gap-1.5 rounded-2xl border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-700 transition hover:bg-neutral-50"
+              aria-expanded={isPopularPagesOpen}
+              aria-controls="marketing-popular-pages-table"
+              onClick={() => setIsPopularPagesOpen((open) => !open)}
+            >
+              <ChevronRight
+                size={14}
+                className={`transition-transform ${isPopularPagesOpen ? 'rotate-90' : ''}`}
+              />
+              {isPopularPagesOpen ? '收起' : '展开'}
+            </button>
+          </div>
+        </div>
+        {isPopularPagesOpen && (
+          <div
+            id="marketing-popular-pages-table"
+            className="overflow-x-auto overscroll-x-contain rounded-2xl border border-neutral-200"
+          >
+            <table className="min-w-full text-sm">
+              <thead className="bg-neutral-50 text-neutral-600">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">页面类型</th>
+                  <th className="px-4 py-3 text-left font-medium">路径</th>
+                  <th className="px-4 py-3 text-left font-medium">PV</th>
+                  <th className="px-4 py-3 text-left font-medium">UV</th>
+                  <th className="px-4 py-3 text-left font-medium">相关点击</th>
+                  <th className="px-4 py-3 text-left font-medium">最近访问</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageItems.length === 0 && !loading && (
+                  <tr>
+                    <td className="px-4 py-6 text-neutral-500" colSpan={6}>暂无页面访问统计</td>
+                  </tr>
+                )}
+                {pageItems.map((item) => (
+                  <tr key={`${item.page_kind}-${item.page_path}`} className="border-t border-neutral-200">
+                    <td className="px-4 py-3">{formatMarketingPageKind(item.page_kind)}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-neutral-700">{item.page_path}</td>
+                    <td className="px-4 py-3">{formatCountValue(item.page_views)}</td>
+                    <td className="px-4 py-3">{formatCountValue(item.unique_visitors)}</td>
+                    <td className="px-4 py-3">{formatCountValue(item.outbound_clicks)}</td>
+                    <td className="px-4 py-3">{formatDateTimeInBeijing(item.last_visited_at)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {isAirportDetailOpen && (
