@@ -26,3 +26,15 @@ test('React report card grids omit risk penalty metric cards', async () => {
 
   assert.doesNotMatch(scoreBreakdown, /label: '风险惩罚'/);
 });
+
+test('React report score card labels low score as limited rating instead of high risk', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+  const scoreGradeStart = source.indexOf('function getScoreGrade');
+  assert.notEqual(scoreGradeStart, -1);
+  const scoreGradeEnd = source.indexOf('function formatNullableSupport', scoreGradeStart);
+  assert.notEqual(scoreGradeEnd, -1);
+  const scoreGradeSource = source.slice(scoreGradeStart, scoreGradeEnd);
+
+  assert.match(scoreGradeSource, /return '评级受限'/);
+  assert.doesNotMatch(scoreGradeSource, /return '高风险'/);
+});

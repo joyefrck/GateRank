@@ -960,7 +960,7 @@ function buildScoreGradeText(score: number | null): string {
   if (score >= 80) return '稳健';
   if (score >= 70) return '可观察';
   if (score >= 60) return '谨慎';
-  return '高风险';
+  return '评级受限';
 }
 
 function buildReportRiskAnswer(view: PublicReportSeoView): string {

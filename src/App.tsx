@@ -4510,7 +4510,7 @@ function getScoreGrade(score: number): string {
   if (score >= 85) return '优秀';
   if (score >= 75) return '良好';
   if (score >= 60) return '观察';
-  return '高风险';
+  return '评级受限';
 }
 
 function formatNullableSupport(value: boolean | null | undefined): string {

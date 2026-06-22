@@ -600,6 +600,49 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
   }
 });
 
+test('GET /airports/:slug labels low report score as limited rating instead of high risk', async () => {
+  const lowScoreReportView: ReportView = {
+    ...reportView,
+    airport: {
+      ...reportView.airport,
+      id: 8,
+      slug: 'fresh-airport',
+      name: '新入驻机场',
+    },
+    summary_card: {
+      ...reportView.summary_card,
+      name: '新入驻机场',
+      score: 58.52,
+    },
+    score_breakdown: {
+      ...reportView.score_breakdown,
+      final_score: 58.52,
+    },
+  };
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: {
+      ...createPublicViewServiceStub(),
+      getReportViewBySlug: async (slug: string): Promise<ReportView | null> => (slug === 'fresh-airport' ? lowScoreReportView : null),
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/fresh-airport`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+
+    assert.match(html, /综合评级：评级受限/);
+    assert.match(html, /<span>综合评级 评级受限<\/span>/);
+    assert.doesNotMatch(html, /综合评级：高风险/);
+    assert.doesNotMatch(html, /<span>综合评级 高风险<\/span>/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /risk-watch redirects permanently to /risk-monitor', async () => {
   const app = express();
   app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
