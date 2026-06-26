@@ -22,21 +22,15 @@ export class StatsRepository {
       this.pool.query<CountRow[]>('SELECT COUNT(*) AS total FROM airports WHERE is_listed = 1'),
       this.pool.query<CountRow[]>('SELECT COUNT(*) AS total FROM airport_probe_samples'),
       this.pool.query<LatestRow[]>(
-        `SELECT MAX(ts) AS latest_at
-           FROM (
-             SELECT MAX(sampled_at) AS ts
-               FROM airport_probe_samples
-              WHERE sampled_at <= CONCAT(?, ' 23:59:59')
-             UNION ALL
-             SELECT MAX(sampled_at) AS ts
-               FROM airport_packet_loss_samples
-              WHERE sampled_at <= CONCAT(?, ' 23:59:59')
-             UNION ALL
-             SELECT MAX(sampled_at) AS ts
-               FROM airport_performance_runs
-              WHERE sampled_at <= CONCAT(?, ' 23:59:59')
-           ) recent_updates`,
-        [date, date, date],
+        `SELECT finished_at AS latest_at
+           FROM admin_scheduler_runs
+          WHERE task_key = 'aggregate_recompute'
+            AND run_date = ?
+            AND status = 'succeeded'
+            AND finished_at IS NOT NULL
+          ORDER BY id DESC
+          LIMIT 1`,
+        [date],
       ),
     ]);
 
