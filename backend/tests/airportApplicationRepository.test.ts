@@ -11,7 +11,7 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
       calls.push({ sql, params });
       if (sql.includes('FROM information_schema.COLUMNS')) {
         schemaChecks += 1;
-        return [schemaChecks <= 26 ? [] : [{ 1: 1 }]];
+        return [schemaChecks <= 28 ? [] : [{ 1: 1 }]];
       }
       return [[]];
     },
@@ -27,6 +27,12 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
   );
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airport_applications ADD COLUMN applicant_email VARCHAR(255) NOT NULL AFTER subscription_url')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airport_applications ADD COLUMN subscription_url_updated_at DATETIME NULL AFTER subscription_url')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes("ALTER TABLE airport_applications ADD COLUMN subscription_url_updated_source ENUM('admin', 'portal') NULL AFTER subscription_url_updated_at")),
   );
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airport_applications ADD COLUMN approved_airport_id BIGINT UNSIGNED NULL AFTER test_password')),
@@ -58,6 +64,56 @@ test('AirportApplicationRepository.ensureSchema creates table and backfills webs
   assert.ok(
     calls.some((call) => call.sql.includes('SET airport_profile_json = JSON_OBJECT()')),
   );
+});
+
+test('AirportApplicationRepository.updateApplicantOperations omits subscription url when it is undefined', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new AirportApplicationRepository({
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  } as never);
+
+  const updated = await repository.updateApplicantOperations(7, {
+    name: 'Cloud Airport Pro',
+    website: 'https://example.com',
+    websites: ['https://example.com'],
+    plan_price_month: 1888,
+    has_trial: false,
+    streaming_support: ['netflix'],
+    payment_methods: ['wechat'],
+    payment_crypto_other: null,
+    profile: { clients: { clash: true } } as any,
+    applicant_telegram: '@cloud',
+    founded_on: '2025-01-01',
+    airport_intro: 'intro',
+    test_account: 'tester',
+    test_password: 'secret',
+  });
+
+  assert.equal(updated, true);
+  assert.equal(calls[0]?.sql.includes('subscription_url = ?'), false);
+  assert.equal(calls[0]?.sql.includes('subscription_url_updated_at = NOW()'), false);
+  assert.equal(calls[0]?.params?.includes('https://old-sub.example.com'), false);
+});
+
+test('AirportApplicationRepository.updateSubscriptionUrlByApprovedAirportId mirrors canonical url metadata', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new AirportApplicationRepository({
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 2 }];
+    },
+  } as never);
+
+  const updated = await repository.updateSubscriptionUrlByApprovedAirportId(42, 'https://new-sub.example.com', 'admin');
+
+  assert.equal(updated, 2);
+  assert.ok(calls[0]?.sql.includes('subscription_url = ?'));
+  assert.ok(calls[0]?.sql.includes('subscription_url_updated_at = NOW()'));
+  assert.ok(calls[0]?.sql.includes('subscription_url_updated_source = ?'));
+  assert.deepEqual(calls[0]?.params, ['https://new-sub.example.com', 'admin', 42]);
 });
 
 test('AirportApplicationRepository.listByQuery filters by payment status', async () => {

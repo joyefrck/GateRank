@@ -498,6 +498,7 @@ interface ApplicationFormState {
   payment_crypto_other: string;
   profile: AirportProfile;
   subscription_url: string;
+  saved_subscription_url: string;
   applicant_email: string;
   applicant_telegram: string;
   founded_on: string;
@@ -5744,27 +5745,30 @@ function PortalPage() {
     setError('');
     setSuccess('');
     try {
+      const operationsBody = {
+        website: websites[0],
+        websites,
+        name: (view?.application.name || applicationForm.name).trim(),
+        plan_price_month: Number(applicationForm.plan_price_month || 0),
+        has_trial: applicationForm.has_trial,
+        streaming_support: applicationForm.streaming_support,
+        payment_methods: applicationForm.payment_methods,
+        payment_crypto_other: applicationForm.payment_methods.includes('crypto_other')
+          ? applicationForm.payment_crypto_other.trim()
+          : null,
+        profile: normalizeAirportProfile(applicationForm.profile),
+        applicant_telegram: applicationForm.applicant_telegram.trim(),
+        founded_on: applicationForm.founded_on,
+        airport_intro: applicationForm.airport_intro.trim(),
+        test_account: applicationForm.test_account.trim(),
+        test_password: applicationForm.test_password,
+        ...(applicationForm.subscription_url.trim() !== applicationForm.saved_subscription_url.trim()
+          ? { subscription_url: applicationForm.subscription_url.trim() }
+          : {}),
+      };
       const data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/application/operations', {
         method: 'PATCH',
-        body: JSON.stringify({
-          website: websites[0],
-          websites,
-          name: (view?.application.name || applicationForm.name).trim(),
-          plan_price_month: Number(applicationForm.plan_price_month || 0),
-          has_trial: applicationForm.has_trial,
-          streaming_support: applicationForm.streaming_support,
-          payment_methods: applicationForm.payment_methods,
-          payment_crypto_other: applicationForm.payment_methods.includes('crypto_other')
-            ? applicationForm.payment_crypto_other.trim()
-            : null,
-          profile: normalizeAirportProfile(applicationForm.profile),
-          subscription_url: applicationForm.subscription_url.trim(),
-          applicant_telegram: applicationForm.applicant_telegram.trim(),
-          founded_on: applicationForm.founded_on,
-          airport_intro: applicationForm.airport_intro.trim(),
-          test_account: applicationForm.test_account.trim(),
-          test_password: applicationForm.test_password,
-        }),
+        body: JSON.stringify(operationsBody),
       });
       setView(data);
       setApplicationForm(createPortalApplicationForm(data.application));
@@ -8019,6 +8023,7 @@ function createApplicationForm(): ApplicationFormState {
     payment_crypto_other: '',
     profile: createDefaultAirportProfile(),
     subscription_url: '',
+    saved_subscription_url: '',
     applicant_email: '',
     applicant_telegram: '',
     founded_on: '',
@@ -8049,6 +8054,7 @@ function createPortalApplicationForm(
     payment_crypto_other: application.payment_crypto_other || '',
     profile: normalizeAirportProfile(application.profile, application.plan_price_month, application.has_trial),
     subscription_url: application.subscription_url || '',
+    saved_subscription_url: application.subscription_url || '',
     applicant_email: application.applicant_email || '',
     applicant_telegram: application.applicant_telegram || '',
     founded_on: application.founded_on || '',

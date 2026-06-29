@@ -6349,35 +6349,7 @@ function AirportsPage({
       return;
     }
 
-    const body = {
-      slug: editing.slug.trim() || null,
-      name: editing.name.trim(),
-      website: websites[0],
-      websites,
-      status: editing.status,
-      is_listed: editing.is_listed,
-      plan_price_month: getAirportPlanPriceMonth(editing),
-      has_trial: getAirportHasTrial(editing),
-      streaming_support: editing.streaming_support,
-      payment_methods: editing.payment_methods,
-      payment_crypto_other: editing.payment_methods.includes('crypto_other')
-        ? editing.payment_crypto_other.trim() || null
-        : null,
-      has_annual_plan: editing.has_annual_plan,
-      has_telegram_group: editing.has_telegram_group,
-      telegram_allows_speaking: editing.telegram_allows_speaking,
-      has_lifetime_plan: editing.has_lifetime_plan,
-      subscription_url: editing.subscription_url.trim() || null,
-      applicant_email: editing.applicant_email.trim() || null,
-      applicant_telegram: editing.applicant_telegram.trim() || null,
-      founded_on: editing.founded_on || null,
-      airport_intro: editing.airport_intro.trim() || null,
-      test_account: editing.test_account.trim() || null,
-      test_password: editing.test_password || null,
-      manual_tags: manualTags,
-      profile: normalizeAirportProfile(editing.profile),
-      confirm_down: confirmDown || undefined,
-    };
+    const body = buildAirportMutationBody(editing, manualTags, websites, confirmDown);
 
     setSaving(true);
     setFormError('');
@@ -7748,10 +7720,10 @@ function AirportEditorPage({
           method: 'PATCH',
           body: JSON.stringify(body),
         });
-        setEditing({
-          ...editing,
-          saved_subscription_url: editing.subscription_url.trim(),
-        });
+        const refreshedAirport = (await apiFetch(`/api/v1/admin/airports/${editing.id}`)) as Airport;
+        const refreshedForm = toAirportForm(refreshedAirport);
+        setEditing(refreshedForm);
+        setManualTagInput(formatTagInput(refreshedForm.manual_tags));
         setMessage('机场资料已保存');
       }
     } catch (err) {
@@ -10633,7 +10605,7 @@ function buildAirportMutationBody(
   websites: string[],
   confirmDown: boolean,
 ) {
-  return {
+  const body = {
     slug: editing.slug.trim() || null,
     name: editing.name.trim(),
     website: websites[0],
@@ -10652,7 +10624,6 @@ function buildAirportMutationBody(
     telegram_allows_speaking: editing.telegram_allows_speaking,
     has_lifetime_plan: editing.has_lifetime_plan,
     profile: normalizeAirportProfile(editing.profile),
-    subscription_url: editing.subscription_url.trim() || null,
     applicant_email: editing.applicant_email.trim() || null,
     applicant_telegram: editing.applicant_telegram.trim() || null,
     founded_on: editing.founded_on || null,
@@ -10662,6 +10633,13 @@ function buildAirportMutationBody(
     manual_tags: manualTags,
     confirm_down: confirmDown || undefined,
   };
+  if (!editing.id || editing.subscription_url.trim() !== editing.saved_subscription_url.trim()) {
+    return {
+      ...body,
+      subscription_url: editing.subscription_url.trim() || null,
+    };
+  }
+  return body;
 }
 
 function normalizeAirportStreamingSupport(value: unknown): AirportStreamingSupport[] {

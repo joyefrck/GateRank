@@ -134,6 +134,8 @@ export interface Airport {
   has_lifetime_plan?: boolean | null;
   profile?: AirportProfile;
   subscription_url?: string | null;
+  subscription_url_updated_at?: string | null;
+  subscription_url_updated_source?: 'admin' | 'portal' | null;
   applicant_email?: string | null;
   applicant_account_email?: string | null;
   applicant_telegram?: string | null;
@@ -163,6 +165,8 @@ export interface AirportApplication {
   payment_crypto_other?: string | null;
   profile?: AirportProfile;
   subscription_url?: string | null;
+  subscription_url_updated_at?: string | null;
+  subscription_url_updated_source?: 'admin' | 'portal' | null;
   applicant_email: string;
   applicant_telegram: string;
   founded_on: string;

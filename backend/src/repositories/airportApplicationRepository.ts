@@ -12,6 +12,8 @@ import type {
 import { normalizeAirportProfile } from '../utils/airportProfile';
 import { formatDateOnly } from '../utils/time';
 
+type SubscriptionUrlUpdatedSource = 'admin' | 'portal';
+
 interface AirportApplicationRow extends RowDataPacket {
   id: number;
   name: string;
@@ -25,6 +27,8 @@ interface AirportApplicationRow extends RowDataPacket {
   payment_crypto_other: string | null;
   airport_profile_json: unknown;
   subscription_url: string | null;
+  subscription_url_updated_at?: string | null;
+  subscription_url_updated_source?: SubscriptionUrlUpdatedSource | null;
   applicant_email: string;
   applicant_telegram: string;
   founded_on: string;
@@ -113,6 +117,7 @@ export interface UpdateAirportApplicationOperationsInput {
   payment_crypto_other?: string | null;
   profile?: AirportProfile;
   subscription_url?: string | null;
+  subscription_url_updated_source?: SubscriptionUrlUpdatedSource | null;
   applicant_telegram: string;
   founded_on: string;
   airport_intro: string;
@@ -200,6 +205,11 @@ export class AirportApplicationRepository {
     await this.ensureColumn('payment_crypto_other', 'VARCHAR(128) NULL AFTER payment_methods_json');
     await this.ensureColumn('airport_profile_json', 'JSON NULL AFTER payment_crypto_other');
     await this.ensureColumn('subscription_url', 'VARCHAR(1024) NULL AFTER airport_profile_json');
+    await this.ensureColumn('subscription_url_updated_at', 'DATETIME NULL AFTER subscription_url');
+    await this.ensureColumn(
+      'subscription_url_updated_source',
+      "ENUM('admin', 'portal') NULL AFTER subscription_url_updated_at",
+    );
     await this.ensureColumn('applicant_email', 'VARCHAR(255) NOT NULL AFTER subscription_url');
     await this.ensureColumn('applicant_telegram', 'VARCHAR(128) NOT NULL AFTER applicant_email');
     await this.ensureColumn('founded_on', 'DATE NOT NULL AFTER applicant_telegram');
@@ -553,45 +563,74 @@ export class AirportApplicationRepository {
 
   async updateApplicantOperations(id: number, input: UpdateAirportApplicationOperationsInput): Promise<boolean> {
     const websites = normalizeWebsiteList(input.websites, input.website);
+    const sets = [
+      'name = ?',
+      'website = ?',
+      'websites_json = ?',
+      'plan_price_month = ?',
+      'has_trial = ?',
+      'streaming_support_json = ?',
+      'payment_methods_json = ?',
+      'payment_crypto_other = ?',
+      'airport_profile_json = ?',
+    ];
+    const values: Array<string | number | null> = [
+      input.name,
+      websites[0],
+      JSON.stringify(websites),
+      input.plan_price_month,
+      input.has_trial ? 1 : 0,
+      JSON.stringify(input.streaming_support || []),
+      JSON.stringify(input.payment_methods || []),
+      input.payment_crypto_other || null,
+      JSON.stringify(normalizeAirportProfile(input.profile)),
+    ];
+    if (input.subscription_url !== undefined) {
+      sets.push('subscription_url = ?');
+      values.push(input.subscription_url || null);
+      sets.push('subscription_url_updated_at = NOW()');
+      sets.push('subscription_url_updated_source = ?');
+      values.push(input.subscription_url_updated_source || null);
+    }
+    sets.push(
+      'applicant_telegram = ?',
+      'founded_on = ?',
+      'airport_intro = ?',
+      'test_account = ?',
+      'test_password = ?',
+    );
+    values.push(
+      input.applicant_telegram,
+      input.founded_on,
+      input.airport_intro,
+      input.test_account,
+      input.test_password,
+      id,
+    );
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE airport_applications
-          SET name = ?,
-              website = ?,
-              websites_json = ?,
-              plan_price_month = ?,
-              has_trial = ?,
-              streaming_support_json = ?,
-              payment_methods_json = ?,
-              payment_crypto_other = ?,
-              airport_profile_json = ?,
-              subscription_url = ?,
-              applicant_telegram = ?,
-              founded_on = ?,
-              airport_intro = ?,
-              test_account = ?,
-              test_password = ?
+          SET ${sets.join(', ')}
         WHERE id = ?`,
-      [
-        input.name,
-        websites[0],
-        JSON.stringify(websites),
-        input.plan_price_month,
-        input.has_trial ? 1 : 0,
-        JSON.stringify(input.streaming_support || []),
-        JSON.stringify(input.payment_methods || []),
-        input.payment_crypto_other || null,
-        JSON.stringify(normalizeAirportProfile(input.profile)),
-        input.subscription_url || null,
-        input.applicant_telegram,
-        input.founded_on,
-        input.airport_intro,
-        input.test_account,
-        input.test_password,
-        id,
-      ],
+      values,
     );
 
     return result.affectedRows > 0;
+  }
+
+  async updateSubscriptionUrlByApprovedAirportId(
+    approvedAirportId: number,
+    subscriptionUrl: string | null,
+    source: SubscriptionUrlUpdatedSource,
+  ): Promise<number> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `UPDATE airport_applications
+          SET subscription_url = ?,
+              subscription_url_updated_at = NOW(),
+              subscription_url_updated_source = ?
+        WHERE approved_airport_id = ?`,
+      [subscriptionUrl || null, source, approvedAirportId],
+    );
+    return result.affectedRows;
   }
 
   async updateApplicantEmail(id: number, applicantEmail: string): Promise<boolean> {
@@ -761,6 +800,8 @@ function toAirportApplicationEntity(row: AirportApplicationRow): AirportApplicat
     payment_crypto_other: row.payment_crypto_other,
     profile: normalizeAirportProfile(row.airport_profile_json),
     subscription_url: row.subscription_url,
+    subscription_url_updated_at: row.subscription_url_updated_at || null,
+    subscription_url_updated_source: row.subscription_url_updated_source || null,
     applicant_email: row.applicant_email,
     applicant_telegram: row.applicant_telegram,
     founded_on: formatDateOnly(row.founded_on),

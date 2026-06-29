@@ -4169,6 +4169,7 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
     assert.deepEqual(updatedAirports[0].payment_methods, ['wechat', 'crypto_other']);
     assert.equal(updatedAirports[0].payment_crypto_other, 'USDC');
     assert.equal(updatedAirports[0].subscription_url, 'https://subscribe-new.example.com');
+    assert.equal(updatedAirports[0].subscription_url_updated_source, 'portal');
     assert.equal(updatedAirports[0].applicant_telegram, '@cloudpro');
     assert.equal(updatedAirports[0].founded_on, '2024-12-01');
     assert.equal(updatedAirports[0].airport_intro, 'updated intro');
@@ -4205,6 +4206,143 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
     assert.equal(data.application.plan_price_month, 1888);
     assert.equal(data.application.has_trial, false);
     assert.deepEqual(data.application.websites, ['https://new.example.com', 'https://backup.example.com']);
+    assert.equal((data.application as any).subscription_url, 'https://subscribe-new.example.com');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /portal/application/operations keeps canonical subscription url when payload omits it', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const updatedApplications: Array<Record<string, unknown>> = [];
+  const updatedAirports: Array<Record<string, unknown>> = [];
+  const application: any = {
+    id: 7,
+    name: 'Cloud Airport',
+    website: 'https://example.com',
+    websites: ['https://example.com'],
+    approved_airport_id: 42,
+    review_status: 'reviewed',
+    payment_status: 'paid',
+    payment_amount: 1000,
+    paid_at: '2026-04-18 11:00:00',
+    applicant_email: 'user@example.com',
+    applicant_telegram: '@cloud',
+    founded_on: '2025-01-01',
+    airport_intro: 'intro',
+    plan_price_month: 1000,
+    has_trial: true,
+    subscription_url: 'https://old-application-sub.example.com',
+    test_account: 'tester',
+    test_password: 'secret',
+    created_at: '2026-04-18 10:00:00',
+  };
+  const approvedAirport: any = {
+    id: 42,
+    name: 'Cloud Airport',
+    website: 'https://example.com',
+    websites: ['https://example.com'],
+    status: 'normal',
+    is_listed: true,
+    plan_price_month: 1000,
+    has_trial: true,
+    subscription_url: 'https://canonical-sub.example.com',
+    applicant_telegram: '@cloud',
+    founded_on: '2025-01-01',
+    airport_intro: 'intro',
+    test_account: 'tester',
+    test_password: 'secret',
+    tags: [],
+    created_at: '2026-04-18 10:00:00',
+    profile: {},
+  };
+
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createPortalRoutes({
+      applicantAccountRepository: {
+        getById: async () => createMockApplicantAccount(),
+        updatePassword: async () => true,
+      },
+      airportApplicationRepository: {
+        getById: async () => application,
+        updateApplicantOperations: async (id, input) => {
+          updatedApplications.push({ id, ...input });
+          Object.assign(application, input);
+          return true;
+        },
+        markPaid: async () => true,
+      },
+      airportRepository: {
+        getById: async () => approvedAirport,
+        update: async (id, input) => {
+          updatedAirports.push({ id, ...input });
+          Object.assign(approvedAirport, input);
+          return true;
+        },
+      },
+      publicPageCache: { clear: () => undefined },
+      applicationPaymentOrderRepository: {
+        create: async () => 1,
+        getLatestByApplicationId: async () => null,
+        getByOutTradeNo: async () => null,
+        markPaid: async () => true,
+        expireOpenOrdersByApplicationId: async () => 0,
+      },
+      applicantBillingRepository: createMockBillingRepository(),
+      applicantPortalAuthService: {
+        login: async () => {
+          throw new Error('not used');
+        },
+      },
+      paymentGatewaySettingsService: {
+        getConfig: async () => ({ application_fee_amount: 1000 }),
+      },
+      paymentGatewayService: {
+        createOrder: async () => {
+          throw new Error('not used');
+        },
+        verifyNotificationPayload: async () => true,
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/portal/application/operations`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: 'Cloud Airport',
+        websites: ['https://new.example.com'],
+        plan_price_month: 1888,
+        has_trial: false,
+        streaming_support: ['netflix'],
+        payment_methods: ['wechat'],
+        profile: { clients: { clash: true } },
+        applicant_telegram: '@cloudpro',
+        founded_on: '2024-12-01',
+        airport_intro: 'updated intro',
+        test_account: 'tester-new',
+        test_password: 'secret-new',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(updatedApplications.length, 1);
+    assert.equal(Object.hasOwn(updatedApplications[0], 'subscription_url'), false);
+    assert.equal(updatedAirports.length, 1);
+    assert.equal(Object.hasOwn(updatedAirports[0], 'subscription_url'), false);
+    assert.equal(approvedAirport.subscription_url, 'https://canonical-sub.example.com');
+    const data = (await response.json()) as { application: { subscription_url: string | null } };
+    assert.equal(data.application.subscription_url, 'https://canonical-sub.example.com');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

@@ -33,6 +33,7 @@ const AIRPORT_PAYMENT_METHOD_VALUES: AirportPaymentMethod[] = [
 
 export type AirportListSortBy = 'score' | 'balance';
 export type AirportListSortOrder = 'asc' | 'desc';
+export type SubscriptionUrlUpdatedSource = 'admin' | 'portal';
 
 interface AirportRow extends RowDataPacket {
   id: number;
@@ -54,6 +55,8 @@ interface AirportRow extends RowDataPacket {
   has_lifetime_plan: number | null;
   airport_profile_json: unknown;
   subscription_url: string | null;
+  subscription_url_updated_at?: string | null;
+  subscription_url_updated_source?: SubscriptionUrlUpdatedSource | null;
   applicant_email: string | null;
   applicant_account_email: string | null;
   applicant_telegram: string | null;
@@ -87,6 +90,7 @@ export interface CreateAirportInput {
   has_lifetime_plan?: boolean | null;
   profile?: AirportProfile;
   subscription_url?: string | null;
+  subscription_url_updated_source?: SubscriptionUrlUpdatedSource | null;
   applicant_email?: string | null;
   applicant_telegram?: string | null;
   founded_on?: string | null;
@@ -115,6 +119,7 @@ export interface UpdateAirportInput {
   has_lifetime_plan?: boolean | null;
   profile?: AirportProfile;
   subscription_url?: string | null;
+  subscription_url_updated_source?: SubscriptionUrlUpdatedSource | null;
   applicant_email?: string | null;
   applicant_telegram?: string | null;
   founded_on?: string | null;
@@ -140,6 +145,11 @@ export class AirportRepository {
     await this.ensureColumn('telegram_allows_speaking', 'TINYINT(1) NULL DEFAULT NULL AFTER has_telegram_group');
     await this.ensureColumn('has_lifetime_plan', 'TINYINT(1) NULL DEFAULT NULL AFTER telegram_allows_speaking');
     await this.ensureColumn('airport_profile_json', 'JSON NULL AFTER has_lifetime_plan');
+    await this.ensureColumn('subscription_url_updated_at', 'DATETIME NULL AFTER subscription_url');
+    await this.ensureColumn(
+      'subscription_url_updated_source',
+      "ENUM('admin', 'portal') NULL AFTER subscription_url_updated_at",
+    );
     await this.ensureColumn('tags_json', 'JSON NULL AFTER subscription_url');
     await this.ensureColumn('manual_tags_json', 'JSON NULL AFTER tags_json');
     await this.ensureColumn('auto_tags_json', 'JSON NULL AFTER manual_tags_json');
@@ -855,6 +865,9 @@ export class AirportRepository {
     if (input.subscription_url !== undefined) {
       sets.push('subscription_url = ?');
       values.push(input.subscription_url || null);
+      sets.push('subscription_url_updated_at = NOW()');
+      sets.push('subscription_url_updated_source = ?');
+      values.push(input.subscription_url_updated_source || null);
     }
     if (input.applicant_email !== undefined) {
       sets.push('applicant_email = ?');
@@ -1084,6 +1097,8 @@ function toAirportEntity(row: AirportRow): Airport {
     has_lifetime_plan: nullableDbBoolean(row.has_lifetime_plan),
     profile: normalizeAirportProfile(row.airport_profile_json),
     subscription_url: row.subscription_url,
+    subscription_url_updated_at: row.subscription_url_updated_at || null,
+    subscription_url_updated_source: row.subscription_url_updated_source || null,
     applicant_email: row.applicant_email,
     applicant_account_email: row.applicant_account_email,
     applicant_telegram: row.applicant_telegram,
