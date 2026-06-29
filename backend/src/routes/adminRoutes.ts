@@ -138,6 +138,7 @@ interface AdminDeps {
         has_lifetime_plan?: boolean | null;
         profile?: AirportProfile;
         subscription_url?: string | null;
+        subscription_url_updated_source?: 'admin' | 'portal' | null;
         applicant_email?: string | null;
         applicant_telegram?: string | null;
         founded_on?: string | null;
@@ -178,6 +179,11 @@ interface AdminDeps {
     }): Promise<number>;
     markPaid?(id: number, paymentAmount: number, paidAt: string): Promise<boolean>;
     deleteUnpaid(id: number): Promise<boolean>;
+    updateSubscriptionUrlByApprovedAirportId?(
+      approvedAirportId: number,
+      subscriptionUrl: string | null,
+      source: 'admin' | 'portal',
+    ): Promise<number>;
   };
   applicationPaymentOrderRepository?: {
     getLatestByApplicationId(applicationId: number): Promise<{
@@ -1500,6 +1506,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           payload.subscription_url === undefined
             ? undefined
             : optionalString(payload.subscription_url) || null,
+        subscription_url_updated_source: undefined as 'admin' | 'portal' | null | undefined,
         applicant_email:
           payload.applicant_email === undefined
             ? undefined
@@ -1531,10 +1538,25 @@ export function createAdminRoutes(deps: AdminDeps): Router {
               : toStringArray(payload.tags)
             : toStringArray(payload.manual_tags),
       };
+      if (payload.subscription_url !== undefined) {
+        patch.subscription_url_updated_source = 'admin';
+      }
+      for (const key of Object.keys(patch) as Array<keyof typeof patch>) {
+        if (patch[key] === undefined) {
+          delete patch[key];
+        }
+      }
 
       const updated = await deps.airportRepository.update(airportId, patch);
       if (!updated) {
         throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found or no changes`);
+      }
+      if (payload.subscription_url !== undefined) {
+        await deps.airportApplicationRepository.updateSubscriptionUrlByApprovedAirportId?.(
+          airportId,
+          patch.subscription_url ?? null,
+          'admin',
+        );
       }
       if (patch.is_listed === true && deps.applicantBillingRepository?.clearAutoUnlistedByAirportId) {
         await deps.applicantBillingRepository.clearAutoUnlistedByAirportId(airportId);

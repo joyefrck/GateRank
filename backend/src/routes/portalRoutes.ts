@@ -270,7 +270,8 @@ interface ApplicantApplicationOperationsInput {
   payment_crypto_other: string | null;
   profile: AirportProfile;
   profile_from_payload: boolean;
-  subscription_url: string | null;
+  subscription_url?: string | null;
+  subscription_url_updated_source?: 'admin' | 'portal' | null;
   applicant_telegram: string;
   founded_on: string;
   airport_intro: string;
@@ -1425,7 +1426,7 @@ function parseApplicantApplicationOperationsPayload(
     hasTrial,
   );
   const paymentMethods = toAirportPaymentMethodArray(payload.payment_methods ?? []);
-  return {
+  const input: ApplicantApplicationOperationsInput = {
     name: mustString(payload.name, 'name'),
     website: websiteBundle.website,
     websites: websiteBundle.websites,
@@ -1436,13 +1437,17 @@ function parseApplicantApplicationOperationsPayload(
     payment_crypto_other: paymentMethods.includes('crypto_other') ? optionalString(payload.payment_crypto_other) || null : null,
     profile,
     profile_from_payload: profileFromPayload,
-    subscription_url: optionalString(payload.subscription_url) || null,
     applicant_telegram: mustString(payload.applicant_telegram, 'applicant_telegram'),
     founded_on: foundedOn,
     airport_intro: mustString(payload.airport_intro, 'airport_intro'),
     test_account: mustString(payload.test_account, 'test_account'),
     test_password: mustString(payload.test_password, 'test_password'),
   };
+  if (Object.hasOwn(payload, 'subscription_url')) {
+    input.subscription_url = optionalString(payload.subscription_url) || null;
+    input.subscription_url_updated_source = 'portal';
+  }
+  return input;
 }
 
 function normalizeApplicantOperationsProfile(
@@ -1490,7 +1495,6 @@ async function syncApprovedAirportOperations(
     streaming_support: input.streaming_support,
     payment_methods: input.payment_methods,
     payment_crypto_other: input.payment_crypto_other,
-    subscription_url: input.subscription_url,
     applicant_telegram: input.applicant_telegram,
     founded_on: input.founded_on,
     airport_intro: input.airport_intro,
@@ -1498,6 +1502,10 @@ async function syncApprovedAirportOperations(
     test_password: input.test_password,
     profile,
   };
+  if (input.subscription_url !== undefined) {
+    patch.subscription_url = input.subscription_url;
+    patch.subscription_url_updated_source = 'portal';
+  }
 
   const updated = await deps.airportRepository.update(approvedAirportId, patch);
   if (!updated) {

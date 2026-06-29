@@ -11,7 +11,7 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
       calls.push({ sql, params });
       if (sql.includes('FROM information_schema.COLUMNS')) {
         schemaChecks += 1;
-        return [schemaChecks <= 20 ? [] : [{ 1: 1 }]];
+        return [schemaChecks <= 22 ? [] : [{ 1: 1 }]];
       }
       return [[]];
     },
@@ -33,6 +33,12 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
   );
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN applicant_email VARCHAR(255) NULL AFTER subscription_url')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN subscription_url_updated_at DATETIME NULL AFTER subscription_url')),
+  );
+  assert.ok(
+    calls.some((call) => call.sql.includes("ALTER TABLE airports ADD COLUMN subscription_url_updated_source ENUM('admin', 'portal') NULL AFTER subscription_url_updated_at")),
   );
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN manual_tags_json JSON NULL AFTER tags_json')),
@@ -94,6 +100,33 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airports ADD UNIQUE KEY uk_airports_slug (slug)')),
   );
+});
+
+test('AirportRepository.update refreshes subscription url metadata only when url is written', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new AirportRepository({
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  } as never);
+
+  const subscriptionUpdated = await repository.update(7, {
+    subscription_url: 'https://new-sub.example.com',
+    subscription_url_updated_source: 'admin',
+  } as any);
+  const ordinaryUpdated = await repository.update(7, {
+    plan_price_month: 1888,
+  });
+
+  assert.equal(subscriptionUpdated, true);
+  assert.equal(ordinaryUpdated, true);
+  assert.ok(calls[0]?.sql.includes('subscription_url = ?'));
+  assert.ok(calls[0]?.sql.includes('subscription_url_updated_at = NOW()'));
+  assert.ok(calls[0]?.sql.includes('subscription_url_updated_source = ?'));
+  assert.deepEqual(calls[0]?.params, ['https://new-sub.example.com', 'admin', 7]);
+  assert.equal(calls[1]?.sql.includes('subscription_url_updated_at = NOW()'), false);
+  assert.deepEqual(calls[1]?.params, [1888, 7]);
 });
 
 test('AirportRepository.listByQuery maps paid application fee marker from paid nonzero applications', async () => {

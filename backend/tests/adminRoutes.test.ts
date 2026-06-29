@@ -237,6 +237,125 @@ test('GET /airports/:id/subscription-node-snapshots/latest returns latest reusab
   }
 });
 
+test('PATCH /airports/:id mirrors explicit subscription url changes to approved application', async () => {
+  const updatedAirports: Array<Record<string, unknown>> = [];
+  const mirroredApplications: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: {
+        ...stubAirportRepository(),
+        update: async (id, input) => {
+          updatedAirports.push({ id, ...input });
+          return true;
+        },
+      },
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        updateSubscriptionUrlByApprovedAirportId: async (airportId: number, subscriptionUrl: string | null, source: string) => {
+          mirroredApplications.push({ airportId, subscriptionUrl, source });
+          return 1;
+        },
+      } as any,
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/9`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({
+        subscription_url: 'https://new-sub.example.com',
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(updatedAirports.length, 1);
+    assert.equal(updatedAirports[0].subscription_url, 'https://new-sub.example.com');
+    assert.equal(updatedAirports[0].subscription_url_updated_source, 'admin');
+    assert.deepEqual(mirroredApplications, [{
+      airportId: 9,
+      subscriptionUrl: 'https://new-sub.example.com',
+      source: 'admin',
+    }]);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('PATCH /airports/:id leaves application subscription mirror untouched when url is omitted', async () => {
+  const updatedAirports: Array<Record<string, unknown>> = [];
+  let mirrorCalls = 0;
+  const app = express();
+  app.use(express.json());
+  app.use(
+    createAdminRoutes({
+      airportRepository: {
+        ...stubAirportRepository(),
+        update: async (id, input) => {
+          updatedAirports.push({ id, ...input });
+          return true;
+        },
+      },
+      airportApplicationRepository: {
+        ...stubAirportApplicationRepository(),
+        updateSubscriptionUrlByApprovedAirportId: async () => {
+          mirrorCalls += 1;
+          return 1;
+        },
+      } as any,
+      probeSampleRepository: stubProbeSampleRepository(),
+      performanceRunRepository: stubPerformanceRunRepository(),
+      metricsRepository: stubMetricsRepository(),
+      scoreRepository: {
+        getByAirportAndDate: async () => null,
+        getTrend: async () => [],
+      },
+      recomputeService: stubRecomputeService(),
+      aggregationService: stubAggregationService(),
+      manualJobService: stubManualJobService(),
+      auditRepository: { log: async () => undefined },
+      publicViewService: stubPublicViewService(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/9`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({
+        plan_price_month: 1999,
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(updatedAirports.length, 1);
+    assert.equal(Object.hasOwn(updatedAirports[0], 'subscription_url'), false);
+    assert.equal(mirrorCalls, 0);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('POST /airports/:id/subscription-node-snapshots/capture captures saved subscription nodes and audits safely', async () => {
   const audits: Array<{ action: string; payload: unknown }> = [];
   const captureCalls: Array<{ airportId: number; actor: string }> = [];
