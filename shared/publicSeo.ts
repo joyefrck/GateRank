@@ -147,6 +147,68 @@ export const PUBLIC_SEO_PATHS = {
 export const PUBLIC_SEO_STATIC_LASTMOD = '2026-05-17T00:00:00+08:00';
 export const PUBLIC_DEALS_LASTMOD = '2026-05-26T00:00:00+08:00';
 
+export interface PublicOgImage {
+  path: string;
+  alt: string;
+  width: 1200;
+  height: 630;
+  type: 'image/png';
+}
+
+export const PUBLIC_CORE_OG_IMAGES = {
+  home: {
+    path: '/og/home-2026-airport-ranking.png',
+    alt: '机场榜 GateRank 全球科学上网机场评测与排名平台分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  fullRanking: {
+    path: '/og/rankings-all.png',
+    alt: 'GateRank 全量机场排行榜分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  deals: {
+    path: '/og/deals-coupons.png',
+    alt: 'GateRank 机场优惠码大全分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  riskMonitor: {
+    path: '/og/risk-monitor.png',
+    alt: 'GateRank 跑路机场监测分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  methodology: {
+    path: '/og/methodology.png',
+    alt: 'GateRank 机场测评方法分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+} as const satisfies Record<string, PublicOgImage>;
+
+export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | undefined {
+  const pathname = normalizePublicSeoPath(canonicalPath);
+  if (pathname === PUBLIC_SEO_PATHS.home) return PUBLIC_CORE_OG_IMAGES.home;
+  if (pathname === PUBLIC_SEO_PATHS.fullRanking) return PUBLIC_CORE_OG_IMAGES.fullRanking;
+  if (pathname === PUBLIC_SEO_PATHS.deals) return PUBLIC_CORE_OG_IMAGES.deals;
+  if (pathname === PUBLIC_SEO_PATHS.riskMonitor) return PUBLIC_CORE_OG_IMAGES.riskMonitor;
+  if (pathname === PUBLIC_SEO_PATHS.methodology) return PUBLIC_CORE_OG_IMAGES.methodology;
+  return undefined;
+}
+
+function normalizePublicSeoPath(canonicalPath: string): string {
+  const pathname = canonicalPath.split('?')[0].split('#')[0] || '/';
+  if (pathname === '/') return pathname;
+  return pathname.replace(/\/+$/, '');
+}
+
 export function buildHomeSeo(input?: {
   dateLabel?: string;
   monitoredAirports?: number;

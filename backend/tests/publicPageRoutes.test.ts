@@ -86,6 +86,47 @@ test('core SEO descriptions include expanded search context', async () => {
   }
 });
 
+test('core public SEO pages expose dedicated 1200x630 OG images', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    airportAdCampaignRepository: {
+      listActiveDeals: async () => [createDealView(1), createDealView(2)],
+    },
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const checks = [
+      ['/', '/og/home-2026-airport-ranking.png', '机场榜 GateRank 全球科学上网机场评测与排名平台分享图'],
+      ['/rankings/all', '/og/rankings-all.png', 'GateRank 全量机场排行榜分享图'],
+      ['/deals', '/og/deals-coupons.png', 'GateRank 机场优惠码大全分享图'],
+      ['/risk-monitor', '/og/risk-monitor.png', 'GateRank 跑路机场监测分享图'],
+      ['/methodology', '/og/methodology.png', 'GateRank 机场测评方法分享图'],
+    ] as const;
+
+    for (const [pathname, imagePath, alt] of checks) {
+      const response = await fetch(`${baseUrl}${pathname}`, { headers: { host: `127.0.0.1:${port}` } });
+      assert.equal(response.status, 200, pathname);
+      const html = await response.text();
+      const imageUrl = `${baseUrl}${imagePath}`;
+      assert.match(html, new RegExp(`<meta property="og:image" content="${escapeRegExp(imageUrl)}" />`), pathname);
+      assert.match(html, new RegExp(`<meta property="og:image:secure_url" content="${escapeRegExp(imageUrl)}" />`), pathname);
+      assert.match(html, /<meta property="og:image:type" content="image\/png" \/>/);
+      assert.match(html, /<meta property="og:image:width" content="1200" \/>/);
+      assert.match(html, /<meta property="og:image:height" content="630" \/>/);
+      assert.match(html, new RegExp(`<meta property="og:image:alt" content="${escapeRegExp(alt)}" />`), pathname);
+      assert.match(html, new RegExp(`<meta name="twitter:image" content="${escapeRegExp(imageUrl)}" />`), pathname);
+      assert.match(html, new RegExp(`<meta name="twitter:image:alt" content="${escapeRegExp(alt)}" />`), pathname);
+    }
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /deals returns crawlable advertising deal HTML', async () => {
   const app = express();
   app.use(createPublicPageRoutes({
@@ -674,6 +715,10 @@ function extractMetaDescription(html: string): string {
   const matched = html.match(/<meta name="description" content="([^"]+)"/);
   assert.ok(matched, 'meta description missing');
   return matched[1];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function createDealView(id: number): AirportDealView {

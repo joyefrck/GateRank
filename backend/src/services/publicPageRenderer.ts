@@ -30,6 +30,7 @@ import {
   buildRiskMonitorSeo,
   formatAirportStatusLabel,
   formatMetric,
+  getPublicOgImageForPath,
   type PublicSeoText,
 } from '../../../shared/publicSeo';
 import type { AirportDealView } from '../../../shared/airportAds';
@@ -953,6 +954,22 @@ export function renderPublicHtmlError(
 
 function renderPublicDocument(options: RenderOptions): string {
   const canonicalUrl = `${options.siteUrl}${options.canonicalPath}`;
+  const ogImage = getPublicOgImageForPath(options.canonicalPath);
+  const ogImageUrl = ogImage ? `${options.siteUrl}${ogImage.path}` : null;
+  const ogImageMeta = ogImage && ogImageUrl
+    ? `
+    <meta property="og:image" content="${escapeAttribute(ogImageUrl)}" />
+    <meta property="og:image:secure_url" content="${escapeAttribute(ogImageUrl)}" />
+    <meta property="og:image:type" content="${escapeAttribute(ogImage.type)}" />
+    <meta property="og:image:width" content="${ogImage.width}" />
+    <meta property="og:image:height" content="${ogImage.height}" />
+    <meta property="og:image:alt" content="${escapeAttribute(ogImage.alt)}" />`
+    : '';
+  const twitterImageMeta = ogImage && ogImageUrl
+    ? `
+    <meta name="twitter:image" content="${escapeAttribute(ogImageUrl)}" />
+    <meta name="twitter:image:alt" content="${escapeAttribute(ogImage.alt)}" />`
+    : '';
   const frontendAssets = options.frontendAssets || FALLBACK_PUBLIC_FRONTEND_ASSETS;
   const initialDataScript = options.initialData
     ? `\n    <script id="__GATERANK_INITIAL_DATA__" type="application/json">${escapeJsonScript(options.initialData)}</script>`
@@ -972,9 +989,11 @@ function renderPublicDocument(options: RenderOptions): string {
     <meta property="og:title" content="${escapeAttribute(options.seo.title)}" />
     <meta property="og:description" content="${escapeAttribute(options.seo.description)}" />
     <meta property="og:url" content="${escapeAttribute(canonicalUrl)}" />
+    ${ogImageMeta}
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeAttribute(options.seo.title)}" />
     <meta name="twitter:description" content="${escapeAttribute(options.seo.description)}" />
+    ${twitterImageMeta}
     <link rel="stylesheet" href="${escapeAttribute(frontendAssets.stylesheet)}" />
     <style>${styles}</style>
     <script type="application/ld+json">${JSON.stringify(options.jsonLd)}</script>
