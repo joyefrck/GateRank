@@ -4,6 +4,7 @@ import type { NewsArticleListItem } from '../types/domain';
 import { renderNewsArticlePage, renderNewsIndexPage, renderNewsTopicPage } from '../services/newsPageRenderer';
 import { renderPublishTokenDocsPage, renderPublishTokenDocsRawMarkdown } from '../services/publishTokenDocsPageRenderer';
 import type { NewsPublicService } from '../services/newsPublicService';
+import type { MonthlyReportPublicService } from '../services/monthlyReportPublicService';
 import { buildServerPageViewRecord } from '../utils/marketing';
 import { setPublicCacheHeaders } from '../utils/publicCache';
 import { getDateInTimezone } from '../utils/time';
@@ -19,6 +20,7 @@ interface NewsPublicDeps {
       items: Array<{ report_url?: string | null }>;
     }>;
   };
+  monthlyReportPublicService?: MonthlyReportPublicService;
   marketingRepository?: {
     insertMany(records: ReturnType<typeof buildServerPageViewRecord>[]): Promise<void>;
   };
@@ -183,6 +185,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       ? await deps.newsPublicService.getSitemapTaxonomy()
       : { categories: [], topics: [] };
     const reportEntries = await getReportSitemapEntries(deps);
+    const monthlyReportEntries = await getMonthlyReportSitemapEntries(deps);
     const dataLastmod = reportEntries[0]?.lastmod || formatSitemapLastmodDate(getDateInTimezone());
     const newsLastmod = getNewsIndexLastmod(items);
     const activeCategories = taxonomy.categories.filter((item) => item.is_active !== false);
@@ -191,6 +194,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       '/',
       '/rankings/all',
       ...getIndexableFullRankingFilterPaths(),
+      '/monthly-reports',
       '/deals',
       '/methodology',
       '/apply',
@@ -201,12 +205,14 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       ...activeCategories.map((item) => `/news/category/${item.slug}`),
       ...activeTopics.map((item) => `/news/topic/${item.slug}`),
       ...reportEntries.map((entry) => entry.path),
+      ...monthlyReportEntries.map((entry) => entry.path),
       ...items.map((item) => `/news/${item.slug}`),
     ];
     const staticLastmodByPath = {
       '/': dataLastmod,
       '/rankings/all': dataLastmod,
       ...Object.fromEntries(getIndexableFullRankingFilterPaths().map((path) => [path, dataLastmod])),
+      '/monthly-reports': getMonthlyReportsIndexLastmod(monthlyReportEntries),
       '/deals': PUBLIC_DEALS_LASTMOD,
       '/risk-monitor': dataLastmod,
       '/methodology': PUBLIC_SEO_STATIC_LASTMOD,
@@ -217,6 +223,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       ...Object.fromEntries(activeCategories.map((item) => [`/news/category/${item.slug}`, formatTaxonomyLastmod(item.updated_at || newsLastmod)])),
       ...Object.fromEntries(activeTopics.map((item) => [`/news/topic/${item.slug}`, formatTaxonomyLastmod(item.updated_at || newsLastmod)])),
       ...Object.fromEntries(reportEntries.map((entry) => [entry.path, entry.lastmod])),
+      ...Object.fromEntries(monthlyReportEntries.map((entry) => [entry.path, entry.lastmod])),
     };
     const xml = buildSitemapXml(siteUrl, urls, items, staticLastmodByPath);
     setPublicCacheHeaders(res);
@@ -241,6 +248,28 @@ async function getReportSitemapEntries(deps: NewsPublicDeps): Promise<Array<{ pa
     console.error('[sitemap] failed to load report urls', { error });
     return [];
   }
+}
+
+async function getMonthlyReportSitemapEntries(deps: NewsPublicDeps): Promise<Array<{ path: string; lastmod: string }>> {
+  if (!deps.monthlyReportPublicService) {
+    return [];
+  }
+  try {
+    const items = await deps.monthlyReportPublicService.getSitemapItems();
+    return items
+      .filter((item) => item.status === 'published' && Boolean(item.published_at))
+      .map((item) => ({
+        path: `/monthly-reports/${item.slug}`,
+        lastmod: formatSitemapLastmodDateTime(item.updated_at || item.published_at || ''),
+      }));
+  } catch (error) {
+    console.error('[sitemap] failed to load monthly report urls', { error });
+    return [];
+  }
+}
+
+function getMonthlyReportsIndexLastmod(entries: Array<{ lastmod: string }>): string {
+  return entries.map((item) => item.lastmod).sort().at(-1) || PUBLIC_SEO_STATIC_LASTMOD;
 }
 
 function getNewsIndexLastmod(items: NewsArticleListItem[]): string {

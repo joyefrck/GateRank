@@ -22,10 +22,12 @@ import {
   X,
   Eye,
   FileDown,
+  FileText,
   ListChecks,
 } from 'lucide-react';
 import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
+import { MonthlyReportEditorPage, MonthlyReportListPage } from './monthlyReports/MonthlyReportPages';
 import { buildPublishTokenDocsHref } from '../site/publicSite';
 import { manualTotalScoreInputValue } from './scoreInput';
 import {
@@ -1126,6 +1128,12 @@ const ADMIN_NAV_ITEMS = [
     isActive: (path: string) => path.startsWith('/admin/news'),
   },
   {
+    path: '/admin/monthly-reports',
+    label: '月度报告',
+    icon: FileText,
+    isActive: (path: string) => path.startsWith('/admin/monthly-reports'),
+  },
+  {
     path: '/admin/scheduler',
     label: '任务调度',
     icon: Activity,
@@ -1613,6 +1621,12 @@ export default function AdminApp() {
           )}
           {path === '/admin/applications' && <ApplicationsPage onOpenAirports={() => navigate('/admin/airports')} />}
           {path === '/admin/news' && <NewsListPage onCreate={() => navigate('/admin/news/new')} onEdit={(id) => navigate(`/admin/news/${id}`)} />}
+          {(path === '/admin/monthly-reports' || path === '/admin/monthly-reports/new') && (
+            <MonthlyReportListPage
+              onCreate={(id) => navigate(`/admin/monthly-reports/${id}`)}
+              onEdit={(id) => navigate(`/admin/monthly-reports/${id}`)}
+            />
+          )}
           {path === '/admin/marketing' && <MarketingPage />}
           {path === '/admin/marketing-settings' && <MarketingSettingsPage />}
           {(path === '/admin/news/new' || path.match(/^\/admin\/news\/\d+$/)) && (
@@ -1620,6 +1634,13 @@ export default function AdminApp() {
               articleId={path === '/admin/news/new' ? undefined : Number(path.split('/')[3])}
               onBack={() => navigate('/admin/news')}
               onNavigateToArticle={(id) => navigate(`/admin/news/${id}`)}
+            />
+          )}
+          {path.match(/^\/admin\/monthly-reports\/\d+$/) && (
+            <MonthlyReportEditorPage
+              reportId={Number(path.split('/')[3])}
+              onBack={() => navigate('/admin/monthly-reports')}
+              onNavigateToReport={(id) => navigate(`/admin/monthly-reports/${id}`)}
             />
           )}
           {path === '/admin/scheduler' && <SchedulerPage />}

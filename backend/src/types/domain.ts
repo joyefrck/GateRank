@@ -104,6 +104,7 @@ export type PerformanceRunStatus = 'success' | 'partial' | 'skipped' | 'failed';
 export type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
 export type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 export type NewsStatus = 'draft' | 'published' | 'archived';
+export type MonthlyReportStatus = 'draft' | 'published' | 'archived';
 export type SchedulerTaskKey =
   | 'stability'
   | 'performance'
@@ -694,6 +695,48 @@ export interface NewsArticleListItem {
   updated_at: string;
   category: NewsCategorySummary | null;
   topics: NewsTopicSummary[];
+}
+
+export interface MonthlyReport {
+  id: number;
+  year: number;
+  month: number;
+  slug: string;
+  title: string;
+  h1: string;
+  excerpt: string;
+  content_markdown: string;
+  content_html: string;
+  seo_title: string;
+  seo_description: string;
+  seo_keywords: string;
+  cover_image_url: string;
+  og_image_url: string;
+  og_image_alt: string;
+  status: MonthlyReportStatus;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MonthlyReportListItem {
+  id: number;
+  year: number;
+  month: number;
+  slug: string;
+  title: string;
+  h1: string;
+  excerpt: string;
+  seo_title: string;
+  seo_description: string;
+  seo_keywords: string;
+  cover_image_url: string;
+  og_image_url: string;
+  og_image_alt: string;
+  status: MonthlyReportStatus;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface NewsCategorySummary {

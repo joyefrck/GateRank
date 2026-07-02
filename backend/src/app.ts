@@ -18,6 +18,7 @@ import { ApplicationPaymentOrderRepository } from './repositories/applicationPay
 import { ApplicantBillingRepository } from './repositories/applicantBillingRepository';
 import { AuditRepository } from './repositories/auditRepository';
 import { NewsRepository } from './repositories/newsRepository';
+import { MonthlyReportRepository } from './repositories/monthlyReportRepository';
 import { MetricsRepository } from './repositories/metricsRepository';
 import { PerformanceNodePreferenceRepository } from './repositories/performanceNodePreferenceRepository';
 import { PerformanceRunRepository } from './repositories/performanceRunRepository';
@@ -34,6 +35,7 @@ import { SystemSettingRepository } from './repositories/systemSettingRepository'
 import { createAdminAuthRoutes } from './routes/adminAuthRoutes';
 import { createAdminRoutes } from './routes/adminRoutes';
 import { createNewsAdminRoutes } from './routes/newsAdminRoutes';
+import { createMonthlyReportAdminRoutes } from './routes/monthlyReportAdminRoutes';
 import { createPortalRoutes } from './routes/portalRoutes';
 import { createOutboundRoutes } from './routes/outboundRoutes';
 import { createPublishRoutes } from './routes/publishRoutes';
@@ -58,6 +60,8 @@ import { PaymentGatewaySettingsService } from './services/paymentGatewaySettings
 import { PaymentGatewayService } from './services/paymentGatewayService';
 import { PexelsCoverService } from './services/pexelsCoverService';
 import { NewsPublicService } from './services/newsPublicService';
+import { MonthlyReportPublicService } from './services/monthlyReportPublicService';
+import { MonthlyReportGenerationService } from './services/monthlyReportGenerationService';
 import { PublicViewService } from './services/publicViewService';
 import { RecomputeService } from './services/recomputeService';
 import { RiskCheckService } from './services/riskCheckService';
@@ -120,6 +124,8 @@ export async function createApp() {
   await marketingEventRepository.ensureSchema();
   const newsRepository = new NewsRepository(pool);
   await newsRepository.ensureSchema();
+  const monthlyReportRepository = new MonthlyReportRepository(pool);
+  await monthlyReportRepository.ensureSchema();
   const scoreRepository = new ScoreRepository(pool);
   const rankingRepository = new RankingRepository(pool);
   const statsRepository = new StatsRepository(pool);
@@ -194,6 +200,14 @@ export async function createApp() {
     });
   const newsContentService = new NewsContentService();
   const newsCoverImageService = new NewsCoverImageService();
+  const monthlyReportGenerationService = new MonthlyReportGenerationService({
+    airportRepository,
+    metricsRepository,
+    scoreRepository,
+    rankingRepository,
+    monthlyReportRepository,
+    newsContentService,
+  });
   const newsMutationService = new NewsMutationService({
     newsRepository,
     newsContentService,
@@ -224,6 +238,7 @@ export async function createApp() {
   });
   const pexelsCoverService = new PexelsCoverService(mediaLibrarySettingsService, newsCoverImageService);
   const newsPublicService = new NewsPublicService(newsRepository, newsContentService);
+  const monthlyReportPublicService = new MonthlyReportPublicService(monthlyReportRepository, airportRepository);
   const applicationNotificationService = new TelegramNotificationService({
     systemSettingRepository,
   });
@@ -316,6 +331,7 @@ export async function createApp() {
     createNewsPublicRoutes({
       newsPublicService,
       publicViewService,
+      monthlyReportPublicService,
       marketingRepository: marketingEventRepository,
     }),
   );
@@ -371,6 +387,18 @@ export async function createApp() {
   );
 
   app.use(
+    '/api/v1/admin',
+    adminAuth,
+    createMonthlyReportAdminRoutes({
+      auditRepository,
+      monthlyReportRepository,
+      monthlyReportGenerationService,
+      newsContentService,
+      newsCoverImageService,
+    }),
+  );
+
+  app.use(
     '/api/v1',
     createPublishRoutes({
       accessTokenService,
@@ -389,6 +417,7 @@ export async function createApp() {
     createPublicPageRoutes({
       publicViewService,
       airportAdCampaignRepository,
+      monthlyReportPublicService,
       pageCache: publicPageCache,
     }),
   );

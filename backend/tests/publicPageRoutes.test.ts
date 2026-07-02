@@ -177,6 +177,140 @@ test('GET /deals returns crawlable advertising deal HTML', async () => {
   }
 });
 
+test('GET /monthly-reports returns crawlable monthly report index HTML', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    monthlyReportPublicService: {
+      getListView: async () => ({
+        page: 1,
+        page_size: 12,
+        total: 1,
+        total_pages: 1,
+        items: [createMonthlyReportListItem()],
+      }),
+      getBySlug: async () => null,
+      getSitemapItems: async () => [],
+    } as never,
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/monthly-reports`, { headers: { host: `127.0.0.1:${port}` } });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<h1>2026机场推荐月度报告<span>按月份追踪机场排行榜与测评结论<\/span><\/h1>/);
+    assert.match(html, /2026机场推荐月度报告 \| 机场排行榜、机场测评、稳定机场推荐与便宜机场推荐/);
+    assert.match(html, /<meta name="keywords" content="机场推荐,2026机场推荐,机场排行榜,机场测评,稳定机场推荐,便宜机场推荐,/);
+    for (const keyword of ['机场推荐', '2026机场推荐', '机场排行榜', '机场测评', '稳定机场推荐', '便宜机场推荐']) {
+      assert.match(html, new RegExp(keyword));
+    }
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/monthly-reports"/);
+    assert.match(html, /<h2>按年份归档<\/h2>/);
+    assert.match(html, /<div class="monthly-report-year">2026<\/div>/);
+    assert.match(html, /<div class="monthly-report-month">06月<\/div>/);
+    assert.match(html, /2026机场推荐、机场排行榜与机场测评索引/);
+    assert.match(html, /月度报告如何服务机场推荐搜索/);
+    assert.match(html, /2026年6月机场 VPN 月度报告/);
+    assert.match(html, /\/monthly-reports\/2026-06-airport-vpn-ranking-report/);
+    assert.match(html, /"@type":"CollectionPage"/);
+    assert.match(html, /"@type":"ItemList"/);
+    assert.match(html, /"kind":"monthly_reports"/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /monthly-reports/:slug returns configured SEO and OG image', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    monthlyReportPublicService: {
+      getListView: async () => ({ page: 1, page_size: 12, total: 0, total_pages: 1, items: [] }),
+      getBySlug: async (slug: string) => slug === '2026-06-airport-vpn-ranking-report'
+        ? createMonthlyReport()
+        : null,
+      getSitemapItems: async () => [],
+    } as never,
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/monthly-reports/2026-06-airport-vpn-ranking-report`, {
+      headers: { host: `127.0.0.1:${port}` },
+    });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<title>自定义 SEO 月报标题<\/title>/);
+    assert.match(html, /<meta name="description" content="自定义 SEO 月报描述" \/>/);
+    assert.match(html, /<meta name="keywords" content="机场VPN月报,机场推荐" \/>/);
+    assert.match(html, /<meta property="og:image" content="http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/monthly-og\.webp" \/>/);
+    assert.match(html, /<meta property="og:image:type" content="image\/webp" \/>/);
+    assert.match(html, /<h1>2026年6月机场 VPN 月度报告<\/h1>/);
+    assert.match(html, /<strong>重点机场<\/strong>/);
+    assert.match(html, /"@type":"Article"/);
+    assert.match(html, /"kind":"monthly_report"/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /monthly-reports/:slug renders airport links that open in a new tab', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    monthlyReportPublicService: {
+      getListView: async () => ({ page: 1, page_size: 12, total: 0, total_pages: 1, items: [] }),
+      getBySlug: async () => createMonthlyReport({
+        content_html: '<p><a class="news-link" href="/airports/xiaomi" target="_blank" rel="noreferrer noopener">小米机场</a></p>',
+      }),
+      getSitemapItems: async () => [],
+    } as never,
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/monthly-reports/2026-06-airport-vpn-ranking-report`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(
+      html,
+      /<a class="news-link" href="\/airports\/xiaomi" target="_blank" rel="noreferrer noopener">小米机场<\/a>/,
+    );
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /monthly-reports/:slug returns 404 for unpublished reports', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    monthlyReportPublicService: {
+      getListView: async () => ({ page: 1, page_size: 12, total: 0, total_pages: 1, items: [] }),
+      getBySlug: async () => null,
+      getSitemapItems: async () => [],
+    } as never,
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/monthly-reports/draft-report`);
+    assert.equal(response.status, 404);
+    assert.match(await response.text(), /月度报告不存在或尚未发布/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /deals and GET /api/v1/pages/deals reuse a shared active deals cache', async () => {
   let dealsCalls = 0;
   const pageCache = createTimedPromiseCache(60_000);
@@ -746,6 +880,43 @@ function createDealView(id: number): AirportDealView {
     low_price_plan: true,
     discount_percent: 20,
     created_at: '2026-05-24T10:00:00+08:00',
+  };
+}
+
+function createMonthlyReportListItem() {
+  return {
+    id: 1,
+    year: 2026,
+    month: 6,
+    slug: '2026-06-airport-vpn-ranking-report',
+    title: '2026年6月机场 VPN 月度报告',
+    h1: '2026年6月机场 VPN 月度报告',
+    excerpt: '6 月机场推荐、机场排名与跑路风险观察。',
+    seo_title: '',
+    seo_description: '',
+    seo_keywords: '',
+    cover_image_url: '',
+    og_image_url: '',
+    og_image_alt: '',
+    status: 'published' as const,
+    published_at: '2026-07-01 10:00:00',
+    created_at: '2026-07-01 09:00:00',
+    updated_at: '2026-07-01 10:30:00',
+  };
+}
+
+function createMonthlyReport(input: Partial<ReturnType<typeof createMonthlyReportListItem> & { content_markdown: string; content_html: string }> = {}) {
+  return {
+    ...createMonthlyReportListItem(),
+    seo_title: '自定义 SEO 月报标题',
+    seo_description: '自定义 SEO 月报描述',
+    seo_keywords: '机场VPN月报,机场推荐',
+    cover_image_url: '/uploads/news/monthly-cover.webp',
+    og_image_url: '/uploads/news/monthly-og.webp',
+    og_image_alt: '月报 OG 图',
+    content_markdown: '## 本月摘要\n\n**重点机场** 表现稳定。',
+    content_html: '<h2 id="summary" class="news-heading news-heading-2">本月摘要</h2><p class="news-paragraph"><strong>重点机场</strong> 表现稳定。</p>',
+    ...input,
   };
 }
 

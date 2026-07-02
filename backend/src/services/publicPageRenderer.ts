@@ -2,6 +2,8 @@ import type {
   FullRankingItem,
   FullRankingView,
   HomePageView,
+  MonthlyReport,
+  MonthlyReportListItem,
   ReportView,
   RiskMonitorItem,
   RiskMonitorView,
@@ -13,6 +15,9 @@ import {
   DEALS_FAQ_ITEMS,
   METHODOLOGY_SEO,
   PUBLIC_SEO_PATHS,
+  buildMonthlyReportPath,
+  buildMonthlyReportSeo,
+  buildMonthlyReportsSeo,
   buildDealsStructuredData,
   buildFullRankingHeading,
   buildFullRankingSeo,
@@ -63,17 +68,26 @@ interface RenderOptions {
   siteUrl: string;
   canonicalPath: string;
   seo: PublicSeoText;
-  active: 'home' | 'rankings' | 'deals' | 'risk' | 'methodology' | 'apply' | 'forAi';
+  active: 'home' | 'rankings' | 'monthlyReports' | 'deals' | 'risk' | 'methodology' | 'apply' | 'forAi';
   jsonLd: unknown;
   body: string;
   status?: number;
   robots?: string;
   initialData?: PublicInitialData;
   frontendAssets?: PublicFrontendAssets;
+  ogImage?: DynamicOgImage | null;
+}
+
+interface DynamicOgImage {
+  url: string;
+  alt: string;
+  type?: string;
+  width?: number;
+  height?: number;
 }
 
 interface PublicInitialData {
-  kind: 'home' | 'full_ranking' | 'risk_monitor' | 'deals';
+  kind: 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'monthly_reports' | 'monthly_report';
   params: {
     date?: string | null;
     page?: number | null;
@@ -93,6 +107,7 @@ const reportAnchorSections = [
   { id: 'report-plan-telegram', label: '套餐电报' },
   { id: 'report-conclusion', label: '结论建议' },
 ];
+const PUBLIC_CORE_MONTHLY_REPORT_OG_PATH = '/og/monthly-reports.png';
 
 export function renderHomePublicPage(
   siteUrl: string,
@@ -315,6 +330,173 @@ export function renderDealsPublicPage(
         </section>
         ${renderDealsGuideSections()}
         ${renderDealsFaqSection()}
+      </main>
+    `,
+  });
+}
+
+export function renderMonthlyReportsPublicPage(
+  siteUrl: string,
+  view: {
+    page: number;
+    page_size: number;
+    total: number;
+    total_pages: number;
+    items: MonthlyReportListItem[];
+  },
+  frontendAssets?: PublicFrontendAssets,
+): string {
+  const seo = buildMonthlyReportsSeo({ total: view.total });
+  const canonicalPath = PUBLIC_SEO_PATHS.monthlyReports;
+  const groupedReports = groupMonthlyReportsByYear(view.items);
+  const latestReport = groupedReports[0]?.items[0] || null;
+  const latestMonthLabel = latestReport ? `${latestReport.year}.${String(latestReport.month).padStart(2, '0')}` : '-';
+  return renderPublicDocument({
+    siteUrl,
+    canonicalPath,
+    seo,
+    active: 'monthlyReports',
+    jsonLd: [
+      buildCollectionPageJsonLd(siteUrl, canonicalPath, seo),
+      buildBreadcrumbJsonLd(siteUrl, [
+        ['今日推荐', '/'],
+        ['月度报告', canonicalPath],
+      ]),
+      buildMonthlyReportItemList(siteUrl, view.items),
+    ],
+    initialData: {
+      kind: 'monthly_reports',
+      params: {
+        page: view.page,
+      },
+      payload: view,
+    },
+    frontendAssets,
+    body: `
+      <main class="page-main">
+        <section class="hero hero-dark monthly-report-hero">
+          <div class="eyebrow">月度报告</div>
+          <h1>2026机场推荐月度报告<span>按月份追踪机场排行榜与测评结论</span></h1>
+          <p>${escapeHtml(seo.description)}</p>
+          <div class="metric-grid">
+            ${renderMetric('已发布月报', formatNumber(view.total))}
+            ${renderMetric('最新月份', latestMonthLabel)}
+            ${renderMetric('当前分页', `${view.page}/${view.total_pages}`)}
+            ${renderMetric('核心主题', '机场推荐')}
+          </div>
+        </section>
+        <section class="monthly-report-archive">
+          <div class="monthly-report-archive-head">
+            <div>
+              <div class="eyebrow monthly-report-light-eyebrow">Reports Archive</div>
+              <h2>按年份归档</h2>
+              <p class="muted">按年份分组、按月份降序排列。每行是一份独立月报，可快速查看当月机场推荐、机场排行榜变化、稳定性与价格观察。</p>
+            </div>
+            <p class="monthly-report-count">共 <strong>${escapeHtml(formatNumber(view.total))}</strong> 份月报</p>
+          </div>
+          ${groupedReports.length > 0 ? groupedReports.map(renderMonthlyReportYearGroup).join('') : '<p class="muted">当前暂无已发布月度报告。</p>'}
+        </section>
+        <section class="monthly-report-seo-section">
+          <h2>2026机场推荐、机场排行榜与机场测评索引</h2>
+          <p class="muted">这个页面是 GateRank 月度报告总入口，用来把每月机场推荐结论、机场排行榜变化、机场测评样本、稳定机场推荐、便宜机场推荐、测速表现和跑路风险集中沉淀为可追踪的长期内容。</p>
+          <div class="filter-chip-row">
+            ${['机场推荐', '2026机场推荐', '机场排行榜', '机场测评', '稳定机场推荐', '便宜机场推荐'].map((item) => `<span class="filter-chip">${escapeHtml(item)}</span>`).join('')}
+          </div>
+        </section>
+        <section class="monthly-report-seo-section">
+          <h2>月度报告如何服务机场推荐搜索</h2>
+          <p class="muted">每篇月报会把当月机场排行榜、全量榜单、测速稳定性、价格变化、支付方式、客户端兼容性和风险事件放在同一条时间线上，帮助需要机场推荐、稳定机场推荐或便宜机场推荐的用户先看趋势，再进入单个机场测评报告。</p>
+        </section>
+      </main>
+    `,
+  });
+}
+
+export function renderMonthlyReportDetailPage(
+  siteUrl: string,
+  report: MonthlyReport,
+  preview = false,
+  frontendAssets?: PublicFrontendAssets,
+): string {
+  const seo = buildMonthlyReportSeo(report);
+  const canonicalPath = buildMonthlyReportPath(report.slug);
+  const ogImageUrl = absoluteImageUrl(siteUrl, report.og_image_url || report.cover_image_url);
+  const monthLabel = `${report.year}年${report.month}月`;
+  return renderPublicDocument({
+    siteUrl,
+    canonicalPath,
+    seo,
+    active: 'monthlyReports',
+    robots: preview ? 'noindex,follow' : undefined,
+    ogImage: ogImageUrl
+      ? {
+        url: ogImageUrl,
+        alt: report.og_image_alt || report.title,
+        type: inferImageMimeType(ogImageUrl),
+      }
+      : null,
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: report.title,
+        name: seo.title,
+        description: seo.description,
+        url: `${siteUrl}${canonicalPath}`,
+        datePublished: report.published_at || report.created_at,
+        dateModified: report.updated_at,
+        image: ogImageUrl || `${siteUrl}${PUBLIC_CORE_MONTHLY_REPORT_OG_PATH}`,
+        about: [
+          '机场 VPN 月度报告',
+          '机场推荐',
+          '机场排名',
+          '科学上网机场',
+          '跑路风险',
+        ],
+      },
+      buildBreadcrumbJsonLd(siteUrl, [
+        ['今日推荐', '/'],
+        ['月度报告', PUBLIC_SEO_PATHS.monthlyReports],
+        [report.title, canonicalPath],
+      ]),
+    ],
+    initialData: {
+      kind: 'monthly_report',
+      params: {},
+      payload: report,
+    },
+    frontendAssets,
+    body: `
+      <main class="page-main monthly-report-page">
+        ${preview ? '<div class="preview-banner">Preview Mode · 该预览页不进入索引，不写入 sitemap</div>' : ''}
+        <section class="hero">
+          <div class="eyebrow">Monthly Report · ${escapeHtml(String(report.year))}-${escapeHtml(String(report.month).padStart(2, '0'))}</div>
+          <h1>${escapeHtml(report.h1 || `${monthLabel}机场 VPN 月度报告`)}</h1>
+          <p>${escapeHtml(seo.description)}</p>
+          <div class="metric-grid">
+            ${renderMetric('报告月份', `${report.year}-${String(report.month).padStart(2, '0')}`)}
+            ${renderMetric('发布状态', preview ? report.status : '已发布')}
+            ${renderMetric('更新时间', formatDateOnly(report.updated_at))}
+            ${renderMetric('关键词', '机场推荐 / 机场排名 / 跑路风险')}
+          </div>
+        </section>
+        ${report.cover_image_url ? `
+          <section class="monthly-report-cover">
+            <img src="${escapeAttribute(report.cover_image_url)}" alt="${escapeAttribute(report.title)}" loading="lazy" />
+          </section>
+        ` : ''}
+        <article class="content-card monthly-report-content">
+          ${report.content_html}
+        </article>
+        <section class="content-card">
+          <h2>相关入口</h2>
+          <div class="card-grid">
+            ${renderLinkedInfoCard('全量榜单', '/rankings/all')}
+            ${renderLinkedInfoCard('跑路监测', '/risk-monitor')}
+            ${renderLinkedInfoCard('测评方法', '/methodology')}
+            ${renderLinkedInfoCard('月度报告列表', '/monthly-reports')}
+          </div>
+        </section>
       </main>
     `,
   });
@@ -666,6 +848,26 @@ function normalizeExternalHref(value: string): string {
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
+function absoluteImageUrl(siteUrl: string, value: string): string | null {
+  const image = value.trim();
+  if (!image) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(image)) {
+    return image;
+  }
+  return `${siteUrl}${image.startsWith('/') ? image : `/${image}`}`;
+}
+
+function inferImageMimeType(value: string): string {
+  const pathname = value.split('?')[0].toLowerCase();
+  if (pathname.endsWith('.webp')) return 'image/webp';
+  if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) return 'image/jpeg';
+  if (pathname.endsWith('.gif')) return 'image/gif';
+  if (pathname.endsWith('.avif')) return 'image/avif';
+  return 'image/png';
+}
+
 function formatPublicScoreText(view: ReportView): string {
   return view.summary_card.score_hidden || view.summary_card.score === null
     ? '暂不公开'
@@ -954,20 +1156,35 @@ export function renderPublicHtmlError(
 
 function renderPublicDocument(options: RenderOptions): string {
   const canonicalUrl = `${options.siteUrl}${options.canonicalPath}`;
-  const ogImage = getPublicOgImageForPath(options.canonicalPath);
-  const ogImageUrl = ogImage ? `${options.siteUrl}${ogImage.path}` : null;
-  const ogImageMeta = ogImage && ogImageUrl
+  const staticOgImage = getPublicOgImageForPath(options.canonicalPath);
+  const dynamicOgImage = options.ogImage?.url
+    ? {
+      url: options.ogImage.url,
+      alt: options.ogImage.alt,
+      type: options.ogImage.type || inferImageMimeType(options.ogImage.url),
+      width: options.ogImage.width,
+      height: options.ogImage.height,
+    }
+    : null;
+  const ogImage = dynamicOgImage || (staticOgImage ? {
+    url: `${options.siteUrl}${staticOgImage.path}`,
+    alt: staticOgImage.alt,
+    type: staticOgImage.type,
+    width: staticOgImage.width,
+    height: staticOgImage.height,
+  } : null);
+  const ogImageMeta = ogImage
     ? `
-    <meta property="og:image" content="${escapeAttribute(ogImageUrl)}" />
-    <meta property="og:image:secure_url" content="${escapeAttribute(ogImageUrl)}" />
+    <meta property="og:image" content="${escapeAttribute(ogImage.url)}" />
+    <meta property="og:image:secure_url" content="${escapeAttribute(ogImage.url)}" />
     <meta property="og:image:type" content="${escapeAttribute(ogImage.type)}" />
-    <meta property="og:image:width" content="${ogImage.width}" />
-    <meta property="og:image:height" content="${ogImage.height}" />
+    ${ogImage.width ? `<meta property="og:image:width" content="${ogImage.width}" />` : ''}
+    ${ogImage.height ? `<meta property="og:image:height" content="${ogImage.height}" />` : ''}
     <meta property="og:image:alt" content="${escapeAttribute(ogImage.alt)}" />`
     : '';
-  const twitterImageMeta = ogImage && ogImageUrl
+  const twitterImageMeta = ogImage
     ? `
-    <meta name="twitter:image" content="${escapeAttribute(ogImageUrl)}" />
+    <meta name="twitter:image" content="${escapeAttribute(ogImage.url)}" />
     <meta name="twitter:image:alt" content="${escapeAttribute(ogImage.alt)}" />`
     : '';
   const frontendAssets = options.frontendAssets || FALLBACK_PUBLIC_FRONTEND_ASSETS;
@@ -1019,6 +1236,7 @@ function renderTopbar(active: RenderOptions['active']): string {
       <nav>
         <a class="${active === 'home' ? 'active' : ''}" href="/">今日推荐</a>
         <a class="${active === 'rankings' ? 'active' : ''}" href="/rankings/all">全量榜单</a>
+        <a class="${active === 'monthlyReports' ? 'active' : ''}" href="/monthly-reports">月度报告</a>
         <a class="${active === 'deals' ? 'active' : ''}" href="/deals">活动优惠</a>
         <a class="${active === 'risk' ? 'active' : ''}" href="/risk-monitor">跑路监测</a>
         <a class="${active === 'methodology' ? 'active' : ''}" href="/methodology">测评方法</a>
@@ -1088,6 +1306,57 @@ function renderDealMiniCard(deal: AirportDealView): string {
       <p class="muted">本活动不影响 GateRank Score。</p>
     </article>
   `;
+}
+
+function renderMonthlyReportYearGroup(group: { year: number; items: MonthlyReportListItem[] }): string {
+  return `
+    <section class="monthly-report-year-group">
+      <div>
+        <div class="monthly-report-year">${escapeHtml(String(group.year))}</div>
+        <div class="monthly-report-year-count">${escapeHtml(String(group.items.length))} Reports</div>
+      </div>
+      <div class="monthly-report-row-list">
+        ${group.items.map(renderMonthlyReportRow).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderMonthlyReportRow(report: MonthlyReportListItem): string {
+  const href = buildMonthlyReportPath(report.slug);
+  const monthLabel = `${String(report.month).padStart(2, '0')}月`;
+  return `
+    <article class="monthly-report-row">
+      <div>
+        <div class="monthly-report-month">${escapeHtml(monthLabel)}</div>
+        <div class="monthly-report-row-year">${escapeHtml(String(report.year))}</div>
+      </div>
+      <div>
+        <h3><a href="${escapeAttribute(href)}">${escapeHtml(report.title)}</a></h3>
+        <p class="muted">${escapeHtml(report.excerpt || report.seo_description || '本月机场 VPN 推荐、机场排名、稳定性、测速表现与跑路风险观察。')}</p>
+        <div class="monthly-report-row-tags">
+          <span>机场推荐</span>
+          <span>机场排行榜</span>
+          <span>机场测评</span>
+        </div>
+      </div>
+      <a class="monthly-report-row-action" href="${escapeAttribute(href)}">查看月报</a>
+    </article>
+  `;
+}
+
+function groupMonthlyReportsByYear(items: MonthlyReportListItem[]): Array<{ year: number; items: MonthlyReportListItem[] }> {
+  const sorted = [...items].sort((a, b) => (b.year - a.year) || (b.month - a.month) || (b.id - a.id));
+  const groups: Array<{ year: number; items: MonthlyReportListItem[] }> = [];
+  for (const item of sorted) {
+    const current = groups[groups.length - 1];
+    if (!current || current.year !== item.year) {
+      groups.push({ year: item.year, items: [item] });
+    } else {
+      current.items.push(item);
+    }
+  }
+  return groups;
 }
 
 function renderDealsGuideSections(): string {
@@ -1400,6 +1669,22 @@ function buildRankingItemList(
   };
 }
 
+function buildMonthlyReportItemList(
+  siteUrl: string,
+  items: MonthlyReportListItem[],
+): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.title,
+      url: `${siteUrl}${buildMonthlyReportPath(item.slug)}`,
+    })),
+  };
+}
+
 function formatMonitorReason(reason: RiskMonitorItem['monitor_reason']): string {
   return reason === 'down' ? '管理员确认跑路' : '风险观察';
 }
@@ -1452,7 +1737,7 @@ const styles = `
   .topbar nav a.apply-link { background: #111111; color: #fff; -webkit-text-fill-color: #fff; forced-color-adjust: none; color-scheme: light; box-shadow: 0 14px 32px rgba(17,17,17,.18); }
   .topbar nav a.apply-link:hover { background: #262626; color: #fff; -webkit-text-fill-color: #fff; }
   .topbar nav a.apply-link.active { background: #111111; color: #fff; -webkit-text-fill-color: #fff; box-shadow: 0 14px 32px rgba(17,17,17,.18); }
-  .page-main { width: min(1180px, calc(100vw - 32px)); margin: 0 auto; padding: 40px 0 72px; display: grid; gap: 32px; }
+  .page-main { width: min(1280px, calc(100vw - 32px)); margin: 0 auto; padding: 40px 0 72px; display: grid; gap: 32px; }
   .hero { border: 1px solid #e5e5e5; border-radius: 28px; padding: 32px; background: linear-gradient(135deg, #fafafa, #fff); }
   .hero-dark { background: linear-gradient(135deg, #111827, #f8fafc); color: #fff; }
   .hero-risk { background: linear-gradient(135deg, #3f0f19, #f7f2f4); color: #fff; }
@@ -1468,6 +1753,48 @@ const styles = `
   .metric div, .muted { color: #666; font-size: 13px; }
   .metric strong, .score { display: block; margin-top: 8px; font-size: 28px; font-weight: 900; }
   .content-card { border: 1px solid #e5e5e5; border-radius: 24px; padding: 26px; background: #fff; }
+  .monthly-report-hero { background: linear-gradient(135deg, #0b3028 0%, #17483b 42%, #dfe9df 100%); }
+  .monthly-report-hero h1 span { display: block; color: rgba(255,255,255,.45); font-size: clamp(26px, 5vw, 46px); line-height: 1.06; }
+  .monthly-report-archive { display: grid; gap: 32px; }
+  .monthly-report-archive-head { display: flex; justify-content: space-between; gap: 24px; align-items: end; border-bottom: 1px solid #e5e5e5; padding-bottom: 24px; }
+  .monthly-report-light-eyebrow { color: #a3a3a3; }
+  .monthly-report-count { margin: 0; color: #737373; font-size: 14px; font-weight: 700; white-space: nowrap; }
+  .monthly-report-count strong { color: #111; font-weight: 900; }
+  .monthly-report-year-group { display: grid; grid-template-columns: 140px minmax(0, 1fr); gap: 28px; }
+  .monthly-report-year { position: sticky; top: 96px; font-size: 56px; line-height: .95; font-weight: 900; letter-spacing: 0; }
+  .monthly-report-year-count { margin-top: 8px; color: #a3a3a3; font-size: 11px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase; }
+  .monthly-report-row-list { border-top: 1px solid #e5e5e5; }
+  .monthly-report-row { display: grid; grid-template-columns: 92px minmax(0, 1fr) 132px; gap: 18px; align-items: center; border-bottom: 1px solid #e5e5e5; padding: 22px 0; transition: background .18s ease, color .18s ease; }
+  .monthly-report-row:hover { background: rgba(250,250,250,.84); }
+  .monthly-report-month { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 30px; line-height: 1; font-weight: 900; color: #111; }
+  .monthly-report-row-year { margin-top: 6px; color: #a3a3a3; font-size: 12px; font-weight: 800; }
+  .monthly-report-row h3 { margin: 0; font-size: 20px; letter-spacing: 0; }
+  .monthly-report-row h3 a { text-decoration: none; }
+  .monthly-report-row:hover h3 a, .monthly-report-row-action:hover { color: #e11d48; }
+  .monthly-report-row .muted { margin: 8px 0 0; font-size: 14px; line-height: 1.8; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .monthly-report-row-tags { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 10px; color: #a3a3a3; font-size: 12px; font-weight: 800; }
+  .monthly-report-row-action { justify-self: end; font-size: 14px; font-weight: 900; text-decoration: none; }
+  .monthly-report-seo-section { border-top: 1px solid #e5e5e5; padding-top: 32px; }
+  .preview-banner { border: 1px solid #fde68a; border-radius: 12px; background: #fffbeb; color: #92400e; padding: 12px 16px; font-size: 13px; font-weight: 900; }
+  .monthly-report-cover { overflow: hidden; border: 1px solid #e5e5e5; border-radius: 24px; background: #f5f5f5; }
+  .monthly-report-cover img { width: 100%; max-height: 460px; object-fit: cover; display: block; }
+  .monthly-report-content { display: grid; gap: 14px; }
+  .monthly-report-content h1,
+  .monthly-report-content h2,
+  .monthly-report-content h3 { margin: 16px 0 4px; letter-spacing: 0; }
+  .monthly-report-content h1 { font-size: 34px; line-height: 1.14; }
+  .monthly-report-content h2 { font-size: 26px; }
+  .monthly-report-content h3 { font-size: 20px; }
+  .monthly-report-content p,
+  .monthly-report-content li { color: #262626; font-size: 16px; line-height: 1.9; }
+  .monthly-report-content a { color: #be123c; font-weight: 800; }
+  .monthly-report-content ul,
+  .monthly-report-content ol { margin: 0; padding-left: 24px; }
+  .monthly-report-content blockquote { margin: 0; border-left: 4px solid #e11d48; padding: 12px 16px; background: #fff1f2; color: #881337; }
+  .monthly-report-content table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  .monthly-report-content th,
+  .monthly-report-content td { border: 1px solid #e5e5e5; padding: 10px; text-align: left; vertical-align: top; }
+  .monthly-report-content th { background: #fafafa; }
   .ranking-filter-card { display: grid; gap: 18px; }
   .ranking-search-form { display: grid; grid-template-columns: minmax(0, 1fr) 112px; gap: 10px; }
   .ranking-search-input,
@@ -1619,9 +1946,14 @@ const styles = `
   th, td { text-align: left; border-bottom: 1px solid #eee; padding: 14px 10px; vertical-align: top; }
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #666; }
   @media (max-width: 900px) {
-    .page-main { width: min(100vw - 24px, 1180px); padding-top: 24px; gap: 20px; }
+    .page-main { width: min(100vw - 24px, 1280px); padding-top: 24px; gap: 20px; }
     .hero, .content-card { border-radius: 18px; padding: 20px; }
     h1 { font-size: 36px; line-height: 1.04; }
+    .monthly-report-archive-head { align-items: start; flex-direction: column; }
+    .monthly-report-year-group { grid-template-columns: 1fr; gap: 12px; }
+    .monthly-report-year { position: static; font-size: 40px; }
+    .monthly-report-row { grid-template-columns: 1fr; gap: 12px; padding: 18px 0; }
+    .monthly-report-row-action { justify-self: start; }
     .ranking-search-form { grid-template-columns: 1fr; }
     .filter-chip-row { flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
     .filter-chip, .filter-clear { flex: 0 0 auto; }

@@ -202,6 +202,10 @@
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
+    <loc>http://localhost:3000/monthly-reports</loc>
+    <lastmod>2026-05-17T00:00:00+08:00</lastmod>
+  </url>
+  <url>
     <loc>http://localhost:3000/deals</loc>
     <lastmod>2026-05-26T00:00:00+08:00</lastmod>
   </url>

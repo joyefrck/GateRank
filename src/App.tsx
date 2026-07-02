@@ -38,6 +38,7 @@ import {
   buildFullRankingHref,
   buildHomeHref,
   buildMethodologyHref,
+  buildMonthlyReportsHref,
   buildPublishTokenDocsHref,
   buildRiskMonitorHref,
   buildQuery,
@@ -83,6 +84,7 @@ import {
 } from '../shared/fullRankingFilters';
 import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import { DealsPage } from './pages/deals/DealsPage';
+import { MonthlyReportDetailPage, MonthlyReportsPage } from './pages/monthlyReports/MonthlyReportsPage';
 import { trackPageView } from './site/analytics';
 import { getCapabilityIcon, type CapabilityIconCategory } from '../shared/capabilityIcons';
 import {
@@ -352,7 +354,7 @@ interface ReportCapabilityItem {
   label: string;
 }
 
-type InitialPublicDataKind = 'home' | 'full_ranking' | 'risk_monitor' | 'deals';
+type InitialPublicDataKind = 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'monthly_reports' | 'monthly_report';
 
 interface InitialPublicDataEnvelope<T> {
   kind: InitialPublicDataKind;
@@ -384,9 +386,10 @@ interface CardProps {
 }
 
 interface RouteState {
-  kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'deals' | 'risk_monitor' | 'methodology' | 'publish_token_docs' | 'not_found';
+  kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'monthly_reports' | 'monthly_report' | 'deals' | 'risk_monitor' | 'methodology' | 'publish_token_docs' | 'not_found';
   airportId?: number;
   airportSlug?: string;
+  monthlyReportSlug?: string;
   date?: string;
   page?: number;
   filters?: FullRankingFilters;
@@ -1363,6 +1366,8 @@ function parseRoute(): RouteState {
   const reportMatch = path.match(/^\/reports\/(\d+)$/);
   const airportMatch = path.match(/^\/airports\/([a-z0-9-]+)$/);
   const fullRankingMatch = path.match(/^\/rankings\/all\/?$/);
+  const monthlyReportsMatch = path.match(/^\/monthly-reports\/?$/);
+  const monthlyReportMatch = path.match(/^\/monthly-reports\/([a-z0-9-]+)$/);
   const dealsMatch = path.match(/^\/deals\/?$/);
   const riskMonitorMatch = path.match(/^\/risk-monitor\/?$/);
   const params = new URLSearchParams(window.location.search);
@@ -1420,6 +1425,23 @@ function parseRoute(): RouteState {
       date,
       page: safePage,
       filters,
+    };
+  }
+
+  if (monthlyReportsMatch) {
+    const page = Number(params.get('page') || '1');
+    const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+    canonicalizeCurrentPublicListUrl(buildMonthlyReportsHref(safePage));
+    return {
+      kind: 'monthly_reports',
+      page: safePage,
+    };
+  }
+
+  if (monthlyReportMatch) {
+    return {
+      kind: 'monthly_report',
+      monthlyReportSlug: monthlyReportMatch[1],
     };
   }
 
@@ -1481,6 +1503,7 @@ function toMarketingPageKind(routeKind: RouteState['kind']): MarketingPageKind |
   if (routeKind === 'report') return 'report';
   if (routeKind === 'apply') return 'apply';
   if (routeKind === 'full_ranking') return 'full_ranking';
+  if (routeKind === 'monthly_reports' || routeKind === 'monthly_report') return null;
   if (routeKind === 'deals') return 'deals';
   if (routeKind === 'risk_monitor') return 'risk_monitor';
   if (routeKind === 'methodology') return 'methodology';
@@ -8179,6 +8202,14 @@ export default function App() {
 
   if (route.kind === 'full_ranking') {
     return <FullRankingPage date={route.date} page={route.page} filters={route.filters} />;
+  }
+
+  if (route.kind === 'monthly_reports') {
+    return <MonthlyReportsPage page={route.page} />;
+  }
+
+  if (route.kind === 'monthly_report') {
+    return <MonthlyReportDetailPage slug={route.monthlyReportSlug || ''} />;
   }
 
   if (route.kind === 'deals') {

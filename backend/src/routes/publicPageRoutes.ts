@@ -15,6 +15,8 @@ import {
   renderFullRankingPublicPage,
   renderHomePublicPage,
   renderMethodologyPublicPage,
+  renderMonthlyReportDetailPage,
+  renderMonthlyReportsPublicPage,
   renderPublicHtmlError,
   renderReportPublicPage,
   renderRiskMonitorPublicPage,
@@ -28,6 +30,7 @@ import {
   parseFullRankingFilters,
   type FullRankingFilters,
 } from '../../../shared/fullRankingFilters';
+import type { MonthlyReportPublicService } from '../services/monthlyReportPublicService';
 
 interface PublicPageDeps {
   publicViewService: {
@@ -40,6 +43,7 @@ interface PublicPageDeps {
   airportAdCampaignRepository?: {
     listActiveDeals(): Promise<AirportDealView[]>;
   };
+  monthlyReportPublicService?: MonthlyReportPublicService;
   pageCache?: TimedPromiseCache;
   frontendAssets?: PublicFrontendAssets;
 }
@@ -145,6 +149,69 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     }
   });
 
+  router.get('/api/v1/monthly-reports', async (req, res, next) => {
+    try {
+      const service = requireMonthlyReportPublicService(deps);
+      const page = toPositiveInt(req.query.page, 1);
+      const pageSize = toPositiveInt(req.query.page_size, 12);
+      res.json(await service.getListView(page, pageSize));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/api/v1/monthly-reports/:slug', async (req, res, next) => {
+    try {
+      const service = requireMonthlyReportPublicService(deps);
+      const report = await service.getBySlug(String(req.params.slug || ''));
+      if (!report) {
+        res.status(404).json({ code: 'MONTHLY_REPORT_NOT_FOUND', message: '月度报告不存在或尚未发布' });
+        return;
+      }
+      res.json(report);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/monthly-reports', async (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    try {
+      const service = requireMonthlyReportPublicService(deps);
+      const page = toPositiveInt(req.query.page, 1);
+      const view = await pageCache.getOrLoad(
+        `monthly-reports:${page}:12`,
+        () => service.getListView(page, 12),
+      );
+      setPublicCacheHeaders(res);
+      res.status(200).type('html').send(renderMonthlyReportsPublicPage(siteUrl, view, frontendAssets));
+    } catch (error) {
+      console.error('[public-page] failed to render monthly reports page', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '月度报告加载失败', frontendAssets));
+    }
+  });
+
+  router.get('/monthly-reports/:slug', async (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    try {
+      const service = requireMonthlyReportPublicService(deps);
+      const slug = String(req.params.slug || '');
+      const report = await pageCache.getOrLoad(
+        `monthly-report:${slug}`,
+        () => service.getBySlug(slug),
+      );
+      if (!report) {
+        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '月度报告不存在或尚未发布', frontendAssets));
+        return;
+      }
+      setPublicCacheHeaders(res);
+      res.status(200).type('html').send(renderMonthlyReportDetailPage(siteUrl, report, false, frontendAssets));
+    } catch (error) {
+      console.error('[public-page] failed to render monthly report page', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '月度报告加载失败', frontendAssets));
+    }
+  });
+
   router.get('/risk-watch', (req, res) => {
     const query = req.url.includes('?') ? req.url.slice(req.url.indexOf('?')) : '';
     res.redirect(301, `/risk-monitor${query}`);
@@ -209,6 +276,13 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   });
 
   return router;
+}
+
+function requireMonthlyReportPublicService(deps: PublicPageDeps): MonthlyReportPublicService {
+  if (!deps.monthlyReportPublicService) {
+    throw new Error('monthlyReportPublicService is not configured');
+  }
+  return deps.monthlyReportPublicService;
 }
 
 const PUBLIC_RANKING_PATH = '/rankings/all';

@@ -1,4 +1,4 @@
-export type PublicNavigationKind = 'home' | 'full_ranking' | 'deals' | 'risk_monitor' | 'methodology' | 'news';
+export type PublicNavigationKind = 'home' | 'full_ranking' | 'monthly_reports' | 'deals' | 'risk_monitor' | 'methodology' | 'news';
 
 export interface PublicNavigationItem {
   kind: PublicNavigationKind;
@@ -17,6 +17,11 @@ export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
     kind: 'full_ranking',
     label: '全量榜单',
     href: '/rankings/all',
+  },
+  {
+    kind: 'monthly_reports',
+    label: '月度报告',
+    href: '/monthly-reports',
   },
   {
     kind: 'deals',

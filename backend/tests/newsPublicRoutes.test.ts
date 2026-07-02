@@ -738,7 +738,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
     );
     const xml = await response.text();
     const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) || [];
-    assert.equal(urlBlocks.length, 60);
+    assert.equal(urlBlocks.length, 61);
     urlBlocks.forEach((block) => {
       assert.match(block, /<lastmod>[^<]+<\/lastmod>/);
     });
@@ -747,6 +747,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?payment=alipay<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?client=clash<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?region=hong_kong<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/monthly-reports<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/risk-monitor<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/deals<\/loc>\n    <lastmod>2026-05-26T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/methodology<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);
@@ -758,6 +759,87 @@ test('GET /sitemap.xml includes published news urls', async () => {
     assert.doesNotMatch(xml, /\/news\/topic\/inactive-topic/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>\n    <lastmod>2026-03-28T18:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news<\/loc>\n    <lastmod>2026-03-28T18:00:00\+08:00<\/lastmod>/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /sitemap.xml includes published monthly reports only', async () => {
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async () => ({ page: 1, page_size: 12, total: 0, total_pages: 1, featured: null, items: [] }),
+        getArticleViewBySlug: async () => null,
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [],
+        getSitemapTaxonomy: async () => ({ categories: [], topics: [] }),
+      } as never,
+      publicViewService: {
+        getFullRankingView: async () => ({
+          date: '2026-06-30',
+          items: [],
+        }),
+      },
+      monthlyReportPublicService: {
+        getSitemapItems: async () => [
+          {
+            id: 1,
+            year: 2026,
+            month: 6,
+            slug: '2026-06-airport-vpn-ranking-report',
+            title: '2026年6月机场 VPN 月度报告',
+            h1: '2026年6月机场 VPN 月度报告',
+            excerpt: '摘要',
+            seo_title: '',
+            seo_description: '',
+            seo_keywords: '',
+            cover_image_url: '',
+            og_image_url: '',
+            og_image_alt: '',
+            status: 'published',
+            published_at: '2026-07-01 10:00:00',
+            created_at: '2026-07-01 09:00:00',
+            updated_at: '2026-07-01 10:30:00',
+          },
+          {
+            id: 2,
+            year: 2026,
+            month: 7,
+            slug: '2026-07-draft-report',
+            title: '草稿',
+            h1: '草稿',
+            excerpt: '草稿',
+            seo_title: '',
+            seo_description: '',
+            seo_keywords: '',
+            cover_image_url: '',
+            og_image_url: '',
+            og_image_alt: '',
+            status: 'draft',
+            published_at: null,
+            created_at: '2026-07-02 09:00:00',
+            updated_at: '2026-07-02 10:30:00',
+          },
+        ],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/sitemap.xml`, {
+      headers: {
+        host: `127.0.0.1:${port}`,
+      },
+    });
+    assert.equal(response.status, 200);
+    const xml = await response.text();
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/monthly-reports<\/loc>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/monthly-reports\/2026-06-airport-vpn-ranking-report<\/loc>\n    <lastmod>2026-07-01T10:30:00\+08:00<\/lastmod>/);
+    assert.doesNotMatch(xml, /2026-07-draft-report/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

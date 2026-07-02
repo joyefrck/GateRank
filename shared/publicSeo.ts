@@ -134,9 +134,27 @@ export interface PublicDealsFaqItem {
   answer: string;
 }
 
+export interface PublicMonthlyReportSeoView {
+  year: number;
+  month: number;
+  slug: string;
+  title: string;
+  h1: string;
+  excerpt: string;
+  seo_title: string;
+  seo_description: string;
+  seo_keywords: string;
+  cover_image_url: string;
+  og_image_url: string;
+  og_image_alt: string;
+  published_at: string | null;
+  updated_at: string;
+}
+
 export const PUBLIC_SEO_PATHS = {
   home: '/',
   fullRanking: '/rankings/all',
+  monthlyReports: '/monthly-reports',
   deals: '/deals',
   methodology: '/methodology',
   apply: '/apply',
@@ -170,6 +188,13 @@ export const PUBLIC_CORE_OG_IMAGES = {
     height: 630,
     type: 'image/png',
   },
+  monthlyReports: {
+    path: '/og/monthly-reports.png',
+    alt: 'GateRank 机场 VPN 月度报告分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
   deals: {
     path: '/og/deals-coupons.png',
     alt: 'GateRank 机场优惠码大全分享图',
@@ -197,10 +222,42 @@ export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | 
   const pathname = normalizePublicSeoPath(canonicalPath);
   if (pathname === PUBLIC_SEO_PATHS.home) return PUBLIC_CORE_OG_IMAGES.home;
   if (pathname === PUBLIC_SEO_PATHS.fullRanking) return PUBLIC_CORE_OG_IMAGES.fullRanking;
+  if (pathname === PUBLIC_SEO_PATHS.monthlyReports || pathname.startsWith(`${PUBLIC_SEO_PATHS.monthlyReports}/`)) {
+    return PUBLIC_CORE_OG_IMAGES.monthlyReports;
+  }
   if (pathname === PUBLIC_SEO_PATHS.deals) return PUBLIC_CORE_OG_IMAGES.deals;
   if (pathname === PUBLIC_SEO_PATHS.riskMonitor) return PUBLIC_CORE_OG_IMAGES.riskMonitor;
   if (pathname === PUBLIC_SEO_PATHS.methodology) return PUBLIC_CORE_OG_IMAGES.methodology;
   return undefined;
+}
+
+export function buildMonthlyReportsSeo(input?: { total?: number }): PublicSeoText {
+  return {
+    title: `2026机场推荐月度报告 | 机场排行榜、机场测评、稳定机场推荐与便宜机场推荐 | ${PUBLIC_SITE_BRAND_NAME}`,
+    description:
+      typeof input?.total === 'number'
+        ? `${PUBLIC_SITE_BRAND_NAME} 月度报告总入口已发布 ${formatCount(input.total)} 篇，按月沉淀2026机场推荐、机场排行榜、机场测评、稳定机场推荐、便宜机场推荐与机场 VPN 风险观察。`
+        : `${PUBLIC_SITE_BRAND_NAME} 月度报告总入口按月沉淀2026机场推荐、机场排行榜、机场测评、稳定机场推荐、便宜机场推荐与机场 VPN 风险观察。`,
+    keywords: '机场推荐,2026机场推荐,机场排行榜,机场测评,稳定机场推荐,便宜机场推荐,机场VPN月度报告,机场VPN排名,科学上网机场,GateRank',
+  };
+}
+
+export function buildMonthlyReportSeo(report: PublicMonthlyReportSeoView): PublicSeoText {
+  const monthLabel = `${report.year}年${report.month}月`;
+  return {
+    title: report.seo_title || `${monthLabel}机场 VPN 月度报告：机场推荐、机场排名与跑路风险观察 | ${PUBLIC_SITE_BRAND_NAME}`,
+    description:
+      report.seo_description
+      || report.excerpt
+      || `${monthLabel} GateRank 机场 VPN 月度报告，复盘机场推荐、机场排名、科学上网机场测速、稳定性表现、全量榜单变化与跑路风险观察。`,
+    keywords:
+      report.seo_keywords
+      || `${monthLabel}机场VPN月度报告,机场推荐,机场排名,机场VPN排名,科学上网机场,跑路机场,GateRank`,
+  };
+}
+
+export function buildMonthlyReportPath(slug: string): string {
+  return `${PUBLIC_SEO_PATHS.monthlyReports}/${encodeURIComponent(slug)}`;
 }
 
 function normalizePublicSeoPath(canonicalPath: string): string {

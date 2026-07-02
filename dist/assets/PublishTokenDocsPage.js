@@ -1,4 +1,4 @@
-import{c as w,i as o,u as N,j as e,k as _,l as g,g as k,R as y,r as T,m as S,h as P}from"./index.js";/**
+import{c as w,k as o,u as N,j as e,l as _,m as g,h as k,R as y,r as T,n as S,i as P}from"./index.js";/**
  * @license lucide-react v0.546.0 - ISC
  *
  * This source code is licensed under the ISC license.
