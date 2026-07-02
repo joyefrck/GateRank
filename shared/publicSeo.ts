@@ -14,6 +14,10 @@ export interface PublicSeoText {
   keywords: string;
 }
 
+export const HOME_HERO_HIGHLIGHT_TEXT = '行业首创，每日更新';
+export const HOME_HERO_SUPPORTING_TEXT =
+  '基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单，帮助用户快速筛选值得关注的机场 VPN 与测评报告。';
+
 export interface PublicReportSeoView {
   date: string;
   airport: {
@@ -275,8 +279,8 @@ export function buildHomeSeo(input?: {
     title: `${PUBLIC_SITE_BRAND_NAME} | 机场 VPN 推荐、科学上网机场测评与可靠性榜单`,
     description:
       input && typeof input.monitoredAirports === 'number' && typeof input.realtimeTests === 'number'
-        ? `${input.dateLabel || '今日'} 机场 VPN 榜单已更新，当前监测 ${formatCount(input.monitoredAirports)} 个机场、累计实时测速 ${formatCount(input.realtimeTests)} 次，覆盖今日推荐、长期稳定、性价比、新入榜与风险预警，适合查找 VPN、科学上网、魔法与梯子相关机场参考。`
-        : `${PUBLIC_SITE_BRAND_NAME} 提供今日推荐、长期稳定、性价比与风险预警等多维机场 VPN 榜单，帮助用户快速筛选值得关注的 VPN、科学上网、魔法和梯子测评报告。`,
+        ? `${HOME_HERO_HIGHLIGHT_TEXT}。${input.dateLabel || '今日'} 机场 VPN 榜单基于公开监测数据生成，当前监测 ${formatCount(input.monitoredAirports)} 个机场、累计实时测速 ${formatCount(input.realtimeTests)} 次，覆盖今日推荐、长期稳定、性价比、新入榜与风险预警。`
+        : `${HOME_HERO_HIGHLIGHT_TEXT}。${PUBLIC_SITE_BRAND_NAME} 基于公开监测数据提供今日推荐、长期稳定、性价比、新入榜与风险预警等多维机场 VPN 榜单。`,
     keywords: '机场榜GateRank,机场榜,机场推荐,机场VPN,VPN,科学上网,魔法,梯子,今日推荐机场,机场测评,稳定机场,风险预警,GateRank',
   };
 }

@@ -53,6 +53,10 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(html, /\.topbar nav a\.active \{ background: #fff1f2; color: #e11d48;/);
       assert.match(html, /\.topbar nav a\.apply-link \{ background: #111111; color: #fff;/);
       assert.match(html, /\.topbar nav a\.apply-link\.active \{ background: #111111; color: #fff;/);
+      if (path === '/') {
+        assert.match(html, /<strong class="hero-highlight">行业首创，每日更新<\/strong>/);
+        assert.match(html, /基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单/);
+      }
     }
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

@@ -49,6 +49,8 @@ import {
 } from './site/publicSite';
 import {
   APPLY_SEO,
+  HOME_HERO_HIGHLIGHT_TEXT,
+  HOME_HERO_SUPPORTING_TEXT,
   buildAirportReportPath,
   buildFullRankingHeading,
   buildFullRankingSeo,
@@ -2887,7 +2889,10 @@ function HomePage({ date }: { date?: string }) {
         </h1>
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-center gap-3 md:gap-6 text-neutral-500">
           <p className="text-[13px] md:text-sm font-medium tracking-tight leading-7">
-            首页默认聚焦今日推荐，同时结合长期稳定、性价比、新入榜与风险预警五类榜单，帮助用户从不同角度快速筛选值得关注的机场 VPN 与测评报告。
+            <strong className="inline-flex items-center rounded-lg border border-orange-200 bg-orange-50 px-1.5 py-0.5 font-black text-orange-700">
+              {HOME_HERO_HIGHLIGHT_TEXT}
+            </strong>
+            {HOME_HERO_SUPPORTING_TEXT}
           </p>
           <div className="hidden md:block w-px h-4 bg-neutral-200" />
           <div className="flex flex-wrap items-center justify-center gap-3 md:gap-5">

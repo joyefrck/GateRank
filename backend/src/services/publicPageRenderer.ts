@@ -13,6 +13,8 @@ import {
   APPLY_SEO,
   DEALS_CONTENT_SECTIONS,
   DEALS_FAQ_ITEMS,
+  HOME_HERO_HIGHLIGHT_TEXT,
+  HOME_HERO_SUPPORTING_TEXT,
   METHODOLOGY_SEO,
   PUBLIC_SEO_PATHS,
   buildMonthlyReportPath,
@@ -155,7 +157,7 @@ export function renderHomePublicPage(
         <section class="hero">
           <div class="eyebrow">今日推荐</div>
           <h1>机场榜：机场 VPN 推荐与可靠性榜单</h1>
-          <p>${escapeHtml(seo.description)}</p>
+          <p><strong class="hero-highlight">${escapeHtml(HOME_HERO_HIGHLIGHT_TEXT)}</strong>${escapeHtml(HOME_HERO_SUPPORTING_TEXT)}</p>
           <div class="metric-grid">
             ${renderMetric('监测机场', `${formatNumber(view.hero.monitored_airports)}+`)}
             ${renderMetric('实时测速', `${formatNumber(view.hero.realtime_tests)}+`)}
@@ -1764,6 +1766,7 @@ const styles = `
   h3 { margin: 0 0 10px; font-size: 18px; }
   p { line-height: 1.8; }
   .hero p { max-width: 820px; font-size: 16px; }
+  .hero-highlight { display: inline-flex; align-items: center; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #c2410c; padding: 2px 7px; font-weight: 900; }
   .metric-grid, .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 24px; }
   .metric, .mini-card { border: 1px solid #e5e5e5; border-radius: 18px; padding: 18px; background: rgba(255,255,255,.86); color: #111; }
   .hero-content .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
