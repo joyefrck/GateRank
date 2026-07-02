@@ -1,8 +1,6 @@
 import React, { useMemo } from 'react';
 import {
   ArrowRight,
-  BadgeInfo,
-  BrainCircuit,
   ChartColumnBig,
   Clock3,
   Gauge,
@@ -21,6 +19,7 @@ import {
   PageFrame,
   usePageSeo,
 } from '../../site/publicSite';
+import { ListPageHero } from '../../components/ListPageHero';
 import {
   decayTimeline,
   dimensionCards,
@@ -121,86 +120,14 @@ export function MethodologyPage() {
   return (
     <PageFrame active="methodology">
       <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-14 md:pb-20 space-y-16 md:space-y-24">
-        <motion.section
-          {...sectionMotion}
-          className="relative overflow-hidden rounded-3xl border border-neutral-200 bg-[linear-gradient(135deg,#f8fafc_0%,#ffffff_52%,#f4f4f5_100%)] px-6 py-8 md:px-10 md:py-12 text-neutral-900 shadow-[0_20px_58px_rgba(15,23,42,0.07)]"
-        >
-          <div className="absolute inset-0 opacity-100" style={{ backgroundImage: 'linear-gradient(rgba(15,23,42,0.035) 1px, transparent 1px), linear-gradient(90deg, rgba(15,23,42,0.035) 1px, transparent 1px)', backgroundSize: '44px 44px' }} />
-          <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_430px] lg:items-start">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/90 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-600 shadow-sm backdrop-blur">
-                <BrainCircuit className="h-3.5 w-3.5" />
-                {PUBLIC_SITE_BRAND_NAME} Methodology
-              </div>
-              <h1 className="mt-5 max-w-4xl text-[clamp(2.35rem,4.2vw,3.5rem)] font-black leading-[1.04] text-neutral-950">
-                <span className="block whitespace-nowrap sm:inline">GateRank</span>
-                <span className="block sm:inline"> 机场评分方法</span>
-                <span className="block text-neutral-500">四维模型生成推荐依据</span>
-              </h1>
-              <p className="mt-5 max-w-3xl text-sm md:text-base leading-7 text-neutral-600">
-                本页系统说明 {PUBLIC_SITE_BRAND_NAME} 的机场测评方法、评分规则、测速标准和风险扣分逻辑。你可以直接看到总分如何拆解、风险如何压分、历史数据为什么保留，以及每日榜单为什么会变化。
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => navigate(buildHomeHref())}
-                  className="inline-flex items-center gap-2 rounded-full bg-neutral-900 px-5 py-3 text-sm font-black text-white transition-transform hover:-translate-y-0.5"
-                >
-                  查看今日推荐
-                  <ArrowRight className="h-4 w-4" />
-                </button>
-                <div className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white/85 px-5 py-3 text-sm font-black text-neutral-600 shadow-sm backdrop-blur">
-                  <BadgeInfo className="h-4 w-4" />
-                  <span className="whitespace-nowrap">公式、权重、扣分口径公开</span>
-                </div>
-              </div>
-              <div className="mt-10 grid gap-3 sm:grid-cols-3">
-                {heroStats.map((item) => (
-                  <div key={item.label} className="rounded-2xl border border-neutral-200 bg-white/92 p-4 shadow-sm backdrop-blur">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">{item.label}</div>
-                    <div className="mt-2 whitespace-nowrap text-[clamp(1.05rem,1.7vw,1.45rem)] font-black text-neutral-900">{item.value}</div>
-                    <div className="mt-2 text-sm leading-6 text-neutral-600">{item.note}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-neutral-200 bg-[linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] p-5 md:p-6 shadow-[0_18px_50px_rgba(15,23,42,0.08)]">
-              <div className="flex flex-wrap items-start justify-between gap-4">
-                <div>
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">Final Score</div>
-                  <div className="mt-2 whitespace-normal text-[clamp(1.5rem,2.2vw,1.8rem)] font-black text-neutral-900 sm:whitespace-nowrap">0.4S + 0.3P + 0.1C + 0.2R</div>
-                </div>
-                <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-3 text-left shadow-sm">
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">核心原则</div>
-                  <div className="mt-1 whitespace-nowrap text-sm font-medium text-neutral-700">不是单一测速榜</div>
-                </div>
-              </div>
-              <div className="mt-6 space-y-4">
-                {totalScoreParts.map((item) => (
-                  <div key={item.key} className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-center justify-between gap-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`flex h-10 w-10 items-center justify-center rounded-2xl ${item.accentClass} text-sm font-black text-white`}>
-                          {item.label}
-                        </div>
-                        <div>
-                          <div className="text-sm font-black text-neutral-900">{item.title}</div>
-                          <div className="text-xs uppercase tracking-[0.18em] text-neutral-400">{item.percent}% 权重</div>
-                        </div>
-                      </div>
-                      <div className="text-lg font-black text-neutral-900">{item.weight.toFixed(1)}</div>
-                    </div>
-                    <div className="mt-4 h-2 overflow-hidden rounded-full bg-neutral-100">
-                      <div className={`h-full rounded-full ${item.accentClass}`} style={{ width: `${item.percent}%` }} />
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-neutral-600">{item.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </motion.section>
+        <ListPageHero
+          eyebrow={`${PUBLIC_SITE_BRAND_NAME} Methodology`}
+          title="机场测评方法：评分规则、测速标准、风险扣分与推荐依据"
+          subtitle=""
+          description={`本页系统说明 ${PUBLIC_SITE_BRAND_NAME} 的机场测评方法、评分规则、测速标准和风险扣分逻辑。你可以直接看到总分如何拆解、风险如何压分、历史数据为什么保留，以及每日榜单为什么会变化。`}
+          tone="sky"
+          stats={heroStats.map((item) => ({ label: item.label, value: item.value }))}
+        />
 
         <motion.section {...sectionMotion}>
           <SectionHeading {...sectionTitles.formula} />

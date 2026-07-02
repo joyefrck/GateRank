@@ -6,6 +6,7 @@ import sharp from 'sharp';
 const OG_IMAGE_PATHS = [
   'home-2026-airport-ranking.png',
   'rankings-all.png',
+  'monthly-reports.png',
   'deals-coupons.png',
   'risk-monitor.png',
   'methodology.png',

@@ -32,6 +32,7 @@ import {
 import { motion } from 'motion/react';
 
 import { TagBadge, TagBadgeGroup, getTagBadgeTone } from './components/TagBadge';
+import { ListPageHero } from './components/ListPageHero';
 import {
   buildAbsoluteUrl,
   buildDealsHref,
@@ -2762,71 +2763,6 @@ function EmptySection({ message }: { message: string }) {
     <div className="rounded-2xl border border-dashed border-neutral-300 bg-neutral-50 px-6 py-10 text-center text-sm text-neutral-500">
       {message}
     </div>
-  );
-}
-
-function ListPageHero({
-  eyebrow,
-  title,
-  subtitle,
-  description,
-  stats,
-  tone = 'default',
-}: {
-  eyebrow: string;
-  title: string;
-  subtitle: string;
-  description: string;
-  stats: Array<{ label: string; value: React.ReactNode }>;
-  tone?: 'default' | 'alert';
-}) {
-  const isAlert = tone === 'alert';
-  const sectionClassName = isAlert
-    ? 'relative overflow-hidden rounded-[32px] border border-neutral-200 bg-[linear-gradient(135deg,#3f0f19_0%,#1f172a_34%,#f7f2f4_100%)] px-6 py-8 md:px-10 md:py-12 text-white shadow-[0_30px_80px_rgba(15,23,42,0.16)]'
-    : 'relative overflow-hidden rounded-[32px] border border-neutral-200 bg-[linear-gradient(135deg,#111827_0%,#0f172a_38%,#f8fafc_100%)] px-6 py-8 md:px-10 md:py-12 text-white shadow-[0_30px_80px_rgba(15,23,42,0.16)]';
-  const overlayStyle = isAlert
-    ? {
-        backgroundImage:
-          'radial-gradient(circle at top left, rgba(251,113,133,0.34), transparent 34%), radial-gradient(circle at bottom right, rgba(255,255,255,0.22), transparent 30%)',
-      }
-    : { backgroundImage: 'radial-gradient(circle at top left, rgba(255,255,255,0.28), transparent 35%)' };
-  const eyebrowClassName = isAlert
-    ? 'inline-flex items-center gap-2 rounded-full border border-rose-200/20 bg-rose-200/8 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-rose-50/88 backdrop-blur'
-    : 'inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white/80 backdrop-blur';
-  const statCardClassName = isAlert
-    ? 'rounded-2xl border border-white/10 bg-white/8 p-4 backdrop-blur'
-    : 'rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur';
-  const statLabelClassName = isAlert
-    ? 'text-[11px] uppercase tracking-[0.18em] text-rose-50/62 font-black'
-    : 'text-[11px] uppercase tracking-[0.18em] text-white/60 font-black';
-  const subtitleClassName = isAlert ? 'block text-rose-50/42' : 'block text-white/45';
-
-  return (
-    <section className={sectionClassName}>
-      <div className="absolute inset-0 opacity-20" style={overlayStyle} />
-      <div className="relative z-10 grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:items-end">
-        <div>
-          <div className={eyebrowClassName}>
-            {eyebrow}
-          </div>
-          <h1 className="mt-5 max-w-4xl text-3xl md:text-5xl lg:text-[56px] font-black leading-[0.95] tracking-tight">
-            {title}
-            <span className={subtitleClassName}>{subtitle}</span>
-          </h1>
-          <p className="mt-5 max-w-3xl text-sm md:text-base leading-7 text-white/72">
-            {description}
-          </p>
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          {stats.map((item) => (
-            <div key={item.label} className={statCardClassName}>
-              <div className={statLabelClassName}>{item.label}</div>
-              <div className="mt-2 text-3xl font-black text-white">{item.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
   );
 }
 

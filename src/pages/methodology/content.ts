@@ -34,7 +34,7 @@ export const methodologySeo = METHODOLOGY_SEO;
 
 export const heroStats = [
   { label: '评分维度', value: '4', note: '稳定性 / 性能 / 价格 / 风险' },
-  { label: '主公式', value: 'S / P / C / R', note: '0.4 / 0.3 / 0.1 / 0.2 权重' },
+  { label: '主公式', value: 'S/P/C/R', note: '0.4 / 0.3 / 0.1 / 0.2 权重' },
   { label: '更新频率', value: '每日重算', note: '近期样本优先，历史表现保留' },
 ] as const;
 

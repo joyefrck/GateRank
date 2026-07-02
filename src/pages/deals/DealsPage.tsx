@@ -16,6 +16,7 @@ import {
 
 import { DEALS_CONTENT_SECTIONS, DEALS_FAQ_ITEMS, buildDealsSeo, buildDealsStructuredData } from '../../../shared/publicSeo';
 import type { AirportDealView } from '../../../shared/airportAds';
+import { ListPageHero } from '../../components/ListPageHero';
 import { buildAbsoluteUrl, buildDealsHref, navigate, PageFrame, usePageSeo } from '../../site/publicSite';
 import { createTrackedOutboundClickHandler, trackMarketingPageView } from '../../site/marketing';
 import { readDealsInitialData, shouldFetchDealsData, type DealsResponse } from './dealsInitialData';
@@ -96,17 +97,21 @@ export function DealsPage() {
   return (
     <PageFrame active="deals">
       <main className="bg-[radial-gradient(circle_at_85%_7%,rgba(37,99,235,0.08),transparent_25%),linear-gradient(180deg,#fff_0%,#fbfdff_58%,#fff_100%)] pb-4">
-        <div className="mx-auto w-[min(1240px,calc(100%-64px))] pt-8">
-          <section className="mb-8 rounded-[18px] border border-slate-200 bg-white px-6 py-7 shadow-[0_10px_30px_rgba(15,23,42,0.04)]">
-            <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">Deals & Coupons</div>
-            <h1 className="mt-3 max-w-4xl text-[clamp(32px,5vw,56px)] font-black leading-none tracking-normal text-slate-950">机场优惠码大全：活动折扣、免费试用与 USDT 支付优惠</h1>
-            <p className="mt-4 max-w-3xl text-[16px] leading-8 text-slate-600">{seo.description}</p>
-            <div className="mt-5 grid gap-3 md:grid-cols-3">
-              <HeroMetric label="当前活动" value={`${deals.length}/6`} />
-              <HeroMetric label="免费试用" value={`${deals.filter((deal) => deal.supports_trial).length}+`} />
-              <HeroMetric label="支持 USDT" value={`${deals.filter((deal) => deal.supports_usdt).length}+`} />
-            </div>
-          </section>
+        <div className="mx-auto w-[min(1240px,calc(100%-64px))] pt-10 md:pt-14">
+          <div className="mb-8">
+            <ListPageHero
+              eyebrow="Deals & Coupons"
+              title="机场优惠码大全：活动折扣、免费试用与 USDT 支付优惠"
+              subtitle=""
+              description={seo.description}
+              tone="orange"
+              stats={[
+                { label: '当前活动', value: `${deals.length}/6` },
+                { label: '免费试用', value: `${deals.filter((deal) => deal.supports_trial).length}+` },
+                { label: '支持 USDT', value: `${deals.filter((deal) => deal.supports_usdt).length}+` },
+              ]}
+            />
+          </div>
 
           <div className="mb-8 flex items-center justify-center gap-2 rounded-[10px] border border-blue-200 bg-blue-50 px-[18px] py-3.5 text-center text-[15px] text-blue-900">
             <Info className="h-5 w-5" />
@@ -143,15 +148,6 @@ export function DealsPage() {
         </div>
       </main>
     </PageFrame>
-  );
-}
-
-function HeroMetric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[8px] border border-slate-200 bg-slate-50 px-4 py-3">
-      <div className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">{label}</div>
-      <div className="mt-1 text-2xl font-black text-slate-950">{value}</div>
-    </div>
   );
 }
 

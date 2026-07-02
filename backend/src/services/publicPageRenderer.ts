@@ -306,15 +306,19 @@ export function renderDealsPublicPage(
     frontendAssets,
     body: `
       <main class="page-main">
-        <section class="hero">
-          <div class="eyebrow">DEALS &amp; COUPONS</div>
-          <h1>机场优惠码大全：活动折扣、免费试用与 USDT 支付优惠</h1>
-          <p>${escapeHtml(seo.description)}</p>
-          <div class="metric-grid">
-            ${renderMetric('广告位', `${deals.length}/6`)}
-            ${renderMetric('免费试用', `${deals.filter((deal) => deal.supports_trial).length}+`)}
-            ${renderMetric('支持 USDT', `${deals.filter((deal) => deal.supports_usdt).length}+`)}
-            ${renderMetric('更新频率', 'Daily Update')}
+        <section class="hero hero-deals">
+          <div class="hero-surface"></div>
+          <div class="hero-content">
+            <div>
+              <div class="eyebrow">DEALS &amp; COUPONS</div>
+              <h1>机场优惠码大全：活动折扣、免费试用与 USDT 支付优惠</h1>
+              <p>${escapeHtml(seo.description)}</p>
+            </div>
+            <div class="metric-grid">
+              ${renderMetric('当前活动', `${deals.length}/6`)}
+              ${renderMetric('免费试用', `${deals.filter((deal) => deal.supports_trial).length}+`)}
+              ${renderMetric('支持 USDT', `${deals.filter((deal) => deal.supports_usdt).length}+`)}
+            </div>
           </div>
         </section>
         <section class="content-card">
@@ -933,15 +937,19 @@ export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: Pu
     frontendAssets,
     body: `
       <main class="page-main">
-        <section class="hero">
-          <div class="eyebrow">测评方法</div>
-          <h1>机场测评方法：评分规则、测速标准、风险扣分与推荐依据</h1>
-          <p>${escapeHtml(METHODOLOGY_SEO.description)}</p>
-          <div class="metric-grid">
-            ${renderMetric('评分维度', '4')}
-            ${renderMetric('主公式', '0.4S + 0.3P + 0.1C + 0.2R')}
-            ${renderMetric('更新频率', '每日重算')}
-            ${renderMetric('价格 / 风险', '10% / 20%')}
+        <section class="hero hero-methodology">
+          <div class="hero-surface"></div>
+          <div class="hero-content">
+            <div>
+              <div class="eyebrow">机场榜GateRank Methodology</div>
+              <h1>机场测评方法：评分规则、测速标准、风险扣分与推荐依据</h1>
+              <p>${escapeHtml(METHODOLOGY_SEO.description)}</p>
+            </div>
+            <div class="metric-grid">
+              ${renderMetric('评分维度', '4')}
+              ${renderMetric('主公式', 'S/P/C/R')}
+              ${renderMetric('更新频率', '每日重算')}
+            </div>
           </div>
         </section>
         <section class="content-card">
@@ -1741,15 +1749,30 @@ const styles = `
   .hero { border: 1px solid #e5e5e5; border-radius: 28px; padding: 32px; background: linear-gradient(135deg, #fafafa, #fff); }
   .hero-dark { background: linear-gradient(135deg, #111827, #f8fafc); color: #fff; }
   .hero-risk { background: linear-gradient(135deg, #3f0f19, #f7f2f4); color: #fff; }
+  .hero-deals { position: relative; overflow: hidden; border-color: rgba(254,215,170,.2); border-radius: 32px; padding: 40px; background: linear-gradient(135deg, #241207 0%, #6F2F0B 38%, #D97706 72%, #F7D7B2 100%); color: #fff; box-shadow: 0 30px 80px rgba(120,53,15,.22); }
+  .hero-methodology { position: relative; overflow: hidden; border-color: rgba(186,230,253,.2); border-radius: 32px; padding: 40px; background: linear-gradient(135deg, #082F49 0%, #075985 38%, #0284C7 72%, #BAE6FD 100%); color: #fff; box-shadow: 0 30px 80px rgba(2,132,199,.18); }
+  .hero-surface { position: absolute; inset: 0; opacity: .2; background-image: radial-gradient(circle at top left, rgba(255,237,213,.34), transparent 35%), radial-gradient(circle at bottom right, rgba(36,18,7,.28), transparent 32%); }
+  .hero-methodology .hero-surface { background-image: radial-gradient(circle at top left, rgba(186,230,253,.34), transparent 35%), radial-gradient(circle at bottom right, rgba(8,47,73,.28), transparent 32%); }
+  .hero-content { position: relative; z-index: 1; display: grid; gap: 32px; grid-template-columns: minmax(0, 1fr) 320px; align-items: end; }
   .eyebrow { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; font-weight: 900; color: #777; }
   .hero-dark .eyebrow, .hero-risk .eyebrow { color: rgba(255,255,255,.74); }
+  .hero-deals .eyebrow { display: inline-flex; align-items: center; border: 1px solid rgba(255,237,213,.2); border-radius: 999px; background: rgba(255,237,213,.1); padding: 8px 16px; color: rgba(255,247,237,.88); backdrop-filter: blur(12px); }
+  .hero-methodology .eyebrow { display: inline-flex; align-items: center; border: 1px solid rgba(224,242,254,.2); border-radius: 999px; background: rgba(224,242,254,.1); padding: 8px 16px; color: rgba(240,249,255,.88); backdrop-filter: blur(12px); }
   h1 { margin: 16px 0 0; font-size: clamp(36px, 7vw, 64px); line-height: .96; letter-spacing: -0.02em; }
+  .hero-methodology h1 span { display: block; color: rgba(240,249,255,.46); }
   h2 { margin: 0 0 16px; font-size: 28px; }
   h3 { margin: 0 0 10px; font-size: 18px; }
   p { line-height: 1.8; }
   .hero p { max-width: 820px; font-size: 16px; }
   .metric-grid, .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 24px; }
   .metric, .mini-card { border: 1px solid #e5e5e5; border-radius: 18px; padding: 18px; background: rgba(255,255,255,.86); color: #111; }
+  .hero-content .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
+  .hero-deals .metric { border-color: rgba(255,255,255,.12); border-radius: 16px; background: rgba(255,255,255,.12); color: #fff; backdrop-filter: blur(12px); }
+  .hero-methodology .metric { border-color: rgba(255,255,255,.12); border-radius: 16px; background: rgba(255,255,255,.12); color: #fff; backdrop-filter: blur(12px); }
+  .hero-deals .metric div { color: rgba(255,247,237,.68); }
+  .hero-methodology .metric div { color: rgba(240,249,255,.68); }
+  .hero-deals .metric strong { color: #fff; }
+  .hero-methodology .metric strong { color: #fff; }
   .metric div, .muted { color: #666; font-size: 13px; }
   .metric strong, .score { display: block; margin-top: 8px; font-size: 28px; font-weight: 900; }
   .content-card { border: 1px solid #e5e5e5; border-radius: 24px; padding: 26px; background: #fff; }
@@ -1948,6 +1971,7 @@ const styles = `
   @media (max-width: 900px) {
     .page-main { width: min(100vw - 24px, 1280px); padding-top: 24px; gap: 20px; }
     .hero, .content-card { border-radius: 18px; padding: 20px; }
+    .hero-content { grid-template-columns: 1fr; }
     h1 { font-size: 36px; line-height: 1.04; }
     .monthly-report-archive-head { align-items: start; flex-direction: column; }
     .monthly-report-year-group { grid-template-columns: 1fr; gap: 12px; }

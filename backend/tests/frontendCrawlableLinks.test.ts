@@ -37,3 +37,25 @@ test('React report page keeps outbound CTA and comparison links as anchors', asy
   assert.match(comparisonSource, /href=\{link\.href\}/);
   assert.doesNotMatch(comparisonSource, /navigate\(link\.href\)/);
 });
+
+test('React deals page uses the shared orange list hero', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/pages/deals/DealsPage.tsx'), 'utf8');
+
+  assert.match(source, /<ListPageHero/);
+  assert.match(source, /tone="orange"/);
+  assert.match(source, /label: '当前活动'/);
+  assert.match(source, /label: '免费试用'/);
+  assert.match(source, /label: '支持 USDT'/);
+  assert.match(source, /pt-10 md:pt-14/);
+  assert.doesNotMatch(source, /function HeroMetric/);
+});
+
+test('React methodology page uses the shared sky list hero', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/pages/methodology/MethodologyPage.tsx'), 'utf8');
+
+  assert.match(source, /<ListPageHero/);
+  assert.match(source, /tone="sky"/);
+  assert.match(source, /label: item\.label/);
+  assert.match(source, /value: item\.value/);
+  assert.match(source, /pt-10 md:pt-14/);
+});

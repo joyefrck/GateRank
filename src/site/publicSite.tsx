@@ -4,6 +4,7 @@ import { Zap } from 'lucide-react';
 import { PUBLIC_SITE_BRAND_NAME } from '../../shared/publicBrand';
 import { type PublicNavigationKind } from '../../shared/publicNavigation';
 import { PUBLIC_TOP_NAV_STYLES, renderPublicTopNav } from '../../shared/publicTopNav';
+import { getPublicOgImageForPath, type PublicOgImage } from '../../shared/publicSeo';
 import { buildFullRankingQuery, EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../shared/fullRankingFilters';
 
 export type NavigationKind = PublicNavigationKind | 'docs';
@@ -14,6 +15,13 @@ export interface SeoConfig {
   keywords: string;
   canonicalPath: string;
   robots?: string;
+  ogImage?: {
+    url: string;
+    alt: string;
+    type?: string;
+    width?: number;
+    height?: number;
+  };
   structuredData?: Record<string, unknown> | Array<Record<string, unknown>>;
 }
 
@@ -31,6 +39,10 @@ function getSiteUrl(): string {
 export function buildAbsoluteUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${getSiteUrl()}${normalizedPath}`;
+}
+
+export function resolvePageOgImageMeta(canonicalPath: string): PublicOgImage | undefined {
+  return getPublicOgImageForPath(canonicalPath);
 }
 
 export function buildQuery(params: Record<string, string | number | undefined>): string {
@@ -134,6 +146,27 @@ export function usePageSeo(config: SeoConfig) {
     setNamedMeta('twitter:card', 'summary_large_image');
     setNamedMeta('twitter:title', config.title);
     setNamedMeta('twitter:description', config.description);
+    const staticOgImage = resolvePageOgImageMeta(config.canonicalPath);
+    const ogImage = config.ogImage?.url
+      ? {
+        path: config.ogImage.url,
+        alt: config.ogImage.alt,
+        type: config.ogImage.type || inferImageMimeType(config.ogImage.url),
+        width: config.ogImage.width,
+        height: config.ogImage.height,
+      }
+      : staticOgImage;
+    if (ogImage) {
+      const imageUrl = toAbsoluteImageUrl(ogImage.path);
+      setPropertyMeta('og:image', imageUrl);
+      setPropertyMeta('og:image:secure_url', imageUrl);
+      setPropertyMeta('og:image:type', ogImage.type);
+      if (ogImage.width) setPropertyMeta('og:image:width', String(ogImage.width));
+      if (ogImage.height) setPropertyMeta('og:image:height', String(ogImage.height));
+      setPropertyMeta('og:image:alt', ogImage.alt);
+      setNamedMeta('twitter:image', imageUrl);
+      setNamedMeta('twitter:image:alt', ogImage.alt);
+    }
 
     const canonical = ensureLinkTag('link[rel="canonical"]', () => {
       const element = document.createElement('link');
@@ -152,6 +185,21 @@ export function usePageSeo(config: SeoConfig) {
     }
     script.textContent = JSON.stringify(config.structuredData ?? {}, null, 0);
   }, [config]);
+}
+
+function toAbsoluteImageUrl(url: string): string {
+  if (/^https?:\/\//i.test(url)) {
+    return url;
+  }
+  return buildAbsoluteUrl(url);
+}
+
+function inferImageMimeType(url: string): string {
+  const pathname = url.split('?')[0].toLowerCase();
+  if (pathname.endsWith('.png')) return 'image/png';
+  if (pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')) return 'image/jpeg';
+  if (pathname.endsWith('.webp')) return 'image/webp';
+  return 'image/png';
 }
 
 export function navigate(to: string, options: { scrollToTop?: boolean } = {}) {

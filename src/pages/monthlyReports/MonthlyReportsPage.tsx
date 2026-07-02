@@ -202,6 +202,12 @@ export function MonthlyReportDetailPage({ slug }: { slug: string }) {
   usePageSeo({
     ...seo,
     canonicalPath: report ? buildMonthlyReportPath(report.slug) : `/monthly-reports/${slug}`,
+    ogImage: report && (report.og_image_url || report.cover_image_url)
+      ? {
+        url: report.og_image_url || report.cover_image_url,
+        alt: report.og_image_alt || report.title,
+      }
+      : undefined,
     structuredData: report ? [
       {
         '@context': 'https://schema.org',

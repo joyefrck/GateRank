@@ -93,6 +93,17 @@ test('core public SEO pages expose dedicated 1200x630 OG images', async () => {
     airportAdCampaignRepository: {
       listActiveDeals: async () => [createDealView(1), createDealView(2)],
     },
+    monthlyReportPublicService: {
+      getListView: async () => ({
+        page: 1,
+        page_size: 12,
+        total: 1,
+        total_pages: 1,
+        items: [createMonthlyReportListItem()],
+      }),
+      getBySlug: async () => null,
+      getSitemapItems: async () => [],
+    } as never,
     frontendAssets: TEST_FRONTEND_ASSETS,
   }));
 
@@ -103,6 +114,7 @@ test('core public SEO pages expose dedicated 1200x630 OG images', async () => {
     const checks = [
       ['/', '/og/home-2026-airport-ranking.png', '机场榜 GateRank 全球科学上网机场评测与排名平台分享图'],
       ['/rankings/all', '/og/rankings-all.png', 'GateRank 全量机场排行榜分享图'],
+      ['/monthly-reports', '/og/monthly-reports.png', 'GateRank 机场 VPN 月度报告分享图'],
       ['/deals', '/og/deals-coupons.png', 'GateRank 机场优惠码大全分享图'],
       ['/risk-monitor', '/og/risk-monitor.png', 'GateRank 跑路机场监测分享图'],
       ['/methodology', '/og/methodology.png', 'GateRank 机场测评方法分享图'],
@@ -144,6 +156,8 @@ test('GET /deals returns crawlable advertising deal HTML', async () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get('content-type') || '', /text\/html/);
     const html = await response.text();
+    assert.match(html, /<section class="hero hero-deals">/);
+    assert.match(html, /linear-gradient\(135deg, #241207 0%, #6F2F0B 38%, #D97706 72%, #F7D7B2 100%\)/);
     assert.match(html, /<h1>机场优惠码大全：活动折扣、免费试用与 USDT 支付优惠<\/h1>/);
     assert.match(html, /机场优惠码大全 \| 机场折扣、活动优惠、免费试用与 USDT 支付/);
     assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/deals"/);
@@ -375,6 +389,8 @@ test('GET /methodology includes expanded methodology SEO body and FAQ structured
     assert.equal(response.status, 200);
     const html = await response.text();
 
+    assert.match(html, /<section class="hero hero-methodology">/);
+    assert.match(html, /linear-gradient\(135deg, #082F49 0%, #075985 38%, #0284C7 72%, #BAE6FD 100%\)/);
     assert.match(html, /总公式与评分目标/);
     assert.match(html, /0\.4 × 稳定性 S \+ 0\.3 × 性能 P \+ 0\.1 × 价格 C \+ 0\.2 × 风险 R/);
     assert.match(html, /四个维度的子项公式/);
