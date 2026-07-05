@@ -134,6 +134,74 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
   }
 });
 
+test('GET /news?page=2 renders page article in lead slot instead of first-article placeholder', async () => {
+  const calls: Array<{ page: number }> = [];
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async (page: number) => {
+          calls.push({ page });
+          return {
+            page,
+            page_size: 12,
+            total: 13,
+            total_pages: 2,
+            query: '',
+            category: null,
+            topic: null,
+            categories: [],
+            topics: [],
+            featured: null,
+            items: [
+              {
+                id: 13,
+                title: '第二页文章',
+                slug: 'page-two-story',
+                excerpt: '第二页仍然应该显示文章内容。',
+                cover_image_url: '',
+                published_at: '2026-03-20 10:00:00',
+                view_count: 12,
+                reading_minutes: 3,
+                category: null,
+                topics: [],
+                is_featured: false,
+                is_recommended: false,
+                recommend_weight: 0,
+              },
+            ],
+            recommended: [],
+            risk_watch: [],
+            guides: [],
+          };
+        },
+        getArticleViewBySlug: async () => null,
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/news?page=2`, {
+      headers: {
+        host: `127.0.0.1:${port}`,
+      },
+    });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+
+    assert.deepEqual(calls, [{ page: 2 }]);
+    assert.match(html, /<h2 class="hero-title"><a href="\/news\/page-two-story">第二页文章<\/a><\/h2>/);
+    assert.doesNotMatch(html, /第一篇文章发布后，这里会显示精选头条与最新文章流。/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /api/v1/news/:slug returns article without incrementing view count', async () => {
   const calls: Array<{ slug: string; options?: { countView?: boolean } }> = [];
   const app = express();

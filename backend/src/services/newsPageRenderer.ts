@@ -1188,8 +1188,12 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
     : `${titlePrefix} | GateRank News`;
   const description = buildListDescription(listView);
   const featured = listView.featured;
+  const leadStory = featured || (listView.page > 1 ? listView.items[0] || null : null);
   const featuredCoverImage = featured ? toAbsoluteUrl(siteUrl, featured.cover_image_url) : null;
-  const listItems = listView.items.map((item) => renderFeedCard(item)).join('');
+  const feedItems = leadStory && !featured
+    ? listView.items.filter((item) => item.id !== leadStory.id)
+    : listView.items;
+  const listItems = feedItems.map((item) => renderFeedCard(item)).join('');
   const isSearch = Boolean(query);
   const jsonLd = [
     {
@@ -1250,7 +1254,7 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
           </section>
 
           <section class="news-hub-grid" style="margin-top: 30px;">
-            ${featured ? renderHeroCard(featured) : `
+            ${leadStory ? renderHeroCard(leadStory) : `
               <div class="empty-state">
                 <div class="eyebrow" style="justify-content:center;">News</div>
                 <p style="margin:0; font-size:16px; line-height:1.8;">第一篇文章发布后，这里会显示精选头条与最新文章流。</p>
