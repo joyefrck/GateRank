@@ -10,6 +10,7 @@ interface MonthlyMarkdownReportInput {
   year: number;
   month: number;
   requestedDate: string;
+  siteOrigin?: string;
 }
 
 export function buildMonthlyMarkdownReport(input: MonthlyMarkdownReportInput): string {
@@ -20,13 +21,14 @@ export function buildMonthlyMarkdownReport(input: MonthlyMarkdownReportInput): s
   const risks = buildRiskFindings(report);
   const trendSummary = summarizeTrends(report);
   const capabilitySummary = summarizeCapabilities(report.capabilities);
+  const reportUrl = buildAirportReportUrl(input.siteOrigin, report.airport.slug);
 
   return [
     `# GateRank ${report.airport.name} ${monthLabel} 月度表现报告`,
     '',
     `> 报告期间：${monthLabel}-01 至 ${requestedDate}`,
     `> 数据口径：截至 ${report.date} 的近 30 天 GateRank 观测快照`,
-    `> 机场官网：${report.airport.website}`,
+    `> 机场榜报告：${reportUrl}`,
     '',
     '## 一、执行摘要',
     '',
@@ -118,6 +120,12 @@ export function buildMonthlyMarkdownReport(input: MonthlyMarkdownReportInput): s
     `_本报告由 GateRank 后台于导出时生成，源数据来自 ${report.date} 的机场报告快照。_`,
     '',
   ].join('\n');
+}
+
+function buildAirportReportUrl(siteOrigin: string | undefined, slug: string): string {
+  const path = `/airports/${slug}`;
+  const origin = String(siteOrigin || '').trim().replace(/\/+$/, '');
+  return origin ? `${origin}${path}` : path;
 }
 
 function buildStrengths(report: ReportView): string[] {

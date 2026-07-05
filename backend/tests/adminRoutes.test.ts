@@ -6564,6 +6564,7 @@ test('GET /airports/:id/monthly-report-markdown exports completed month markdown
     const port = (server.address() as AddressInfo).port;
     const response = await fetch(
       `http://127.0.0.1:${port}/airports/1/monthly-report-markdown?year=${period.year}&month=${period.month}`,
+      { headers: { Origin: 'https://gate-rank.com' } },
     );
     const body = await response.text();
 
@@ -6572,6 +6573,9 @@ test('GET /airports/:id/monthly-report-markdown exports completed month markdown
     assert.match(response.headers.get('content-disposition') || '', /\.md/);
     assert.deepEqual(requestedDates, [period.endDate]);
     assert.match(body, new RegExp(`# GateRank 飞猫云 ${period.year}-${pad2(period.month)} 月度表现报告`));
+    assert.match(body, /> 机场榜报告：https:\/\/gate-rank\.com\/airports\/feimao-cloud/);
+    assert.doesNotMatch(body, /> 机场官网：/);
+    assert.doesNotMatch(body, /https:\/\/feimao\.example\.com/);
     assert.match(body, /## 一、执行摘要/);
     assert.match(body, /综合分为 \*\*88\.50\*\*/);
     assert.match(body, /稳定性 S/);

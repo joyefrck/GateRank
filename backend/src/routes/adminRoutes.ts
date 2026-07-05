@@ -2317,6 +2317,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         year,
         month,
         requestedDate,
+        siteOrigin: getSiteOrigin(req),
       });
       const filename = buildMonthlyReportFilename(report.airport.name, year, month);
       const fallbackFilename = `GateRank-${airportId}-${year}-${pad2(month)}-monthly-report.md`;
