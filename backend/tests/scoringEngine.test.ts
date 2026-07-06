@@ -153,7 +153,7 @@ test('computeScore returns bounded and weighted output', () => {
   assert.ok(out.c >= 0 && out.c <= 100);
   assert.ok(out.r >= 0 && out.r <= 100);
   assert.ok(out.score >= 0 && out.score <= 100);
-  assert.equal(out.final_score, 91.17);
+  assert.equal(out.final_score, 91.76);
   assert.equal(out.details.ssl_penalty, 0);
   assert.equal(out.details.complaint_penalty, 3);
   assert.equal(out.details.history_penalty, 0);
@@ -193,9 +193,9 @@ test('computeScore uses uptime, latency cv and streak formulas for S', () => {
 
   const out = computeScore(airport, metrics, 0);
   assert.equal(out.details.uptime_score, 80);
-  assert.equal(out.details.stability_score, 90.91);
+  assert.equal(out.details.stability_score, 100);
   assert.equal(out.details.streak_score, 50);
-  assert.equal(out.s, 77.27);
+  assert.equal(out.s, 80);
 });
 
 test('computeScore uses effective latency cv for low-latency routes', () => {
@@ -223,7 +223,7 @@ test('computeScore uses effective latency cv for low-latency routes', () => {
     packet_loss_percent: 0.2,
     stable_days_streak: 15,
     healthy_days_streak: 15,
-    stability_tier: 'stable',
+    stability_tier: 'volatile',
     domain_ok: true,
     ssl_days_left: 30,
     recent_complaints_count: 0,
@@ -232,13 +232,14 @@ test('computeScore uses effective latency cv for low-latency routes', () => {
 
   const out = computeScore(airport, metrics, 0);
   assert.equal(out.details.latency_cv_raw, 1.4909);
-  assert.equal(out.details.effective_latency_cv, 0.1141);
-  assert.equal(out.details.stability_rule_version, 'stability_tier_v3');
-  assert.equal(out.details.stability_score, 88.59);
-  assert.equal(out.s, 86.58);
+  assert.equal(out.details.effective_latency_cv, 0);
+  assert.equal(out.details.stability_tier, 'stable');
+  assert.equal(out.details.stability_rule_version, 'stability_tier_v4');
+  assert.equal(out.details.stability_score, 100);
+  assert.equal(out.s, 90);
 });
 
-test('computeScore does not over-reward genuinely noisy latency samples', () => {
+test('computeScore applies gradual penalties to sustained 600ms+ latency samples', () => {
   const airport: Airport = {
     id: 1,
     name: 'A',
@@ -256,7 +257,7 @@ test('computeScore does not over-reward genuinely noisy latency samples', () => 
     date: '2026-03-28',
     uptime_percent_30d: 99.8,
     uptime_percent_today: 100,
-    latency_samples_ms: [5, 20, 40, 60, 90, 120],
+    latency_samples_ms: [600, 620, 650, 680, 700],
     median_latency_ms: 80,
     median_download_mbps: 100,
     packet_loss_percent: 0.2,
@@ -269,8 +270,8 @@ test('computeScore does not over-reward genuinely noisy latency samples', () => 
   };
 
   const out = computeScore(airport, metrics, 0);
-  assert.equal(out.details.effective_latency_cv, 0.6961);
-  assert.equal(out.details.stability_score, 30.39);
+  assert.equal(out.details.effective_latency_cv, 0.45);
+  assert.equal(out.details.stability_score, 55);
 });
 
 test('computeScore prefers healthy streak days when minor fluctuation should not over-penalize S', () => {
@@ -291,7 +292,7 @@ test('computeScore prefers healthy streak days when minor fluctuation should not
     date: '2026-04-02',
     uptime_percent_30d: 99.1,
     uptime_percent_today: 100,
-    latency_samples_ms: [10, 12, 18, 16, 14],
+    latency_samples_ms: [350, 380, 420, 460, 490],
     median_latency_ms: 60,
     median_download_mbps: 100,
     packet_loss_percent: 0.2,

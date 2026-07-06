@@ -13,6 +13,7 @@ import {
   computeStabilityScore,
   computeStreakScore,
   computeUptimeScore,
+  getStabilityTier,
 } from '../utils/stability';
 
 export function normalizeLinear(
@@ -49,6 +50,7 @@ export function computeScore(
   const effectiveLatencyCv = effectiveLatencyStats.cv ?? rawLatencyCv;
   const uptimeScore = computeUptimeScore(uptimeBasis);
   const stabilityScore = computeStabilityScore(effectiveLatencyCv);
+  const stabilityTier = getStabilityTier(uptimeBasis, latencySamples);
   const streakBasisDays = metrics.healthy_days_streak ?? metrics.stable_days_streak;
   const streakScore = computeStreakScore(streakBasisDays);
 
@@ -145,7 +147,7 @@ export function computeScore(
       latency_cv: effectiveLatencyCv === null ? null : round4(effectiveLatencyCv),
       latency_cv_raw: rawLatencyCv === null ? null : round4(rawLatencyCv),
       effective_latency_cv: effectiveLatencyCv === null ? null : round4(effectiveLatencyCv),
-      stability_tier: metrics.stability_tier ?? null,
+      stability_tier: stabilityTier,
       stability_rule_version: STABILITY_RULES.ruleVersion,
       available_nodes_count: metrics.available_nodes_count ?? null,
       unavailable_nodes_count: metrics.unavailable_nodes_count ?? null,

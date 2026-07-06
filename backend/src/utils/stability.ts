@@ -50,8 +50,7 @@ export function computeEffectiveLatencyStats(samples: number[]): EffectiveLatenc
 
   const meanMs = average(evaluatedSamples);
   const stdMs = standardDeviation(evaluatedSamples, meanMs);
-  const cv =
-    meanMs > 0 ? stdMs / Math.max(meanMs, STABILITY_RULES.effectiveMeanFloorMs) : null;
+  const cv = average(evaluatedSamples.map((sample) => latencyPenalty(sample)));
 
   return {
     meanMs: round2(meanMs),
@@ -148,6 +147,15 @@ function trimSamples(samples: number[]): number[] {
 
   const sorted = samples.slice().sort((left, right) => left - right);
   return sorted.slice(0, sorted.length - STABILITY_RULES.trimMaxSampleCount);
+}
+
+function latencyPenalty(sampleMs: number): number {
+  for (const band of STABILITY_RULES.latencyPenaltyBands) {
+    if (sampleMs <= band.maxLatencyMs) {
+      return band.penalty;
+    }
+  }
+  return 0.95;
 }
 
 function average(values: number[]): number {

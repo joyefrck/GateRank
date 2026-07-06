@@ -25,7 +25,15 @@ const STABILITY_RULES = {
   maxMinorLatencyCv: 0.35,
   trimMinSampleCount: 6,
   trimMaxSampleCount: 1,
-  effectiveMeanFloorMs: 10,
+  latencyPenaltyBands: [
+    { maxLatencyMs: 200, penalty: 0 },
+    { maxLatencyMs: 300, penalty: 0.1 },
+    { maxLatencyMs: 500, penalty: 0.25 },
+    { maxLatencyMs: 800, penalty: 0.45 },
+    { maxLatencyMs: 1200, penalty: 0.65 },
+    { maxLatencyMs: 2000, penalty: 0.8 },
+    { maxLatencyMs: Number.POSITIVE_INFINITY, penalty: 0.95 },
+  ],
 } as const;
 
 const TIME_DECAY_LAMBDA = 0.1;
@@ -89,7 +97,7 @@ export const dimensionCards = [
     formula: 'S = 0.5 × UptimeScore + 0.3 × StabilityScore + 0.2 × StreakScore',
     bullets: [
       'UptimeScore 由当日或 30 天可用率换算，低于 95% 后快速失分。',
-      'StabilityScore 使用稳健波动值 effective_latency_cv，并对低延迟样本做 10ms 均值地板保护。',
+      'StabilityScore 使用阶梯化 effective_latency_cv：200ms 内不扣分，超过后按延迟区间温和递增。',
       '单日状态分为稳定 / 轻微波动 / 异常波动，只有异常波动会打断连续健康记录。',
       'StreakScore 使用连续健康天数计算，30 天封顶。',
     ],
@@ -241,9 +249,16 @@ function computeEffectiveLatencyCv(samples: number[]): number {
     normalized.length >= STABILITY_RULES.trimMinSampleCount
       ? normalized.slice(0, normalized.length - STABILITY_RULES.trimMaxSampleCount)
       : normalized;
-  const mean = average(evaluated);
-  const std = standardDeviation(evaluated, mean);
-  return round2(std / Math.max(mean, STABILITY_RULES.effectiveMeanFloorMs));
+  return round2(average(evaluated.map((sample) => latencyPenalty(sample))));
+}
+
+function latencyPenalty(sampleMs: number): number {
+  for (const band of STABILITY_RULES.latencyPenaltyBands) {
+    if (sampleMs <= band.maxLatencyMs) {
+      return band.penalty;
+    }
+  }
+  return 0.95;
 }
 
 function computeStreakScore(stableDaysStreak: number): number {
@@ -283,15 +298,6 @@ function describeStabilityTier(uptimePercent: number, latencyCv: number | null):
 
 function average(values: number[]): number {
   return values.reduce((sum, value) => sum + value, 0) / values.length;
-}
-
-function standardDeviation(values: number[], meanValue: number): number {
-  if (values.length <= 1) {
-    return 0;
-  }
-  const variance =
-    values.reduce((sum, value) => sum + (value - meanValue) ** 2, 0) / values.length;
-  return Math.sqrt(variance);
 }
 
 function calcSslPenalty(sslDaysLeft: number | null): number {
