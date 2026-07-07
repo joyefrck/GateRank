@@ -410,6 +410,8 @@ export async function createApp() {
   app.use(
     createMachineReadableRoutes({
       publicViewService,
+      airportAdCampaignRepository,
+      monthlyReportPublicService,
     }),
   );
 

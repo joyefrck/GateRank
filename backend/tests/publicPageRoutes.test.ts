@@ -56,12 +56,13 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       if (path === '/') {
         assert.match(html, /<strong class="hero-highlight">行业首创，每日更新<\/strong>/);
         assert.match(html, /基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单/);
-        assert.match(html, /<h2>机场榜 GateRank 是什么？<\/h2>/);
-        assert.match(html, /<h2>GateRank 如何评测机场 VPN？<\/h2>/);
-        assert.match(html, /<h2>新手如何选择机场？<\/h2>/);
-        assert.match(html, /<h2>机场推荐主要看哪些指标？<\/h2>/);
-        assert.match(html, /<h2>不同需求推荐入口<\/h2>/);
-        assert.match(html, /<h2>常见问题<\/h2>/);
+        assert.match(html, /<h2>读懂机场推荐逻辑<\/h2>/);
+        assert.match(html, /<h3>机场榜 GateRank 是什么？<\/h3>/);
+        assert.match(html, /<h3>GateRank 如何评测机场 VPN？<\/h3>/);
+        assert.match(html, /<h3>新手如何选择机场？<\/h3>/);
+        assert.match(html, /<h3>机场推荐主要看哪些指标？<\/h3>/);
+        assert.match(html, /<h3>不同需求推荐入口<\/h3>/);
+        assert.match(html, /<h3>常见问题<\/h3>/);
         assert.match(html, /<h3>机场和 VPN 有什么区别？<\/h3>/);
         assert.match(html, /<h3>机场推荐看价格还是稳定性？<\/h3>/);
         assert.match(html, /href="\/rankings\/all"/);
@@ -253,7 +254,9 @@ test('GET /monthly-reports returns crawlable monthly report index HTML', async (
     assert.match(html, /2026年6月机场 VPN 月度报告/);
     assert.match(html, /\/monthly-reports\/2026-06-airport-vpn-ranking-report/);
     assert.match(html, /"@type":"CollectionPage"/);
+    assert.match(html, /"@type":"BreadcrumbList"/);
     assert.match(html, /"@type":"ItemList"/);
+    assert.equal(Array.from(html.matchAll(/<script type="application\/ld\+json">/g)).length, 1);
     assert.match(html, /"kind":"monthly_reports"/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

@@ -176,13 +176,19 @@ export function usePageSeo(config: SeoConfig) {
     canonical.setAttribute('href', canonicalUrl);
 
     const scriptId = 'gaterank-jsonld';
-    let script = document.getElementById(scriptId) as HTMLScriptElement | null;
+    let script = (document.getElementById(scriptId) as HTMLScriptElement | null)
+      || (document.head.querySelector('script[type="application/ld+json"]') as HTMLScriptElement | null);
     if (!script) {
       script = document.createElement('script');
-      script.id = scriptId;
       script.type = 'application/ld+json';
       document.head.appendChild(script);
     }
+    script.id = scriptId;
+    document.head.querySelectorAll('script[type="application/ld+json"]').forEach((element) => {
+      if (element !== script) {
+        element.remove();
+      }
+    });
     script.textContent = JSON.stringify(config.structuredData ?? {}, null, 0);
   }, [config]);
 }

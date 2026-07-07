@@ -3088,7 +3088,7 @@ function HomeSeoContent() {
           {indicatorSection ? <HomeSeoArticle section={indicatorSection} compact /> : null}
           {entrySection ? (
             <article className="rounded-[8px] border border-slate-200 bg-slate-50 p-5">
-              <h2 className="text-xl font-black tracking-normal text-slate-950">{entrySection.title}</h2>
+              <h3 className="text-xl font-black tracking-normal text-slate-950">{entrySection.title}</h3>
               <p className="mt-3 text-sm leading-7 text-slate-600">{entrySection.body}</p>
               <div className="mt-4 flex flex-wrap gap-2">
                 {(entrySection.links || []).map((link) => (
@@ -3108,7 +3108,7 @@ function HomeSeoContent() {
 
           <article className="rounded-[8px] border border-slate-200 bg-white p-5">
             <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">FAQ</div>
-            <h2 className="mt-2 text-xl font-black tracking-normal text-slate-950">常见问题</h2>
+            <h3 className="mt-2 text-xl font-black tracking-normal text-slate-950">常见问题</h3>
             <div className="mt-4 grid gap-3">
               {HOME_FAQ_ITEMS.map((item) => (
                 <details key={item.question} className="rounded-[8px] border border-slate-200 bg-slate-50 px-4 py-3">
@@ -3134,7 +3134,7 @@ function HomeSeoArticle({
 }) {
   return (
     <article className="rounded-[8px] border border-slate-200 bg-slate-50 p-5 transition duration-200 hover:border-slate-300 hover:bg-white hover:shadow-[0_12px_28px_rgba(15,23,42,0.06)] motion-reduce:transition-none">
-      <h2 className={`${compact ? 'text-xl' : 'text-[22px]'} font-black tracking-normal text-slate-950`}>{section.title}</h2>
+      <h3 className={`${compact ? 'text-xl' : 'text-[22px]'} font-black tracking-normal text-slate-950`}>{section.title}</h3>
       <p className="mt-3 text-sm leading-7 text-slate-600">{section.body}</p>
       <div className="mt-4 flex flex-wrap gap-2">
         {section.facts.map((fact) => (

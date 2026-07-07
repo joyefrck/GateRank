@@ -1,16 +1,22 @@
 import { Router } from 'express';
-import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../types/domain';
+import type { FullRankingView, HomePageView, MonthlyReport, ReportView, RiskMonitorView } from '../types/domain';
+import type { AirportDealView } from '../../../shared/airportAds';
 import { setPublicCacheHeaders } from '../utils/publicCache';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { getDateInTimezone } from '../utils/time';
 import {
+  buildDealsData,
+  buildMonthlyReportsData,
   buildRankingsData,
   buildRiskMonitorData,
   buildSummaryData,
   renderAirportMarkdown,
   renderDataIndexMarkdown,
+  renderDealsMarkdown,
   renderLlmsFullTxt,
   renderLlmsTxt,
+  renderMonthlyReportDetailMarkdown,
+  renderMonthlyReportsMarkdown,
   renderRankingsMarkdown,
   renderRobotsTxt,
   renderRiskMonitorMarkdown,
@@ -21,6 +27,7 @@ import {
   resolvePublicFrontendAssets,
   type PublicFrontendAssets,
 } from '../services/frontendAssets';
+import type { MonthlyReportPublicService } from '../services/monthlyReportPublicService';
 
 interface MachineReadableDeps {
   publicViewService: {
@@ -29,6 +36,10 @@ interface MachineReadableDeps {
     getRiskMonitorView(date: string, page: number, pageSize: number): Promise<RiskMonitorView>;
     getReportViewBySlug?(slug: string, date: string): Promise<ReportView | null>;
   };
+  airportAdCampaignRepository?: {
+    listActiveDeals(): Promise<AirportDealView[]>;
+  };
+  monthlyReportPublicService?: MonthlyReportPublicService;
   frontendAssets?: PublicFrontendAssets;
 }
 
@@ -84,6 +95,65 @@ export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
     } catch (error) {
       console.error('[machine-readable] failed to render llms-full.txt', { error, requestId: req.requestId || 'unknown' });
       sendText(res.status(500), 'text/plain; charset=utf-8', 'GateRank llms-full.txt 暂时无法生成');
+    }
+  });
+
+  router.get('/deals.md', async (req, res) => {
+    try {
+      const siteUrl = getSiteOrigin(req);
+      const deals = await getDeals(deps);
+      const data = buildDealsData(siteUrl, deals, new Date().toISOString());
+      sendText(res, 'text/markdown; charset=utf-8', renderDealsMarkdown(siteUrl, data));
+    } catch (error) {
+      console.error('[machine-readable] failed to render deals markdown', { error, requestId: req.requestId || 'unknown' });
+      sendText(res.status(500), 'text/plain; charset=utf-8', 'GateRank deals markdown 暂时无法生成');
+    }
+  });
+
+  router.get('/data/deals.json', async (req, res) => {
+    try {
+      const deals = await getDeals(deps);
+      setPublicCacheHeaders(res);
+      res.json(buildDealsData(getSiteOrigin(req), deals, new Date().toISOString()));
+    } catch (error) {
+      console.error('[machine-readable] failed to render deals json', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).json({ error: { code: 'DEALS_UNAVAILABLE', message: 'deals data is temporarily unavailable' } });
+    }
+  });
+
+  router.get('/monthly-reports.md', async (req, res) => {
+    try {
+      const data = await getMonthlyReportsData(deps, getSiteOrigin(req));
+      sendText(res, 'text/markdown; charset=utf-8', renderMonthlyReportsMarkdown(data));
+    } catch (error) {
+      console.error('[machine-readable] failed to render monthly reports markdown', { error, requestId: req.requestId || 'unknown' });
+      sendText(res.status(500), 'text/plain; charset=utf-8', 'GateRank monthly reports markdown 暂时无法生成');
+    }
+  });
+
+  router.get('/data/monthly-reports.json', async (req, res) => {
+    try {
+      setPublicCacheHeaders(res);
+      res.json(await getMonthlyReportsData(deps, getSiteOrigin(req)));
+    } catch (error) {
+      console.error('[machine-readable] failed to render monthly reports json', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).json({ error: { code: 'MONTHLY_REPORTS_UNAVAILABLE', message: 'monthly reports data is temporarily unavailable' } });
+    }
+  });
+
+  router.get('/monthly-reports/:slug.md', async (req, res) => {
+    try {
+      const service = requireMonthlyReportPublicService(deps);
+      const slug = String(req.params.slug || '').replace(/\.md$/i, '');
+      const report = await service.getBySlug(slug);
+      if (!report) {
+        sendText(res.status(404), 'text/plain; charset=utf-8', 'GateRank monthly report markdown not found');
+        return;
+      }
+      sendText(res, 'text/markdown; charset=utf-8', renderMonthlyReportDetailMarkdown(report));
+    } catch (error) {
+      console.error('[machine-readable] failed to render monthly report markdown', { error, requestId: req.requestId || 'unknown' });
+      sendText(res.status(500), 'text/plain; charset=utf-8', 'GateRank monthly report markdown 暂时无法生成');
     }
   });
 
@@ -200,6 +270,32 @@ export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
   });
 
   return router;
+}
+
+async function getDeals(deps: MachineReadableDeps): Promise<AirportDealView[]> {
+  if (!deps.airportAdCampaignRepository) {
+    throw new Error('airportAdCampaignRepository is not configured');
+  }
+  return deps.airportAdCampaignRepository.listActiveDeals();
+}
+
+async function getMonthlyReportsData(deps: MachineReadableDeps, siteUrl: string) {
+  const service = requireMonthlyReportPublicService(deps);
+  const view = await service.getListView(1, 50);
+  const details = await Promise.all(view.items.map((item) => service.getBySlug(item.slug)));
+  const detailsBySlug = new Map(
+    details
+      .filter((item): item is MonthlyReport => Boolean(item))
+      .map((item) => [item.slug, item]),
+  );
+  return buildMonthlyReportsData(siteUrl, view.items, detailsBySlug);
+}
+
+function requireMonthlyReportPublicService(deps: MachineReadableDeps): MonthlyReportPublicService {
+  if (!deps.monthlyReportPublicService) {
+    throw new Error('monthlyReportPublicService is not configured');
+  }
+  return deps.monthlyReportPublicService;
 }
 
 async function getSummary(deps: MachineReadableDeps, siteUrl: string, date = getDateInTimezone()) {

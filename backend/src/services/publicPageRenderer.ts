@@ -1358,7 +1358,7 @@ function renderHomeSeoContent(): string {
 function renderHomeSeoArticle(section: (typeof HOME_SEO_CONTENT_SECTIONS)[number]): string {
   return `
     <article class="home-seo-article">
-      <h2>${escapeHtml(section.title)}</h2>
+      <h3>${escapeHtml(section.title)}</h3>
       <p>${escapeHtml(section.body)}</p>
       <div class="home-seo-facts">
         ${section.facts.map((fact) => `<span>${escapeHtml(fact)}</span>`).join('')}
@@ -1375,7 +1375,7 @@ function renderHomeSeoArticle(section: (typeof HOME_SEO_CONTENT_SECTIONS)[number
 function renderHomeSeoEntrySection(section: (typeof HOME_SEO_CONTENT_SECTIONS)[number]): string {
   return `
     <article class="home-seo-article home-seo-entry">
-      <h2>${escapeHtml(section.title)}</h2>
+      <h3>${escapeHtml(section.title)}</h3>
       <p>${escapeHtml(section.body)}</p>
       <div class="home-seo-facts">
         ${section.facts.map((fact) => `<span>${escapeHtml(fact)}</span>`).join('')}
@@ -1400,7 +1400,7 @@ function renderHomeFaqSection(): string {
   return `
     <article class="home-seo-article home-seo-faq">
       <div class="eyebrow">FAQ</div>
-      <h2>常见问题</h2>
+      <h3>常见问题</h3>
       <div class="home-seo-faq-list">
         ${HOME_FAQ_ITEMS.map((item) => `
           <section>
@@ -1947,7 +1947,7 @@ const styles = `
   .home-seo-column { display: grid; gap: 16px; align-content: start; }
   .home-seo-article { border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 20px; transition: transform .2s ease-out, box-shadow .2s ease-out, border-color .2s ease-out, background-color .2s ease-out; }
   .home-seo-article:hover { transform: translateY(-2px); border-color: #cbd5e1; background: #fff; box-shadow: 0 12px 28px rgba(15,23,42,.06); }
-  .home-seo-article h2 { margin: 0; color: #020617; font-size: 22px; letter-spacing: 0; }
+  .home-seo-article h3 { margin: 0; color: #020617; font-size: 22px; letter-spacing: 0; }
   .home-seo-article p { margin: 12px 0 0; color: #475569; font-size: 14px; line-height: 1.9; }
   .home-seo-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
   .home-seo-facts span { display: inline-flex; min-height: 32px; align-items: center; border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; padding: 0 12px; color: #475569; font-size: 12px; font-weight: 900; }
@@ -1962,7 +1962,7 @@ const styles = `
   .home-seo-entry-links span { display: block; margin-top: 4px; color: #64748b; font-size: 12px; line-height: 1.6; }
   .home-seo-entry-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
   .home-seo-entry-links a { flex: 1 1 150px; }
-  .home-seo-faq h2 { margin-top: 8px; }
+  .home-seo-faq h3 { margin-top: 8px; }
   .home-seo-faq-list { display: grid; gap: 10px; margin-top: 16px; }
   .home-seo-faq-list section { border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 14px 16px; }
   .home-seo-faq-list h3 { margin: 0; color: #020617; font-size: 15px; letter-spacing: 0; }

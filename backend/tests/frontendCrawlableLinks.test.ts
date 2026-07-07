@@ -90,3 +90,45 @@ test('React homepage renders shared SEO content with crawlable anchors', async (
   assert.match(contentSource, /href=\{link\.href\}/);
   assert.doesNotMatch(contentSource, /navigate\(link\.href\)/);
 });
+
+test('React homepage SEO guide keeps inner topics below the section H2', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+
+  const contentStart = source.indexOf('function HomeSeoContent');
+  assert.notEqual(contentStart, -1);
+  const contentEnd = source.indexOf('function FullRankingPage', contentStart);
+  assert.notEqual(contentEnd, -1);
+  const contentSource = source.slice(contentStart, contentEnd);
+
+  assert.match(contentSource, />读懂机场推荐逻辑<\/h2>/);
+  assert.match(contentSource, /<h3[^>]*>\{section\.title\}<\/h3>/);
+  assert.match(contentSource, /<h3[^>]*>\{entrySection\.title\}<\/h3>/);
+  assert.match(contentSource, /<h3[^>]*>常见问题<\/h3>/);
+});
+
+test('React monthly report rows expose the view action as a crawlable anchor', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/pages/monthlyReports/MonthlyReportsPage.tsx'), 'utf8');
+
+  const rowStart = source.indexOf('function MonthlyReportRow');
+  assert.notEqual(rowStart, -1);
+  const rowEnd = source.indexOf('function HeroMetric', rowStart);
+  assert.notEqual(rowEnd, -1);
+  const rowSource = source.slice(rowStart, rowEnd);
+
+  assert.match(rowSource, /<a[^>]+href=\{href\}[^>]*>/);
+  assert.match(rowSource, /navigate\(href\)/);
+  assert.doesNotMatch(rowSource, /<button/);
+});
+
+test('React SEO hook reuses the server-rendered JSON-LD script when present', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/site/publicSite.tsx'), 'utf8');
+
+  const hookStart = source.indexOf('export function usePageSeo');
+  assert.notEqual(hookStart, -1);
+  const hookEnd = source.indexOf('function toAbsoluteImageUrl', hookStart);
+  assert.notEqual(hookEnd, -1);
+  const hookSource = source.slice(hookStart, hookEnd);
+
+  assert.match(hookSource, /document\.head\.querySelector\('script\[type="application\/ld\+json"\]'\)/);
+  assert.match(hookSource, /script\.id = scriptId/);
+});

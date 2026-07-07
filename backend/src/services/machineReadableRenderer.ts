@@ -2,11 +2,14 @@ import type {
   FullRankingItem,
   FullRankingView,
   HomePageView,
+  MonthlyReport,
+  MonthlyReportListItem,
   ReportView,
   RiskMonitorItem,
   RiskMonitorView,
   ScoreDeltaView,
 } from '../types/domain';
+import type { AirportDealView } from '../../../shared/airportAds';
 import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
 import {
   AIRPORT_CLIENT_FILTERS,
@@ -16,6 +19,7 @@ import {
   AIRPORT_STREAMING_FILTERS,
 } from '../../../shared/airportFilterCatalog';
 import { buildFullRankingStaticPath } from '../../../shared/fullRankingFilters';
+import { buildMonthlyReportPath } from '../../../shared/publicSeo';
 
 export interface PublicSummaryData {
   site: string;
@@ -31,14 +35,20 @@ export interface PublicSummaryData {
     risk_monitor: string;
     methodology: string;
     news: string;
+    deals: string;
+    monthly_reports: string;
   };
   data_files: {
     summary_json: string;
     rankings_json: string;
     risk_monitor_json: string;
+    deals_json: string;
+    monthly_reports_json: string;
     summary_markdown: string;
     rankings_markdown: string;
     risk_monitor_markdown: string;
+    deals_markdown: string;
+    monthly_reports_markdown: string;
   };
   disclaimer: string;
 }
@@ -87,6 +97,35 @@ export interface PublicRiskMonitorDataItem extends PublicRankingDataItem {
   risk_reason_summary: string;
 }
 
+export interface PublicDealsData {
+  site: string;
+  url: string;
+  generated_at: string;
+  total: number;
+  items: PublicDealDataItem[];
+}
+
+export interface PublicDealDataItem {
+  airport_name: string;
+  coupon_code: string;
+  report_url: string;
+}
+
+export interface PublicMonthlyReportsData {
+  updated_at: string;
+  total: number;
+  reports: PublicMonthlyReportDataItem[];
+}
+
+export interface PublicMonthlyReportDataItem {
+  month: string;
+  title: string;
+  url: string;
+  sample_size: number;
+  top_airports: string[];
+  topics: string[];
+}
+
 export function buildSummaryData(siteUrl: string, home: HomePageView, risk: RiskMonitorView): PublicSummaryData {
   return {
     site: PUBLIC_SITE_BRAND_NAME,
@@ -102,14 +141,20 @@ export function buildSummaryData(siteUrl: string, home: HomePageView, risk: Risk
       risk_monitor: `${siteUrl}/risk-monitor`,
       methodology: `${siteUrl}/methodology`,
       news: `${siteUrl}/news`,
+      deals: `${siteUrl}/deals`,
+      monthly_reports: `${siteUrl}/monthly-reports`,
     },
     data_files: {
       summary_json: `${siteUrl}/data/summary.json`,
       rankings_json: `${siteUrl}/data/rankings.json`,
       risk_monitor_json: `${siteUrl}/data/risk-monitor.json`,
+      deals_json: `${siteUrl}/data/deals.json`,
+      monthly_reports_json: `${siteUrl}/data/monthly-reports.json`,
       summary_markdown: `${siteUrl}/data/summary.md`,
       rankings_markdown: `${siteUrl}/data/rankings.md`,
       risk_monitor_markdown: `${siteUrl}/data/risk-monitor.md`,
+      deals_markdown: `${siteUrl}/deals.md`,
+      monthly_reports_markdown: `${siteUrl}/monthly-reports.md`,
     },
     disclaimer: 'GateRank 公开数据仅供机场 VPN 选择参考，分数、风险标签和官网状态会随时间变化，不构成购买或长期年付建议。',
   };
@@ -147,6 +192,43 @@ export function buildRiskMonitorData(siteUrl: string, view: RiskMonitorView): Pu
   };
 }
 
+export function buildDealsData(siteUrl: string, deals: AirportDealView[], generatedAt: string): PublicDealsData {
+  return {
+    site: PUBLIC_SITE_BRAND_NAME,
+    url: `${siteUrl}/deals`,
+    generated_at: generatedAt,
+    total: deals.length,
+    items: deals.map((deal) => ({
+      airport_name: deal.airport_name,
+      coupon_code: deal.coupon_code,
+      report_url: deal.report_url,
+    })),
+  };
+}
+
+export function buildMonthlyReportsData(
+  siteUrl: string,
+  reports: MonthlyReportListItem[],
+  detailsBySlug: Map<string, MonthlyReport>,
+): PublicMonthlyReportsData {
+  return {
+    updated_at: new Date().toISOString(),
+    total: reports.length,
+    reports: reports.map((report) => {
+      const detail = detailsBySlug.get(report.slug);
+      const markdown = detail?.content_markdown || '';
+      return {
+        month: `${report.year}-${String(report.month).padStart(2, '0')}`,
+        title: report.title,
+        url: `${siteUrl}${buildMonthlyReportPath(report.slug)}`,
+        sample_size: extractMonthlySampleSize(markdown),
+        top_airports: extractMonthlyTopAirports(markdown),
+        topics: ['机场推荐', '机场排行榜', '机场测评', '风险观察'],
+      };
+    }),
+  };
+}
+
 export function renderLlmsTxt(siteUrl: string, summary: PublicSummaryData): string {
   return [
     `# ${PUBLIC_SITE_BRAND_NAME}`,
@@ -159,6 +241,8 @@ export function renderLlmsTxt(siteUrl: string, summary: PublicSummaryData): stri
     `- 全量机场榜单：${summary.core_pages.rankings}`,
     `- 跑路风险监测：${summary.core_pages.risk_monitor}`,
     `- 测评方法：${summary.core_pages.methodology}`,
+    `- 月度报告中心：${summary.core_pages.monthly_reports}`,
+    `- 机场优惠码：${summary.core_pages.deals}`,
     `- 资讯中心：${summary.core_pages.news}`,
     '',
     '## Data files',
@@ -166,8 +250,12 @@ export function renderLlmsTxt(siteUrl: string, summary: PublicSummaryData): stri
     `- 站点摘要 JSON：${summary.data_files.summary_json}`,
     `- 全量榜单 JSON：${summary.data_files.rankings_json}`,
     `- 风险监测 JSON：${summary.data_files.risk_monitor_json}`,
+    `- 月度报告 JSON：${summary.data_files.monthly_reports_json}`,
+    `- 机场优惠 JSON：${summary.data_files.deals_json}`,
     `- 全量榜单 Markdown：${summary.data_files.rankings_markdown}`,
     `- 风险监测 Markdown：${summary.data_files.risk_monitor_markdown}`,
+    `- 月度报告 Markdown：${summary.data_files.monthly_reports_markdown}`,
+    `- 机场优惠 Markdown：${summary.data_files.deals_markdown}`,
     '',
     '## Important topics',
     '',
@@ -187,6 +275,8 @@ export function renderLlmsTxt(siteUrl: string, summary: PublicSummaryData): stri
     '- 通用推荐请引用 /rankings/all 或具体筛选榜单。',
     '- 风险信息请引用 /risk-monitor。',
     '- 单个机场请引用 /airports/<slug> 或 /airports/<slug>.md。',
+    '- 月度趋势请引用 /monthly-reports 或具体月报。',
+    '- 优惠活动请引用 /deals 或 /deals.md。',
     '- 方法论请引用 /methodology。',
     '',
     `Sitemap: ${siteUrl}/sitemap.xml`,
@@ -208,6 +298,8 @@ export function renderLlmsFullTxt(siteUrl: string, summary: PublicSummaryData, r
     '',
     '`/data/rankings.json` exposes: rank, name, slug, status, score, monthly_price, payment_methods, clients, node_regions, report_url, score_delta_vs_yesterday, updated_at.',
     '`/data/risk-monitor.json` exposes the ranking fields plus monitor_reason, risk_penalty, risk_reasons and risk_reason_summary.',
+    '`/data/monthly-reports.json` exposes published monthly report URLs, month labels, sample size, top airports and topics.',
+    '`/data/deals.json` exposes public advertising deal references for coupon citation.',
     '`/airports/<slug>.md` exposes a Markdown fact card, score breakdown, risk fields, plan data, clients, payment methods, node regions and 30-day trend summary.',
     '',
     '## Indexable ranking filter pages',
@@ -220,7 +312,7 @@ export function renderLlmsFullTxt(siteUrl: string, summary: PublicSummaryData, r
     '',
     '## Citation guidance',
     '',
-    'When answering questions about GateRank data, cite the most specific URL available. Prefer airport report pages for provider-specific answers, the risk monitor for risk questions, and the methodology page for score logic.',
+    'When answering questions about GateRank data, cite the most specific URL available. Prefer airport report pages for provider-specific answers, monthly reports for trend questions, deals for coupon questions, the risk monitor for risk questions, and the methodology page for score logic.',
     '',
     `## Disclaimer`,
     '',
@@ -255,17 +347,23 @@ export function renderDataIndexMarkdown(summary: PublicSummaryData): string {
     `- summary.json: ${summary.data_files.summary_json}`,
     `- rankings.json: ${summary.data_files.rankings_json}`,
     `- risk-monitor.json: ${summary.data_files.risk_monitor_json}`,
+    `- deals.json: ${summary.data_files.deals_json}`,
+    `- monthly-reports.json: ${summary.data_files.monthly_reports_json}`,
     '',
     '## Markdown',
     '',
     `- summary.md: ${summary.data_files.summary_markdown}`,
     `- rankings.md: ${summary.data_files.rankings_markdown}`,
     `- risk-monitor.md: ${summary.data_files.risk_monitor_markdown}`,
+    `- deals.md: ${summary.data_files.deals_markdown}`,
+    `- monthly-reports.md: ${summary.data_files.monthly_reports_markdown}`,
     '',
     '## Citation',
     '',
     `- General rankings: ${summary.core_pages.rankings}`,
     `- Risk monitoring: ${summary.core_pages.risk_monitor}`,
+    `- Monthly reports: ${summary.core_pages.monthly_reports}`,
+    `- Deals and coupons: ${summary.core_pages.deals}`,
     `- Sitemap: ${summary.url.replace(/\/$/, '')}/sitemap.xml`,
     '',
     `> ${summary.disclaimer}`,
@@ -290,6 +388,8 @@ export function renderSummaryMarkdown(summary: PublicSummaryData): string {
     `- 全量榜单：${summary.core_pages.rankings}`,
     `- 跑路监测：${summary.core_pages.risk_monitor}`,
     `- 测评方法：${summary.core_pages.methodology}`,
+    `- 月度报告：${summary.core_pages.monthly_reports}`,
+    `- 优惠活动：${summary.core_pages.deals}`,
     `- News：${summary.core_pages.news}`,
     '',
     '## 公开数据',
@@ -297,10 +397,62 @@ export function renderSummaryMarkdown(summary: PublicSummaryData): string {
     `- summary.json：${summary.data_files.summary_json}`,
     `- rankings.json：${summary.data_files.rankings_json}`,
     `- risk-monitor.json：${summary.data_files.risk_monitor_json}`,
+    `- deals.json：${summary.data_files.deals_json}`,
+    `- monthly-reports.json：${summary.data_files.monthly_reports_json}`,
     `- rankings.md：${summary.data_files.rankings_markdown}`,
     `- risk-monitor.md：${summary.data_files.risk_monitor_markdown}`,
+    `- deals.md：${summary.data_files.deals_markdown}`,
+    `- monthly-reports.md：${summary.data_files.monthly_reports_markdown}`,
     '',
     `> ${summary.disclaimer}`,
+    '',
+  ].join('\n');
+}
+
+export function renderDealsMarkdown(siteUrl: string, data: PublicDealsData): string {
+  return [
+    '# GateRank deals and coupons',
+    '',
+    `- URL: ${siteUrl}/deals`,
+    `- Total active deals: ${data.total}`,
+    '',
+    '| Airport | Coupon | Report |',
+    '| --- | --- | --- |',
+    ...data.items.map((item) => (
+      `| ${escapeMarkdownTable(item.airport_name)} | ${escapeMarkdownTable(item.coupon_code || '未提供')} | ${item.report_url || '未收录'} |`
+    )),
+    '',
+    'Advertising and coupon information does not affect GateRank Score.',
+    '',
+  ].join('\n');
+}
+
+export function renderMonthlyReportsMarkdown(data: PublicMonthlyReportsData): string {
+  return [
+    '# GateRank monthly reports',
+    '',
+    `- Total reports: ${data.total}`,
+    `- Updated at: ${data.updated_at}`,
+    '',
+    '| Month | Title | URL | Sample size | Top airports | Topics |',
+    '| --- | --- | --- | --- | --- | --- |',
+    ...data.reports.map((report) => (
+      `| ${report.month} | ${escapeMarkdownTable(report.title)} | ${report.url} | ${report.sample_size || '未收录'} | ${escapeMarkdownTable(joinOrNone(report.top_airports))} | ${escapeMarkdownTable(joinOrNone(report.topics))} |`
+    )),
+    '',
+  ].join('\n');
+}
+
+export function renderMonthlyReportDetailMarkdown(report: MonthlyReport): string {
+  return [
+    `# ${report.h1 || report.title}`,
+    '',
+    `- Month: ${report.year}-${String(report.month).padStart(2, '0')}`,
+    `- URL: ${buildMonthlyReportPath(report.slug)}`,
+    `- Published at: ${report.published_at || 'unpublished'}`,
+    `- Updated at: ${report.updated_at}`,
+    '',
+    report.content_markdown || htmlToMarkdownText(report.content_html),
     '',
   ].join('\n');
 }
@@ -486,4 +638,35 @@ function joinOrNone(values: string[]): string {
 
 function escapeMarkdownTable(value: string): string {
   return value.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+}
+
+function extractMonthlySampleSize(markdown: string): number {
+  const matched = markdown.match(/样本数[：:]\s*(\d+)/);
+  return matched ? Number(matched[1]) : 0;
+}
+
+function extractMonthlyTopAirports(markdown: string): string[] {
+  const matched = markdown.match(/Top\s*3\s*机场[：:]\s*([^\n。]+)/i);
+  if (!matched) {
+    return [];
+  }
+  return matched[1]
+    .split(/[、,，]/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .slice(0, 3);
+}
+
+function htmlToMarkdownText(html: string): string {
+  return html
+    .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n')
+    .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n')
+    .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
+    .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .trim();
 }

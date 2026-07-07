@@ -293,9 +293,13 @@ function MonthlyReportRow({ item }: { item: MonthlyReportListItem; key?: React.K
           <span>机场测评</span>
         </div>
       </div>
-      <button className="inline-flex items-center justify-start gap-2 text-sm font-black text-neutral-900 transition-colors group-hover:text-rose-600 md:justify-end" onClick={() => navigate(href)}>
+      <a
+        href={href}
+        className="inline-flex items-center justify-start gap-2 text-sm font-black text-neutral-900 transition-colors group-hover:text-rose-600 md:justify-end"
+        onClick={(event) => { event.preventDefault(); navigate(href); }}
+      >
         查看月报 <ArrowRight size={14} />
-      </button>
+      </a>
     </article>
   );
 }
