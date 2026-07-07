@@ -423,6 +423,7 @@ NIGHTLY_PIPELINE_AIRPORT_STATUS=normal
 - `00:00` 指上海时间每日零点开始整条流水线，不代表四个模块同时并发启动。
 - 任务只会在设定时间后的一个短窗口内触发一次，避免服务白天重启后补跑整条午夜流水线。
 - “时间维度（衰减）”没有单独脚本，它包含在最后一次 `recomputeForDate` 里。
+- 管理后台“任务调度”里的性能采集会默认使用更轻量的调度参数：`LATENCY_ATTEMPTS=3`、`LATENCY_SAMPLE_INTERVAL_SECONDS=1`、`SPEED_TIMEOUT=10`、`SPEED_CONNECTIONS=2`、`NODE_AVAILABILITY_CHECK=tcp`。这些默认值只在环境变量未显式配置时生效，生产需要深度测速时可自行覆盖。
 
 ## 稳定性采集 Cron
 
@@ -541,9 +542,11 @@ SING_BOX_BIN=sing-box \
 - `PROXY_PORT`: 本地 HTTP 代理端口，默认 `7890`
 - `PROXY_STARTUP_TIMEOUT`: 等待 `sing-box` 启动秒数，默认 `8`
 - `LATENCY_ATTEMPTS`: 每节点延迟探测次数，默认 `3`
+- `LATENCY_SAMPLE_INTERVAL_SECONDS`: 每节点延迟探测间隔秒数，默认 `3`；后台调度默认使用 `1`
 - `NODE_AVAILABILITY_CHECK`: 节点可用性口径，`proxy_http` 或 `tcp`，默认 `proxy_http`
 - `TEST_URL_LATENCY`: 代理 HTTP 诊断 URL，默认 `https://www.google.com/generate_204`
 - `TEST_URL_SPEED`: 下载测速 URL，默认 `https://speed.cloudflare.com/__down?bytes=5000000`
+- `SPEED_TIMEOUT`: 下载测速每节点时长，默认 `20` 秒；后台调度默认使用 `10`
 - `SPEED_CONNECTIONS`: 下载测速并发连接数，默认 `4`
 - `SOURCE`: 运行来源标记，默认 `cron-performance`
 - `SKIP_RECOMPUTE`: 设为 `1/true/yes/on` 时只聚合不重算

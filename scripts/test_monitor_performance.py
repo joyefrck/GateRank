@@ -384,7 +384,7 @@ proxies:
         self.assertEqual(results[0].tcp_reachable, True)
         proxy_probe.assert_called_once_with(config, node)
 
-    def test_build_config_defaults_to_six_latency_attempts_and_three_second_interval(self) -> None:
+    def test_build_config_defaults_to_three_latency_attempts_and_three_second_interval(self) -> None:
         env = {
             "ADMIN_API_KEY": "test-key",
             "AIRPORT_ID": "1",
@@ -392,7 +392,7 @@ proxies:
         with patch.dict(os.environ, env, clear=True), patch.object(sys, "argv", ["monitor_performance.py"]):
             config = build_config()
 
-        self.assertEqual(config.latency_attempts, 6)
+        self.assertEqual(config.latency_attempts, 3)
         self.assertEqual(config.latency_sample_interval_seconds, 3)
         self.assertEqual(config.performance_concurrency, 4)
         self.assertEqual(config.node_availability_check, "proxy_http")
@@ -539,6 +539,51 @@ proxies:
         self.assertEqual(payload["diagnostics"]["node_availability_error_summary"], [])
         self.assertEqual(payload["diagnostics"]["node_availability"][0]["check"], "tcp")
         self.assertEqual(payload["diagnostics"]["node_availability"][0]["tcp_reachable"], None)
+
+    def test_run_for_airport_records_tcp_node_availability_check_in_diagnostics(self) -> None:
+        config = self.make_config()
+        config.node_availability_check = "tcp"
+        airport = {"id": 1, "name": "Alpha", "subscription_url": "https://sub.example.com"}
+        snapshot = {
+            "id": 12,
+            "captured_at": "2026-05-12T10:00:00+08:00",
+            "subscription_url": "https://sub.example.com",
+            "subscription_format": "plain",
+            "nodes": [{
+                "name": "HK-1",
+                "region": "HK",
+                "type": "trojan",
+                "outbound": {"type": "trojan", "tag": "proxy", "server": "hk.example.com", "server_port": 443, "password": "secret"},
+                "raw_uri": "trojan://secret@hk.example.com:443#HK-1",
+            }],
+        }
+
+        def fake_probe_node(_config, node):
+            return NodeProbeResult(
+                node=node,
+                latency_samples_ms=[100],
+                latency_sampled_at=["2026-05-13T12:00:00+08:00"],
+                proxy_latency_samples_ms=[180],
+                download_mbps=50,
+                failures=0,
+                total_attempts=1,
+            )
+
+        with (
+            patch("scripts.monitor_performance.get_latest_subscription_node_snapshot", return_value=snapshot),
+            patch("scripts.monitor_performance.check_nodes_availability", return_value=[
+                NodeAvailabilityResult(nodes_from_snapshot(snapshot)[0][0], True, check="tcp", tcp_reachable=True),
+            ]),
+            patch("scripts.monitor_performance.get_performance_node_selection", return_value={"mode": "default", "selected_keys": []}),
+            patch("scripts.monitor_performance.probe_node", side_effect=fake_probe_node),
+        ):
+            result = run_for_airport(config, airport, "2026-05-13T12:00:00+08:00")
+
+        payload = result["payload"]
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["diagnostics"]["node_availability_check"], "tcp")
+        self.assertEqual(payload["diagnostics"]["node_availability"][0]["check"], "tcp")
+        self.assertEqual(payload["diagnostics"]["node_availability"][0]["tcp_reachable"], True)
 
     def test_run_for_airport_skips_when_no_stored_snapshot_exists(self) -> None:
         config = self.make_config()

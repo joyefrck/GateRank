@@ -56,6 +56,25 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       if (path === '/') {
         assert.match(html, /<strong class="hero-highlight">行业首创，每日更新<\/strong>/);
         assert.match(html, /基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单/);
+        assert.match(html, /<h2>机场榜 GateRank 是什么？<\/h2>/);
+        assert.match(html, /<h2>GateRank 如何评测机场 VPN？<\/h2>/);
+        assert.match(html, /<h2>新手如何选择机场？<\/h2>/);
+        assert.match(html, /<h2>机场推荐主要看哪些指标？<\/h2>/);
+        assert.match(html, /<h2>不同需求推荐入口<\/h2>/);
+        assert.match(html, /<h2>常见问题<\/h2>/);
+        assert.match(html, /<h3>机场和 VPN 有什么区别？<\/h3>/);
+        assert.match(html, /<h3>机场推荐看价格还是稳定性？<\/h3>/);
+        assert.match(html, /href="\/rankings\/all"/);
+        assert.match(html, /href="\/methodology"/);
+        assert.match(html, /href="\/risk-monitor"/);
+        assert.match(html, /href="\/deals"/);
+        assert.match(html, /href="\/rankings\/all\?payment=alipay"/);
+        assert.match(html, /href="\/rankings\/all\?payment=usdt_trc20"/);
+        assert.match(html, /href="\/rankings\/all\?streaming=chatgpt"/);
+        assert.match(html, /href="\/rankings\/all\?streaming=netflix"/);
+        assert.match(html, /"@type":"FAQPage"/);
+        const homeFaqQuestionCount = Array.from(html.matchAll(/"@type":"Question"/g)).length;
+        assert.ok(homeFaqQuestionCount >= 5, `expected at least 5 home FAQ questions, got ${homeFaqQuestionCount}`);
       }
     }
   } finally {

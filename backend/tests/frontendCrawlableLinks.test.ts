@@ -59,3 +59,20 @@ test('React methodology page uses the shared sky list hero', async () => {
   assert.match(source, /value: item\.value/);
   assert.match(source, /pt-10 md:pt-14/);
 });
+
+test('React homepage renders shared SEO content with crawlable anchors', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+
+  assert.match(source, /HOME_SEO_CONTENT_SECTIONS/);
+  assert.match(source, /HOME_FAQ_ITEMS/);
+
+  const contentStart = source.indexOf('function HomeSeoContent');
+  assert.notEqual(contentStart, -1);
+  const contentEnd = source.indexOf('function FullRankingPage', contentStart);
+  assert.notEqual(contentEnd, -1);
+  const contentSource = source.slice(contentStart, contentEnd);
+
+  assert.match(contentSource, /<a/);
+  assert.match(contentSource, /href=\{link\.href\}/);
+  assert.doesNotMatch(contentSource, /navigate\(link\.href\)/);
+});

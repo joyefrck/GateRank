@@ -9554,7 +9554,8 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <div className="text-sm font-semibold text-neutral-900">稳定性判定</div>
               <div className="mt-1 text-xs text-neutral-500 whitespace-pre-wrap">
                 {'三档规则：`stable = uptime >= 99% 且 effective_latency_cv <= 0.20`；`minor_fluctuation = uptime >= 95% 且 effective_latency_cv <= 0.35`；其余为 `volatile`。\n'}
-                {'首页健康记录会累计 stable + minor_fluctuation；严格稳定记录只累计 stable。原始 `latency_cv` 仅用于诊断，判定仍使用去极值后的 effective_latency_cv。'}
+                {'effective_latency_cv 为阶梯扣分比例：200ms 内不扣分，200-300ms 记 0.10，300-500ms 记 0.25，500-800ms 记 0.45，800ms 以上继续温和递增。\n'}
+                {'首页健康记录会累计 stable + minor_fluctuation；严格稳定记录只累计 stable。原始 `latency_cv` 仅用于诊断，判定使用去极值后的阶梯扣分值。'}
               </div>
             </div>
 
@@ -9579,7 +9580,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <div className="text-sm font-semibold text-neutral-900">评分公式</div>
               <div className="mt-2 text-xs text-neutral-500 whitespace-pre-wrap">
                 {'UptimeScore = clamp((Uptime% - 95) * 20, 0, 100)\n'}
-                {'StabilityScore = clamp(100 - effective_latency_cv * 100, 0, 100)\n'}
+                {'StabilityScore = clamp(100 - 阶梯扣分比例 * 100, 0, 100)\n'}
                 {'StreakScore = min(healthy_days_streak / 30 * 100, 100)\n'}
                 {'S = 0.5 * UptimeScore + 0.3 * StabilityScore + 0.2 * StreakScore'}
               </div>

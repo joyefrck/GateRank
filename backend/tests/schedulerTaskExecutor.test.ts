@@ -9,6 +9,15 @@ type ExecOptions = {
   timeout: number;
 };
 
+const PERFORMANCE_ENV_KEYS = [
+  'LATENCY_ATTEMPTS',
+  'LATENCY_SAMPLE_INTERVAL_SECONDS',
+  'SPEED_TIMEOUT',
+  'SPEED_CONNECTIONS',
+  'NODE_AVAILABILITY_CHECK',
+  'NIGHTLY_PIPELINE_SCRIPT_TIMEOUT_MS',
+] as const;
+
 function createSchedulerTaskExecutor(overrides: Partial<ConstructorParameters<typeof SchedulerTaskExecutor>[0]> = {}) {
   return new SchedulerTaskExecutor({
     airportRepository: {
@@ -47,6 +56,39 @@ function createSchedulerTaskExecutor(overrides: Partial<ConstructorParameters<ty
     },
     ...overrides,
   });
+}
+
+async function withSchedulerEnv<T>(
+  patch: Partial<Record<(typeof PERFORMANCE_ENV_KEYS)[number], string | undefined>>,
+  callback: () => Promise<T>,
+): Promise<T> {
+  const previous = new Map<string, string | undefined>();
+  for (const key of PERFORMANCE_ENV_KEYS) {
+    previous.set(key, process.env[key]);
+    if (Object.prototype.hasOwnProperty.call(patch, key)) {
+      const value = patch[key];
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+      continue;
+    }
+    delete process.env[key];
+  }
+
+  try {
+    return await callback();
+  } finally {
+    for (const key of PERFORMANCE_ENV_KEYS) {
+      const value = previous.get(key);
+      if (value === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = value;
+      }
+    }
+  }
 }
 
 test('SchedulerTaskExecutor.runRiskInspection skips down and unlisted airports', async () => {
@@ -109,6 +151,91 @@ test('SchedulerTaskExecutor.runStabilityCollection surfaces script failure detai
     result.detail.summary,
     '2/3 succeeded, 1 failed; Hangzhou #7: airport 7 has no website configured',
   );
+});
+
+test('SchedulerTaskExecutor.runPerformanceCollection injects scheduler-safe probe defaults', async () => {
+  await withSchedulerEnv({}, async () => {
+    let capturedEnv: NodeJS.ProcessEnv | null = null;
+    const executor = createSchedulerTaskExecutor({
+      execFileAsync: async (_file: string, _args: readonly string[], options: ExecOptions) => {
+        capturedEnv = options.env;
+        return {
+          stdout: JSON.stringify({ airport_count: 1, success_count: 1, failure_count: 0 }),
+          stderr: '',
+        };
+      },
+    });
+
+    const result = await executor.runPerformanceCollection('2026-07-07');
+
+    assert.equal(result.status, 'succeeded');
+    assert.ok(capturedEnv);
+    const env = capturedEnv as NodeJS.ProcessEnv;
+    assert.equal(env.LATENCY_ATTEMPTS, '3');
+    assert.equal(env.LATENCY_SAMPLE_INTERVAL_SECONDS, '1');
+    assert.equal(env.SPEED_TIMEOUT, '10');
+    assert.equal(env.SPEED_CONNECTIONS, '2');
+    assert.equal(env.NODE_AVAILABILITY_CHECK, 'tcp');
+    assert.equal(env.SOURCE, 'scheduler-performance');
+  });
+});
+
+test('SchedulerTaskExecutor.runPerformanceCollection preserves explicitly configured probe settings', async () => {
+  await withSchedulerEnv({
+    LATENCY_ATTEMPTS: '5',
+    LATENCY_SAMPLE_INTERVAL_SECONDS: '2',
+    SPEED_TIMEOUT: '15',
+    SPEED_CONNECTIONS: '3',
+    NODE_AVAILABILITY_CHECK: 'proxy_http',
+  }, async () => {
+    let capturedEnv: NodeJS.ProcessEnv | null = null;
+    const executor = createSchedulerTaskExecutor({
+      execFileAsync: async (_file: string, _args: readonly string[], options: ExecOptions) => {
+        capturedEnv = options.env;
+        return {
+          stdout: JSON.stringify({ airport_count: 1, success_count: 1, failure_count: 0 }),
+          stderr: '',
+        };
+      },
+    });
+
+    const result = await executor.runPerformanceCollection('2026-07-07');
+
+    assert.equal(result.status, 'succeeded');
+    assert.ok(capturedEnv);
+    const env = capturedEnv as NodeJS.ProcessEnv;
+    assert.equal(env.LATENCY_ATTEMPTS, '5');
+    assert.equal(env.LATENCY_SAMPLE_INTERVAL_SECONDS, '2');
+    assert.equal(env.SPEED_TIMEOUT, '15');
+    assert.equal(env.SPEED_CONNECTIONS, '3');
+    assert.equal(env.NODE_AVAILABILITY_CHECK, 'proxy_http');
+  });
+});
+
+test('SchedulerTaskExecutor.runPerformanceCollection summarizes script timeout explicitly', async () => {
+  await withSchedulerEnv({ NIGHTLY_PIPELINE_SCRIPT_TIMEOUT_MS: '1800000' }, async () => {
+    const executor = createSchedulerTaskExecutor({
+      execFileAsync: async () => {
+        const error = new Error('Command failed: python3 /app/scripts/monitor_performance.py') as Error & {
+          killed: boolean;
+          signal: NodeJS.Signals;
+          stdout: string;
+          stderr: string;
+        };
+        error.killed = true;
+        error.signal = 'SIGTERM';
+        error.stdout = '';
+        error.stderr = '';
+        throw error;
+      },
+    });
+
+    const result = await executor.runPerformanceCollection('2026-07-07');
+
+    assert.equal(result.status, 'failed');
+    assert.equal(result.detail.summary, '超时：超过 30.0 min');
+    assert.equal(result.message, '性能采集失败：超时：超过 30.0 min');
+  });
 });
 
 test('SchedulerTaskExecutor.runTask syncs billing listing status', async () => {

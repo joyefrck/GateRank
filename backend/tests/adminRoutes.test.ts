@@ -2982,12 +2982,12 @@ test('GET /airports/:id/dashboard exposes raw and effective stability diagnostic
     assert.equal(response.status, 200);
     const data = (await response.json()) as { stability: Record<string, unknown> };
     assert.equal(data.stability.latency_cv, 0.2498);
-    assert.equal(data.stability.effective_latency_cv, 0.1141);
+    assert.equal(data.stability.effective_latency_cv, 0);
     assert.equal(data.stability.is_stable_day, true);
     assert.equal(data.stability.healthy_days_streak, 15);
     assert.equal(data.stability.stability_tier, 'stable');
-    assert.equal(data.stability.stability_score, 88.59);
-    assert.equal(data.stability.stability_rule_version, 'stability_tier_v3');
+    assert.equal(data.stability.stability_score, 100);
+    assert.equal(data.stability.stability_rule_version, 'stability_tier_v4');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

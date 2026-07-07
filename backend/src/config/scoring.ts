@@ -27,8 +27,17 @@ export const STABILITY_RULES = {
   streakCapDays: 30,
   trimMinSampleCount: 6,
   trimMaxSampleCount: 1,
-  effectiveMeanFloorMs: 10,
-  ruleVersion: 'stability_tier_v3',
+  acceptableLatencyMs: 200,
+  latencyPenaltyBands: [
+    { maxLatencyMs: 200, penalty: 0 },
+    { maxLatencyMs: 300, penalty: 0.1 },
+    { maxLatencyMs: 500, penalty: 0.25 },
+    { maxLatencyMs: 800, penalty: 0.45 },
+    { maxLatencyMs: 1200, penalty: 0.65 },
+    { maxLatencyMs: 2000, penalty: 0.8 },
+    { maxLatencyMs: Number.POSITIVE_INFINITY, penalty: 0.95 },
+  ],
+  ruleVersion: 'stability_tier_v4',
 } as const;
 
 export const THRESHOLDS = {

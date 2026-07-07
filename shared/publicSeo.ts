@@ -18,6 +18,70 @@ export const HOME_HERO_HIGHLIGHT_TEXT = '行业首创，每日更新';
 export const HOME_HERO_SUPPORTING_TEXT =
   '基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单，帮助用户快速筛选值得关注的机场 VPN 与测评报告。';
 
+export const HOME_SEO_CONTENT_SECTIONS: PublicHomeSeoContentSection[] = [
+  {
+    title: '机场榜 GateRank 是什么？',
+    body: '机场榜 GateRank 是一个面向科学上网用户的机场 VPN 评测与排名平台。首页不是简单收集机场名称，而是把公开监测、官网状态、测速结果、价格信息、风险记录和历史表现整理成可对比的榜单。用户搜索机场推荐、VPN 推荐或梯子推荐时，往往需要先知道哪些服务仍在正常运营、哪些机场近期更稳定、哪些机场适合短期尝试。GateRank 的定位就是把这些分散信息放在同一个判断框架里，减少只看广告、只看低价或只看单次测速带来的误判。',
+    facts: ['公开监测数据优先', '榜单每日更新', '推荐与风险并列展示'],
+  },
+  {
+    title: 'GateRank 如何评测机场 VPN？',
+    body: 'GateRank 评测机场 VPN 时，会把稳定性、性能、价格和风险拆开观察，再汇总成公开展示分数。稳定性关注 30 天可用率、连续健康天数和延迟波动；性能关注中位延迟、下载速度、丢包率与晚高峰表现；价格维度会结合月付、年付折算、试用和套餐门槛；风险维度则关注官网可访问性、SSL 状态、历史异常和投诉信号。这样做的目的不是替用户保证某个机场绝对可靠，而是让每一次机场推荐都有可追溯的指标依据。',
+    facts: ['稳定性、性能、价格、风险分开观察', '晚高峰与长期趋势比单次测速更重要', '广告活动不进入 GateRank Score'],
+    links: [
+      { label: '查看测评方法', href: '/methodology', description: '理解评分规则、测速标准和风险扣分逻辑' },
+      { label: '查看全量榜单', href: '/rankings/all', description: '按公开展示分数对比已收录机场' },
+    ],
+  },
+  {
+    title: '新手如何选择机场？',
+    body: '新手选择机场时，不建议直接购买很长周期套餐。更稳妥的方式是先看今日推荐和长期稳定榜，确认官网仍可访问、近期没有明显风险预警，再优先选择支持试用、月付或短周期套餐的机场。支付方式也要按自己的风险承受能力判断：支付宝和微信更适合普通用户核对订单，USDT 更适合熟悉链上转账和售后规则的人。购买前还应确认客户端支持、订阅导入方式、常用地区节点和客服渠道，避免买完才发现设备或使用场景不匹配。',
+    facts: ['先短周期验证，再考虑长期套餐', '不要只看低价或折扣力度', '客户端和节点地区要匹配自己的设备'],
+  },
+  {
+    title: '机场推荐主要看哪些指标？',
+    body: '一个值得进入推荐视野的机场，通常不是某一个指标特别亮眼，而是在多个指标上没有明显短板。可用率说明服务是否经常在线，延迟和丢包影响网页、游戏和视频会议体验，下载速度影响大文件和流媒体，价格决定长期使用成本，风险记录则帮助用户避开可能失联、跑路或售后异常的服务。GateRank 首页把今日推荐、长期稳定、性价比、新入榜和风险预警拆成不同入口，是为了让用户按需求进入，而不是把所有场景压成一个单一排名。',
+    facts: ['可用率看持续在线能力', '延迟和丢包看日常体验', '风险记录决定是否需要回避'],
+  },
+  {
+    title: '不同需求推荐入口',
+    body: '不同用户搜索机场推荐时，真实需求并不一样。有人想找稳定机场，有人只关心便宜机场，有人需要 Netflix、ChatGPT 或常用客户端支持，也有人想先排除风险机场。首页底部这些入口用于把搜索意图分发到更长尾的页面，帮助 Google 和用户理解 GateRank 不只是一个榜单首页，而是覆盖评测方法、风险监测、优惠活动和细分筛选的机场 VPN 信息体系。',
+    facts: ['按支付方式筛选', '按流媒体和 AI 工具筛选', '按风险与优惠场景分流'],
+    links: [
+      { label: '全部机场排名', href: '/rankings/all', description: '查看全部已上线机场评分排名' },
+      { label: '跑路风险监测', href: '/risk-monitor', description: '优先排除已跑路和风险观察机场' },
+      { label: '机场优惠码', href: '/deals', description: '查看活动折扣，但不把优惠当作唯一判断依据' },
+      { label: '支付宝机场', href: '/rankings/all?payment=alipay', description: '筛选支持支付宝付款的机场服务' },
+      { label: 'USDT 机场', href: '/rankings/all?payment=usdt_trc20', description: '筛选支持 USDT-TRC20 的机场服务' },
+      { label: 'ChatGPT 机场', href: '/rankings/all?streaming=chatgpt', description: '筛选支持 AI 工具访问的机场服务' },
+      { label: 'Netflix 机场', href: '/rankings/all?streaming=netflix', description: '筛选支持 Netflix 解锁的机场服务' },
+    ],
+  },
+];
+
+export const HOME_FAQ_ITEMS: PublicHomeFaqItem[] = [
+  {
+    question: '机场和 VPN 有什么区别？',
+    answer: '机场通常指提供代理节点、订阅链接和多客户端导入方式的服务商，用户会通过 Clash、Shadowrocket、sing-box 等客户端使用；传统 VPN 更多是一套封装好的官方客户端。两者都可能用于科学上网，但配置方式、节点选择、稳定性和售后模式不同。',
+  },
+  {
+    question: '机场推荐看价格还是稳定性？',
+    answer: '价格只能说明使用成本，不能单独代表服务质量。更合理的判断顺序是先看稳定性、可用率、延迟、丢包和风险记录，再比较价格和套餐周期。特别便宜但长期波动或风险信号明显的机场，不适合作为长期主力。',
+  },
+  {
+    question: '支持支付宝的机场安全吗？',
+    answer: '支持支付宝只说明付款方式更适合普通用户核对订单，不等于机场本身一定安全。仍然需要结合官网状态、历史记录、近期投诉、退款规则、客服渠道和榜单表现判断，避免因为支付方便就忽略服务风险。',
+  },
+  {
+    question: '支持 USDT 的机场适合谁？',
+    answer: 'USDT 更适合熟悉链类型、到账确认、交易哈希和售后沟通的人。它可能提供更灵活的支付选择，但退款、汇率、转账手续费和地址核对都需要用户自己承担更多责任，新手不应只因为支持 USDT 就直接购买长期套餐。',
+  },
+  {
+    question: '为什么晚高峰测试很重要？',
+    answer: '很多机场在白天或低峰时段表现正常，但晚高峰更容易暴露拥塞、丢包、延迟抖动和流媒体不可用等问题。晚高峰测试能更接近日常真实使用压力，因此比单次低峰测速更适合判断机场是否能长期使用。',
+  },
+];
+
 export interface PublicReportSeoView {
   date: string;
   airport: {
@@ -134,6 +198,24 @@ export interface PublicDealsContentSection {
 }
 
 export interface PublicDealsFaqItem {
+  question: string;
+  answer: string;
+}
+
+export interface PublicHomeSeoLink {
+  label: string;
+  href: string;
+  description: string;
+}
+
+export interface PublicHomeSeoContentSection {
+  title: string;
+  body: string;
+  facts: string[];
+  links?: PublicHomeSeoLink[];
+}
+
+export interface PublicHomeFaqItem {
   question: string;
   answer: string;
 }
@@ -281,7 +363,7 @@ export function buildHomeSeo(input?: {
       input && typeof input.monitoredAirports === 'number' && typeof input.realtimeTests === 'number'
         ? `${HOME_HERO_HIGHLIGHT_TEXT}。${input.dateLabel || '今日'} 机场 VPN 榜单基于公开监测数据生成，当前监测 ${formatCount(input.monitoredAirports)} 个机场、累计实时测速 ${formatCount(input.realtimeTests)} 次，覆盖今日推荐、长期稳定、性价比、新入榜与风险预警。`
         : `${HOME_HERO_HIGHLIGHT_TEXT}。${PUBLIC_SITE_BRAND_NAME} 基于公开监测数据提供今日推荐、长期稳定、性价比、新入榜与风险预警等多维机场 VPN 榜单。`,
-    keywords: '机场榜GateRank,机场榜,机场推荐,机场VPN,VPN,科学上网,魔法,梯子,今日推荐机场,机场测评,稳定机场,风险预警,GateRank',
+    keywords: '机场榜GateRank,机场榜,机场推荐,机场VPN,机场VPN排名,VPN推荐,梯子推荐,科学上网,魔法,梯子,今日推荐机场,机场测评,稳定机场,风险预警,GateRank',
   };
 }
 
