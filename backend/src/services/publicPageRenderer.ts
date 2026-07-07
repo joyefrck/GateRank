@@ -13,8 +13,10 @@ import {
   APPLY_SEO,
   DEALS_CONTENT_SECTIONS,
   DEALS_FAQ_ITEMS,
+  HOME_FAQ_ITEMS,
   HOME_HERO_HIGHLIGHT_TEXT,
   HOME_HERO_SUPPORTING_TEXT,
+  HOME_SEO_CONTENT_SECTIONS,
   METHODOLOGY_SEO,
   PUBLIC_SEO_PATHS,
   buildMonthlyReportPath,
@@ -145,6 +147,18 @@ export function renderHomePublicPage(
         url: `${siteUrl}${canonicalPath}`,
         mainEntity: buildItemList(siteUrl, todayPickItems),
       },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: HOME_FAQ_ITEMS.map((item) => ({
+          '@type': 'Question',
+          name: item.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: item.answer,
+          },
+        })),
+      },
     ],
     initialData: {
       kind: 'home',
@@ -166,6 +180,7 @@ export function renderHomePublicPage(
           </div>
         </section>
         ${renderHomeSections(view)}
+        ${renderHomeSeoContent()}
       </main>
     `,
   });
@@ -1281,6 +1296,92 @@ function renderHomeSections(view: HomePageView): string {
     .join('');
 }
 
+function renderHomeSeoContent(): string {
+  const primarySections = HOME_SEO_CONTENT_SECTIONS.slice(0, 3);
+  const indicatorSection = HOME_SEO_CONTENT_SECTIONS[3];
+  const entrySection = HOME_SEO_CONTENT_SECTIONS[4];
+
+  return `
+    <section class="home-seo-guide" aria-label="机场推荐指南">
+      <div class="home-seo-guide-head">
+        <div>
+          <div class="eyebrow">SEO Guide</div>
+          <h2>读懂机场推荐逻辑</h2>
+        </div>
+        <p>从榜单结果继续往下看，理解 GateRank 如何承接机场推荐、VPN 推荐、梯子推荐和机场 VPN 排名这几类搜索意图。</p>
+      </div>
+      <div class="home-seo-guide-grid">
+        <div class="home-seo-column">
+          ${primarySections.map(renderHomeSeoArticle).join('')}
+        </div>
+        <aside class="home-seo-column">
+          ${indicatorSection ? renderHomeSeoArticle(indicatorSection) : ''}
+          ${entrySection ? renderHomeSeoEntrySection(entrySection) : ''}
+          ${renderHomeFaqSection()}
+        </aside>
+      </div>
+    </section>
+  `;
+}
+
+function renderHomeSeoArticle(section: (typeof HOME_SEO_CONTENT_SECTIONS)[number]): string {
+  return `
+    <article class="home-seo-article">
+      <h2>${escapeHtml(section.title)}</h2>
+      <p>${escapeHtml(section.body)}</p>
+      <div class="home-seo-facts">
+        ${section.facts.map((fact) => `<span>${escapeHtml(fact)}</span>`).join('')}
+      </div>
+      ${section.links && section.links.length > 0 ? `
+        <div class="home-seo-link-grid">
+          ${section.links.map(renderHomeSeoLink).join('')}
+        </div>
+      ` : ''}
+    </article>
+  `;
+}
+
+function renderHomeSeoEntrySection(section: (typeof HOME_SEO_CONTENT_SECTIONS)[number]): string {
+  return `
+    <article class="home-seo-article home-seo-entry">
+      <h2>${escapeHtml(section.title)}</h2>
+      <p>${escapeHtml(section.body)}</p>
+      <div class="home-seo-facts">
+        ${section.facts.map((fact) => `<span>${escapeHtml(fact)}</span>`).join('')}
+      </div>
+      <div class="home-seo-entry-links">
+        ${(section.links || []).map(renderHomeSeoLink).join('')}
+      </div>
+    </article>
+  `;
+}
+
+function renderHomeSeoLink(link: { label: string; href: string; description: string }): string {
+  return `
+    <a href="${escapeAttribute(link.href)}" title="${escapeAttribute(link.description)}">
+      <strong>${escapeHtml(link.label)}</strong>
+      <span>${escapeHtml(link.description)}</span>
+    </a>
+  `;
+}
+
+function renderHomeFaqSection(): string {
+  return `
+    <article class="home-seo-article home-seo-faq">
+      <div class="eyebrow">FAQ</div>
+      <h2>常见问题</h2>
+      <div class="home-seo-faq-list">
+        ${HOME_FAQ_ITEMS.map((item) => `
+          <section>
+            <h3>${escapeHtml(item.question)}</h3>
+            <p>${escapeHtml(item.answer)}</p>
+          </section>
+        `).join('')}
+      </div>
+    </article>
+  `;
+}
+
 function renderAirportCard(item: {
   name: string;
   score: number | null;
@@ -1779,6 +1880,34 @@ const styles = `
   .metric div, .muted { color: #666; font-size: 13px; }
   .metric strong, .score { display: block; margin-top: 8px; font-size: 28px; font-weight: 900; }
   .content-card { border: 1px solid #e5e5e5; border-radius: 24px; padding: 26px; background: #fff; }
+  .home-seo-guide { border: 1px solid #e2e8f0; border-radius: 18px; padding: 32px; background: #fff; box-shadow: 0 18px 54px rgba(15,23,42,.045); }
+  .home-seo-guide-head { display: flex; justify-content: space-between; gap: 24px; align-items: end; border-bottom: 1px solid #e2e8f0; padding-bottom: 24px; }
+  .home-seo-guide-head h2 { margin: 8px 0 0; color: #020617; font-size: 30px; letter-spacing: 0; }
+  .home-seo-guide-head p { max-width: 560px; margin: 0; color: #64748b; font-size: 14px; line-height: 1.9; }
+  .home-seo-guide-grid { display: grid; grid-template-columns: minmax(0,1.05fr) minmax(340px,.95fr); gap: 20px; margin-top: 24px; }
+  .home-seo-column { display: grid; gap: 16px; align-content: start; }
+  .home-seo-article { border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 20px; transition: transform .2s ease-out, box-shadow .2s ease-out, border-color .2s ease-out, background-color .2s ease-out; }
+  .home-seo-article:hover { transform: translateY(-2px); border-color: #cbd5e1; background: #fff; box-shadow: 0 12px 28px rgba(15,23,42,.06); }
+  .home-seo-article h2 { margin: 0; color: #020617; font-size: 22px; letter-spacing: 0; }
+  .home-seo-article p { margin: 12px 0 0; color: #475569; font-size: 14px; line-height: 1.9; }
+  .home-seo-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .home-seo-facts span { display: inline-flex; min-height: 32px; align-items: center; border: 1px solid #e2e8f0; border-radius: 999px; background: #fff; padding: 0 12px; color: #475569; font-size: 12px; font-weight: 900; }
+  .home-seo-link-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-top: 16px; }
+  .home-seo-link-grid a,
+  .home-seo-entry-links a { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 12px; text-decoration: none; transition: transform .2s ease-out, box-shadow .2s ease-out, border-color .2s ease-out; }
+  .home-seo-link-grid a:hover,
+  .home-seo-entry-links a:hover { transform: translateY(-2px); border-color: #cbd5e1; box-shadow: 0 10px 24px rgba(15,23,42,.08); }
+  .home-seo-link-grid strong,
+  .home-seo-entry-links strong { display: block; color: #1e293b; font-size: 14px; font-weight: 900; }
+  .home-seo-link-grid span,
+  .home-seo-entry-links span { display: block; margin-top: 4px; color: #64748b; font-size: 12px; line-height: 1.6; }
+  .home-seo-entry-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+  .home-seo-entry-links a { flex: 1 1 150px; }
+  .home-seo-faq h2 { margin-top: 8px; }
+  .home-seo-faq-list { display: grid; gap: 10px; margin-top: 16px; }
+  .home-seo-faq-list section { border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 14px 16px; }
+  .home-seo-faq-list h3 { margin: 0; color: #020617; font-size: 15px; letter-spacing: 0; }
+  .home-seo-faq-list p { margin-top: 10px; }
   .monthly-report-hero { background: linear-gradient(135deg, #0b3028 0%, #17483b 42%, #dfe9df 100%); }
   .monthly-report-hero h1 span { display: block; color: rgba(255,255,255,.45); font-size: clamp(26px, 5vw, 46px); line-height: 1.06; }
   .monthly-report-archive { display: grid; gap: 32px; }
@@ -1973,8 +2102,10 @@ const styles = `
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #666; }
   @media (max-width: 900px) {
     .page-main { width: min(100vw - 24px, 1280px); padding-top: 24px; gap: 20px; }
-    .hero, .content-card { border-radius: 18px; padding: 20px; }
+    .hero, .content-card, .home-seo-guide { border-radius: 18px; padding: 20px; }
     .hero-content { grid-template-columns: 1fr; }
+    .home-seo-guide-head { align-items: start; flex-direction: column; }
+    .home-seo-guide-grid, .home-seo-link-grid { grid-template-columns: 1fr; }
     h1 { font-size: 36px; line-height: 1.04; }
     .monthly-report-archive-head { align-items: start; flex-direction: column; }
     .monthly-report-year-group { grid-template-columns: 1fr; gap: 12px; }

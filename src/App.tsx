@@ -49,8 +49,10 @@ import {
 } from './site/publicSite';
 import {
   APPLY_SEO,
+  HOME_FAQ_ITEMS,
   HOME_HERO_HIGHLIGHT_TEXT,
   HOME_HERO_SUPPORTING_TEXT,
+  HOME_SEO_CONTENT_SECTIONS,
   buildAirportReportPath,
   buildFullRankingHeading,
   buildFullRankingSeo,
@@ -2869,6 +2871,18 @@ function HomePage({ date }: { date?: string }) {
           })),
         },
       },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: HOME_FAQ_ITEMS.map((item) => ({
+          '@type': 'Question',
+          name: item.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: item.answer,
+          },
+        })),
+      },
     ],
     [data, date, homepageDescription, homepageTitle],
   );
@@ -2988,8 +3002,106 @@ function HomePage({ date }: { date?: string }) {
             </section>
           );
         })}
+        {!loading && !error && data ? <HomeSeoContent /> : null}
       </main>
     </PageFrame>
+  );
+}
+
+function HomeSeoContent() {
+  const primarySections = HOME_SEO_CONTENT_SECTIONS.slice(0, 3);
+  const indicatorSection = HOME_SEO_CONTENT_SECTIONS[3];
+  const entrySection = HOME_SEO_CONTENT_SECTIONS[4];
+
+  return (
+    <section className="rounded-[18px] border border-slate-200 bg-white p-5 shadow-[0_18px_54px_rgba(15,23,42,0.045)] md:p-8" aria-label="机场推荐指南">
+      <div className="flex flex-col gap-3 border-b border-slate-200 pb-6 md:flex-row md:items-end md:justify-between">
+        <div>
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">SEO Guide</div>
+          <h2 className="mt-2 text-2xl font-black tracking-normal text-slate-950 md:text-3xl">读懂机场推荐逻辑</h2>
+        </div>
+        <p className="max-w-xl text-sm leading-7 text-slate-500">
+          从榜单结果继续往下看，理解 GateRank 如何承接机场推荐、VPN 推荐、梯子推荐和机场 VPN 排名这几类搜索意图。
+        </p>
+      </div>
+
+      <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">
+        <div className="grid gap-4">
+          {primarySections.map((section) => (
+            <HomeSeoArticle key={section.title} section={section} />
+          ))}
+        </div>
+
+        <aside className="grid gap-4">
+          {indicatorSection ? <HomeSeoArticle section={indicatorSection} compact /> : null}
+          {entrySection ? (
+            <article className="rounded-[8px] border border-slate-200 bg-slate-50 p-5">
+              <h2 className="text-xl font-black tracking-normal text-slate-950">{entrySection.title}</h2>
+              <p className="mt-3 text-sm leading-7 text-slate-600">{entrySection.body}</p>
+              <div className="mt-4 flex flex-wrap gap-2">
+                {(entrySection.links || []).map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    className="group inline-flex min-h-10 max-w-full items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 text-sm font-black text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_10px_24px_rgba(15,23,42,0.08)] motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+                    title={link.description}
+                  >
+                    <span className="truncate">{link.label}</span>
+                    <ArrowRight className="h-3.5 w-3.5 shrink-0 text-slate-400 transition group-hover:text-slate-900" />
+                  </a>
+                ))}
+              </div>
+            </article>
+          ) : null}
+
+          <article className="rounded-[8px] border border-slate-200 bg-white p-5">
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">FAQ</div>
+            <h2 className="mt-2 text-xl font-black tracking-normal text-slate-950">常见问题</h2>
+            <div className="mt-4 grid gap-3">
+              {HOME_FAQ_ITEMS.map((item) => (
+                <details key={item.question} className="rounded-[8px] border border-slate-200 bg-slate-50 px-4 py-3">
+                  <summary className="cursor-pointer text-sm font-black text-slate-950">{item.question}</summary>
+                  <p className="mt-3 text-sm leading-7 text-slate-600">{item.answer}</p>
+                </details>
+              ))}
+            </div>
+          </article>
+        </aside>
+      </div>
+    </section>
+  );
+}
+
+function HomeSeoArticle({
+  section,
+  compact = false,
+}: {
+  key?: React.Key;
+  section: (typeof HOME_SEO_CONTENT_SECTIONS)[number];
+  compact?: boolean;
+}) {
+  return (
+    <article className="rounded-[8px] border border-slate-200 bg-slate-50 p-5 transition duration-200 hover:border-slate-300 hover:bg-white hover:shadow-[0_12px_28px_rgba(15,23,42,0.06)] motion-reduce:transition-none">
+      <h2 className={`${compact ? 'text-xl' : 'text-[22px]'} font-black tracking-normal text-slate-950`}>{section.title}</h2>
+      <p className="mt-3 text-sm leading-7 text-slate-600">{section.body}</p>
+      <div className="mt-4 flex flex-wrap gap-2">
+        {section.facts.map((fact) => (
+          <span key={fact} className="inline-flex min-h-8 items-center rounded-full border border-slate-200 bg-white px-3 text-xs font-black text-slate-600">
+            {fact}
+          </span>
+        ))}
+      </div>
+      {section.links && section.links.length > 0 ? (
+        <div className="mt-4 grid gap-2 sm:grid-cols-2">
+          {section.links.map((link) => (
+            <a key={link.href} href={link.href} className="rounded-[8px] border border-slate-200 bg-white p-3 text-sm font-black text-slate-800 transition hover:border-slate-300 hover:text-slate-950">
+              {link.label}
+              <span className="mt-1 block text-xs font-bold leading-5 text-slate-500">{link.description}</span>
+            </a>
+          ))}
+        </div>
+      ) : null}
+    </article>
   );
 }
 
