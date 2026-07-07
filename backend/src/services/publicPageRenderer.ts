@@ -25,6 +25,7 @@ import {
   buildDealsStructuredData,
   buildFullRankingHeading,
   buildFullRankingSeo,
+  buildFullRankingTopicContent,
   buildDealsSeo,
   buildHomeSeo,
   buildQuery,
@@ -40,6 +41,7 @@ import {
   formatAirportStatusLabel,
   formatMetric,
   getPublicOgImageForPath,
+  type PublicFullRankingTopicContent,
   type PublicSeoText,
 } from '../../../shared/publicSeo';
 import type { AirportDealView } from '../../../shared/airportAds';
@@ -61,6 +63,7 @@ import {
   type AirportFilterOption,
 } from '../../../shared/airportFilterCatalog';
 import {
+  buildFullRankingStaticPath,
   buildFullRankingPath,
   EMPTY_FULL_RANKING_FILTERS,
   getFullRankingSeoDecision,
@@ -202,6 +205,21 @@ export function renderFullRankingPublicPage(
     page: hasFullRankingFilters(seoDecision.canonicalFilters) ? undefined : page,
   });
   const heading = buildFullRankingHeading(filters);
+  const topicContent = buildFullRankingTopicContent(filters);
+  const topicFaqJsonLd = topicContent
+    ? {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: topicContent.faqItems.map((item) => ({
+        '@type': 'Question',
+        name: item.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: item.answer,
+        },
+      })),
+    }
+    : null;
 
   return renderPublicDocument({
     siteUrl,
@@ -216,6 +234,7 @@ export function renderFullRankingPublicPage(
         ['全量榜单', canonicalPath],
       ]),
       buildRankingItemList(siteUrl, view.items),
+      ...(topicFaqJsonLd ? [topicFaqJsonLd] : []),
     ],
     initialData: {
       kind: 'full_ranking',
@@ -241,6 +260,7 @@ export function renderFullRankingPublicPage(
           </div>
         </section>
         ${renderFullRankingFilters(filters)}
+        ${renderFullRankingTopicContent(topicContent)}
         ${renderRankingTable(view.items)}
       </main>
     `,
@@ -1129,6 +1149,17 @@ export function renderForAiPublicPage(
           </div>
         </section>
         <section class="content-card">
+          <h2>筛选榜单示例</h2>
+          <div class="card-grid">
+            ${renderLinkedInfoCard('支付宝机场', buildFullRankingStaticPath('payment', 'alipay'))}
+            ${renderLinkedInfoCard('USDT-TRC20 机场', buildFullRankingStaticPath('payment', 'usdt_trc20'))}
+            ${renderLinkedInfoCard('Shadowrocket 机场', buildFullRankingStaticPath('client', 'shadowrocket'))}
+            ${renderLinkedInfoCard('香港节点机场', buildFullRankingStaticPath('region', 'hong_kong'))}
+            ${renderLinkedInfoCard('IEPL 专线机场', buildFullRankingStaticPath('line', 'iepl'))}
+            ${renderLinkedInfoCard('ChatGPT 解锁机场', buildFullRankingStaticPath('streaming', 'chatgpt'))}
+          </div>
+        </section>
+        <section class="content-card">
           <h2>数据文件</h2>
           <div class="card-grid">
             ${renderLinkedInfoCard('summary.json', summary.data_files.summary_json)}
@@ -1528,6 +1559,34 @@ function renderFullRankingFilters(filters: FullRankingFilters): string {
       ${renderFilterGroup('线路类型', 'line', AIRPORT_LINE_FILTERS, filters)}
       ${renderFilterGroup('流媒体与服务', 'streaming', AIRPORT_STREAMING_FILTERS, filters)}
       ${renderFilterGroup('导入方式', 'import', AIRPORT_IMPORT_FILTERS, filters)}
+    </section>
+  `;
+}
+
+function renderFullRankingTopicContent(topicContent: PublicFullRankingTopicContent | null): string {
+  if (!topicContent) {
+    return '';
+  }
+  return `
+    <section class="content-card">
+      <div class="eyebrow">专题说明</div>
+      <p>${escapeHtml(topicContent.intro)}</p>
+      <div class="card-grid">
+        ${topicContent.sections.map((section) => `
+          <article class="mini-card">
+            <h2>${escapeHtml(section.title)}</h2>
+            <p>${escapeHtml(section.body)}</p>
+          </article>
+        `).join('')}
+      </div>
+      <div class="card-grid">
+        ${topicContent.faqItems.map((item) => `
+          <article class="mini-card">
+            <h3>${escapeHtml(item.question)}</h3>
+            <p>${escapeHtml(item.answer)}</p>
+          </article>
+        `).join('')}
+      </div>
     </section>
   `;
 }

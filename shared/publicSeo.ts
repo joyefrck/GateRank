@@ -1,11 +1,19 @@
 import { PUBLIC_SITE_BRAND_NAME } from './publicBrand';
 import {
+  buildFullRankingStaticPath,
   getFullRankingFilterCount,
   getFullRankingSeoDecision,
   hasFullRankingFilters,
   type FullRankingFilters,
+  type FullRankingStaticFilterRoute,
 } from './fullRankingFilters';
-import { AIRPORT_PAYMENT_FILTERS, AIRPORT_STREAMING_FILTERS } from './airportFilterCatalog';
+import {
+  AIRPORT_FILTER_CATALOG,
+  AIRPORT_PAYMENT_FILTERS,
+  AIRPORT_STREAMING_FILTERS,
+  getAirportFilterLabel,
+  type AirportPrimaryIndexableFilterCategory,
+} from './airportFilterCatalog';
 import type { AirportDealView } from './airportAds';
 
 export interface PublicSeoText {
@@ -51,10 +59,10 @@ export const HOME_SEO_CONTENT_SECTIONS: PublicHomeSeoContentSection[] = [
       { label: '全部机场排名', href: '/rankings/all', description: '查看全部已上线机场评分排名' },
       { label: '跑路风险监测', href: '/risk-monitor', description: '优先排除已跑路和风险观察机场' },
       { label: '机场优惠码', href: '/deals', description: '查看活动折扣，但不把优惠当作唯一判断依据' },
-      { label: '支付宝机场', href: '/rankings/all?payment=alipay', description: '筛选支持支付宝付款的机场服务' },
-      { label: 'USDT 机场', href: '/rankings/all?payment=usdt_trc20', description: '筛选支持 USDT-TRC20 的机场服务' },
-      { label: 'ChatGPT 机场', href: '/rankings/all?streaming=chatgpt', description: '筛选支持 AI 工具访问的机场服务' },
-      { label: 'Netflix 机场', href: '/rankings/all?streaming=netflix', description: '筛选支持 Netflix 解锁的机场服务' },
+      { label: '支付宝机场', href: buildFullRankingStaticPath('payment', 'alipay'), description: '筛选支持支付宝付款的机场服务' },
+      { label: 'USDT 机场', href: buildFullRankingStaticPath('payment', 'usdt_trc20'), description: '筛选支持 USDT-TRC20 的机场服务' },
+      { label: 'ChatGPT 机场', href: buildFullRankingStaticPath('streaming', 'chatgpt'), description: '筛选支持 AI 工具访问的机场服务' },
+      { label: 'Netflix 机场', href: buildFullRankingStaticPath('streaming', 'netflix'), description: '筛选支持 Netflix 解锁的机场服务' },
     ],
   },
 ];
@@ -220,6 +228,25 @@ export interface PublicHomeFaqItem {
   answer: string;
 }
 
+export interface PublicFullRankingTopicSection {
+  title: string;
+  body: string;
+}
+
+export interface PublicFullRankingTopicFaqItem {
+  question: string;
+  answer: string;
+}
+
+export interface PublicFullRankingTopicContent {
+  route: FullRankingStaticFilterRoute;
+  label: string;
+  searchName: string;
+  intro: string;
+  sections: PublicFullRankingTopicSection[];
+  faqItems: PublicFullRankingTopicFaqItem[];
+}
+
 export interface PublicMonthlyReportSeoView {
   year: number;
   month: number;
@@ -379,8 +406,8 @@ export function buildFullRankingSeo(input?: {
       title: `${title} | ${PUBLIC_SITE_BRAND_NAME}`,
       description:
         input && typeof input.total === 'number'
-          ? `${input.dateLabel || '今日'} ${title}收录 ${formatCount(input.total)} 个匹配机场，按公开展示分数排序，展示官网入口、状态、价格、试用、支付、客户端、节点地区和测评报告。`
-          : `${PUBLIC_SITE_BRAND_NAME} 提供${title}，帮助用户按支付方式、客户端类型、节点地区和线路能力筛选机场 VPN。`,
+          ? `${input.dateLabel || '今日'} ${title}收录 ${formatCount(input.total)} 个匹配机场，按 GateRank 公开展示分数排序，展示官网入口、状态、价格、试用、支付、客户端、节点地区和测评报告。`
+          : `${PUBLIC_SITE_BRAND_NAME} 提供${title}，帮助用户按支付方式、客户端类型、节点地区、线路和解锁能力筛选机场 VPN。`,
       keywords: `机场榜GateRank,${decision.primaryLabel}机场,机场排名,机场推荐,机场测评,机场VPN,GateRank`,
     };
   }
@@ -418,10 +445,10 @@ export function buildFullRankingHeading(filters?: FullRankingFilters): string {
 
 function buildFullRankingFilteredTitle(category: string, label: string): string {
   if (category === 'payment') {
-    return `${label}的机场 VPN 排名`;
+    return `${label}${label.includes(' ') ? ' 的' : '的'}机场 VPN 推荐排名`;
   }
   if (category === 'client') {
-    return `${label}机场推荐`;
+    return `${label}${label.includes(' ') ? ' ' : ''}机场推荐`;
   }
   if (category === 'region') {
     return `${label}机场排行榜`;
@@ -430,9 +457,83 @@ function buildFullRankingFilteredTitle(category: string, label: string): string 
     return `${label}机场排名`;
   }
   if (category === 'streaming') {
-    return `${label}机场推荐`;
+    return `${label}${label.includes(' ') ? ' ' : ''}机场推荐`;
   }
   return `${label}机场筛选`;
+}
+
+export function buildFullRankingTopicContent(filters: FullRankingFilters): PublicFullRankingTopicContent | null {
+  const decision = getFullRankingSeoDecision(filters, 1);
+  if (!decision.primaryCategory || !decision.primaryValue || !decision.primaryLabel || getFullRankingFilterCount(filters) !== 1) {
+    return null;
+  }
+  const category = decision.primaryCategory;
+  const value = decision.primaryValue;
+  const baseLabel = getAirportFilterLabel(category, value);
+  const label = decision.primaryLabel;
+  const searchName = buildFullRankingTopicSearchName(category, label);
+  const adjacent = buildFullRankingAdjacentLabel(category, value);
+  return {
+    route: { category, value },
+    label,
+    searchName,
+    intro: `${searchName}不是简单的参数筛选页。本页会把支持 ${baseLabel} 相关能力的机场集中到一个可索引专题中，并继续按 GateRank 公开分数排序，方便用户同时核对官网状态、价格、试用、客户端、节点地区和测评报告。`,
+    sections: [
+      {
+        title: `${baseLabel}机场怎么选`,
+        body: `选择${searchName}时，优先确认该能力是否与自己的设备、付款习惯和使用场景匹配，再看近期稳定性、晚高峰表现、风险记录和售后入口。GateRank 的排序不是广告位排序，而是基于公开监测数据和榜单分数做横向对比。`,
+      },
+      {
+        title: `${searchName}的优点和风险`,
+        body: `${searchName}的价值在于降低用户筛选成本，但单一能力不能代表机场整体可靠。购买前仍要检查官网是否可访问、套餐周期是否过长、是否支持短周期试用，以及近期是否存在投诉、失联或明显性能波动。`,
+      },
+      {
+        title: `${searchName}与 ${adjacent}对比`,
+        body: `${searchName}适合明确需要 ${baseLabel} 的用户；${adjacent}则更适合需求不同或希望分散风险的人。建议先用本页筛出候选机场，再进入具体测评报告核对稳定性、延迟、丢包、价格和风险扣分。`,
+      },
+    ],
+    faqItems: [
+      {
+        question: `${searchName}适合哪些用户？`,
+        answer: `${searchName}适合已经明确需要 ${baseLabel} 能力，并希望在购买前先比较公开评分、价格、试用、客户端、节点和风险记录的用户。`,
+      },
+      {
+        question: `${searchName}一定更安全吗？`,
+        answer: `不一定。${baseLabel} 只代表一个筛选条件，不能替代稳定性、官网状态、投诉记录、历史异常和售后响应等综合判断。`,
+      },
+      {
+        question: `GateRank 如何排序${searchName}？`,
+        answer: `GateRank 会先筛出匹配 ${baseLabel} 的机场，再按公开展示分数排序。分数会综合稳定性、性能、价格和风险维度，并保留测评报告入口供进一步核对。`,
+      },
+    ],
+  };
+}
+
+function buildFullRankingTopicSearchName(category: AirportPrimaryIndexableFilterCategory, label: string): string {
+  if (category === 'payment') {
+    return buildCapabilityTopicName(label);
+  }
+  if (category === 'region' || category === 'line') {
+    return `${label}机场`;
+  }
+  return buildCapabilityTopicName(label);
+}
+
+function buildCapabilityTopicName(label: string): string {
+  const cleanLabel = label.replace(/^支持\s*/, '').trim();
+  return `${cleanLabel}${/[A-Za-z0-9]$/.test(cleanLabel) ? ' ' : ''}机场`;
+}
+
+function buildFullRankingAdjacentLabel(category: AirportPrimaryIndexableFilterCategory, value: string): string {
+  if (category === 'payment' && value === 'alipay') {
+    return 'USDT-TRC20 机场';
+  }
+  if (category === 'payment' && value !== 'alipay') {
+    return '支付宝机场';
+  }
+  const options = AIRPORT_FILTER_CATALOG[category];
+  const adjacent = options.find((item) => item.key !== value);
+  return adjacent ? `${adjacent.label}机场` : '全量机场榜单';
 }
 
 function hasComplexFullRankingFilters(filters: FullRankingFilters | undefined): boolean {
@@ -1027,7 +1128,7 @@ function buildReportFitText(view: PublicReportSeoView): string {
 function buildFullRankingFilterHref(category: 'payment' | 'streaming', key: string): string {
   const catalog = category === 'payment' ? AIRPORT_PAYMENT_FILTERS : AIRPORT_STREAMING_FILTERS;
   const supported = catalog.some((item) => item.key === key);
-  return supported ? `${PUBLIC_SEO_PATHS.fullRanking}${buildQuery({ [category]: key })}` : PUBLIC_SEO_PATHS.fullRanking;
+  return supported ? buildFullRankingStaticPath(category, key) : PUBLIC_SEO_PATHS.fullRanking;
 }
 
 function dedupeReportComparisonLinks(links: PublicReportComparisonLink[]): PublicReportComparisonLink[] {

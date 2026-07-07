@@ -68,10 +68,10 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.match(html, /href="\/methodology"/);
         assert.match(html, /href="\/risk-monitor"/);
         assert.match(html, /href="\/deals"/);
-        assert.match(html, /href="\/rankings\/all\?payment=alipay"/);
-        assert.match(html, /href="\/rankings\/all\?payment=usdt_trc20"/);
-        assert.match(html, /href="\/rankings\/all\?streaming=chatgpt"/);
-        assert.match(html, /href="\/rankings\/all\?streaming=netflix"/);
+        assert.match(html, /href="\/rankings\/payment\/alipay"/);
+        assert.match(html, /href="\/rankings\/payment\/usdt-trc20"/);
+        assert.match(html, /href="\/rankings\/unlock\/chatgpt"/);
+        assert.match(html, /href="\/rankings\/unlock\/netflix"/);
         assert.match(html, /"@type":"FAQPage"/);
         const homeFaqQuestionCount = Array.from(html.matchAll(/"@type":"Question"/g)).length;
         assert.ok(homeFaqQuestionCount >= 5, `expected at least 5 home FAQ questions, got ${homeFaqQuestionCount}`);
@@ -514,7 +514,7 @@ test('public data routes embed initial payload for React takeover', async () => 
   }
 });
 
-test('GET /rankings/all renders indexable single-filter SEO page', async () => {
+test('GET /rankings/payment/alipay renders indexable static single-filter SEO page', async () => {
   const app = express();
   app.use(createPublicPageRoutes({
     publicViewService: {
@@ -529,14 +529,36 @@ test('GET /rankings/all renders indexable single-filter SEO page', async () => {
   const server = app.listen(0);
   try {
     const port = (server.address() as AddressInfo).port;
-    const response = await fetch(`http://127.0.0.1:${port}/rankings/all?payment=alipay`);
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/payment/alipay`);
     assert.equal(response.status, 200);
     const html = await response.text();
-    assert.match(html, /<h1>支持支付宝的机场 VPN 排名<\/h1>/);
+    assert.match(html, /<h1>支持支付宝的机场 VPN 推荐排名<\/h1>/);
     assert.match(html, /<meta name="robots" content="index,follow,max-image-preview:large"/);
-    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?payment=alipay"/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/rankings\/payment\/alipay"/);
     assert.match(html, /搜索与分类筛选/);
+    assert.match(html, /支付宝机场怎么选/);
+    assert.match(html, /支付宝机场的优点和风险/);
+    assert.match(html, /支付宝机场与 USDT-TRC20 机场对比/);
+    assert.match(html, /支付宝机场适合哪些用户/);
+    assert.match(html, /"@type":"FAQPage"/);
     assert.match(html, /class="filter-chip active" href="\/rankings\/all">支付宝<\/a>/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /rankings/all redirects indexable single-filter query to static URL', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/all?payment=alipay`, {
+      redirect: 'manual',
+    });
+    assert.equal(response.status, 301);
+    assert.equal(response.headers.get('location'), '/rankings/payment/alipay');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -570,6 +592,20 @@ test('GET /rankings/all noindexes search and combination filters', async () => {
   }
 });
 
+test('GET /rankings static filter rejects unknown slugs', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/payment/not-a-filter`);
+    assert.equal(response.status, 404);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /rankings/all removes unsupported filter values from URL', async () => {
   const app = express();
   app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
@@ -581,7 +617,7 @@ test('GET /rankings/all removes unsupported filter values from URL', async () =>
       redirect: 'manual',
     });
     assert.equal(response.status, 301);
-    assert.equal(response.headers.get('location'), '/rankings/all?payment=alipay');
+    assert.equal(response.headers.get('location'), '/rankings/payment/alipay');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -749,9 +785,9 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /结论与建议/);
     assert.match(okHtml, /继续对比更多机场/);
     assert.match(okHtml, /href="\/rankings\/all"/);
-    assert.match(okHtml, /href="\/rankings\/all\?streaming=chatgpt"/);
-    assert.match(okHtml, /href="\/rankings\/all\?streaming=netflix"/);
-    assert.match(okHtml, /href="\/rankings\/all\?payment=usdt_trc20"/);
+    assert.match(okHtml, /href="\/rankings\/unlock\/chatgpt"/);
+    assert.match(okHtml, /href="\/rankings\/unlock\/netflix"/);
+    assert.match(okHtml, /href="\/rankings\/payment\/usdt-trc20"/);
     assert.doesNotMatch(okHtml, /GateRank Pro 数据看板/);
     assert.match(okHtml, /常见问题/);
     assert.match(okHtml, /星云机场怎么样/);

@@ -5,7 +5,7 @@ import { PUBLIC_SITE_BRAND_NAME } from '../../shared/publicBrand';
 import { type PublicNavigationKind } from '../../shared/publicNavigation';
 import { PUBLIC_TOP_NAV_STYLES, renderPublicTopNav } from '../../shared/publicTopNav';
 import { getPublicOgImageForPath, type PublicOgImage } from '../../shared/publicSeo';
-import { buildFullRankingQuery, EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../shared/fullRankingFilters';
+import { buildFullRankingPath, EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../shared/fullRankingFilters';
 
 export type NavigationKind = PublicNavigationKind | 'docs';
 
@@ -61,10 +61,10 @@ export function buildHomeHref(date?: string): string {
 }
 
 export function buildFullRankingHref(date?: string, page = 1, filters: FullRankingFilters = EMPTY_FULL_RANKING_FILTERS): string {
-  return `/rankings/all${buildFullRankingQuery(filters, {
+  return buildFullRankingPath(filters, {
     date,
     page: page > 1 ? page : undefined,
-  })}`;
+  });
 }
 
 export function buildMonthlyReportsHref(page = 1): string {

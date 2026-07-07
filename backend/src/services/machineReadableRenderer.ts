@@ -15,6 +15,7 @@ import {
   AIRPORT_REGION_FILTERS,
   AIRPORT_STREAMING_FILTERS,
 } from '../../../shared/airportFilterCatalog';
+import { buildFullRankingStaticPath } from '../../../shared/fullRankingFilters';
 
 export interface PublicSummaryData {
   site: string;
@@ -413,11 +414,11 @@ function buildRankingItem(item: FullRankingItem, generatedAt: string): PublicRan
 
 function buildFilterPages(siteUrl: string): string[] {
   return [
-    ...AIRPORT_PAYMENT_FILTERS.map((item) => `- ${item.label}：${siteUrl}/rankings/all?payment=${encodeURIComponent(item.key)}`),
-    ...AIRPORT_CLIENT_FILTERS.map((item) => `- ${item.label}：${siteUrl}/rankings/all?client=${encodeURIComponent(item.key)}`),
-    ...AIRPORT_STREAMING_FILTERS.map((item) => `- ${item.label}：${siteUrl}/rankings/all?streaming=${encodeURIComponent(item.key)}`),
-    ...AIRPORT_REGION_FILTERS.map((item) => `- ${item.label}：${siteUrl}/rankings/all?region=${encodeURIComponent(item.key)}`),
-    ...AIRPORT_LINE_FILTERS.map((item) => `- ${item.label}：${siteUrl}/rankings/all?line=${encodeURIComponent(item.key)}`),
+    ...AIRPORT_PAYMENT_FILTERS.map((item) => `- ${item.label}：${siteUrl}${buildFullRankingStaticPath('payment', item.key)}`),
+    ...AIRPORT_CLIENT_FILTERS.map((item) => `- ${item.label}：${siteUrl}${buildFullRankingStaticPath('client', item.key)}`),
+    ...AIRPORT_STREAMING_FILTERS.map((item) => `- ${item.label}：${siteUrl}${buildFullRankingStaticPath('streaming', item.key)}`),
+    ...AIRPORT_REGION_FILTERS.map((item) => `- ${item.label}：${siteUrl}${buildFullRankingStaticPath('region', item.key)}`),
+    ...AIRPORT_LINE_FILTERS.map((item) => `- ${item.label}：${siteUrl}${buildFullRankingStaticPath('line', item.key)}`),
   ];
 }
 

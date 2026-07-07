@@ -28,6 +28,8 @@ import {
 import {
   buildFullRankingPath,
   parseFullRankingFilters,
+  parseFullRankingStaticPath,
+  EMPTY_FULL_RANKING_FILTERS,
   type FullRankingFilters,
 } from '../../../shared/fullRankingFilters';
 import type { MonthlyReportPublicService } from '../services/monthlyReportPublicService';
@@ -103,6 +105,48 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     } catch (error) {
       console.error('[public-page] failed to render full ranking page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '全量榜单加载失败', frontendAssets));
+    }
+  });
+
+  router.get('/rankings/:category/:slug', async (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    try {
+      const staticRoute = parseFullRankingStaticPath(req.path);
+      if (!staticRoute) {
+        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '筛选榜单不存在', frontendAssets));
+        return;
+      }
+      const requestedDate = parseDateQuery(req.query.date);
+      const page = toPositiveInt(req.query.page, 1);
+      const filters = {
+        ...EMPTY_FULL_RANKING_FILTERS,
+        [staticRoute.category]: [staticRoute.value],
+      };
+      if (redirectFullRankingQuery(req, res, requestedDate, page, filters)) {
+        return;
+      }
+      const renderDate = requestedDate || getDateInTimezone();
+      const view = await pageCache.getOrLoad(
+        `full-ranking:${renderDate}:${page}:${FULL_RANKING_PUBLIC_PAGE_SIZE}:${JSON.stringify(filters)}`,
+        () => deps.publicViewService.getFullRankingView(
+          renderDate,
+          page,
+          FULL_RANKING_PUBLIC_PAGE_SIZE,
+          filters,
+        ),
+      );
+      setPublicCacheHeaders(res);
+      res.status(200).type('html').send(renderFullRankingPublicPage(
+        siteUrl,
+        view,
+        requestedDate,
+        page,
+        filters,
+        frontendAssets,
+      ));
+    } catch (error) {
+      console.error('[public-page] failed to render static full ranking page', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '筛选榜单加载失败', frontendAssets));
     }
   });
 

@@ -56,6 +56,7 @@ import {
   buildAirportReportPath,
   buildFullRankingHeading,
   buildFullRankingSeo,
+  buildFullRankingTopicContent,
   buildHomeSeo,
   buildReportComparisonLinks,
   buildReportContentSections,
@@ -84,6 +85,7 @@ import {
   fullRankingFiltersEqual,
   getFullRankingFilterCount,
   getFullRankingSeoDecision,
+  parseFullRankingStaticPath,
   parseFullRankingFilters,
   type FullRankingFilters,
 } from '../shared/fullRankingFilters';
@@ -1371,6 +1373,7 @@ function parseRoute(): RouteState {
   const reportMatch = path.match(/^\/reports\/(\d+)$/);
   const airportMatch = path.match(/^\/airports\/([a-z0-9-]+)$/);
   const fullRankingMatch = path.match(/^\/rankings\/all\/?$/);
+  const staticFullRankingMatch = parseFullRankingStaticPath(path);
   const monthlyReportsMatch = path.match(/^\/monthly-reports\/?$/);
   const monthlyReportMatch = path.match(/^\/monthly-reports\/([a-z0-9-]+)$/);
   const dealsMatch = path.match(/^\/deals\/?$/);
@@ -1424,6 +1427,23 @@ function parseRoute(): RouteState {
     const safePage = Number.isFinite(page) && page > 0 ? page : 1;
     const date = normalizePublicListDate(params.get('date') || undefined);
     const filters = parseFullRankingFilters(params);
+    canonicalizeCurrentPublicListUrl(buildFullRankingHref(date, safePage, filters));
+    return {
+      kind: 'full_ranking',
+      date,
+      page: safePage,
+      filters,
+    };
+  }
+
+  if (staticFullRankingMatch) {
+    const page = Number(params.get('page') || '1');
+    const safePage = Number.isFinite(page) && page > 0 ? page : 1;
+    const date = normalizePublicListDate(params.get('date') || undefined);
+    const filters = {
+      ...EMPTY_FULL_RANKING_FILTERS,
+      [staticFullRankingMatch.category]: [staticFullRankingMatch.value],
+    };
     canonicalizeCurrentPublicListUrl(buildFullRankingHref(date, safePage, filters));
     return {
       kind: 'full_ranking',
@@ -1653,21 +1673,53 @@ function FullRankingFilterGroup({
       <div className="mt-2 flex flex-wrap gap-2">
         {options.map((option) => {
           const active = isFullRankingFilterActive(category, option.key, filters);
+          const nextFilters = toggleFullRankingFilterValue(filters, category, option.key);
           return (
-            <button
+            <a
               key={option.key}
-              type="button"
+              href={buildFullRankingHref(undefined, 1, toggleFullRankingFilterValue(filters, category, option.key))}
               className={`inline-flex min-h-10 max-w-full items-center rounded-full border px-3 text-sm font-black ${
                 active ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-600'
               }`}
-              onClick={() => onChange(toggleFullRankingFilterValue(filters, category, option.key))}
+              onClick={(event) => {
+                event.preventDefault();
+                onChange(nextFilters);
+              }}
             >
               {option.label}
-            </button>
+            </a>
           );
         })}
       </div>
     </div>
+  );
+}
+
+function FullRankingTopicSection({ topicContent }: { topicContent: ReturnType<typeof buildFullRankingTopicContent> }) {
+  if (!topicContent) {
+    return null;
+  }
+  return (
+    <section className="mt-8 rounded-[24px] border border-neutral-200 bg-white px-5 py-6 shadow-[0_14px_40px_rgba(15,23,42,0.05)] md:px-7 md:py-8">
+      <div className="text-[11px] font-black uppercase tracking-[0.2em] text-neutral-400">SEO Topic</div>
+      <p className="mt-3 max-w-4xl text-sm leading-7 text-neutral-600">{topicContent.intro}</p>
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        {topicContent.sections.map((section) => (
+          <article key={section.title} className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-5">
+            <h2 className="text-lg font-black tracking-tight text-neutral-900">{section.title}</h2>
+            <p className="mt-3 text-sm leading-7 text-neutral-600">{section.body}</p>
+          </article>
+        ))}
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        {topicContent.faqItems.map((item) => (
+          <article key={item.question} className="rounded-2xl border border-neutral-200 bg-white px-4 py-5">
+            <h3 className="text-base font-black tracking-tight text-neutral-900">{item.question}</h3>
+            <p className="mt-3 text-sm leading-7 text-neutral-600">{item.answer}</p>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -3178,6 +3230,7 @@ function FullRankingPage({
   const rankingHeading = buildFullRankingHeading(activeFilters);
   const selectedFilterCount = getFullRankingFilterCount(activeFilters);
   const seoDecision = getFullRankingSeoDecision(activeFilters, safePage);
+  const topicContent = buildFullRankingTopicContent(activeFilters);
   const canonicalPage = getFullRankingFilterCount(seoDecision.canonicalFilters) > 0 ? 1 : safePage;
   const seoTitle = fullRankingSeo.title;
   const seoDescription = fullRankingSeo.description;
@@ -3222,8 +3275,20 @@ function FullRankingPage({
             url: buildAbsoluteUrl(item.report_url as string),
           })),
       },
+      ...(topicContent ? [{
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: topicContent.faqItems.map((item) => ({
+          '@type': 'Question',
+          name: item.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: item.answer,
+          },
+        })),
+      }] : []),
     ]),
-    [activeFilters, data, date, safePage, seoDescription, seoTitle],
+    [activeFilters, data, date, safePage, seoDescription, seoTitle, topicContent],
   );
 
   usePageSeo({
@@ -3252,6 +3317,7 @@ function FullRankingPage({
         />
 
         <FullRankingFilterPanel date={date} filters={activeFilters} />
+        <FullRankingTopicSection topicContent={topicContent} />
 
         <section className="mt-10 rounded-[28px] border border-neutral-200 bg-white px-5 py-6 md:px-7 md:py-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
           <div className="flex flex-col gap-4 border-b border-neutral-100 pb-6 md:flex-row md:items-end md:justify-between">

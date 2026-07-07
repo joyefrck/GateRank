@@ -31,6 +31,11 @@ export interface FullRankingSeoDecision {
   primaryLabel: string | null;
 }
 
+export interface FullRankingStaticFilterRoute {
+  category: AirportPrimaryIndexableFilterCategory;
+  value: string;
+}
+
 export const EMPTY_FULL_RANKING_FILTERS: FullRankingFilters = {
   q: '',
   payment: [],
@@ -122,15 +127,49 @@ export function buildFullRankingPath(filters: FullRankingFilters, input: {
   date?: string;
   page?: number;
 } = {}): string {
+  const staticRoute = getSingleStaticFilterRoute(filters);
+  if (staticRoute && (!input.page || input.page <= 1)) {
+    const query = buildQueryFromEntries(input.date ? [['date', input.date]] : []);
+    return `${buildFullRankingStaticPath(staticRoute.category, staticRoute.value)}${query}`;
+  }
   return `/rankings/all${buildFullRankingQuery(filters, input)}`;
 }
 
 export function getIndexableFullRankingFilterPaths(): string[] {
   return AIRPORT_PRIMARY_INDEXABLE_FILTER_CATEGORIES.flatMap((category) => (
     AIRPORT_FILTER_CATALOG[category].map((option) => (
-      buildFullRankingPath({ ...EMPTY_FULL_RANKING_FILTERS, [category]: [option.key] })
+      buildFullRankingStaticPath(category, option.key)
     ))
   ));
+}
+
+export function buildFullRankingStaticPath(category: AirportPrimaryIndexableFilterCategory, value: string): string {
+  return `/rankings/${buildFullRankingStaticCategorySegment(category)}/${encodeURIComponent(buildFullRankingStaticSlug(value))}`;
+}
+
+export function parseFullRankingStaticPath(pathname: string): FullRankingStaticFilterRoute | null {
+  const match = pathname.match(/^\/rankings\/([^/?#]+)\/([^/?#]+)\/?$/);
+  if (!match) {
+    return null;
+  }
+  const category = parseFullRankingStaticCategorySegment(decodeURIComponent(match[1]));
+  if (!category) {
+    return null;
+  }
+  const slug = decodeURIComponent(match[2]);
+  const option = AIRPORT_FILTER_CATALOG[category].find((item) => buildFullRankingStaticSlug(item.key) === slug);
+  return option ? { category, value: option.key } : null;
+}
+
+export function getSingleStaticFilterRoute(filters: FullRankingFilters): FullRankingStaticFilterRoute | null {
+  const decision = getFullRankingSeoDecision(filters, 1);
+  if (!decision.primaryCategory || !decision.primaryValue || getFullRankingFilterCount(filters) !== 1) {
+    return null;
+  }
+  return {
+    category: decision.primaryCategory,
+    value: decision.primaryValue,
+  };
 }
 
 export function getFullRankingSeoDecision(filters: FullRankingFilters, page = 1): FullRankingSeoDecision {
@@ -190,6 +229,27 @@ export function cloneFullRankingFilters(filters: FullRankingFilters): FullRankin
 function normalizeKnownValues(values: string[], category: ArrayFilterKey): string[] {
   const allowed = new Set(AIRPORT_FILTER_CATALOG[category].map((item) => item.key));
   return [...new Set(values.map((item) => item.trim()).filter((item) => allowed.has(item)))];
+}
+
+function buildFullRankingStaticCategorySegment(category: AirportPrimaryIndexableFilterCategory): string {
+  return category === 'streaming' ? 'unlock' : category;
+}
+
+function parseFullRankingStaticCategorySegment(segment: string): AirportPrimaryIndexableFilterCategory | null {
+  const category = segment === 'unlock' ? 'streaming' : segment;
+  return (AIRPORT_PRIMARY_INDEXABLE_FILTER_CATEGORIES as readonly string[]).includes(category)
+    ? category as AirportPrimaryIndexableFilterCategory
+    : null;
+}
+
+function buildFullRankingStaticSlug(value: string): string {
+  return value.replace(/_/g, '-');
+}
+
+function buildQueryFromEntries(entries: Array<[string, string]>): string {
+  const search = new URLSearchParams(entries);
+  const query = search.toString();
+  return query ? `?${query}` : '';
 }
 
 function values(source: URLSearchParams | Record<string, unknown>, key: string): string[] {

@@ -10,195 +10,195 @@
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?payment=wechat</loc>
+    <loc>http://localhost:3000/rankings/payment/wechat</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?payment=alipay</loc>
+    <loc>http://localhost:3000/rankings/payment/alipay</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?payment=usdt_trc20</loc>
+    <loc>http://localhost:3000/rankings/payment/usdt-trc20</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?payment=usdt_erc20</loc>
+    <loc>http://localhost:3000/rankings/payment/usdt-erc20</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?payment=usdt_bep20</loc>
+    <loc>http://localhost:3000/rankings/payment/usdt-bep20</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?payment=stripe_card</loc>
+    <loc>http://localhost:3000/rankings/payment/stripe-card</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?payment=paypal</loc>
+    <loc>http://localhost:3000/rankings/payment/paypal</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?payment=crypto_other</loc>
+    <loc>http://localhost:3000/rankings/payment/crypto-other</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?payment=unionpay</loc>
+    <loc>http://localhost:3000/rankings/payment/unionpay</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?streaming=netflix</loc>
+    <loc>http://localhost:3000/rankings/unlock/netflix</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?streaming=chatgpt</loc>
+    <loc>http://localhost:3000/rankings/unlock/chatgpt</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?streaming=disney_plus</loc>
+    <loc>http://localhost:3000/rankings/unlock/disney-plus</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?streaming=hbo_max</loc>
+    <loc>http://localhost:3000/rankings/unlock/hbo-max</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?streaming=youtube_premium</loc>
+    <loc>http://localhost:3000/rankings/unlock/youtube-premium</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?streaming=tiktok</loc>
+    <loc>http://localhost:3000/rankings/unlock/tiktok</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?streaming=spotify</loc>
+    <loc>http://localhost:3000/rankings/unlock/spotify</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=self_built_client</loc>
+    <loc>http://localhost:3000/rankings/client/self-built-client</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=clash</loc>
+    <loc>http://localhost:3000/rankings/client/clash</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=clash_verge</loc>
+    <loc>http://localhost:3000/rankings/client/clash-verge</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=clash_mi</loc>
+    <loc>http://localhost:3000/rankings/client/clash-mi</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=clash_party</loc>
+    <loc>http://localhost:3000/rankings/client/clash-party</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=shadowrocket</loc>
+    <loc>http://localhost:3000/rankings/client/shadowrocket</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=quantumult_x</loc>
+    <loc>http://localhost:3000/rankings/client/quantumult-x</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=stash</loc>
+    <loc>http://localhost:3000/rankings/client/stash</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=surge</loc>
+    <loc>http://localhost:3000/rankings/client/surge</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=sing_box</loc>
+    <loc>http://localhost:3000/rankings/client/sing-box</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=v2rayn</loc>
+    <loc>http://localhost:3000/rankings/client/v2rayn</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=v2rayng</loc>
+    <loc>http://localhost:3000/rankings/client/v2rayng</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=nekobox</loc>
+    <loc>http://localhost:3000/rankings/client/nekobox</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=surfboard</loc>
+    <loc>http://localhost:3000/rankings/client/surfboard</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=xiaohuojian</loc>
+    <loc>http://localhost:3000/rankings/client/xiaohuojian</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?client=openclash</loc>
+    <loc>http://localhost:3000/rankings/client/openclash</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=hong_kong</loc>
+    <loc>http://localhost:3000/rankings/region/hong-kong</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=taiwan</loc>
+    <loc>http://localhost:3000/rankings/region/taiwan</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=japan</loc>
+    <loc>http://localhost:3000/rankings/region/japan</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=singapore</loc>
+    <loc>http://localhost:3000/rankings/region/singapore</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=united_states</loc>
+    <loc>http://localhost:3000/rankings/region/united-states</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=south_korea</loc>
+    <loc>http://localhost:3000/rankings/region/south-korea</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=united_kingdom</loc>
+    <loc>http://localhost:3000/rankings/region/united-kingdom</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=germany</loc>
+    <loc>http://localhost:3000/rankings/region/germany</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=turkey</loc>
+    <loc>http://localhost:3000/rankings/region/turkey</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=argentina</loc>
+    <loc>http://localhost:3000/rankings/region/argentina</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?region=india</loc>
+    <loc>http://localhost:3000/rankings/region/india</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?line=iepl</loc>
+    <loc>http://localhost:3000/rankings/line/iepl</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?line=iplc</loc>
+    <loc>http://localhost:3000/rankings/line/iplc</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?line=cn2</loc>
+    <loc>http://localhost:3000/rankings/line/cn2</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?line=bgp</loc>
+    <loc>http://localhost:3000/rankings/line/bgp</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
-    <loc>http://localhost:3000/rankings/all?line=relay</loc>
+    <loc>http://localhost:3000/rankings/line/relay</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>

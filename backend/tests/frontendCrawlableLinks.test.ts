@@ -16,6 +16,20 @@ test('React full ranking report action remains a crawlable anchor', async () => 
   assert.doesNotMatch(fullRankingActionPanel, /navigate\(item\.report_url\)/);
 });
 
+test('React full ranking filter chips remain crawlable anchors with static SEO hrefs', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+
+  const groupStart = source.indexOf('function FullRankingFilterGroup');
+  assert.notEqual(groupStart, -1);
+  const groupEnd = source.indexOf('function FullRankingCapabilitySummary', groupStart);
+  assert.notEqual(groupEnd, -1);
+  const groupSource = source.slice(groupStart, groupEnd);
+
+  assert.match(groupSource, /<a/);
+  assert.match(groupSource, /href=\{buildFullRankingHref\(undefined, 1, toggleFullRankingFilterValue\(filters, category, option\.key\)\)\}/);
+  assert.doesNotMatch(groupSource, /<button/);
+});
+
 test('React report page keeps outbound CTA and comparison links as anchors', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
 

@@ -812,9 +812,10 @@ test('GET /sitemap.xml includes published news urls', async () => {
     });
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
-    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?payment=alipay<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
-    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?client=clash<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
-    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/all\?region=hong_kong<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/payment\/alipay<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/client\/clash<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/rankings\/region\/hong-kong<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
+    assert.doesNotMatch(xml, /\/rankings\/all\?payment=alipay/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/monthly-reports<\/loc>\n    <lastmod>2026-05-17T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/risk-monitor<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/deals<\/loc>\n    <lastmod>2026-05-26T00:00:00\+08:00<\/lastmod>/);
