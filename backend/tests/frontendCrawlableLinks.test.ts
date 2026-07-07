@@ -27,7 +27,27 @@ test('React full ranking filter chips remain crawlable anchors with static SEO h
 
   assert.match(groupSource, /<a/);
   assert.match(groupSource, /href=\{buildFullRankingHref\(undefined, 1, toggleFullRankingFilterValue\(filters, category, option\.key\)\)\}/);
+  assert.match(groupSource, /full-ranking-filter-chip/);
+  assert.match(groupSource, /is-active border-neutral-900 bg-neutral-900 text-white/);
   assert.doesNotMatch(groupSource, /<button/);
+});
+
+test('React full ranking selected chips force readable active text color', async () => {
+  const appSource = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+  const cssSource = await readFile(path.join(process.cwd(), 'src/index.css'), 'utf8');
+
+  const panelStart = appSource.indexOf('function FullRankingFilterPanel');
+  assert.notEqual(panelStart, -1);
+  const panelEnd = appSource.indexOf('function FullRankingFilterGroup', panelStart);
+  assert.notEqual(panelEnd, -1);
+  const panelSource = appSource.slice(panelStart, panelEnd);
+
+  assert.match(panelSource, /full-ranking-filter-chip is-active/);
+  assert.match(panelSource, /full-ranking-filter-chip inline-flex/);
+  assert.match(panelSource, /is-active border-neutral-900 bg-neutral-900 text-white/);
+  assert.match(cssSource, /\.full-ranking-filter-chip\.is-active\s*\{/);
+  assert.match(cssSource, /color:\s*#ffffff;/);
+  assert.match(cssSource, /-webkit-text-fill-color:\s*#ffffff;/);
 });
 
 test('React report page keeps outbound CTA and comparison links as anchors', async () => {

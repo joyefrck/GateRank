@@ -1604,7 +1604,7 @@ function FullRankingFilterPanel({ date, filters }: { date?: string; filters: Ful
         ) : (
           <>
             {selectedLabels.map((label) => (
-              <span key={label} className="inline-flex min-h-9 items-center rounded-full bg-neutral-900 px-3 text-xs font-black text-white">
+              <span key={label} className="full-ranking-filter-chip is-active inline-flex min-h-9 items-center rounded-full bg-neutral-900 px-3 text-xs font-black text-white">
                 {label}
               </span>
             ))}
@@ -1639,8 +1639,8 @@ function FullRankingFilterPanel({ date, filters }: { date?: string; filters: Ful
               <button
                 key={String(key)}
                 type="button"
-                className={`inline-flex min-h-10 max-w-full items-center rounded-full border px-3 text-sm font-black ${
-                  value === true ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-600'
+                className={`full-ranking-filter-chip inline-flex min-h-10 max-w-full items-center rounded-full border px-3 text-sm font-black ${
+                  value === true ? 'is-active border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-600'
                 }`}
                 onClick={() => goToFilters(toggleBooleanFullRankingFilter(filters, key as 'trial' | 'annual' | 'lifetime' | 'telegram'))}
               >
@@ -1678,8 +1678,8 @@ function FullRankingFilterGroup({
             <a
               key={option.key}
               href={buildFullRankingHref(undefined, 1, toggleFullRankingFilterValue(filters, category, option.key))}
-              className={`inline-flex min-h-10 max-w-full items-center rounded-full border px-3 text-sm font-black ${
-                active ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-600'
+              className={`full-ranking-filter-chip inline-flex min-h-10 max-w-full items-center rounded-full border px-3 text-sm font-black ${
+                active ? 'is-active border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-neutral-50 text-neutral-600'
               }`}
               onClick={(event) => {
                 event.preventDefault();

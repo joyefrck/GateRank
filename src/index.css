@@ -141,6 +141,20 @@
 }
 
 @layer utilities {
+  .full-ranking-filter-chip.is-active {
+    color: #ffffff;
+    -webkit-text-fill-color: #ffffff;
+    forced-color-adjust: none;
+    color-scheme: light;
+  }
+
+  .full-ranking-filter-chip.is-active:hover,
+  .full-ranking-filter-chip.is-active:focus,
+  .full-ranking-filter-chip.is-active:focus-visible {
+    color: #ffffff;
+    -webkit-text-fill-color: #ffffff;
+  }
+
   .portal-login-primary-link {
     color: #ffffff;
     -webkit-text-fill-color: #ffffff;
