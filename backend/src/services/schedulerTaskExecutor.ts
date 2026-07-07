@@ -18,6 +18,13 @@ import {
 import { dateDaysAgo } from '../utils/time';
 
 const execFileAsync = promisify(execFile);
+const SCHEDULER_PERFORMANCE_ENV_DEFAULTS: Readonly<Record<string, string>> = {
+  LATENCY_ATTEMPTS: '3',
+  LATENCY_SAMPLE_INTERVAL_SECONDS: '1',
+  SPEED_TIMEOUT: '10',
+  SPEED_CONNECTIONS: '2',
+  NODE_AVAILABILITY_CHECK: 'tcp',
+};
 
 interface LoggerLike {
   log(message: string, ...args: unknown[]): void;
@@ -343,6 +350,9 @@ export class SchedulerTaskExecutor {
     if (this.airportStatus) {
       env.AIRPORT_STATUS = this.airportStatus;
     }
+    if (stage === 'performance') {
+      applyMissingEnvDefaults(env, SCHEDULER_PERFORMANCE_ENV_DEFAULTS);
+    }
 
     try {
       const { stdout, stderr } = await this.execFileFn(this.pythonBin, [scriptPath], {
@@ -355,7 +365,7 @@ export class SchedulerTaskExecutor {
       this.logger.log(`[scheduler] ${stage} stage succeeded${detail ? `: ${detail}` : ''}`);
       return { stage, status: 'succeeded', detail: detail || 'ok' };
     } catch (error) {
-      const detail = summarizeScriptFailure(error, this.singBoxBin);
+      const detail = summarizeScriptFailure(error, this.singBoxBin, this.scriptTimeoutMs);
       this.logger.error(`[scheduler] ${stage} stage failed`, error);
       return { stage, status: 'failed', detail };
     }
@@ -389,7 +399,7 @@ export class SchedulerTaskExecutor {
       });
       this.logger.log(`[scheduler] stability resample succeeded for airport ${airportId}`);
     } catch (error) {
-      const detail = summarizeScriptFailure(error, this.singBoxBin);
+      const detail = summarizeScriptFailure(error, this.singBoxBin, this.scriptTimeoutMs);
       this.logger.error(`[scheduler] stability resample failed for airport ${airportId}`, error);
       throw new Error(detail);
     }
@@ -482,7 +492,10 @@ function summarizeScriptOutput(stdout: string, stderr: string): string {
   }
 }
 
-function summarizeScriptFailure(error: unknown, singBoxBin: string): string {
+function summarizeScriptFailure(error: unknown, singBoxBin: string, timeoutMs: number): string {
+  if (isScriptTimeoutFailure(error)) {
+    return `超时：超过 ${formatTimeoutDuration(timeoutMs)}`;
+  }
   const execError = asExecFailure(error);
   const scriptDetail = summarizeScriptFailureOutput(execError?.stdout, execError?.stderr);
   if (scriptDetail) {
@@ -541,6 +554,41 @@ function asExecFailure(error: unknown): { stdout?: string; stderr?: string } | n
     stdout: typeof candidate.stdout === 'string' ? candidate.stdout : undefined,
     stderr: typeof candidate.stderr === 'string' ? candidate.stderr : undefined,
   };
+}
+
+function isScriptTimeoutFailure(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const candidate = error as {
+    code?: unknown;
+    killed?: unknown;
+    message?: unknown;
+    signal?: unknown;
+    timedOut?: unknown;
+  };
+  if (candidate.timedOut === true || candidate.code === 'ETIMEDOUT') {
+    return true;
+  }
+  if (candidate.killed === true && candidate.signal === 'SIGTERM') {
+    return true;
+  }
+  return typeof candidate.message === 'string' && /timed out|timeout/i.test(candidate.message);
+}
+
+function formatTimeoutDuration(timeoutMs: number): string {
+  if (timeoutMs >= 60_000) {
+    return `${(timeoutMs / 60_000).toFixed(1)} min`;
+  }
+  return `${(timeoutMs / 1_000).toFixed(1)} s`;
+}
+
+function applyMissingEnvDefaults(env: NodeJS.ProcessEnv, defaults: Readonly<Record<string, string>>): void {
+  for (const [key, value] of Object.entries(defaults)) {
+    if (env[key] === undefined) {
+      env[key] = value;
+    }
+  }
 }
 
 function defaultSleep(ms: number): Promise<void> {
