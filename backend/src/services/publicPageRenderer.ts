@@ -2326,10 +2326,16 @@ const styles = `
   .tool-version-line { margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 12px; font-weight: 800; }
   .tool-action-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-top: auto; padding-top: 18px; }
   .tool-download-primary,
-  .tool-official-link { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; border-radius: 8px; padding: 0 14px; text-decoration: none; font-size: 13px; font-weight: 900; }
+  .tool-official-link { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; border-radius: 8px; padding: 0 14px; text-decoration: none; font-size: 13px; font-weight: 900; transition: transform .2s ease-out, border-color .2s ease-out, background-color .2s ease-out, color .2s ease-out, box-shadow .2s ease-out; }
   .tool-download-primary { background: linear-gradient(135deg, #0891b2, #10b981); color: #fff; box-shadow: 0 14px 30px rgba(8,145,178,.18); }
+  .tool-download-primary:not(.is-disabled):hover,
+  .tool-download-primary:not(.is-disabled):focus-visible { transform: translateY(-2px); box-shadow: 0 18px 34px rgba(8,145,178,.28); }
   .tool-download-primary.is-disabled { background: #e2e8f0; color: #64748b; box-shadow: none; cursor: not-allowed; }
   .tool-official-link { border: 1px solid #e2e8f0; background: #fff; color: #475569; }
+  .tool-official-link:hover,
+  .tool-official-link:focus-visible { transform: translateY(-2px); border-color: #bae6fd; background: #ecfeff; color: #0e7490; box-shadow: 0 12px 24px rgba(15,23,42,.08); }
+  .tool-download-primary:focus-visible,
+  .tool-official-link:focus-visible { outline: 0; box-shadow: 0 0 0 4px rgba(207,250,254,.9), 0 18px 34px rgba(8,145,178,.18); }
   @media (max-width: 1024px) {
     .tools-download-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }

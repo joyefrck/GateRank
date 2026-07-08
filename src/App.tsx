@@ -4168,7 +4168,7 @@ function ToolDownloadCard({ item, platform }: { item: ToolDownloadItem; platform
       <p className="mt-4 border-t border-slate-200 pt-3 text-xs font-extrabold text-slate-500">支持版本：{supportVersion}{item.file_size_label ? ` · 大小：${item.file_size_label}` : ''}</p>
       <div className="mt-auto grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 pt-5">
         {hasLocalFile ? (
-          <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,#0891b2,#10b981)] px-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(8,145,178,0.18)]" href={item.local_file_url} download={buildToolDownloadFilename(item, platform)}>
+          <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,#0891b2,#10b981)] px-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(8,145,178,0.18)] transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(8,145,178,0.28)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100" href={item.local_file_url} download={buildToolDownloadFilename(item, platform)}>
             <Download size={15} />
             本地下载
           </a>
@@ -4179,7 +4179,7 @@ function ToolDownloadCard({ item, platform }: { item: ToolDownloadItem; platform
           </span>
         )}
         {item.official_url ? (
-          <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 text-sm font-black text-slate-600 hover:border-slate-300 hover:text-slate-950" href={item.official_url} target="_blank" rel="nofollow noreferrer noopener">
+          <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 text-sm font-black text-slate-600 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800 hover:shadow-[0_12px_24px_rgba(15,23,42,0.08)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100" href={item.official_url} target="_blank" rel="nofollow noreferrer noopener">
             <Globe2 size={15} />
             官方
           </a>

@@ -289,6 +289,8 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
     assert.match(html, /class="tool-card is-hot"/);
     assert.match(html, /class="tool-hot-badge" data-tool-hot-badge>热门<\/span>/);
     assert.match(html, /\.tool-hot-badge \{ position: absolute;/);
+    assert.match(html, /\.tool-download-primary:not\(\.is-disabled\):hover,/);
+    assert.match(html, /\.tool-official-link:hover,/);
     assert.doesNotMatch(html, /Download Center/);
     assert.doesNotMatch(html, /选择你的设备系统/);
     assert.doesNotMatch(html, /热门客户端推荐/);
