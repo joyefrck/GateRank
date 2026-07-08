@@ -1,5 +1,11 @@
 import { Router } from 'express';
-import { isToolDownloadPlatform } from '../../../shared/toolDownloads';
+import {
+  buildToolPublicLocalFileMarker,
+  getToolDownloadFileExtension,
+  isToolDownloadPlatform,
+  type ToolDownloadItem,
+  type ToolsDownloadPageView,
+} from '../../../shared/toolDownloads';
 import type { ToolsDownloadService } from '../services/toolsDownloadService';
 import { setPublicCacheHeaders } from '../utils/publicCache';
 
@@ -15,12 +21,13 @@ export function createToolsPublicRoutes(deps: ToolsPublicDeps): Router {
       const platform = isToolDownloadPlatform(req.query.platform) ? req.query.platform : null;
       const view = await deps.toolsDownloadService.getDownloadPageView(platform);
       setPublicCacheHeaders(res);
+      const publicView = sanitizeToolsDownloadPageView(view);
       res.json({
-        platform: view.platform,
-        platforms: view.platforms,
-        total: view.total,
-        items: view.items,
-        hot_items: view.hotItems,
+        platform: publicView.platform,
+        platforms: publicView.platforms,
+        total: publicView.total,
+        items: publicView.items,
+        hot_items: publicView.hotItems,
       });
     } catch (error) {
       next(error);
@@ -32,11 +39,24 @@ export function createToolsPublicRoutes(deps: ToolsPublicDeps): Router {
       const platform = isToolDownloadPlatform(req.query.platform) ? req.query.platform : null;
       const view = await deps.toolsDownloadService.getDownloadPageView(platform);
       setPublicCacheHeaders(res);
-      res.json(view);
+      res.json(sanitizeToolsDownloadPageView(view));
     } catch (error) {
       next(error);
     }
   });
 
   return router;
+}
+
+function sanitizeToolsDownloadPageView(view: ToolsDownloadPageView): ToolsDownloadPageView {
+  const sanitizeItem = (item: ToolDownloadItem): ToolDownloadItem => ({
+    ...item,
+    file_extension: item.file_extension || getToolDownloadFileExtension(item.local_file_url),
+    local_file_url: buildToolPublicLocalFileMarker(item),
+  });
+  return {
+    ...view,
+    items: view.items.map(sanitizeItem),
+    hotItems: view.hotItems.map(sanitizeItem),
+  };
 }

@@ -55,7 +55,27 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
   assert.match(getLocationBlock(config, '^~ /monthly-reports/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.match(getLocationBlock(config, '/news'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.match(getLocationBlock(config, '^~ /tools/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
+  assert.match(getLocationBlock(config, '^~ /download/file/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.match(getLocationBlock(config, '= /deals/'), /proxy_pass\s+http:\/\/gaterank-api:8787\/deals\/;/);
+});
+
+test('nginx protects tool installer downloads with rate, connection and internal file serving limits', async () => {
+  const config = await readFile(path.join(process.cwd(), 'nginx.conf'), 'utf8');
+
+  assert.match(config, /limit_req_zone\s+\$binary_remote_addr\s+zone=tool_download_req:10m\s+rate=10r\/m;/);
+  assert.match(config, /limit_conn_zone\s+\$binary_remote_addr\s+zone=tool_download_conn:10m;/);
+  assert.match(config, /limit_conn_zone\s+\$server_name\s+zone=tool_download_global:10m;/);
+
+  const publicDownloadBlock = getLocationBlock(config, '^~ /download/file/');
+  assert.match(publicDownloadBlock, /limit_req\s+zone=tool_download_req\s+burst=20\s+nodelay;/);
+  assert.match(publicDownloadBlock, /limit_conn\s+tool_download_conn\s+2;/);
+  assert.match(publicDownloadBlock, /limit_conn\s+tool_download_global\s+50;/);
+
+  const protectedUploadsBlock = getLocationBlock(config, '^~ /_protected_uploads/tools/files/');
+  assert.match(protectedUploadsBlock, /internal;/);
+  assert.match(protectedUploadsBlock, /proxy_pass\s+http:\/\/gaterank-api:8787\/uploads\/tools\/files\/;/);
+  assert.match(protectedUploadsBlock, /limit_rate_after\s+10m;/);
+  assert.match(protectedUploadsBlock, /limit_rate\s+2m;/);
 });
 
 test('nginx reserves SPA fallback only for admin and portal entry routes', async () => {

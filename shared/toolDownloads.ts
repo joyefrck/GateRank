@@ -39,6 +39,7 @@ export interface ToolDownloadItem {
   primary_action: ToolDownloadPrimaryAction;
   version: string;
   file_size_label: string;
+  file_extension?: string;
   is_hot: boolean;
   sort_order: number;
   status: ToolDownloadStatus;
@@ -236,7 +237,20 @@ export function buildToolDownloadFilename(item: ToolDownloadItem, platform: Tool
     .map(sanitizeDownloadFilenamePart)
     .filter(Boolean)
     .join('-') || sanitizeDownloadFilenamePart(`${item.slug}-${platform}`) || 'download';
-  return `${stem}${getDownloadFileExtension(item.local_file_url)}`;
+  return `${stem}${item.file_extension || getToolDownloadFileExtension(item.local_file_url)}`;
+}
+
+export function buildToolControlledDownloadUrl(item: Pick<ToolDownloadItem, 'slug'>, platform: ToolDownloadPlatform): string {
+  return `/download/file/${encodeURIComponent(item.slug)}?platform=${encodeURIComponent(platform)}`;
+}
+
+export function buildToolPublicLocalFileMarker(item: Pick<ToolDownloadItem, 'local_file_url'>): string {
+  const extension = getToolDownloadFileExtension(item.local_file_url);
+  return item.local_file_url ? `/download/file${extension}` : '';
+}
+
+export function getToolDownloadFileExtension(url: string): string {
+  return getDownloadFileExtension(url);
 }
 
 function sanitizeDownloadFilenamePart(value: string): string {

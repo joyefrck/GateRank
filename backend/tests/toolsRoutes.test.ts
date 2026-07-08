@@ -27,7 +27,7 @@ test('tools public routes expose published downloads and page config', async () 
           platforms: ['ios'],
           platform_versions: { ios: 'iOS 15+' },
           icon_url: '/uploads/tools/icons/shadowrocket.webp',
-          local_file_url: '',
+          local_file_url: '/uploads/tools/files/shadowrocket.ipa',
           official_url: 'https://apps.apple.com/app/shadowrocket/id932747118',
           primary_action: 'official',
           version: '',
@@ -50,15 +50,18 @@ test('tools public routes expose published downloads and page config', async () 
     const port = (server.address() as AddressInfo).port;
     const response = await fetch(`http://127.0.0.1:${port}/api/v1/tools/downloads?platform=ios`);
     assert.equal(response.status, 200);
-    const data = await response.json() as { platform: string; items: Array<{ name: string }> };
+    const data = await response.json() as { platform: string; items: Array<{ name: string; local_file_url: string; file_extension?: string }> };
     assert.equal(data.platform, 'ios');
     assert.equal(data.items[0].name, 'Shadowrocket');
+    assert.equal(data.items[0].local_file_url, '/download/file.ipa');
+    assert.equal(data.items[0].file_extension, '.ipa');
     assert.deepEqual((data.items[0] as { platform_versions?: Record<string, string> }).platform_versions, { ios: 'iOS 15+' });
 
     const pageResponse = await fetch(`http://127.0.0.1:${port}/api/v1/tools/download-page`);
     assert.equal(pageResponse.status, 200);
-    const page = await pageResponse.json() as { config: { seo_title: string } };
+    const page = await pageResponse.json() as { config: { seo_title: string }; items: Array<{ local_file_url: string }> };
     assert.match(page.config.seo_title, /翻墙工具下载/);
+    assert.equal(page.items[0].local_file_url, '/download/file.ipa');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

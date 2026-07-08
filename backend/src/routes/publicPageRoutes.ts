@@ -37,6 +37,7 @@ import {
 import type { MonthlyReportPublicService } from '../services/monthlyReportPublicService';
 import type { ToolsDownloadService } from '../services/toolsDownloadService';
 import { isToolDownloadPlatform } from '../../../shared/toolDownloads';
+import { sendError } from '../utils/http';
 
 interface PublicPageDeps {
   publicViewService: {
@@ -50,7 +51,7 @@ interface PublicPageDeps {
     listActiveDeals(): Promise<AirportDealView[]>;
   };
   monthlyReportPublicService?: MonthlyReportPublicService;
-  toolsDownloadService?: Pick<ToolsDownloadService, 'getDownloadPageView'>;
+  toolsDownloadService?: Pick<ToolsDownloadService, 'getDownloadPageView' | 'getDownloadFileTarget'>;
   pageCache?: TimedPromiseCache;
   frontendAssets?: PublicFrontendAssets;
 }
@@ -207,6 +208,46 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   router.get('/tools', redirectToDownload);
   router.get('/tools/', redirectToDownload);
   router.get('/tools/download', redirectToDownload);
+
+  router.get('/download/file/:slug', async (req, res, next) => {
+    try {
+      if (isObviousDownloadBot(req)) {
+        sendError(res, 403, 'DOWNLOAD_FORBIDDEN', '当前下载请求被拒绝', req.requestId || 'unknown');
+        return;
+      }
+      const rateLimit = checkToolDownloadRateLimit(req);
+      if ('retryAfterMs' in rateLimit) {
+        res.setHeader('Retry-After', String(Math.ceil(rateLimit.retryAfterMs / 1000)));
+        sendError(res, 429, 'DOWNLOAD_RATE_LIMITED', '下载请求过于频繁，请稍后再试', req.requestId || 'unknown');
+        return;
+      }
+      if (!isToolDownloadPlatform(req.query.platform)) {
+        sendError(res, 400, 'BAD_REQUEST', '下载平台无效', req.requestId || 'unknown');
+        return;
+      }
+
+      const target = await requireToolsDownloadService(deps).getDownloadFileTarget(
+        String(req.params.slug || ''),
+        req.query.platform,
+      );
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
+      res.setHeader('Content-Type', 'application/octet-stream');
+      if (target.internalRedirectPath) {
+        res.setHeader('Content-Disposition', buildAttachmentContentDisposition(target.downloadFilename));
+        res.setHeader('X-Accel-Redirect', target.internalRedirectPath);
+        res.status(200).end();
+        return;
+      }
+      res.download(target.absolutePath, target.downloadFilename, (error) => {
+        if (error && !res.headersSent) {
+          next(error);
+        }
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get('/download', async (req, res) => {
     const siteUrl = getSiteOrigin(req);
@@ -390,11 +431,61 @@ function requireMonthlyReportPublicService(deps: PublicPageDeps): MonthlyReportP
   return deps.monthlyReportPublicService;
 }
 
-function requireToolsDownloadService(deps: PublicPageDeps): Pick<ToolsDownloadService, 'getDownloadPageView'> {
+function requireToolsDownloadService(deps: PublicPageDeps): Pick<ToolsDownloadService, 'getDownloadPageView' | 'getDownloadFileTarget'> {
   if (!deps.toolsDownloadService) {
     throw new Error('toolsDownloadService is not configured');
   }
   return deps.toolsDownloadService;
+}
+
+const TOOL_DOWNLOAD_RATE_BUCKETS = new Map<string, { count: number; resetAt: number }>();
+
+function checkToolDownloadRateLimit(req: { headers: Record<string, unknown>; ip?: string }): { allowed: true } | { allowed: false; retryAfterMs: number } {
+  const windowMs = Math.max(1000, Number(process.env.TOOL_DOWNLOAD_RATE_WINDOW_MS || 60_000));
+  const maxRequests = Math.max(1, Number(process.env.TOOL_DOWNLOAD_RATE_MAX || 30));
+  const now = Date.now();
+  const key = getDownloadRateLimitKey(req);
+  const bucket = TOOL_DOWNLOAD_RATE_BUCKETS.get(key);
+  if (!bucket || bucket.resetAt <= now) {
+    TOOL_DOWNLOAD_RATE_BUCKETS.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true };
+  }
+  bucket.count += 1;
+  if (bucket.count > maxRequests) {
+    return { allowed: false, retryAfterMs: Math.max(1000, bucket.resetAt - now) };
+  }
+  return { allowed: true };
+}
+
+function getDownloadRateLimitKey(req: { headers: Record<string, unknown>; ip?: string }): string {
+  return String(req.headers['cf-connecting-ip'] || getFirstForwardedIp(req.headers['x-forwarded-for']) || req.ip || 'unknown');
+}
+
+function getFirstForwardedIp(value: unknown): string {
+  const header = Array.isArray(value) ? value[0] : value;
+  return String(header || '').split(',')[0]?.trim() || '';
+}
+
+function isObviousDownloadBot(req: { headers: Record<string, unknown> }): boolean {
+  const userAgent = String(req.headers['user-agent'] || '').trim().toLowerCase();
+  if (!userAgent) {
+    return true;
+  }
+  return /\b(curl|wget|python-requests|python-urllib|go-http-client|java\/|libwww-perl|scrapy|httpclient|okhttp|axios|node-fetch|undici|headlesschrome|phantomjs|bot|crawler|spider|scanner)\b/.test(userAgent);
+}
+
+function buildAttachmentContentDisposition(filename: string): string {
+  const fallback = filename
+    .replace(/[^\x20-\x7E]+/g, '_')
+    .replace(/["\\;]+/g, '_')
+    .trim() || 'download';
+  return `attachment; filename="${fallback}"; filename*=UTF-8''${encodeRfc5987ValueChars(filename)}`;
+}
+
+function encodeRfc5987ValueChars(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/['()]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/\*/g, '%2A');
 }
 
 const PUBLIC_RANKING_PATH = '/rankings/all';

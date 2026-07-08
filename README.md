@@ -342,6 +342,14 @@ proxy_send_timeout 300s;
 proxy_read_timeout 300s;
 ```
 
+公开下载入口必须走 `/download/file/:slug?platform=...`，不要把 `/uploads/tools/files/...` 直接暴露给用户。生产 Nginx 配置会对 `/download/file/` 做单 IP 频率限制、单 IP 并发限制和全站下载并发限制，并对公网直接访问 `/uploads/tools/files/` 返回 `403`。如需让 Nginx 内部转发安装包响应，在 `gaterank-api` 环境变量中增加：
+
+```bash
+TOOL_DOWNLOAD_INTERNAL_REDIRECT_PREFIX=/_protected_uploads/tools/files
+```
+
+未配置该变量时，后端仍会通过受控下载入口返回文件，Nginx 的 `/download/file/` 限流和并发限制仍然生效。
+
 线上编排使用 GitHub Actions 构建并发布到 GHCR 的生产镜像：
 
 - `ghcr.io/joyefrck/gaterank-web:main`：前端静态产物 + Nginx

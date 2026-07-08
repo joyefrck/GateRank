@@ -76,8 +76,11 @@ import {
   type FullRankingFilters,
 } from '../../../shared/fullRankingFilters';
 import {
+  buildToolControlledDownloadUrl,
   buildToolDownloadFilename,
+  buildToolPublicLocalFileMarker,
   getToolDownloadPlatformLabel,
+  getToolDownloadFileExtension,
   TOOL_DOWNLOAD_PLATFORMS,
   type ToolDownloadItem,
   type ToolDownloadPlatform,
@@ -599,7 +602,7 @@ export function renderToolsDownloadPublicPage(
       params: {
         page: null,
       },
-      payload: view,
+      payload: sanitizeToolsDownloadPageViewForPublicPayload(view),
     },
     frontendAssets,
     body: `
@@ -615,6 +618,19 @@ export function renderToolsDownloadPublicPage(
       </main>
     `,
   });
+}
+
+function sanitizeToolsDownloadPageViewForPublicPayload(view: ToolsDownloadPageView): ToolsDownloadPageView {
+  const sanitizeItem = (item: ToolDownloadItem): ToolDownloadItem => ({
+    ...item,
+    file_extension: item.file_extension || getToolDownloadFileExtension(item.local_file_url),
+    local_file_url: buildToolPublicLocalFileMarker(item),
+  });
+  return {
+    ...view,
+    items: view.items.map(sanitizeItem),
+    hotItems: view.hotItems.map(sanitizeItem),
+  };
 }
 
 export function renderToolPlaceholderPublicPage(
@@ -1472,7 +1488,7 @@ function renderToolDownloadCard(item: ToolDownloadItem, platform: ToolDownloadPl
       <p>${escapeHtml(item.description || item.summary)}</p>
       <p class="muted tool-version-line">支持版本：${escapeHtml(supportVersion)}${item.file_size_label ? ` · 大小：${escapeHtml(item.file_size_label)}` : ''}</p>
       <div class="tool-action-row">
-        ${hasLocalFile ? `<a class="tool-download-primary" href="${escapeAttribute(item.local_file_url)}" download="${escapeAttribute(buildToolDownloadFilename(item, platform))}">本地下载</a>` : '<span class="tool-download-primary is-disabled">本地下载待上传</span>'}
+        ${hasLocalFile ? `<a class="tool-download-primary" href="${escapeAttribute(buildToolControlledDownloadUrl(item, platform))}" download="${escapeAttribute(buildToolDownloadFilename(item, platform))}">本地下载</a>` : '<span class="tool-download-primary is-disabled">本地下载待上传</span>'}
         ${item.official_url ? `<a class="tool-official-link" href="${escapeAttribute(item.official_url)}" target="_blank" rel="nofollow noreferrer noopener">官方页面</a>` : ''}
       </div>
     </article>
@@ -1549,7 +1565,7 @@ function buildToolDownloadSoftwareJsonLd(siteUrl: string, items: ToolDownloadIte
     }).join(', '),
     applicationCategory: 'NetworkApplication',
     url: item.official_url || `${siteUrl}/download#tool-${item.slug}`,
-    downloadUrl: item.local_file_url || undefined,
+    downloadUrl: item.local_file_url && item.platforms[0] ? `${siteUrl}${buildToolControlledDownloadUrl(item, item.platforms[0])}` : undefined,
     image: item.icon_url ? absoluteImageUrl(siteUrl, item.icon_url) : undefined,
   }));
 }

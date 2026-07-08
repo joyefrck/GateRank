@@ -1,3 +1,5 @@
+import { stat } from 'node:fs/promises';
+import path from 'node:path';
 import { HttpError } from '../middleware/errorHandler';
 import type {
   ToolDownloadInput,
@@ -6,8 +8,10 @@ import type {
   UpdateToolDownloadInput,
 } from '../repositories/toolDownloadRepository';
 import type { SystemSettingRepository } from '../repositories/systemSettingRepository';
+import { getNewsUploadRootDir } from '../utils/newsStorage';
 import { formatSqlDateTimeInTimezone } from '../utils/time';
 import {
+  buildToolDownloadFilename,
   DEFAULT_HOT_TOOL_DOWNLOADS,
   DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
   isToolDownloadPlatform,
@@ -22,6 +26,15 @@ import {
 } from '../../../shared/toolDownloads';
 
 const TOOLS_DOWNLOAD_PAGE_SETTING_KEY = 'tools_download_page';
+const TOOL_FILE_UPLOAD_URL_PREFIX = '/uploads/tools/files/';
+
+export interface ToolDownloadFileTarget {
+  item: ToolDownloadItem;
+  platform: ToolDownloadPlatform;
+  downloadFilename: string;
+  absolutePath: string;
+  internalRedirectPath?: string;
+}
 
 export class ToolsDownloadService {
   constructor(
@@ -107,10 +120,81 @@ export class ToolsDownloadService {
     return item;
   }
 
+  async getDownloadFileTarget(slug: string, platform: ToolDownloadPlatform): Promise<ToolDownloadFileTarget> {
+    const normalizedSlug = mustSlug(slug);
+    if (!isToolDownloadPlatform(platform)) {
+      throw new HttpError(400, 'BAD_REQUEST', '下载平台无效');
+    }
+    const item = await this.toolDownloadRepository.getBySlug(normalizedSlug);
+    if (!item || item.status !== 'published') {
+      throw new HttpError(404, 'TOOL_DOWNLOAD_NOT_FOUND', '下载项不存在或尚未发布');
+    }
+    if (!item.platforms.includes(platform)) {
+      throw new HttpError(404, 'TOOL_DOWNLOAD_NOT_FOUND', '该软件不支持当前下载平台');
+    }
+    if (!item.local_file_url) {
+      throw new HttpError(404, 'TOOL_DOWNLOAD_FILE_NOT_FOUND', '本地安装包尚未上传');
+    }
+
+    const absolutePath = resolveToolDownloadFilePath(item.local_file_url);
+    try {
+      const fileStat = await stat(absolutePath);
+      if (!fileStat.isFile()) {
+        throw new HttpError(404, 'TOOL_DOWNLOAD_FILE_NOT_FOUND', '本地安装包不存在');
+      }
+    } catch (error) {
+      if (error instanceof HttpError) {
+        throw error;
+      }
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        throw new HttpError(404, 'TOOL_DOWNLOAD_FILE_NOT_FOUND', '本地安装包不存在');
+      }
+      throw error;
+    }
+
+    return {
+      item,
+      platform,
+      downloadFilename: buildToolDownloadFilename(item, platform),
+      absolutePath,
+      internalRedirectPath: buildInternalRedirectPath(item.local_file_url),
+    };
+  }
+
   private async getDownloadPageConfig(): Promise<ToolsDownloadPageConfig> {
     const record = await this.systemSettingRepository.getByKey(TOOLS_DOWNLOAD_PAGE_SETTING_KEY);
     return normalizePageConfig(record?.value_json || DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG);
   }
+}
+
+function resolveToolDownloadFilePath(publicUrl: string): string {
+  let pathname: string;
+  try {
+    pathname = new URL(publicUrl, 'http://gaterank.local').pathname;
+  } catch {
+    throw new HttpError(400, 'BAD_REQUEST', '本地安装包 URL 无效');
+  }
+  if (!pathname.startsWith(TOOL_FILE_UPLOAD_URL_PREFIX)) {
+    throw new HttpError(400, 'BAD_REQUEST', '本地安装包必须来自工具上传目录');
+  }
+  const relativePath = pathname.slice('/uploads/'.length);
+  const uploadRoot = getNewsUploadRootDir();
+  const absolutePath = path.resolve(uploadRoot, relativePath);
+  const safeRoot = path.resolve(uploadRoot);
+  if (absolutePath !== safeRoot && !absolutePath.startsWith(`${safeRoot}${path.sep}`)) {
+    throw new HttpError(400, 'BAD_REQUEST', '本地安装包路径无效');
+  }
+  return absolutePath;
+}
+
+function buildInternalRedirectPath(publicUrl: string): string | undefined {
+  const prefix = optionalString(process.env.TOOL_DOWNLOAD_INTERNAL_REDIRECT_PREFIX);
+  if (!prefix) {
+    return undefined;
+  }
+  const pathname = new URL(publicUrl, 'http://gaterank.local').pathname;
+  const filename = path.basename(pathname);
+  return `${prefix.replace(/\/+$/, '')}/${encodeURIComponent(filename)}`;
 }
 
 function parseToolDownloadPayload(payload: Record<string, unknown>, required: boolean): ToolDownloadInput | UpdateToolDownloadInput {

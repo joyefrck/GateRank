@@ -283,7 +283,9 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
     assert.match(html, /Linux 端/);
     assert.match(html, /支持版本：macOS 12\+/);
     assert.match(html, /支持版本：Windows 10\/11/);
+    assert.match(html, /href="\/download\/file\/clash-verge-rev\?platform=macos"/);
     assert.match(html, /download="Clash-Verge-Rev-macOS-2\.5\.1\.dmg"/);
+    assert.doesNotMatch(html, /\/uploads\/tools\/files\/1783493370824-8654d0d0-9b6f-49ce-bcbf-ddd79a05bbc9\.dmg/);
     assert.match(html, /\.tools-download-card-grid \{ display: grid; grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
     assert.doesNotMatch(html, /\.tools-download-card-grid \{ display: grid; grid-template-columns: repeat\(auto-fit/);
     assert.match(html, /class="tool-card is-hot"/);
@@ -306,6 +308,69 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
     assert.match(html, /"@type":"SoftwareApplication"/);
     assert.match(html, /"@type":"FAQPage"/);
     assert.match(html, /"kind":"tools_download"/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /download/file/:slug uses controlled download headers and rejects obvious bots', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    toolsDownloadService: {
+      getDownloadPageView: async () => ({
+        config: {
+          seo_title: '翻墙工具下载',
+          seo_description: '翻墙工具下载页面。',
+          seo_keywords: '翻墙工具下载',
+          h1: '翻墙工具下载',
+          hero_description: '下载工具。',
+          content_sections: [],
+          faq_items: [],
+        },
+        platform: null,
+        platforms: ['windows', 'macos', 'ios', 'android', 'linux'],
+        items: [],
+        hotItems: [],
+        total: 0,
+      }),
+      getDownloadFileTarget: async (slug: string, platform: string) => ({
+        item: createToolDownloadItem({
+          slug,
+          name: 'Clash Verge Rev',
+          platforms: ['macos'],
+          local_file_url: '/uploads/tools/files/clash-verge-rev.dmg',
+          version: '2.5.1',
+        }),
+        platform,
+        downloadFilename: 'Clash-Verge-Rev-macOS-2.5.1.dmg',
+        absolutePath: '/tmp/gaterank-test-clash-verge-rev.dmg',
+        internalRedirectPath: '/_protected_uploads/tools/files/clash-verge-rev.dmg',
+      }),
+    } as never,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const browserResponse = await fetch(`http://127.0.0.1:${port}/download/file/clash-verge-rev?platform=macos`, {
+      headers: {
+        'user-agent': 'Mozilla/5.0 GateRank download test',
+        'accept-language': 'zh-CN,zh;q=0.9',
+      },
+    });
+    assert.equal(browserResponse.status, 200);
+    assert.equal(browserResponse.headers.get('x-accel-redirect'), '/_protected_uploads/tools/files/clash-verge-rev.dmg');
+    assert.match(browserResponse.headers.get('content-disposition') || '', /attachment/);
+    assert.match(browserResponse.headers.get('content-disposition') || '', /filename\*=UTF-8''Clash-Verge-Rev-macOS-2\.5\.1\.dmg/);
+
+    const botResponse = await fetch(`http://127.0.0.1:${port}/download/file/clash-verge-rev?platform=macos`, {
+      headers: {
+        'user-agent': 'curl/8.0.1',
+      },
+    });
+    assert.equal(botResponse.status, 403);
+    assert.equal((await botResponse.json()).code, 'DOWNLOAD_FORBIDDEN');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

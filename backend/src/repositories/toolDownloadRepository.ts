@@ -144,6 +144,11 @@ export class ToolDownloadRepository {
     return rows[0] ? toToolDownloadItem(rows[0]) : null;
   }
 
+  async getBySlug(slug: string): Promise<ToolDownloadItem | null> {
+    const [rows] = await this.pool.query<ToolDownloadRow[]>(`${selectSql()} WHERE slug = ? LIMIT 1`, [slug]);
+    return rows[0] ? toToolDownloadItem(rows[0]) : null;
+  }
+
   async create(input: ToolDownloadInput): Promise<number> {
     const [result] = await this.pool.execute<ResultSetHeader>(
       `INSERT INTO tool_download_items (
