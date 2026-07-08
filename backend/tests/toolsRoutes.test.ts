@@ -180,6 +180,55 @@ test('tools admin routes update page SEO config and publish downloads', async ()
   }
 });
 
+test('tools admin routes return conflict when tool download slug already exists', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.requestId = 'tools-duplicate-test';
+    next();
+  });
+  app.use('/api/v1/admin', createToolsAdminRoutes({
+    auditRepository: {
+      log: async () => {},
+    } as never,
+    toolsDownloadService: {
+      getAdminDownloadPageConfig: async () => DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
+      updateAdminDownloadPageConfig: async (input) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
+      listAdminDownloads: async () => ({ page: 1, page_size: 20, total: 0, items: [] }),
+      createDownload: async () => {
+        throw Object.assign(new Error('Duplicate entry'), {
+          code: 'ER_DUP_ENTRY',
+          sqlMessage: 'Duplicate entry for key uk_tool_download_items_slug',
+        });
+      },
+      updateDownload: async () => ({}),
+      updateDownloadStatus: async () => ({}),
+    } as never,
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tools/downloads`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        slug: 'clash-verge-rev',
+        name: 'Clash Verge Rev',
+        summary: 'macOS 客户端',
+        platforms: ['macos'],
+        primary_action: 'local',
+      }),
+    });
+    assert.equal(response.status, 409);
+    const data = await response.json() as { message: string };
+    assert.match(data.message, /slug 已存在/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('tools admin routes recover recent uploaded tool file by size and extension', async () => {
   const previousUploadRoot = process.env.NEWS_UPLOAD_ROOT_DIR;
   const uploadRoot = await mkdtemp(path.join(tmpdir(), 'gaterank-tool-upload-'));

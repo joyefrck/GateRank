@@ -80,7 +80,7 @@ export function createToolsAdminRoutes(deps: ToolsAdminDeps): Router {
       clearToolsDownloadPublicCache(deps);
       res.status(201).json(item);
     } catch (error) {
-      next(error);
+      next(normalizeToolDownloadMutationError(error));
     }
   });
 
@@ -95,7 +95,7 @@ export function createToolsAdminRoutes(deps: ToolsAdminDeps): Router {
       clearToolsDownloadPublicCache(deps);
       res.json(item);
     } catch (error) {
-      next(error);
+      next(normalizeToolDownloadMutationError(error));
     }
   });
 
@@ -271,6 +271,22 @@ function requiredString(value: unknown, message: string): string {
     throw new HttpError(400, 'BAD_REQUEST', message);
   }
   return stringValue;
+}
+
+function normalizeToolDownloadMutationError(error: unknown): unknown {
+  if (isDuplicateToolDownloadSlugError(error)) {
+    return new HttpError(409, 'TOOL_DOWNLOAD_SLUG_CONFLICT', '工具下载 slug 已存在，请换一个 slug 或使用“软件名-平台”的格式');
+  }
+  return error;
+}
+
+function isDuplicateToolDownloadSlugError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') {
+    return false;
+  }
+  const candidate = error as { code?: unknown; sqlMessage?: unknown; message?: unknown };
+  const text = `${String(candidate.sqlMessage || '')} ${String(candidate.message || '')}`;
+  return candidate.code === 'ER_DUP_ENTRY' && text.includes('tool_download_items');
 }
 
 function toPositiveInt(value: unknown, fallback: number): number {

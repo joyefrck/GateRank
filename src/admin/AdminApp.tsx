@@ -1993,8 +1993,16 @@ function ToolsDownloadAdminPage() {
           </div>
           <div className="grid min-w-0 gap-5">
             <div className="grid gap-3 md:grid-cols-2">
-              <AdminField label="名称"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value, slug: current.slug || slugifyToolName(e.target.value) }))} placeholder="例如 Clash Verge Rev" /></AdminField>
-              <AdminField label="Slug"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} placeholder="clash-verge-rev" /></AdminField>
+              <AdminField label="名称"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.name} onChange={(e) => setForm((current) => {
+                const nextName = e.target.value;
+                const platform = current.platforms[0] || 'windows';
+                return {
+                  ...current,
+                  name: nextName,
+                  slug: shouldRefreshToolSlug(current, nextName) ? buildToolPlatformSlug(nextName, platform) : current.slug,
+                };
+              })} placeholder="例如 Clash Verge Rev" /></AdminField>
+              <AdminField label="Slug"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} placeholder="clash-verge-rev-macos" /></AdminField>
               <AdminField label="摘要"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} placeholder="一句话说明适用系统和用途" /></AdminField>
               <div className="grid gap-3 sm:grid-cols-2">
                 <AdminField label="客户端版本"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.version} onChange={(e) => setForm({ ...form, version: e.target.value })} placeholder="latest / 1.8.2" /></AdminField>
@@ -2026,6 +2034,9 @@ function ToolsDownloadAdminPage() {
                             ...current,
                             platforms: [platform],
                             platform_versions: ensureToolPlatformVersion(current.platform_versions, platform),
+                            slug: shouldRefreshToolSlug(current, current.name)
+                              ? buildToolPlatformSlug(current.name || current.slug, platform)
+                              : current.slug,
                           }))}
                         />
                         {formatToolPlatform(platform)}
@@ -2272,8 +2283,9 @@ function toToolDownloadForm(item: ToolDownloadItem): ToolDownloadFormState {
 }
 
 function buildToolDownloadPayload(form: ToolDownloadFormState) {
+  const platform = form.platforms[0] || 'windows';
   return {
-    slug: form.slug.trim(),
+    slug: buildToolPlatformSlug(form.slug.trim() || form.name.trim(), platform),
     name: form.name.trim(),
     summary: form.summary.trim(),
     description: form.description.trim(),
@@ -2340,7 +2352,9 @@ function applyToolFileUploadInference(
   const nextPlatform = inferred.platforms[0] || current.platforms[0] || 'windows';
   const nextPlatforms: ToolDownloadPlatform[] = [nextPlatform];
   const nextName = current.name.trim() || inferred.name;
-  const nextSlug = current.slug.trim() || slugifyToolName(nextName || inferred.slugSource);
+  const nextSlug = shouldRefreshToolSlug(current, nextName)
+    ? buildToolPlatformSlug(nextName || inferred.slugSource, nextPlatform)
+    : buildToolPlatformSlug(current.slug.trim(), nextPlatform);
   const nextVersions = { ...current.platform_versions };
   for (const platform of nextPlatforms) {
     if (!nextVersions[platform]) {
@@ -2512,9 +2526,30 @@ function slugifyToolName(value: string): string {
     .slice(0, 80);
 }
 
-function mergeToolPlatforms(current: ToolDownloadPlatform[], inferred: ToolDownloadPlatform[]): ToolDownloadPlatform[] {
-  const merged = new Set<ToolDownloadPlatform>([...current, ...inferred]);
-  return TOOL_PLATFORM_OPTIONS.filter((platform) => merged.has(platform));
+function buildToolPlatformSlug(value: string, platform: ToolDownloadPlatform): string {
+  const base = stripToolPlatformSlugSuffix(slugifyToolName(value)) || platform;
+  const maxBaseLength = 127 - platform.length;
+  const safeBase = base.slice(0, maxBaseLength).replace(/-+$/g, '') || platform;
+  return `${safeBase}-${platform}`;
+}
+
+function stripToolPlatformSlugSuffix(value: string): string {
+  const suffixPattern = new RegExp(`-(${TOOL_PLATFORM_OPTIONS.join('|')})$`);
+  return value.replace(suffixPattern, '');
+}
+
+function shouldRefreshToolSlug(current: ToolDownloadFormState, nextName: string): boolean {
+  const slug = current.slug.trim();
+  if (!slug) {
+    return true;
+  }
+  const currentNameSlug = slugifyToolName(current.name);
+  const nextNameSlug = slugifyToolName(nextName);
+  const strippedSlug = stripToolPlatformSlugSuffix(slug);
+  return slug === currentNameSlug
+    || slug === nextNameSlug
+    || strippedSlug === currentNameSlug
+    || strippedSlug === nextNameSlug;
 }
 
 function buildDefaultToolSummary(name: string, platforms: ToolDownloadPlatform[]): string {
