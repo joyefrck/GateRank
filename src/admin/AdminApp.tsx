@@ -1801,6 +1801,7 @@ function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
 function ToolsDownloadAdminPage() {
   const [items, setItems] = useState<ToolDownloadItem[]>([]);
   const [config, setConfig] = useState<ToolsDownloadPageConfig | null>(null);
+  const [recentUploads, setRecentUploads] = useState<RecentToolUpload[]>([]);
   const [editing, setEditing] = useState<ToolDownloadItem | null>(null);
   const [form, setForm] = useState(() => createDefaultToolDownloadForm());
   const [loading, setLoading] = useState(false);
@@ -1816,12 +1817,14 @@ function ToolsDownloadAdminPage() {
     setLoading(true);
     setError('');
     try {
-      const [listData, configData] = await Promise.all([
+      const [listData, configData, recentData] = await Promise.all([
         apiFetch('/api/v1/admin/tools/downloads?page_size=100') as Promise<{ items: ToolDownloadItem[] }>,
         apiFetch('/api/v1/admin/tools/download-page') as Promise<ToolsDownloadPageConfig>,
+        apiFetch('/api/v1/admin/tools/uploads/recent?limit=12') as Promise<{ items: RecentToolUpload[] }>,
       ]);
       setItems(listData.items);
       setConfig(configData);
+      setRecentUploads(recentData.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -1904,6 +1907,15 @@ function ToolsDownloadAdminPage() {
         setForm((current) => ({ ...current, icon_url: data.url }));
       } else {
         setForm((current) => applyToolFileUploadInference(current, file, data));
+        setRecentUploads((current) => mergeRecentToolUploads(current, {
+          url: data.url,
+          filename: data.filename || filenameFromUrl(data.url),
+          original_name: data.original_name || file.name,
+          file_size_label: data.file_size_label || formatUploadBytes(file.size),
+          size: file.size,
+          extension: toolUploadExtension(file.name),
+          uploaded_at: new Date().toISOString(),
+        }));
       }
       completed = true;
     } catch (err) {
@@ -1952,6 +1964,14 @@ function ToolsDownloadAdminPage() {
   const publishedCount = items.filter((item) => item.status === 'published').length;
   const fileUploadProgress = uploadProgress?.kind === 'file' ? uploadProgress : null;
   const iconUploadProgress = uploadProgress?.kind === 'icon' ? uploadProgress : null;
+
+  const useRecentUpload = (upload: RecentToolUpload) => {
+    setForm((current) => applyToolFileUploadInference(current, { name: upload.original_name || upload.filename }, {
+      url: upload.url,
+      file_size_label: upload.file_size_label,
+    }));
+    setError('');
+  };
 
   return (
     <div className="space-y-6">
@@ -2024,6 +2044,39 @@ function ToolsDownloadAdminPage() {
                 <AutoDetectRow label="文件大小" value={form.file_size_label || '待上传'} active={Boolean(form.file_size_label)} />
               </div>
             </div>
+            {recentUploads.length > 0 && (
+              <div className="rounded-2xl border border-cyan-100 bg-white p-4">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-black text-neutral-900">最近上传安装包</div>
+                    <p className="mt-1 text-xs leading-5 text-neutral-500">上传遇到 524 或刷新页面后，可以从这里找回已到服务器的文件。</p>
+                  </div>
+                  <button className="text-xs font-black text-cyan-700 hover:text-cyan-900" onClick={() => void load()}>刷新</button>
+                </div>
+                <div className="mt-3 grid gap-2">
+                  {recentUploads.slice(0, 6).map((upload) => (
+                    <div key={`${upload.url}-${upload.uploaded_at}`} className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="truncate text-sm font-black text-neutral-900" title={upload.original_name || upload.filename}>
+                            {upload.original_name || upload.filename}
+                          </div>
+                          <div className="mt-1 text-xs font-bold text-neutral-500">
+                            {upload.file_size_label} · {formatRecentUploadTime(upload.uploaded_at)}
+                          </div>
+                        </div>
+                        <button
+                          className="shrink-0 rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-black text-white hover:bg-cyan-700"
+                          onClick={() => useRecentUpload(upload)}
+                        >
+                          使用
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
           <div className="grid gap-5">
             <div className="grid gap-3 md:grid-cols-2">
@@ -2236,6 +2289,16 @@ interface ToolUploadProgress {
   lengthComputable: boolean;
 }
 
+interface RecentToolUpload {
+  url: string;
+  filename: string;
+  original_name: string;
+  file_size_label: string;
+  size: number;
+  extension: string;
+  uploaded_at: string;
+}
+
 function AdminField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1 text-sm">
@@ -2404,7 +2467,7 @@ function ensureToolPlatformVersion(versions: ToolDownloadPlatformVersions, platf
 
 function applyToolFileUploadInference(
   current: ToolDownloadFormState,
-  file: File,
+  file: { name: string },
   data: { url: string; file_size_label?: string },
 ): ToolDownloadFormState {
   const inferred = inferToolFile(file.name);
@@ -2623,7 +2686,7 @@ async function uploadToolAsset(
   kind: 'icon' | 'file',
   file: File,
   onProgress?: (progress: ToolUploadProgress) => void,
-): Promise<{ url: string; file_size_label?: string }> {
+): Promise<{ url: string; filename?: string; original_name?: string; file_size_label?: string }> {
   const body = new FormData();
   body.append('file', file);
   return new Promise((resolve, reject) => {
@@ -2689,10 +2752,10 @@ async function uploadToolAsset(
   });
 }
 
-function parseUploadResponse(responseText: string): { url?: string; file_size_label?: string; message?: string } {
+function parseUploadResponse(responseText: string): { url?: string; filename?: string; original_name?: string; file_size_label?: string; message?: string } {
   if (!responseText) return {};
   try {
-    return JSON.parse(responseText) as { url?: string; file_size_label?: string; message?: string };
+    return JSON.parse(responseText) as { url?: string; filename?: string; original_name?: string; file_size_label?: string; message?: string };
   } catch {
     return {};
   }
@@ -2702,7 +2765,7 @@ async function recoverToolUploadAfterInterruptedResponse(
   kind: 'icon' | 'file',
   file: File,
   onProgress?: (progress: ToolUploadProgress) => void,
-): Promise<{ url: string; file_size_label?: string } | null> {
+): Promise<{ url: string; filename?: string; original_name?: string; file_size_label?: string } | null> {
   if (kind !== 'file' || file.size <= 0) {
     return null;
   }
@@ -2727,7 +2790,7 @@ async function recoverToolUploadAfterInterruptedResponse(
       if (!response.ok) {
         continue;
       }
-      const data = await response.json() as { url?: string; file_size_label?: string };
+      const data = await response.json() as { url?: string; filename?: string; original_name?: string; file_size_label?: string };
       if (!data.url) {
         continue;
       }
@@ -2739,7 +2802,7 @@ async function recoverToolUploadAfterInterruptedResponse(
         percent: 100,
         lengthComputable: true,
       });
-      return { url: data.url, file_size_label: data.file_size_label };
+      return { url: data.url, filename: data.filename, original_name: data.original_name, file_size_label: data.file_size_label };
     } catch {
       continue;
     }
@@ -2753,6 +2816,28 @@ function toolUploadExtension(filename: string): string {
   if (lower.endsWith('.tar.gz')) return '.tar.gz';
   const dot = lower.lastIndexOf('.');
   return dot >= 0 ? lower.slice(dot) : '';
+}
+
+function filenameFromUrl(url: string): string {
+  const clean = String(url || '').split('?')[0] || '';
+  return clean.slice(clean.lastIndexOf('/') + 1) || 'uploaded-file';
+}
+
+function mergeRecentToolUploads(current: RecentToolUpload[], next: RecentToolUpload): RecentToolUpload[] {
+  return [next, ...current.filter((item) => item.url !== next.url)].slice(0, 12);
+}
+
+function formatRecentUploadTime(value: string): string {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) {
+    return '刚刚';
+  }
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }
 
 function delay(ms: number): Promise<void> {

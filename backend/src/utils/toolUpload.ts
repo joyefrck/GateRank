@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { readdir, stat } from 'node:fs/promises';
+import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import multer from 'multer';
@@ -8,6 +8,17 @@ import { fileExtensionFromMime } from './news';
 import { getNewsUploadRootDir } from './newsStorage';
 
 type ToolUploadKind = 'icons' | 'files';
+
+export interface RecentToolUpload {
+  url: string;
+  filename: string;
+  original_name: string;
+  file_size_label: string;
+  size: number;
+  extension: string;
+  uploaded_at: string;
+  updated_at?: string;
+}
 
 export function createToolUploadMiddleware(kind: ToolUploadKind) {
   return multer({
@@ -50,10 +61,70 @@ export function getToolUploadPublicUrl(kind: ToolUploadKind, filename: string): 
   return `/uploads/tools/${kind}/${filename}`;
 }
 
+export async function writeToolUploadMetadata(
+  kind: ToolUploadKind,
+  filename: string,
+  metadata: { original_name?: string; size?: number },
+): Promise<void> {
+  const dir = getToolUploadDir(kind);
+  await writeFile(
+    path.join(dir, `${filename}.meta.json`),
+    JSON.stringify({
+      original_name: metadata.original_name || filename,
+      size: metadata.size || 0,
+      uploaded_at: new Date().toISOString(),
+    }),
+  );
+}
+
+export async function listRecentToolUploads(
+  kind: ToolUploadKind,
+  input: { limit?: number; sinceSeconds?: number } = {},
+): Promise<RecentToolUpload[]> {
+  const dir = getToolUploadDir(kind);
+  const sinceMs = Date.now() - Math.max(60, Math.min(input.sinceSeconds || 86400, 7 * 86400)) * 1000;
+  const limit = Math.max(1, Math.min(input.limit || 20, 100));
+  let filenames: string[];
+  try {
+    filenames = await readdir(dir);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+    throw error;
+  }
+
+  const uploads: RecentToolUpload[] = [];
+  for (const filename of filenames) {
+    if (filename.endsWith('.meta.json')) {
+      continue;
+    }
+    const filePath = path.join(dir, filename);
+    const fileStat = await stat(filePath);
+    if (!fileStat.isFile() || fileStat.mtimeMs < sinceMs) {
+      continue;
+    }
+    const metadata = await readToolUploadMetadata(dir, filename);
+    uploads.push({
+      url: getToolUploadPublicUrl(kind, filename),
+      filename,
+      original_name: metadata.original_name || filename,
+      file_size_label: formatFileSize(fileStat.size),
+      size: fileStat.size,
+      extension: safeExtensionFromFilename(metadata.original_name || filename),
+      uploaded_at: metadata.uploaded_at || new Date(fileStat.mtimeMs).toISOString(),
+    });
+  }
+
+  return uploads
+    .sort((left, right) => new Date(right.uploaded_at).getTime() - new Date(left.uploaded_at).getTime())
+    .slice(0, limit);
+}
+
 export async function findRecentToolUpload(
   kind: ToolUploadKind,
   input: { size: number; extension?: string; sinceSeconds?: number },
-): Promise<{ url: string; filename: string; file_size_label: string; updated_at: string } | null> {
+): Promise<RecentToolUpload | null> {
   if (!Number.isFinite(input.size) || input.size <= 0) {
     throw new HttpError(400, 'BAD_REQUEST', '文件大小无效');
   }
@@ -92,8 +163,12 @@ export async function findRecentToolUpload(
   return {
     url: getToolUploadPublicUrl(kind, latest.filename),
     filename: latest.filename,
+    original_name: (await readToolUploadMetadata(dir, latest.filename)).original_name || latest.filename,
     file_size_label: formatFileSize(input.size),
+    size: input.size,
+    extension: safeExtensionFromFilename(latest.filename),
     updated_at: new Date(latest.mtimeMs).toISOString(),
+    uploaded_at: new Date(latest.mtimeMs).toISOString(),
   };
 }
 
@@ -106,6 +181,18 @@ export function formatFileSize(bytes: number): string {
 
 function getToolUploadDir(kind: ToolUploadKind): string {
   return path.resolve(getNewsUploadRootDir(), 'tools', kind);
+}
+
+async function readToolUploadMetadata(dir: string, filename: string): Promise<{ original_name?: string; size?: number; uploaded_at?: string }> {
+  try {
+    return JSON.parse(await readFile(path.join(dir, `${filename}.meta.json`), 'utf8')) as {
+      original_name?: string;
+      size?: number;
+      uploaded_at?: string;
+    };
+  } catch {
+    return {};
+  }
 }
 
 function safeExtensionFromFilename(filename: string): string {

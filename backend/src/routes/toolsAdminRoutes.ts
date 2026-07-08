@@ -8,6 +8,8 @@ import {
   findRecentToolUpload,
   formatFileSize,
   getToolUploadPublicUrl,
+  listRecentToolUploads,
+  writeToolUploadMetadata,
 } from '../utils/toolUpload';
 import { isToolDownloadPlatform } from '../../../shared/toolDownloads';
 
@@ -144,12 +146,22 @@ export function createToolsAdminRoutes(deps: ToolsAdminDeps): Router {
         throw new HttpError(400, 'BAD_REQUEST', '缺少安装包文件');
       }
       const url = getToolUploadPublicUrl('files', req.file.filename);
+      await writeToolUploadMetadata('files', req.file.filename, {
+        original_name: req.file.originalname,
+        size: req.file.size,
+      });
       await deps.auditRepository.log('upload_tool_file', actorFromReq(req), req.requestId, {
         filename: req.file.filename,
+        original_name: req.file.originalname,
         size: req.file.size,
       });
       clearToolsDownloadPublicCache(deps);
-      res.status(201).json({ url, file_size_label: formatFileSize(req.file.size) });
+      res.status(201).json({
+        url,
+        filename: req.file.filename,
+        original_name: req.file.originalname,
+        file_size_label: formatFileSize(req.file.size),
+      });
     } catch (error) {
       next(error);
     }
@@ -166,6 +178,19 @@ export function createToolsAdminRoutes(deps: ToolsAdminDeps): Router {
         throw new HttpError(404, 'NOT_FOUND', '没有找到匹配的最近上传文件');
       }
       res.json(recovered);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/tools/uploads/recent', async (req, res, next) => {
+    try {
+      res.json({
+        items: await listRecentToolUploads('files', {
+          limit: toPositiveInt(req.query.limit, 20),
+          sinceSeconds: toPositiveInt(req.query.since_seconds, 7 * 86400),
+        }),
+      });
     } catch (error) {
       next(error);
     }

@@ -187,6 +187,11 @@ test('tools admin routes recover recent uploaded tool file by size and extension
   const filesDir = path.join(uploadRoot, 'tools', 'files');
   await mkdir(filesDir, { recursive: true });
   await writeFile(path.join(filesDir, '1783499000000-recovered.dmg'), Buffer.alloc(2048));
+  await writeFile(path.join(filesDir, '1783499000000-recovered.dmg.meta.json'), JSON.stringify({
+    original_name: 'Clash.Verge_2.5.1_aarch64.dmg',
+    size: 2048,
+    uploaded_at: new Date().toISOString(),
+  }));
 
   const app = express();
   app.use((req, _res, next) => {
@@ -216,8 +221,15 @@ test('tools admin routes recover recent uploaded tool file by size and extension
     );
     assert.equal(response.status, 200);
     const data = await response.json() as { url: string; file_size_label: string };
+    assert.equal((data as { original_name?: string }).original_name, 'Clash.Verge_2.5.1_aarch64.dmg');
     assert.equal(data.url, '/uploads/tools/files/1783499000000-recovered.dmg');
     assert.equal(data.file_size_label, '2.0 KB');
+
+    const recentResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tools/uploads/recent?limit=5`);
+    assert.equal(recentResponse.status, 200);
+    const recent = await recentResponse.json() as { items: Array<{ url: string; original_name: string }> };
+    assert.equal(recent.items[0].url, '/uploads/tools/files/1783499000000-recovered.dmg');
+    assert.equal(recent.items[0].original_name, 'Clash.Verge_2.5.1_aarch64.dmg');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     if (previousUploadRoot === undefined) {
