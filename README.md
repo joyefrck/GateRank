@@ -332,6 +332,16 @@ npm run server:dev
 - `/` -> `http://127.0.0.1:18088`
 - `/api` -> `http://127.0.0.1:18787`
 
+工具下载后台会上传客户端安装包，后端默认允许最大 `300MB`。生产反向代理必须同步放开上传限制，否则浏览器会看到 `上传失败: 502` 或代理层错误。1Panel/Nginx 的 `/api` 代理建议配置：
+
+```nginx
+client_max_body_size 320m;
+client_body_timeout 300s;
+proxy_request_buffering off;
+proxy_send_timeout 300s;
+proxy_read_timeout 300s;
+```
+
 线上编排使用 GitHub Actions 构建并发布到 GHCR 的生产镜像：
 
 - `ghcr.io/joyefrck/gaterank-web:main`：前端静态产物 + Nginx

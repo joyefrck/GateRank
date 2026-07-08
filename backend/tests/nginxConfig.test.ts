@@ -73,7 +73,12 @@ test('nginx reserves SPA fallback only for admin and portal entry routes', async
 
 test('nginx proxies API routes and returns hard 404 for unknown public paths', async () => {
   const config = await readFile(path.join(process.cwd(), 'nginx.conf'), 'utf8');
-  assert.match(getLocationBlock(config, '^~ /api/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
+  const apiBlock = getLocationBlock(config, '^~ /api/');
+  assert.match(apiBlock, /proxy_pass\s+http:\/\/gaterank-api:8787;/);
+  assert.match(apiBlock, /client_max_body_size\s+320m;/);
+  assert.match(apiBlock, /proxy_request_buffering\s+off;/);
+  assert.match(apiBlock, /proxy_send_timeout\s+300s;/);
+  assert.match(apiBlock, /proxy_read_timeout\s+300s;/);
   assert.match(getLocationBlock(config, '^~ /uploads/'), /proxy_pass\s+http:\/\/gaterank-api:8787\/uploads\/;/);
 
   const catchAll = getLocationBlock(config, '/');
