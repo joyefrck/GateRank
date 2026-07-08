@@ -1806,6 +1806,7 @@ function ToolsDownloadAdminPage() {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState<'icon' | 'file' | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<ToolUploadProgress | null>(null);
   const [fileDragActive, setFileDragActive] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [seoOpen, setSeoOpen] = useState(false);
@@ -1888,17 +1889,35 @@ function ToolsDownloadAdminPage() {
   const uploadAsset = async (kind: 'icon' | 'file', file: File) => {
     setError('');
     setUploading(kind);
+    let completed = false;
+    setUploadProgress({
+      kind,
+      fileName: file.name,
+      loaded: 0,
+      total: file.size,
+      percent: 0,
+      lengthComputable: file.size > 0,
+    });
     try {
-      const data = await uploadToolAsset(kind, file);
+      const data = await uploadToolAsset(kind, file, (progress) => setUploadProgress(progress));
       if (kind === 'icon') {
         setForm((current) => ({ ...current, icon_url: data.url }));
       } else {
         setForm((current) => applyToolFileUploadInference(current, file, data));
       }
+      completed = true;
     } catch (err) {
       setError(err instanceof Error ? err.message : '上传失败');
+      setUploadProgress(null);
     } finally {
       setUploading(null);
+      if (completed) {
+        window.setTimeout(() => {
+          setUploadProgress((current) => (
+            current?.kind === kind && current.fileName === file.name ? null : current
+          ));
+        }, 900);
+      }
     }
   };
 
@@ -1931,6 +1950,8 @@ function ToolsDownloadAdminPage() {
 
   const localPackageCount = items.filter((item) => item.local_file_url).length;
   const publishedCount = items.filter((item) => item.status === 'published').length;
+  const fileUploadProgress = uploadProgress?.kind === 'file' ? uploadProgress : null;
+  const iconUploadProgress = uploadProgress?.kind === 'icon' ? uploadProgress : null;
 
   return (
     <div className="space-y-6">
@@ -1983,6 +2004,7 @@ function ToolsDownloadAdminPage() {
               </span>
               <span className="mt-4 text-lg font-black text-cyan-950">{uploading === 'file' ? '安装包上传中...' : fileDragActive ? '松开即可上传' : '第一步：上传安装包'}</span>
               <span className="mt-2 max-w-xs text-sm leading-6 text-cyan-800">点击选择或直接拖入安装包。支持 exe、msi、dmg、pkg、apk、ipa、deb、rpm、AppImage、zip、tar.gz。</span>
+              {fileUploadProgress && <ToolUploadProgressBar progress={fileUploadProgress} />}
               <input className="hidden" type="file" disabled={uploading === 'file'} onChange={(event) => {
                 const file = event.currentTarget.files?.[0];
                 event.currentTarget.value = '';
@@ -2108,6 +2130,7 @@ function ToolsDownloadAdminPage() {
                         if (file) void uploadAsset('icon', file);
                       }} />
                     </label>
+                    {iconUploadProgress && <ToolUploadProgressBar progress={iconUploadProgress} compact />}
                   </div>
                 </div>
               )}
@@ -2204,12 +2227,54 @@ interface ToolDownloadFormState {
   sort_order: string;
 }
 
+interface ToolUploadProgress {
+  kind: 'icon' | 'file';
+  fileName: string;
+  loaded: number;
+  total: number;
+  percent: number;
+  lengthComputable: boolean;
+}
+
 function AdminField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1 text-sm">
       <span className="font-bold text-neutral-700">{label}</span>
       {children}
     </label>
+  );
+}
+
+function ToolUploadProgressBar({ progress, compact = false }: { progress: ToolUploadProgress; compact?: boolean }) {
+  const width = progress.lengthComputable ? `${Math.max(2, Math.min(100, progress.percent))}%` : '42%';
+  return (
+    <div
+      data-testid={`tool-${progress.kind}-upload-progress`}
+      className={`${compact ? 'min-w-48 flex-1' : 'mt-5 w-full max-w-sm'} rounded-2xl border border-cyan-100 bg-white/80 p-3 text-left shadow-sm`}
+    >
+      <div className="flex items-center justify-between gap-3 text-xs font-black text-cyan-950">
+        <span className="min-w-0 truncate">{progress.fileName}</span>
+        <span className="shrink-0">{progress.lengthComputable ? `${progress.percent}%` : '上传中'}</span>
+      </div>
+      <div
+        className="mt-2 h-2 overflow-hidden rounded-full bg-cyan-100"
+        role="progressbar"
+        aria-label={progress.kind === 'file' ? '安装包上传进度' : '图标上传进度'}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={progress.lengthComputable ? progress.percent : undefined}
+      >
+        <div
+          className={`h-full rounded-full bg-[linear-gradient(90deg,#0891b2,#10b981)] transition-[width] duration-200 ${progress.lengthComputable ? '' : 'animate-pulse'}`}
+          style={{ width }}
+        />
+      </div>
+      <div className="mt-2 text-xs font-medium text-cyan-800">
+        {progress.lengthComputable
+          ? `${formatUploadBytes(progress.loaded)} / ${formatUploadBytes(progress.total)}`
+          : '正在上传，等待服务器返回结果'}
+      </div>
+    </div>
   );
 }
 
@@ -2554,19 +2619,71 @@ function formatToolStatus(status: ToolDownloadStatus): string {
   return '草稿';
 }
 
-async function uploadToolAsset(kind: 'icon' | 'file', file: File): Promise<{ url: string; file_size_label?: string }> {
+async function uploadToolAsset(
+  kind: 'icon' | 'file',
+  file: File,
+  onProgress?: (progress: ToolUploadProgress) => void,
+): Promise<{ url: string; file_size_label?: string }> {
   const body = new FormData();
   body.append('file', file);
-  const response = await fetch(`${getApiBase()}/api/v1/admin/tools/upload-${kind}`, {
-    method: 'POST',
-    credentials: 'include',
-    body,
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${getApiBase()}/api/v1/admin/tools/upload-${kind}`);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (event) => {
+      const lengthComputable = event.lengthComputable || file.size > 0;
+      const total = event.lengthComputable ? event.total : file.size;
+      const loaded = event.loaded;
+      const percent = total > 0 ? Math.min(99, Math.round((loaded / total) * 100)) : 0;
+      onProgress?.({
+        kind,
+        fileName: file.name,
+        loaded,
+        total,
+        percent,
+        lengthComputable,
+      });
+    };
+    xhr.onload = () => {
+      const data = parseUploadResponse(xhr.responseText);
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(data?.message || `上传失败: ${xhr.status}`));
+        return;
+      }
+      if (!data.url) {
+        reject(new Error('上传失败：服务器未返回文件地址'));
+        return;
+      }
+      onProgress?.({
+        kind,
+        fileName: file.name,
+        loaded: file.size,
+        total: file.size,
+        percent: 100,
+        lengthComputable: file.size > 0,
+      });
+      resolve({ url: data.url, file_size_label: data.file_size_label });
+    };
+    xhr.onerror = () => reject(new Error('网络异常，上传失败'));
+    xhr.onabort = () => reject(new Error('上传已取消'));
+    xhr.send(body);
   });
-  if (!response.ok) {
-    const data = await safeJson(response) as { message?: string };
-    throw new Error(data?.message || `上传失败: ${response.status}`);
+}
+
+function parseUploadResponse(responseText: string): { url?: string; file_size_label?: string; message?: string } {
+  if (!responseText) return {};
+  try {
+    return JSON.parse(responseText) as { url?: string; file_size_label?: string; message?: string };
+  } catch {
+    return {};
   }
-  return safeJson(response) as Promise<{ url: string; file_size_label?: string }>;
+}
+
+function formatUploadBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes >= 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
 }
 
 function SchedulerPage() {
