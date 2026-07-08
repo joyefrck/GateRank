@@ -8,6 +8,7 @@ import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from 
 import { createTimedPromiseCache } from '../src/utils/publicCache';
 import type { AirportDealView } from '../../shared/airportAds';
 import { getDateInTimezone } from '../src/utils/time';
+import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG } from '../../shared/toolDownloads';
 
 const TEST_FRONTEND_ASSETS = {
   script: '/assets/index-CkG9aP2q.js',
@@ -223,6 +224,7 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
     toolsDownloadService: {
       getDownloadPageView: async (platform?: string | null) => ({
         config: {
+          ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
           seo_title: '翻墙工具下载 | Clash Verge Rev、v2rayN、Shadowrocket 客户端',
           seo_description: 'GateRank 翻墙工具下载页收录 Windows、macOS、iOS、Android、Linux 常用科学上网客户端，支持官方页面跳转和后台上传文件。',
           seo_keywords: '翻墙工具下载,科学上网客户端下载,Clash Verge Rev,v2rayN,Shadowrocket,Stash,sing-box,Hiddify',
@@ -230,9 +232,6 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
           hero_description: '按系统筛选常用代理客户端，优先展示官方页面和后台上传的可信安装包。',
           content_sections: [
             { title: '如何选择翻墙工具', body: 'Windows 和 macOS 用户可优先查看 Clash Verge Rev、v2rayN、sing-box、Hiddify 等客户端。' },
-          ],
-          faq_items: [
-            { question: '这些翻墙工具和机场有什么关系？', answer: '机场通常提供订阅链接，客户端负责导入订阅并连接节点。' },
           ],
         },
         platform: platform ?? null,
@@ -276,11 +275,11 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
     assert.match(html, /\.public-top-nav-submenu \{[\s\S]*?min-width: 260px;/);
     assert.match(html, /\.public-top-nav-submenu-link > span:first-child \{[\s\S]*?white-space: nowrap;/);
     assert.doesNotMatch(html, /href="\/tools"[^/]/);
-    assert.match(html, /Windows 端/);
-    assert.match(html, /macOS 端/);
-    assert.match(html, /iOS 端/);
-    assert.match(html, /Android 端/);
-    assert.match(html, /Linux 端/);
+    assert.match(html, /Windows 翻墙工具下载/);
+    assert.match(html, /macOS 翻墙工具下载/);
+    assert.match(html, /iOS 翻墙工具下载/);
+    assert.match(html, /Android 翻墙工具下载/);
+    assert.match(html, /Linux 翻墙工具下载/);
     assert.match(html, /支持版本：macOS 12\+/);
     assert.match(html, /支持版本：Windows 10\/11/);
     assert.match(html, /href="\/download\/file\/clash-verge-rev\?platform=macos"/);
@@ -307,6 +306,11 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
     assert.match(html, /Hiddify/);
     assert.match(html, /"@type":"SoftwareApplication"/);
     assert.match(html, /"@type":"FAQPage"/);
+    assert.match(html, /Windows 翻墙工具推荐哪个？/);
+    assert.match(html, /Android 用 v2rayNG 还是 Karing？/);
+    assert.match(html, /Shadowrocket 为什么需要美区 Apple ID？/);
+    assert.match(html, /"name":"Windows 翻墙工具推荐哪个？"/);
+    assert.match(html, /"name":"Shadowrocket 为什么需要美区 Apple ID？"/);
     assert.match(html, /"kind":"tools_download"/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -408,8 +412,8 @@ test('GET /download platform filter is noindex and canonicalizes to base page', 
     const html = await response.text();
     assert.match(html, /<meta name="robots" content="noindex,follow" \/>/);
     assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/download"/);
-    assert.match(html, /macOS 端/);
-    assert.doesNotMatch(html, /Windows 端/);
+    assert.match(html, /macOS 翻墙工具下载/);
+    assert.doesNotMatch(html, /Windows 翻墙工具下载/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

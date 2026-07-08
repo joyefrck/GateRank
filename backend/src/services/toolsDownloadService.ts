@@ -27,6 +27,11 @@ import {
 
 const TOOLS_DOWNLOAD_PAGE_SETTING_KEY = 'tools_download_page';
 const TOOL_FILE_UPLOAD_URL_PREFIX = '/uploads/tools/files/';
+const LEGACY_DEFAULT_TOOL_DOWNLOAD_FAQ_QUESTIONS = [
+  '翻墙工具和机场 VPN 是一回事吗？',
+  '下载客户端后可以直接使用吗？',
+  '为什么优先展示官方页面？',
+];
 
 export interface ToolDownloadFileTarget {
   item: ToolDownloadItem;
@@ -219,6 +224,7 @@ function parseToolDownloadPayload(payload: Record<string, unknown>, required: bo
 
 function normalizePageConfig(value: unknown): ToolsDownloadPageConfig {
   const input = (value && typeof value === 'object' && !Array.isArray(value) ? value : {}) as Partial<ToolsDownloadPageConfig>;
+  const faqItems = normalizeFaqItems(input.faq_items);
   return {
     seo_title: optionalString(input.seo_title) || DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG.seo_title,
     seo_description: optionalString(input.seo_description) || DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG.seo_description,
@@ -231,13 +237,24 @@ function normalizePageConfig(value: unknown): ToolsDownloadPageConfig {
         body: optionalString(item?.body),
       })).filter((item) => item.title && item.body)
       : DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG.content_sections,
-    faq_items: Array.isArray(input.faq_items)
-      ? input.faq_items.map((item) => ({
-        question: optionalString(item?.question),
-        answer: optionalString(item?.answer),
-      })).filter((item) => item.question && item.answer)
-      : DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG.faq_items,
+    faq_items: faqItems,
   };
+}
+
+function normalizeFaqItems(value: unknown): ToolsDownloadPageConfig['faq_items'] {
+  if (!Array.isArray(value)) {
+    return DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG.faq_items;
+  }
+  const items = value.map((item) => ({
+    question: optionalString(item?.question),
+    answer: optionalString(item?.answer),
+  })).filter((item) => item.question && item.answer);
+  return isLegacyDefaultToolDownloadFaq(items) ? DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG.faq_items : items;
+}
+
+function isLegacyDefaultToolDownloadFaq(items: ToolsDownloadPageConfig['faq_items']): boolean {
+  return items.length === LEGACY_DEFAULT_TOOL_DOWNLOAD_FAQ_QUESTIONS.length
+    && items.every((item, index) => item.question === LEGACY_DEFAULT_TOOL_DOWNLOAD_FAQ_QUESTIONS[index]);
 }
 
 function getDefaultPublishedItems(platform: ToolDownloadPlatform | null): ToolDownloadItem[] {

@@ -79,16 +79,44 @@ export const DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG: ToolsDownloadPageConfig = {
   ],
   faq_items: [
     {
-      question: '翻墙工具和机场 VPN 是一回事吗？',
-      answer: '不是。机场通常提供订阅链接和节点服务，翻墙工具或科学上网客户端负责导入订阅并连接节点。',
+      question: 'Windows 翻墙工具推荐哪个？',
+      answer: 'Windows 用户通常优先看 Clash Verge Rev 和 v2rayN。Clash Verge Rev 更适合想要图形界面、规则分流和跨平台体验的用户；v2rayN 更适合习惯 Windows 原生客户端、需要导入多种代理协议的用户。',
     },
     {
-      question: '下载客户端后可以直接使用吗？',
-      answer: '通常还需要机场订阅链接或节点配置。可以先在 GateRank 查看机场排行和测评，再把订阅导入对应客户端。',
+      question: 'iPhone 用什么翻墙工具？',
+      answer: 'iPhone 常见选择是 Shadowrocket 和 Stash。Shadowrocket 上手简单、机场教程覆盖多；Stash 更偏规则管理和高级配置。两者通常都需要配合机场订阅链接使用。',
     },
     {
-      question: '为什么优先展示官方页面？',
-      answer: '代理客户端属于网络安全敏感软件，官方发布页和后台明确上传的文件更容易追踪来源、版本和更新状态。',
+      question: 'Android 用 v2rayNG 还是 Karing？',
+      answer: 'v2rayNG 更轻量，适合只需要导入订阅、选择节点和基础代理的用户；Karing 界面更完整，适合想要跨平台体验和更友好配置流程的用户。优先选择机场明确支持的客户端。',
+    },
+    {
+      question: 'Clash Verge Rev 和 v2rayN 有什么区别？',
+      answer: 'Clash Verge Rev 主要围绕 Clash/Mihomo 生态，适合规则分流、代理组切换和跨平台使用；v2rayN 是 Windows 上常见的多协议客户端，适合 V2Ray、Xray、sing-box 等订阅格式。',
+    },
+    {
+      question: 'Clash Verge Rev 怎么导入机场订阅？',
+      answer: '一般在 Clash Verge Rev 的订阅或配置入口粘贴机场提供的订阅链接，保存后更新订阅，再选择可用节点或策略组。不同机场的订阅格式可能不同，需以机场后台教程为准。',
+    },
+    {
+      question: 'v2rayN 怎么导入订阅链接？',
+      answer: '通常在 v2rayN 的订阅管理中添加机场订阅地址，更新订阅后选择节点并启用系统代理。若更新失败，需要检查订阅链接是否过期、网络是否可访问以及客户端版本是否过旧。',
+    },
+    {
+      question: '为什么下载客户端后还不能翻墙？',
+      answer: '客户端只是连接工具，通常还需要可用的机场订阅链接或节点配置。下载后仍不能使用，常见原因包括没有订阅、订阅过期、节点不可用、系统代理未开启或客户端不支持该订阅格式。',
+    },
+    {
+      question: '机场订阅链接是什么？',
+      answer: '机场订阅链接是服务商提供的一段配置地址，里面包含节点、协议、端口和分流信息。用户把订阅导入客户端后，客户端才能获取节点列表并发起代理连接。',
+    },
+    {
+      question: '本地下载和官方下载有什么区别？',
+      answer: '官方下载通常指跳转到项目官网、GitHub 或 App Store 获取最新版本；本地下载是 GateRank 后台保存的安装包备份，适合官方页面访问不稳定时使用。安全性和最新版本仍建议以官方页面为准。',
+    },
+    {
+      question: 'Shadowrocket 为什么需要美区 Apple ID？',
+      answer: 'Shadowrocket 并非所有地区 App Store 都可直接下载。部分用户需要切换到可购买该 App 的 Apple ID 区域，例如美区账号；实际可用地区和价格以 Apple App Store 当前展示为准。',
     },
   ],
 };

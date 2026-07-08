@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
   buildToolDownloadPlatformHeading,
   buildToolDownloadTrustMeta,
 } from '../../shared/toolDownloads';
@@ -33,5 +34,27 @@ test('tool download trust meta falls back to official page version and updated d
       updated_at: '2026-07-07T11:12:13.000Z',
     }),
     '版本：以官方发布页为准 · 发布：2026-07-07',
+  );
+});
+
+test('default tool download FAQ covers long-tail SEO questions', () => {
+  const questions = DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG.faq_items.map((item) => item.question);
+
+  assert.equal(questions.length, 10);
+  assert.deepEqual(questions, [
+    'Windows 翻墙工具推荐哪个？',
+    'iPhone 用什么翻墙工具？',
+    'Android 用 v2rayNG 还是 Karing？',
+    'Clash Verge Rev 和 v2rayN 有什么区别？',
+    'Clash Verge Rev 怎么导入机场订阅？',
+    'v2rayN 怎么导入订阅链接？',
+    '为什么下载客户端后还不能翻墙？',
+    '机场订阅链接是什么？',
+    '本地下载和官方下载有什么区别？',
+    'Shadowrocket 为什么需要美区 Apple ID？',
+  ]);
+  assert.match(
+    DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG.faq_items[2].answer,
+    /v2rayNG 更轻量.*Karing 界面更完整/s,
   );
 });
