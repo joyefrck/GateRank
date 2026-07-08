@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
 import path from 'node:path';
-import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import express from 'express';
 import { createToolsPublicRoutes } from '../src/routes/toolsPublicRoutes';
@@ -230,6 +230,93 @@ test('tools admin routes recover recent uploaded tool file by size and extension
     const recent = await recentResponse.json() as { items: Array<{ url: string; original_name: string }> };
     assert.equal(recent.items[0].url, '/uploads/tools/files/1783499000000-recovered.dmg');
     assert.equal(recent.items[0].original_name, 'Clash.Verge_2.5.1_aarch64.dmg');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    if (previousUploadRoot === undefined) {
+      delete process.env.NEWS_UPLOAD_ROOT_DIR;
+    } else {
+      process.env.NEWS_UPLOAD_ROOT_DIR = previousUploadRoot;
+    }
+    await rm(uploadRoot, { recursive: true, force: true });
+  }
+});
+
+test('tools admin routes accept chunked tool file upload and complete final package', async () => {
+  const previousUploadRoot = process.env.NEWS_UPLOAD_ROOT_DIR;
+  const uploadRoot = await mkdtemp(path.join(tmpdir(), 'gaterank-tool-chunk-upload-'));
+  process.env.NEWS_UPLOAD_ROOT_DIR = uploadRoot;
+  const auditActions: string[] = [];
+
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.requestId = 'tools-chunk-test';
+    next();
+  });
+  app.use('/api/v1/admin', createToolsAdminRoutes({
+    auditRepository: {
+      log: async (action: string) => { auditActions.push(action); },
+    } as never,
+    publicPageCache: { clear: () => {} },
+    toolsDownloadService: {
+      getAdminDownloadPageConfig: async () => DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
+      updateAdminDownloadPageConfig: async (input) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
+      listAdminDownloads: async () => ({ page: 1, page_size: 20, total: 0, items: [] }),
+      createDownload: async () => ({}),
+      updateDownload: async () => ({}),
+      updateDownloadStatus: async () => ({}),
+    } as never,
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const uploadId = '11111111-1111-4111-8111-111111111111';
+    const originalName = 'Clash.Verge_2.5.1_aarch64.dmg';
+    const chunks = [Buffer.from('hello-'), Buffer.from('world')];
+    const totalSize = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+
+    for (const [index, chunk] of chunks.entries()) {
+      const form = new FormData();
+      form.set('upload_id', uploadId);
+      form.set('chunk_index', String(index));
+      form.set('total_chunks', String(chunks.length));
+      form.set('original_name', originalName);
+      form.set('total_size', String(totalSize));
+      form.set('file', new Blob([chunk], { type: 'application/octet-stream' }), originalName);
+
+      const response = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tools/upload-file/chunk`, {
+        method: 'POST',
+        body: form,
+      });
+      assert.equal(response.status, 201);
+    }
+
+    const completeResponse = await fetch(`http://127.0.0.1:${port}/api/v1/admin/tools/upload-file/complete`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        upload_id: uploadId,
+        original_name: originalName,
+        total_chunks: chunks.length,
+        total_size: totalSize,
+      }),
+    });
+    assert.equal(completeResponse.status, 201);
+    const completed = await completeResponse.json() as {
+      url: string;
+      filename: string;
+      original_name: string;
+      file_size_label: string;
+    };
+    assert.match(completed.url, /^\/uploads\/tools\/files\/.+\.dmg$/);
+    assert.equal(completed.original_name, originalName);
+    assert.equal(completed.file_size_label, '11 B');
+
+    const written = await readFile(path.join(uploadRoot, 'tools', 'files', completed.filename), 'utf8');
+    assert.equal(written, 'hello-world');
+    assert.deepEqual(auditActions, ['upload_tool_file_chunked']);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
     if (previousUploadRoot === undefined) {

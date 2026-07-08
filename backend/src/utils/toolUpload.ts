@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs';
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import multer from 'multer';
@@ -57,8 +57,116 @@ export function createToolUploadMiddleware(kind: ToolUploadKind) {
   });
 }
 
+export function createToolChunkUploadMiddleware() {
+  return multer({
+    storage: multer.memoryStorage(),
+    fileFilter: (_req, file, callback) => {
+      if (!isAllowedToolFile(file.originalname, file.mimetype)) {
+        callback(new HttpError(400, 'BAD_REQUEST', '只允许上传 exe、msi、dmg、pkg、apk、ipa、deb、rpm、AppImage、zip、tar.gz 文件'));
+        return;
+      }
+      callback(null, true);
+    },
+    limits: {
+      fileSize: Number(process.env.TOOL_FILE_CHUNK_MAX_BYTES || 6 * 1024 * 1024),
+      files: 1,
+    },
+  });
+}
+
 export function getToolUploadPublicUrl(kind: ToolUploadKind, filename: string): string {
   return `/uploads/tools/${kind}/${filename}`;
+}
+
+export async function storeToolUploadChunk(input: {
+  uploadId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  originalName: string;
+  totalSize: number;
+  buffer: Buffer;
+}): Promise<{ upload_id: string; chunk_index: number; total_chunks: number; chunk_size: number }> {
+  validateChunkUploadInput(input);
+  const chunkDir = getToolChunkDir(input.uploadId);
+  await mkdir(chunkDir, { recursive: true });
+  await writeFile(path.join(chunkDir, `${input.chunkIndex}.part`), input.buffer);
+  await writeFile(path.join(chunkDir, 'meta.json'), JSON.stringify({
+    upload_id: input.uploadId,
+    original_name: input.originalName,
+    total_chunks: input.totalChunks,
+    total_size: input.totalSize,
+    updated_at: new Date().toISOString(),
+  }));
+
+  return {
+    upload_id: input.uploadId,
+    chunk_index: input.chunkIndex,
+    total_chunks: input.totalChunks,
+    chunk_size: input.buffer.length,
+  };
+}
+
+export async function completeToolUploadChunks(input: {
+  uploadId: string;
+  originalName: string;
+  totalChunks: number;
+  totalSize: number;
+}): Promise<{ url: string; filename: string; original_name: string; file_size_label: string }> {
+  validateChunkUploadInput({
+    ...input,
+    chunkIndex: 0,
+    buffer: Buffer.alloc(1),
+  });
+
+  const extension = safeExtensionFromFilename(input.originalName);
+  const filename = `${Date.now()}-${randomUUID()}${extension}`;
+  const fileDir = getToolUploadDir('files');
+  const targetPath = path.join(fileDir, filename);
+  const chunkDir = getToolChunkDir(input.uploadId);
+
+  await mkdir(fileDir, { recursive: true });
+  await rm(targetPath, { force: true });
+
+  let writtenBytes = 0;
+  try {
+    for (let index = 0; index < input.totalChunks; index += 1) {
+      const chunkPath = path.join(chunkDir, `${index}.part`);
+      let chunk: Buffer;
+      try {
+        chunk = await readFile(chunkPath);
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+          throw new HttpError(400, 'BAD_REQUEST', `缺少第 ${index + 1} 个上传分片`);
+        }
+        throw error;
+      }
+      writtenBytes += chunk.length;
+      await appendFile(targetPath, chunk);
+    }
+
+    if (writtenBytes !== input.totalSize) {
+      await rm(targetPath, { force: true });
+      throw new HttpError(400, 'BAD_REQUEST', '分片合并后的文件大小不一致');
+    }
+
+    await writeToolUploadMetadata('files', filename, {
+      original_name: input.originalName,
+      size: input.totalSize,
+    });
+    await rm(chunkDir, { recursive: true, force: true });
+
+    return {
+      url: getToolUploadPublicUrl('files', filename),
+      filename,
+      original_name: input.originalName,
+      file_size_label: formatFileSize(input.totalSize),
+    };
+  } catch (error) {
+    if (!(error instanceof HttpError)) {
+      await rm(targetPath, { force: true });
+    }
+    throw error;
+  }
 }
 
 export async function writeToolUploadMetadata(
@@ -181,6 +289,42 @@ export function formatFileSize(bytes: number): string {
 
 function getToolUploadDir(kind: ToolUploadKind): string {
   return path.resolve(getNewsUploadRootDir(), 'tools', kind);
+}
+
+function getToolChunkDir(uploadId: string): string {
+  return path.resolve(getNewsUploadRootDir(), 'tools', 'chunks', uploadId);
+}
+
+function validateChunkUploadInput(input: {
+  uploadId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  originalName: string;
+  totalSize: number;
+  buffer: Buffer;
+}): void {
+  if (!/^[a-zA-Z0-9_-]{12,80}$/.test(input.uploadId)) {
+    throw new HttpError(400, 'BAD_REQUEST', '上传会话 id 无效');
+  }
+  if (!Number.isInteger(input.totalChunks) || input.totalChunks <= 0 || input.totalChunks > 500) {
+    throw new HttpError(400, 'BAD_REQUEST', '上传分片总数无效');
+  }
+  if (!Number.isInteger(input.chunkIndex) || input.chunkIndex < 0 || input.chunkIndex >= input.totalChunks) {
+    throw new HttpError(400, 'BAD_REQUEST', '上传分片序号无效');
+  }
+  if (!input.originalName || !isAllowedToolFile(input.originalName, 'application/octet-stream')) {
+    throw new HttpError(400, 'BAD_REQUEST', '安装包文件名无效');
+  }
+  if (!Number.isFinite(input.totalSize) || input.totalSize <= 0 || input.totalSize > getToolFileMaxBytes()) {
+    throw new HttpError(400, 'BAD_REQUEST', '安装包文件大小无效');
+  }
+  if (!Buffer.isBuffer(input.buffer) || input.buffer.length <= 0 || input.buffer.length > Number(process.env.TOOL_FILE_CHUNK_MAX_BYTES || 6 * 1024 * 1024)) {
+    throw new HttpError(400, 'BAD_REQUEST', '上传分片文件无效');
+  }
+}
+
+function getToolFileMaxBytes(): number {
+  return Number(process.env.TOOL_FILE_MAX_BYTES || 300 * 1024 * 1024);
 }
 
 async function readToolUploadMetadata(dir: string, filename: string): Promise<{ original_name?: string; size?: number; uploaded_at?: string }> {

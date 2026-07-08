@@ -4,11 +4,14 @@ import type { AuditRepository } from '../repositories/auditRepository';
 import type { ToolsDownloadService } from '../services/toolsDownloadService';
 import type { TimedPromiseCache } from '../utils/publicCache';
 import {
+  completeToolUploadChunks,
+  createToolChunkUploadMiddleware,
   createToolUploadMiddleware,
   findRecentToolUpload,
   formatFileSize,
   getToolUploadPublicUrl,
   listRecentToolUploads,
+  storeToolUploadChunk,
   writeToolUploadMetadata,
 } from '../utils/toolUpload';
 import { isToolDownloadPlatform } from '../../../shared/toolDownloads';
@@ -29,6 +32,7 @@ interface ToolsAdminDeps {
 
 const iconUpload = createToolUploadMiddleware('icons');
 const fileUpload = createToolUploadMiddleware('files');
+const chunkUpload = createToolChunkUploadMiddleware();
 
 export function createToolsAdminRoutes(deps: ToolsAdminDeps): Router {
   const router = Router();
@@ -167,6 +171,45 @@ export function createToolsAdminRoutes(deps: ToolsAdminDeps): Router {
     }
   });
 
+  router.post('/tools/upload-file/chunk', chunkUpload.single('file'), async (req, res, next) => {
+    try {
+      if (!req.file) {
+        throw new HttpError(400, 'BAD_REQUEST', '缺少安装包分片');
+      }
+      const stored = await storeToolUploadChunk({
+        uploadId: requiredString(req.body.upload_id, '上传会话 id 无效'),
+        chunkIndex: Number(req.body.chunk_index),
+        totalChunks: Number(req.body.total_chunks),
+        originalName: requiredString(req.body.original_name, '安装包文件名无效'),
+        totalSize: Number(req.body.total_size),
+        buffer: req.file.buffer,
+      });
+      res.status(201).json(stored);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/tools/upload-file/complete', async (req, res, next) => {
+    try {
+      const completed = await completeToolUploadChunks({
+        uploadId: requiredString(req.body?.upload_id, '上传会话 id 无效'),
+        originalName: requiredString(req.body?.original_name, '安装包文件名无效'),
+        totalChunks: Number(req.body?.total_chunks),
+        totalSize: Number(req.body?.total_size),
+      });
+      await deps.auditRepository.log('upload_tool_file_chunked', actorFromReq(req), req.requestId, {
+        filename: completed.filename,
+        original_name: completed.original_name,
+        size_label: completed.file_size_label,
+      });
+      clearToolsDownloadPublicCache(deps);
+      res.status(201).json(completed);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/tools/upload-file/recent', async (req, res, next) => {
     try {
       const recovered = await findRecentToolUpload('files', {
@@ -220,6 +263,14 @@ function optionalString(value: unknown): string | undefined {
     return undefined;
   }
   return String(value).trim();
+}
+
+function requiredString(value: unknown, message: string): string {
+  const stringValue = optionalString(value);
+  if (!stringValue) {
+    throw new HttpError(400, 'BAD_REQUEST', message);
+  }
+  return stringValue;
 }
 
 function toPositiveInt(value: unknown, fallback: number): number {

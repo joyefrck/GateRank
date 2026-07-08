@@ -2698,6 +2698,10 @@ async function uploadToolAsset(
   file: File,
   onProgress?: (progress: ToolUploadProgress) => void,
 ): Promise<{ url: string; filename?: string; original_name?: string; file_size_label?: string }> {
+  if (kind === 'file') {
+    return uploadToolFileInChunks(file, onProgress);
+  }
+
   const body = new FormData();
   body.append('file', file);
   return new Promise((resolve, reject) => {
@@ -2741,7 +2745,7 @@ async function uploadToolAsset(
         percent: 100,
         lengthComputable: file.size > 0,
       });
-      resolve({ url: data.url, file_size_label: data.file_size_label });
+      resolve({ url: data.url, filename: data.filename, original_name: data.original_name, file_size_label: data.file_size_label });
     };
     xhr.onerror = async () => {
       const recovered = await recoverToolUploadAfterInterruptedResponse(kind, file, onProgress);
@@ -2761,6 +2765,160 @@ async function uploadToolAsset(
     };
     xhr.send(body);
   });
+}
+
+const TOOL_FILE_UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
+
+async function uploadToolFileInChunks(
+  file: File,
+  onProgress?: (progress: ToolUploadProgress) => void,
+): Promise<{ url: string; filename?: string; original_name?: string; file_size_label?: string }> {
+  const totalChunks = Math.max(1, Math.ceil(file.size / TOOL_FILE_UPLOAD_CHUNK_BYTES));
+  const uploadId = createToolUploadId();
+  let uploadedBytes = 0;
+
+  onProgress?.({
+    kind: 'file',
+    fileName: file.name,
+    loaded: 0,
+    total: file.size,
+    percent: 0,
+    lengthComputable: file.size > 0,
+  });
+
+  for (let index = 0; index < totalChunks; index += 1) {
+    const start = index * TOOL_FILE_UPLOAD_CHUNK_BYTES;
+    const chunk = file.slice(start, Math.min(file.size, start + TOOL_FILE_UPLOAD_CHUNK_BYTES));
+    await uploadToolFileChunkWithRetry({
+      uploadId,
+      file,
+      chunk,
+      chunkIndex: index,
+      totalChunks,
+      uploadedBytes,
+      onProgress,
+    });
+    uploadedBytes += chunk.size;
+    onProgress?.({
+      kind: 'file',
+      fileName: file.name,
+      loaded: uploadedBytes,
+      total: file.size,
+      percent: file.size > 0 ? Math.min(99, Math.round((uploadedBytes / file.size) * 100)) : 99,
+      lengthComputable: file.size > 0,
+    });
+  }
+
+  const response = await fetch(`${getApiBase()}/api/v1/admin/tools/upload-file/complete`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      upload_id: uploadId,
+      original_name: file.name,
+      total_chunks: totalChunks,
+      total_size: file.size,
+    }),
+  });
+  const data = await response.json().catch(() => ({})) as {
+    url?: string;
+    filename?: string;
+    original_name?: string;
+    file_size_label?: string;
+    message?: string;
+  };
+  if (!response.ok || !data.url) {
+    throw new Error(data.message || `上传合并失败: ${response.status}`);
+  }
+
+  onProgress?.({
+    kind: 'file',
+    fileName: file.name,
+    loaded: file.size,
+    total: file.size,
+    percent: 100,
+    lengthComputable: file.size > 0,
+  });
+  return { url: data.url, filename: data.filename, original_name: data.original_name, file_size_label: data.file_size_label };
+}
+
+async function uploadToolFileChunkWithRetry(input: {
+  uploadId: string;
+  file: File;
+  chunk: Blob;
+  chunkIndex: number;
+  totalChunks: number;
+  uploadedBytes: number;
+  onProgress?: (progress: ToolUploadProgress) => void;
+}): Promise<void> {
+  let lastError: Error | null = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await uploadToolFileChunk(input);
+      return;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('分片上传失败');
+      if (attempt < 2) {
+        await delay(800 * (attempt + 1));
+      }
+    }
+  }
+  throw lastError || new Error('分片上传失败');
+}
+
+async function uploadToolFileChunk(input: {
+  uploadId: string;
+  file: File;
+  chunk: Blob;
+  chunkIndex: number;
+  totalChunks: number;
+  uploadedBytes: number;
+  onProgress?: (progress: ToolUploadProgress) => void;
+}): Promise<void> {
+  const body = new FormData();
+  body.append('upload_id', input.uploadId);
+  body.append('chunk_index', String(input.chunkIndex));
+  body.append('total_chunks', String(input.totalChunks));
+  body.append('original_name', input.file.name);
+  body.append('total_size', String(input.file.size));
+  body.append('file', input.chunk, input.file.name);
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `${getApiBase()}/api/v1/admin/tools/upload-file/chunk`);
+    xhr.withCredentials = true;
+    xhr.upload.onprogress = (event) => {
+      const total = input.file.size;
+      const chunkLoaded = event.lengthComputable ? event.loaded : Math.min(input.chunk.size, event.loaded || 0);
+      const loaded = Math.min(total, input.uploadedBytes + chunkLoaded);
+      input.onProgress?.({
+        kind: 'file',
+        fileName: input.file.name,
+        loaded,
+        total,
+        percent: total > 0 ? Math.min(99, Math.round((loaded / total) * 100)) : 0,
+        lengthComputable: total > 0,
+      });
+    };
+    xhr.onload = () => {
+      const data = parseUploadResponse(xhr.responseText);
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(data.message || `第 ${input.chunkIndex + 1} 个分片上传失败: ${xhr.status}`));
+        return;
+      }
+      resolve();
+    };
+    xhr.onerror = () => reject(new Error(`第 ${input.chunkIndex + 1} 个分片网络异常`));
+    xhr.onabort = () => reject(new Error(`第 ${input.chunkIndex + 1} 个分片上传已取消`));
+    xhr.send(body);
+  });
+}
+
+function createToolUploadId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
 function parseUploadResponse(responseText: string): { url?: string; filename?: string; original_name?: string; file_size_label?: string; message?: string } {
