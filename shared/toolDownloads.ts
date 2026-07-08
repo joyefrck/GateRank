@@ -230,6 +230,18 @@ export function getToolDownloadPlatformLabel(platform: ToolDownloadPlatform): st
   return labels[platform];
 }
 
+export function buildToolDownloadPlatformHeading(platform: ToolDownloadPlatform): string {
+  return `${getToolDownloadPlatformLabel(platform)} 翻墙工具下载`;
+}
+
+export function buildToolDownloadTrustMeta(
+  item: Pick<ToolDownloadItem, 'version' | 'published_at' | 'updated_at'>,
+): string {
+  const versionLabel = item.version.trim() || '以官方发布页为准';
+  const dateLabel = formatToolDownloadDate(item.published_at || item.updated_at);
+  return `版本：${versionLabel} · 发布：${dateLabel}`;
+}
+
 export function buildToolDownloadFilename(item: ToolDownloadItem, platform: ToolDownloadPlatform): string {
   const platformLabel = getToolDownloadPlatformLabel(platform);
   const versionLabel = item.version || item.platform_versions?.[platform] || 'latest';
@@ -260,6 +272,11 @@ function sanitizeDownloadFilenamePart(value: string): string {
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
     .replace(/^[.-]+|[.-]+$/g, '');
+}
+
+function formatToolDownloadDate(value: string | null): string {
+  const match = (value || '').match(/^(\d{4}-\d{2}-\d{2})/);
+  return match?.[1] || '待补充';
 }
 
 function getDownloadFileExtension(url: string): string {

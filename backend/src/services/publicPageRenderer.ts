@@ -78,6 +78,8 @@ import {
 import {
   buildToolControlledDownloadUrl,
   buildToolDownloadFilename,
+  buildToolDownloadPlatformHeading,
+  buildToolDownloadTrustMeta,
   buildToolPublicLocalFileMarker,
   getToolDownloadPlatformLabel,
   getToolDownloadFileExtension,
@@ -1451,7 +1453,7 @@ function renderToolDownloadGroups(view: ToolsDownloadPageView): string {
         <div class="tools-group-head">
           <div>
             <div class="eyebrow">${escapeHtml(label)} 下载</div>
-            <h2>${escapeHtml(label)} 端</h2>
+            <h2>${escapeHtml(buildToolDownloadPlatformHeading(platform))}</h2>
           </div>
           <p>适合 ${escapeHtml(label)} 设备使用的翻墙工具下载，本地安装包优先展示，官方页面作为备用入口。</p>
         </div>
@@ -1482,13 +1484,13 @@ function renderToolDownloadCard(item: ToolDownloadItem, platform: ToolDownloadPl
         ${item.icon_url ? `<img src="${escapeAttribute(item.icon_url)}" alt="${escapeAttribute(item.name)} 图标" loading="lazy" />` : `<span class="${iconClass}">${escapeHtml(item.name.slice(0, 1).toUpperCase())}</span>`}
         <div>
           <h3>${escapeHtml(item.name)}</h3>
-          <p class="muted">${escapeHtml(item.summary)}</p>
+          <p class="muted">${escapeHtml(buildToolDownloadTrustMeta(item))}</p>
         </div>
       </div>
       <p>${escapeHtml(item.description || item.summary)}</p>
       <p class="muted tool-version-line">支持版本：${escapeHtml(supportVersion)}${item.file_size_label ? ` · 大小：${escapeHtml(item.file_size_label)}` : ''}</p>
       <div class="tool-action-row">
-        ${hasLocalFile ? `<a class="tool-download-primary" href="${escapeAttribute(buildToolControlledDownloadUrl(item, platform))}" download="${escapeAttribute(buildToolDownloadFilename(item, platform))}">本地下载</a>` : '<span class="tool-download-primary is-disabled">本地下载待上传</span>'}
+        ${hasLocalFile ? `<a class="tool-download-primary" href="${escapeAttribute(buildToolControlledDownloadUrl(item, platform))}" download="${escapeAttribute(buildToolDownloadFilename(item, platform))}">立即下载</a>` : '<span class="tool-download-primary is-disabled">本地下载待上传</span>'}
         ${item.official_url ? `<a class="tool-official-link" href="${escapeAttribute(item.official_url)}" target="_blank" rel="nofollow noreferrer noopener">官方页面</a>` : ''}
       </div>
     </article>

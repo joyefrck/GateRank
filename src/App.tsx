@@ -95,6 +95,8 @@ import {
 import {
   buildToolControlledDownloadUrl,
   buildToolDownloadFilename,
+  buildToolDownloadPlatformHeading,
+  buildToolDownloadTrustMeta,
   getToolDownloadPlatformLabel,
   isToolDownloadPlatform,
   TOOL_DOWNLOAD_PLATFORMS,
@@ -4077,7 +4079,7 @@ function ToolsDownloadPage({ platform }: { platform?: ToolDownloadPlatform }) {
               <div className="flex flex-col gap-2 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
                 <div>
                   <div className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">{getToolDownloadPlatformLabel(groupPlatform)} 下载</div>
-                  <h2 className="mt-1 text-2xl font-black tracking-normal text-slate-950 md:text-3xl">{getToolDownloadPlatformLabel(groupPlatform)} 端</h2>
+                  <h2 className="mt-1 text-2xl font-black tracking-normal text-slate-950 md:text-3xl">{buildToolDownloadPlatformHeading(groupPlatform)}</h2>
                 </div>
                 <p className="max-w-xl text-sm leading-7 text-slate-500">适合 {getToolDownloadPlatformLabel(groupPlatform)} 设备使用的翻墙工具下载，本地安装包优先展示，官方页面作为备用入口。</p>
               </div>
@@ -4161,8 +4163,8 @@ function ToolDownloadCard({ item, platform }: { item: ToolDownloadItem; platform
       <div className={`flex items-center gap-3 ${item.is_hot ? 'pr-16' : ''}`}>
         {item.icon_url ? <img className="h-12 max-h-12 min-h-12 w-12 min-w-12 max-w-12 shrink-0 rounded-[8px] object-cover" src={item.icon_url} alt={`${item.name} 图标`} /> : <div className={`flex h-12 max-h-12 min-h-12 w-12 min-w-12 max-w-12 shrink-0 items-center justify-center rounded-[8px] text-lg font-black text-white ${iconTone}`}>{item.name.slice(0, 1).toUpperCase()}</div>}
         <div className="min-w-0">
-          <h2 className="truncate text-lg font-black text-slate-950">{item.name}</h2>
-          <p className="truncate text-sm text-slate-500">{item.summary}</p>
+          <h3 className="truncate text-lg font-black text-slate-950">{item.name}</h3>
+          <p className="truncate text-sm text-slate-500">{buildToolDownloadTrustMeta(item)}</p>
         </div>
       </div>
       <p className="mt-4 text-sm leading-7 text-slate-600">{item.description || item.summary}</p>
@@ -4171,7 +4173,7 @@ function ToolDownloadCard({ item, platform }: { item: ToolDownloadItem; platform
         {hasLocalFile ? (
           <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,#0891b2,#10b981)] px-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(8,145,178,0.18)] transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(8,145,178,0.28)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100" href={buildToolControlledDownloadUrl(item, platform)} download={buildToolDownloadFilename(item, platform)}>
             <Download size={15} />
-            本地下载
+            立即下载
           </a>
         ) : (
           <span className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-slate-200 px-4 text-sm font-black text-slate-500">
