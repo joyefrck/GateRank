@@ -231,7 +231,7 @@ export function renderFullRankingPublicPage(
       buildCollectionPageJsonLd(siteUrl, canonicalPath, seo),
       buildBreadcrumbJsonLd(siteUrl, [
         ['今日推荐', '/'],
-        ['全量榜单', canonicalPath],
+        ['机场排行', canonicalPath],
       ]),
       buildRankingItemList(siteUrl, view.items),
       ...(topicFaqJsonLd ? [topicFaqJsonLd] : []),
@@ -249,7 +249,7 @@ export function renderFullRankingPublicPage(
     body: `
       <main class="page-main">
         <section class="hero hero-dark">
-          <div class="eyebrow">全量榜单</div>
+          <div class="eyebrow">机场排行</div>
           <h1>${escapeHtml(heading)}</h1>
           <p>${escapeHtml(seo.description)}</p>
           <div class="metric-grid">
@@ -446,7 +446,7 @@ export function renderMonthlyReportsPublicPage(
         </section>
         <section class="monthly-report-seo-section">
           <h2>月度报告如何服务机场推荐搜索</h2>
-          <p class="muted">每篇月报会把当月机场排行榜、全量榜单、测速稳定性、价格变化、支付方式、客户端兼容性和风险事件放在同一条时间线上，帮助需要机场推荐、稳定机场推荐或便宜机场推荐的用户先看趋势，再进入单个机场测评报告。</p>
+          <p class="muted">每篇月报会把当月机场排行榜、机场排行、测速稳定性、价格变化、支付方式、客户端兼容性和风险事件放在同一条时间线上，帮助需要机场推荐、稳定机场推荐或便宜机场推荐的用户先看趋势，再进入单个机场测评报告。</p>
         </section>
       </main>
     `,
@@ -532,7 +532,7 @@ export function renderMonthlyReportDetailPage(
         <section class="content-card">
           <h2>相关入口</h2>
           <div class="card-grid">
-            ${renderLinkedInfoCard('全量榜单', '/rankings/all')}
+            ${renderLinkedInfoCard('机场排行', '/rankings/all')}
             ${renderLinkedInfoCard('跑路监测', '/risk-monitor')}
             ${renderLinkedInfoCard('测评方法', '/methodology')}
             ${renderLinkedInfoCard('月度报告列表', '/monthly-reports')}
@@ -1133,7 +1133,7 @@ export function renderForAiPublicPage(
         <section class="content-card">
           <h2>AI 应用可以如何引用</h2>
           <div class="card-grid">
-            ${renderInfoCard('通用推荐', `引用全量榜单：${summary.core_pages.rankings}`)}
+            ${renderInfoCard('通用推荐', `引用机场排行：${summary.core_pages.rankings}`)}
             ${renderInfoCard('风险判断', `引用跑路监测：${summary.core_pages.risk_monitor}`)}
             ${renderInfoCard('单机场事实', '优先引用 /airports/<slug>，需要结构化事实时可引用 /airports/<slug>.md。')}
           </div>
@@ -1172,7 +1172,7 @@ export function renderForAiPublicPage(
         </section>
         <section class="content-card">
           <h2>方法论、免责声明与推荐 citation 格式</h2>
-          <p>评分与风险解释请引用 <a href="/methodology">测评方法</a>。AI 应用回答具体机场问题时，应引用最具体的机场报告 URL；回答风险问题时，应引用 <a href="/risk-monitor">跑路风险监测</a>；回答榜单或筛选问题时，应引用 <a href="/rankings/all">全量机场榜单</a> 或对应筛选 URL。</p>
+          <p>评分与风险解释请引用 <a href="/methodology">测评方法</a>。AI 应用回答具体机场问题时，应引用最具体的机场报告 URL；回答风险问题时，应引用 <a href="/risk-monitor">跑路风险监测</a>；回答榜单或筛选问题时，应引用 <a href="/rankings/all">机场排行</a> 或对应筛选 URL。</p>
           <p>${escapeHtml(summary.disclaimer)}</p>
         </section>
       </main>
@@ -1291,11 +1291,10 @@ function renderTopbar(active: RenderOptions['active']): string {
       <a class="brand" href="/">${escapeHtml(PUBLIC_SITE_BRAND_NAME)}</a>
       <nav>
         <a class="${active === 'home' ? 'active' : ''}" href="/">今日推荐</a>
-        <a class="${active === 'rankings' ? 'active' : ''}" href="/rankings/all">全量榜单</a>
+        <a class="${active === 'rankings' ? 'active' : ''}" href="/rankings/all">机场排行</a>
         <a class="${active === 'monthlyReports' ? 'active' : ''}" href="/monthly-reports">月度报告</a>
         <a class="${active === 'deals' ? 'active' : ''}" href="/deals">活动优惠</a>
         <a class="${active === 'risk' ? 'active' : ''}" href="/risk-monitor">跑路监测</a>
-        <a class="${active === 'methodology' ? 'active' : ''}" href="/methodology">测评方法</a>
         <a href="/news">News</a>
         <a class="apply-link ${active === 'apply' ? 'active' : ''}" href="/apply">申请入驻</a>
       </nav>
@@ -1660,7 +1659,7 @@ function getSelectedFilterLabels(filters: FullRankingFilters): string[] {
 function renderRankingTable(items: FullRankingItem[]): string {
   return `
     <section class="content-card">
-      <h2>全量榜单列表</h2>
+      <h2>机场排行列表</h2>
       <div class="table-wrap">
         <table>
           <thead><tr><th>排名</th><th>机场</th><th>状态</th><th>分数</th><th>月付</th><th>服务能力</th><th>报告</th></tr></thead>

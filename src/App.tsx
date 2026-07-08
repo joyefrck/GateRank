@@ -3207,7 +3207,7 @@ function FullRankingPage({
       .catch((err: unknown) => {
         if (active) {
           setData(null);
-          setError(err instanceof Error ? err.message : '全量榜单加载失败');
+          setError(err instanceof Error ? err.message : '机场排行加载失败');
         }
       })
       .finally(() => {
@@ -3256,7 +3256,7 @@ function FullRankingPage({
           {
             '@type': 'ListItem',
             position: 2,
-            name: '全量榜单',
+            name: '机场排行',
             item: buildAbsoluteUrl(buildFullRankingHref(date, safePage, activeFilters)),
           },
         ],
@@ -3304,7 +3304,7 @@ function FullRankingPage({
     <PageFrame active="full_ranking">
       <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-10">
         <ListPageHero
-          eyebrow="全量榜单"
+          eyebrow="机场排行"
           title={rankingHeading}
           subtitle=""
           description={seoDescription}
@@ -3323,7 +3323,7 @@ function FullRankingPage({
           <div className="flex flex-col gap-4 border-b border-neutral-100 pb-6 md:flex-row md:items-end md:justify-between">
             <div>
               <div className="text-[11px] font-black uppercase tracking-[0.2em] text-neutral-400">Ranking Overview</div>
-              <h2 className="mt-2 text-2xl md:text-3xl font-black tracking-tight text-neutral-900">全量榜单列表</h2>
+              <h2 className="mt-2 text-2xl md:text-3xl font-black tracking-tight text-neutral-900">机场排行列表</h2>
               <p className="mt-2 max-w-3xl text-sm leading-7 text-neutral-500">
                 默认每页 20 条。点击官网可在新窗口打开机场主页，点击测评报告可继续查看该机场在稳定性、性能、价格与风险维度的完整说明。
               </p>
@@ -3334,7 +3334,7 @@ function FullRankingPage({
           </div>
 
           <div className="mt-8">
-            {loading && <EmptySection message="正在加载全量榜单..." />}
+            {loading && <EmptySection message="正在加载机场排行..." />}
             {error && !loading && <EmptySection message={error} />}
 
             {!loading && !error && data && data.items.length === 0 && (
@@ -3467,7 +3467,7 @@ function FullRankingPage({
 
                 <nav
                   className="mt-8 flex flex-col gap-4 rounded-[24px] border border-neutral-200 bg-neutral-50 px-4 py-4 md:flex-row md:items-center md:justify-between"
-                  aria-label="全量榜单分页"
+                  aria-label="机场排行分页"
                 >
                   <div className="text-sm text-neutral-500">
                     第 <span className="font-black text-neutral-900">{safePage}</span> 页，共 <span className="font-black text-neutral-900">{totalPages}</span> 页
@@ -8349,7 +8349,7 @@ export default function App() {
 function NotFoundPage() {
   usePageSeo({
     title: '页面不存在 | 机场榜GateRank',
-    description: '当前访问的 GateRank 页面不存在，请返回首页、全量榜单或跑路监测页面继续查看机场 VPN 测评与风险信息。',
+    description: '当前访问的 GateRank 页面不存在，请返回首页、机场排行或跑路监测页面继续查看机场 VPN 测评与风险信息。',
     keywords: 'GateRank,机场榜,404,页面不存在,机场VPN,机场测评',
     canonicalPath: '/404',
     robots: 'noindex,follow',
@@ -8364,7 +8364,7 @@ function NotFoundPage() {
         </div>
         <h1 className="text-3xl font-black tracking-normal text-neutral-950 md:text-5xl">页面不存在</h1>
         <p className="mt-5 max-w-2xl text-base leading-8 text-neutral-600">
-          这个地址没有对应的公开页面。你可以返回首页查看今日推荐，或进入全量榜单和跑路监测继续筛选机场服务。
+          这个地址没有对应的公开页面。你可以返回首页查看今日推荐，或进入机场排行和跑路监测继续筛选机场服务。
         </p>
         <div className="mt-10 flex flex-wrap gap-3">
           <button
@@ -8379,7 +8379,7 @@ function NotFoundPage() {
             onClick={() => navigate('/rankings/all', { scrollToTop: true })}
             className="inline-flex h-11 items-center justify-center rounded-lg border border-neutral-200 bg-white px-5 text-sm font-black text-neutral-800"
           >
-            全量榜单
+            机场排行
           </button>
           <button
             type="button"

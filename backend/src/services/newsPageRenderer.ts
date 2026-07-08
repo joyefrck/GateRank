@@ -1889,12 +1889,12 @@ function renderFooter(): string {
             </span>
           </div>
           <p class="footer-copy">
-            GateRank 以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在今日推荐、全量榜单与测评报告之间完成交叉判断。
+            GateRank 以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在今日推荐、机场排行与测评报告之间完成交叉判断。
           </p>
         </div>
         <div class="footer-links">
           <a href="/">今日推荐</a>
-          <a href="/rankings/all">全量榜单</a>
+          <a href="/rankings/all">机场排行</a>
           <a href="/risk-monitor">跑路监测</a>
           <a href="/methodology">测评方法</a>
           <a href="/news">News</a>

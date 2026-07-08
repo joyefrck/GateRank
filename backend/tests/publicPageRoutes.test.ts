@@ -707,7 +707,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /href="#report-conclusion"/);
     assert.doesNotMatch(okHtml, /回到顶部/);
     assert.match(okHtml, /今日推荐/);
-    assert.match(okHtml, /全量榜单/);
+    assert.match(okHtml, /机场排行/);
     assert.match(okHtml, /申请入驻/);
     assert.match(okHtml, /GateRank Score/);
     assert.match(okHtml, /星云机场 测评摘要/);

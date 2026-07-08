@@ -275,13 +275,13 @@ function SiteFooter() {
           </div>
           <p className="max-w-2xl text-[13px] md:text-sm leading-7 text-neutral-500">
             {PUBLIC_SITE_BRAND_NAME}
-            以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在今日推荐、全量榜单与测评报告之间完成交叉判断。
+            以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在今日推荐、机场排行与测评报告之间完成交叉判断。
           </p>
         </div>
 
         <div className="flex flex-wrap justify-center gap-x-12 gap-y-4 text-sm font-bold text-neutral-600 mb-12">
           <a href={buildHomeHref()} onClick={(event) => { event.preventDefault(); navigate('/'); }} className="hover:text-black transition-colors">今日推荐</a>
-          <a href={buildFullRankingHref()} onClick={(event) => { event.preventDefault(); navigate('/rankings/all'); }} className="hover:text-black transition-colors">全量榜单</a>
+          <a href={buildFullRankingHref()} onClick={(event) => { event.preventDefault(); navigate('/rankings/all'); }} className="hover:text-black transition-colors">机场排行</a>
           <a href={buildMonthlyReportsHref()} onClick={(event) => { event.preventDefault(); navigate(buildMonthlyReportsHref()); }} className="hover:text-black transition-colors">月度报告</a>
           <a href={buildDealsHref()} onClick={(event) => { event.preventDefault(); navigate(buildDealsHref()); }} className="hover:text-black transition-colors">活动优惠</a>
           <a href={buildRiskMonitorHref()} onClick={(event) => { event.preventDefault(); navigate(buildRiskMonitorHref()); }} className="hover:text-black transition-colors">跑路监测</a>

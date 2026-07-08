@@ -38,7 +38,7 @@ export const HOME_SEO_CONTENT_SECTIONS: PublicHomeSeoContentSection[] = [
     facts: ['稳定性、性能、价格、风险分开观察', '晚高峰与长期趋势比单次测速更重要', '广告活动不进入 GateRank Score'],
     links: [
       { label: '查看测评方法', href: '/methodology', description: '理解评分规则、测速标准和风险扣分逻辑' },
-      { label: '查看全量榜单', href: '/rankings/all', description: '按公开展示分数对比已收录机场' },
+      { label: '查看机场排行', href: '/rankings/all', description: '按公开展示分数对比已收录机场' },
     ],
   },
   {
@@ -362,7 +362,7 @@ export function buildMonthlyReportSeo(report: PublicMonthlyReportSeoView): Publi
     description:
       report.seo_description
       || report.excerpt
-      || `${monthLabel} GateRank 机场 VPN 月度报告，复盘机场推荐、机场排名、科学上网机场测速、稳定性表现、全量榜单变化与跑路风险观察。`,
+      || `${monthLabel} GateRank 机场 VPN 月度报告，复盘机场推荐、机场排名、科学上网机场测速、稳定性表现、机场排行变化与跑路风险观察。`,
     keywords:
       report.seo_keywords
       || `${monthLabel}机场VPN月度报告,机场推荐,机场排名,机场VPN排名,科学上网机场,跑路机场,GateRank`,
@@ -418,7 +418,7 @@ export function buildFullRankingSeo(input?: {
       description:
         input && typeof input.total === 'number'
           ? `${input.dateLabel || '今日'} 机场筛选结果命中 ${formatCount(input.total)} 个机场，当前使用 ${formatCount(count)} 个搜索或分类条件，覆盖支付方式、客户端类型、节点地区、线路、套餐和 Telegram 支持。`
-          : `${PUBLIC_SITE_BRAND_NAME} 全量榜单支持按搜索词、支付方式、客户端类型、节点地区、线路、套餐和 Telegram 支持筛选机场 VPN。`,
+          : `${PUBLIC_SITE_BRAND_NAME} 机场排行支持按搜索词、支付方式、客户端类型、节点地区、线路、套餐和 Telegram 支持筛选机场 VPN。`,
       keywords: '机场榜GateRank,机场筛选,机场搜索,机场支付方式,机场客户端,机场节点地区,机场线路,GateRank',
     };
   }
@@ -426,8 +426,8 @@ export function buildFullRankingSeo(input?: {
     title: `全量机场榜单 | 全部已上线机场评分排名 | ${PUBLIC_SITE_BRAND_NAME}`,
     description:
       input && typeof input.total === 'number'
-        ? `${input.dateLabel || '今日'} 全量榜单收录 ${formatCount(input.total)} 个已上线机场，按公开展示分数降序排列，支持分页查看官网入口、状态、标签、成立日期、月付价格、试用支持与测评报告。`
-        : `${PUBLIC_SITE_BRAND_NAME} 全量榜单按公开展示分数降序展示全部已上线机场，包含官网入口、状态、标签、月付价格、试用支持和测评报告入口。`,
+        ? `${input.dateLabel || '今日'} 机场排行收录 ${formatCount(input.total)} 个已上线机场，按公开展示分数降序排列，支持分页查看官网入口、状态、标签、成立日期、月付价格、试用支持与测评报告。`
+        : `${PUBLIC_SITE_BRAND_NAME} 机场排行按公开展示分数降序展示全部已上线机场，包含官网入口、状态、标签、月付价格、试用支持和测评报告入口。`,
     keywords: '机场榜GateRank,全量榜单,机场排名,机场排行榜,机场推荐,机场测评,机场官网,风险机场,GateRank',
   };
 }
@@ -782,7 +782,7 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
     },
     {
       question: `${airportName}和其他机场相比有什么优势？`,
-      answer: `${airportName} 当前公开总分${formatPublicScoreText(view)}，稳定性 S=${formatMetric(view.score_breakdown.s)}、性能 P=${formatMetric(view.score_breakdown.p)}、价格 C=${formatMetric(view.score_breakdown.c)}、风险 R=${formatMetric(view.score_breakdown.r)}。它的优势需要放到全量榜单、稳定榜和性价比筛选中横向比较。`,
+      answer: `${airportName} 当前公开总分${formatPublicScoreText(view)}，稳定性 S=${formatMetric(view.score_breakdown.s)}、性能 P=${formatMetric(view.score_breakdown.p)}、价格 C=${formatMetric(view.score_breakdown.c)}、风险 R=${formatMetric(view.score_breakdown.r)}。它的优势需要放到机场排行、稳定榜和性价比筛选中横向比较。`,
     },
     {
       question: `选择${airportName}前要注意什么？`,

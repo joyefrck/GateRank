@@ -15,7 +15,7 @@ export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
   },
   {
     kind: 'full_ranking',
-    label: '全量榜单',
+    label: '机场排行',
     href: '/rankings/all',
   },
   {
@@ -33,11 +33,6 @@ export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
     label: '跑路监测',
     href: '/risk-monitor',
     badge: '快照',
-  },
-  {
-    kind: 'methodology',
-    label: '测评方法',
-    href: '/methodology',
   },
   {
     kind: 'news',

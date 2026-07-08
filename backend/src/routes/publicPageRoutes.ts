@@ -104,7 +104,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       ));
     } catch (error) {
       console.error('[public-page] failed to render full ranking page', { error, requestId: req.requestId || 'unknown' });
-      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '全量榜单加载失败', frontendAssets));
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '机场排行加载失败', frontendAssets));
     }
   });
 

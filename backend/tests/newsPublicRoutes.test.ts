@@ -115,7 +115,8 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
     assert.match(html, /\.public-top-nav-links\s*\{[\s\S]*font-size:\s*13px;[\s\S]*letter-spacing:\s*2\.34px;/);
     assert.match(html, /data-public-top-nav="true"/);
     assert.match(html, /<span class="public-top-nav-brand-title">机场榜GateRank<\/span>/);
-    assert.match(html, /<a class="public-top-nav-link" href="\/methodology" data-client-nav="true">测评方法<\/a>/);
+    assert.match(html, /<a class="public-top-nav-link" href="\/rankings\/all" data-client-nav="true">机场排行<\/a>/);
+    assert.doesNotMatch(html, /<a class="public-top-nav-link" href="\/methodology" data-client-nav="true">测评方法<\/a>/);
     assert.match(html, /<a class="public-top-nav-link is-active" href="\/news">News<\/a>/);
     assert.match(html, /<a class="public-top-nav-login" href="\/portal" target="_blank" rel="noreferrer">登录<\/a>/);
     assert.match(html, /<a class="public-top-nav-apply" href="\/apply" target="_blank" rel="noreferrer">/);

@@ -176,7 +176,7 @@ export function MonthlyReportsPage({ page = 1 }: { page?: number }) {
           <section className="mt-10 border-t border-neutral-200 pt-8">
             <h2 className="text-2xl font-black">月度报告如何服务机场推荐搜索</h2>
             <p className="mt-3 max-w-4xl text-[15px] leading-8 text-neutral-600">
-              每篇月报会把当月机场排行榜、全量榜单、测速稳定性、价格变化、支付方式、客户端兼容性和风险事件放在同一条时间线上，帮助需要机场推荐、稳定机场推荐或便宜机场推荐的用户先看趋势，再进入单个机场测评报告。
+              每篇月报会把当月机场排行榜、机场排行、测速稳定性、价格变化、支付方式、客户端兼容性和风险事件放在同一条时间线上，帮助需要机场推荐、稳定机场推荐或便宜机场推荐的用户先看趋势，再进入单个机场测评报告。
             </p>
           </section>
 
@@ -259,7 +259,7 @@ export function MonthlyReportDetailPage({ slug }: { slug: string }) {
                 dangerouslySetInnerHTML={{ __html: report.content_html }}
               />
               <div className="grid gap-3 rounded-3xl border border-neutral-200 p-5 text-sm md:grid-cols-3">
-                <RelatedLink href="/rankings/all" label="全量榜单" />
+                <RelatedLink href="/rankings/all" label="机场排行" />
                 <RelatedLink href="/risk-monitor" label="跑路监测" />
                 <RelatedLink href="/methodology" label="测评方法" />
               </div>
