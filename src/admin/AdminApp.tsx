@@ -2644,9 +2644,14 @@ async function uploadToolAsset(
         lengthComputable,
       });
     };
-    xhr.onload = () => {
+    xhr.onload = async () => {
       const data = parseUploadResponse(xhr.responseText);
       if (xhr.status < 200 || xhr.status >= 300) {
+        const recovered = await recoverToolUploadAfterInterruptedResponse(kind, file, onProgress);
+        if (recovered) {
+          resolve(recovered);
+          return;
+        }
         reject(new Error(data?.message || `上传失败: ${xhr.status}`));
         return;
       }
@@ -2664,8 +2669,22 @@ async function uploadToolAsset(
       });
       resolve({ url: data.url, file_size_label: data.file_size_label });
     };
-    xhr.onerror = () => reject(new Error('网络异常，上传失败'));
-    xhr.onabort = () => reject(new Error('上传已取消'));
+    xhr.onerror = async () => {
+      const recovered = await recoverToolUploadAfterInterruptedResponse(kind, file, onProgress);
+      if (recovered) {
+        resolve(recovered);
+        return;
+      }
+      reject(new Error('网络异常，上传失败'));
+    };
+    xhr.onabort = async () => {
+      const recovered = await recoverToolUploadAfterInterruptedResponse(kind, file, onProgress);
+      if (recovered) {
+        resolve(recovered);
+        return;
+      }
+      reject(new Error('上传已取消'));
+    };
     xhr.send(body);
   });
 }
@@ -2677,6 +2696,67 @@ function parseUploadResponse(responseText: string): { url?: string; file_size_la
   } catch {
     return {};
   }
+}
+
+async function recoverToolUploadAfterInterruptedResponse(
+  kind: 'icon' | 'file',
+  file: File,
+  onProgress?: (progress: ToolUploadProgress) => void,
+): Promise<{ url: string; file_size_label?: string } | null> {
+  if (kind !== 'file' || file.size <= 0) {
+    return null;
+  }
+
+  const extension = toolUploadExtension(file.name);
+  const query = new URLSearchParams({
+    size: String(file.size),
+    since_seconds: '900',
+  });
+  if (extension) {
+    query.set('extension', extension);
+  }
+
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    if (attempt > 0) {
+      await delay(1500);
+    }
+    try {
+      const response = await fetch(`${getApiBase()}/api/v1/admin/tools/upload-file/recent?${query.toString()}`, {
+        credentials: 'include',
+      });
+      if (!response.ok) {
+        continue;
+      }
+      const data = await response.json() as { url?: string; file_size_label?: string };
+      if (!data.url) {
+        continue;
+      }
+      onProgress?.({
+        kind,
+        fileName: file.name,
+        loaded: file.size,
+        total: file.size,
+        percent: 100,
+        lengthComputable: true,
+      });
+      return { url: data.url, file_size_label: data.file_size_label };
+    } catch {
+      continue;
+    }
+  }
+
+  return null;
+}
+
+function toolUploadExtension(filename: string): string {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.tar.gz')) return '.tar.gz';
+  const dot = lower.lastIndexOf('.');
+  return dot >= 0 ? lower.slice(dot) : '';
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 function formatUploadBytes(bytes: number): string {

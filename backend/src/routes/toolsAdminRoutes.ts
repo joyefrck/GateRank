@@ -3,7 +3,12 @@ import { HttpError } from '../middleware/errorHandler';
 import type { AuditRepository } from '../repositories/auditRepository';
 import type { ToolsDownloadService } from '../services/toolsDownloadService';
 import type { TimedPromiseCache } from '../utils/publicCache';
-import { createToolUploadMiddleware, getToolUploadPublicUrl } from '../utils/toolUpload';
+import {
+  createToolUploadMiddleware,
+  findRecentToolUpload,
+  formatFileSize,
+  getToolUploadPublicUrl,
+} from '../utils/toolUpload';
 import { isToolDownloadPlatform } from '../../../shared/toolDownloads';
 
 interface ToolsAdminDeps {
@@ -150,6 +155,22 @@ export function createToolsAdminRoutes(deps: ToolsAdminDeps): Router {
     }
   });
 
+  router.get('/tools/upload-file/recent', async (req, res, next) => {
+    try {
+      const recovered = await findRecentToolUpload('files', {
+        size: Number(req.query.size || 0),
+        extension: optionalString(req.query.extension),
+        sinceSeconds: toPositiveInt(req.query.since_seconds, 600),
+      });
+      if (!recovered) {
+        throw new HttpError(404, 'NOT_FOUND', '没有找到匹配的最近上传文件');
+      }
+      res.json(recovered);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   return router;
 }
 
@@ -179,14 +200,4 @@ function optionalString(value: unknown): string | undefined {
 function toPositiveInt(value: unknown, fallback: number): number {
   const number = Number(value ?? fallback);
   return Number.isFinite(number) && number > 0 ? Math.floor(number) : fallback;
-}
-
-function formatFileSize(size: number): string {
-  if (size >= 1024 * 1024) {
-    return `${(size / 1024 / 1024).toFixed(1)} MB`;
-  }
-  if (size >= 1024) {
-    return `${Math.round(size / 1024)} KB`;
-  }
-  return `${size} B`;
 }

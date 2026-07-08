@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
+import path from 'node:path';
+import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
 import express from 'express';
 import { createToolsPublicRoutes } from '../src/routes/toolsPublicRoutes';
 import { createToolsAdminRoutes } from '../src/routes/toolsAdminRoutes';
@@ -174,5 +177,54 @@ test('tools admin routes update page SEO config and publish downloads', async ()
     assert.equal(publicCacheClears, 3);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('tools admin routes recover recent uploaded tool file by size and extension', async () => {
+  const previousUploadRoot = process.env.NEWS_UPLOAD_ROOT_DIR;
+  const uploadRoot = await mkdtemp(path.join(tmpdir(), 'gaterank-tool-upload-'));
+  process.env.NEWS_UPLOAD_ROOT_DIR = uploadRoot;
+  const filesDir = path.join(uploadRoot, 'tools', 'files');
+  await mkdir(filesDir, { recursive: true });
+  await writeFile(path.join(filesDir, '1783499000000-recovered.dmg'), Buffer.alloc(2048));
+
+  const app = express();
+  app.use((req, _res, next) => {
+    req.requestId = 'tools-recover-test';
+    next();
+  });
+  app.use('/api/v1/admin', createToolsAdminRoutes({
+    auditRepository: {
+      log: async () => {},
+    } as never,
+    toolsDownloadService: {
+      getAdminDownloadPageConfig: async () => DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
+      updateAdminDownloadPageConfig: async (input) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
+      listAdminDownloads: async () => ({ page: 1, page_size: 20, total: 0, items: [] }),
+      createDownload: async () => ({}),
+      updateDownload: async () => ({}),
+      updateDownloadStatus: async () => ({}),
+    } as never,
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(
+      `http://127.0.0.1:${port}/api/v1/admin/tools/upload-file/recent?size=2048&extension=.dmg&since_seconds=600`,
+    );
+    assert.equal(response.status, 200);
+    const data = await response.json() as { url: string; file_size_label: string };
+    assert.equal(data.url, '/uploads/tools/files/1783499000000-recovered.dmg');
+    assert.equal(data.file_size_label, '2.0 KB');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    if (previousUploadRoot === undefined) {
+      delete process.env.NEWS_UPLOAD_ROOT_DIR;
+    } else {
+      process.env.NEWS_UPLOAD_ROOT_DIR = previousUploadRoot;
+    }
+    await rm(uploadRoot, { recursive: true, force: true });
   }
 });
