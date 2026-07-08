@@ -2009,8 +2009,8 @@ function ToolsDownloadAdminPage() {
             {editing && <button className="rounded-xl border border-neutral-200 px-3 py-2 text-sm font-bold text-neutral-600 hover:bg-neutral-50" onClick={resetForm}>退出编辑</button>}
           </div>
         </div>
-        <div className="grid gap-5 p-5 xl:grid-cols-[360px_minmax(0,1fr)]">
-          <div className="grid gap-4">
+        <div className="grid gap-5 p-5 2xl:grid-cols-[420px_minmax(0,1fr)]">
+          <div className="grid min-w-0 content-start gap-4">
             <label
               data-testid="tool-file-dropzone"
               onDragEnter={handleToolFileDrag}
@@ -2045,40 +2045,48 @@ function ToolsDownloadAdminPage() {
               </div>
             </div>
             {recentUploads.length > 0 && (
-              <div className="rounded-2xl border border-cyan-100 bg-white p-4">
+              <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
                 <div className="flex items-center justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-black text-neutral-900">最近上传安装包</div>
-                    <p className="mt-1 text-xs leading-5 text-neutral-500">上传遇到 524 或刷新页面后，可以从这里找回已到服务器的文件。</p>
+                  <div className="min-w-0 px-4 pt-4">
+                    <div className="flex items-center gap-2 text-sm font-black text-neutral-900">
+                      <FileDown className="h-4 w-4 text-cyan-700" />
+                      最近上传安装包
+                    </div>
+                    <p className="mt-1 text-xs leading-5 text-neutral-500">上传 524 或刷新后，从这里恢复已到服务器的文件。</p>
                   </div>
-                  <button className="text-xs font-black text-cyan-700 hover:text-cyan-900" onClick={() => void load()}>刷新</button>
+                  <button className="mr-4 mt-4 shrink-0 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-black text-neutral-600 hover:border-cyan-300 hover:text-cyan-800" onClick={() => void load()}>刷新</button>
                 </div>
-                <div className="mt-3 grid gap-2">
+                <div className="mt-3 max-h-[360px] overflow-y-auto border-t border-neutral-100 p-2">
                   {recentUploads.slice(0, 6).map((upload) => (
-                    <div key={`${upload.url}-${upload.uploaded_at}`} className="rounded-xl border border-neutral-100 bg-neutral-50 p-3">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="truncate text-sm font-black text-neutral-900" title={upload.original_name || upload.filename}>
-                            {upload.original_name || upload.filename}
-                          </div>
-                          <div className="mt-1 text-xs font-bold text-neutral-500">
-                            {upload.file_size_label} · {formatRecentUploadTime(upload.uploaded_at)}
-                          </div>
-                        </div>
-                        <button
-                          className="shrink-0 rounded-lg bg-cyan-600 px-2.5 py-1.5 text-xs font-black text-white hover:bg-cyan-700"
-                          onClick={() => useRecentUpload(upload)}
-                        >
-                          使用
-                        </button>
+                    <div key={`${upload.url}-${upload.uploaded_at}`} className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-cyan-50/60">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 text-neutral-600">
+                        <FileDown className="h-4 w-4" />
                       </div>
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="truncate text-sm font-black text-neutral-900">{formatRecentUploadTitle(upload)}</span>
+                          <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-neutral-500">{upload.extension.replace('.', '') || 'file'}</span>
+                        </div>
+                        <div className="mt-1 flex min-w-0 items-center gap-2 text-xs font-bold text-neutral-500">
+                          <span className="shrink-0">{upload.file_size_label}</span>
+                          <span className="shrink-0 text-neutral-300">/</span>
+                          <span className="shrink-0">{formatRecentUploadTime(upload.uploaded_at)}</span>
+                          <span className="min-w-0 truncate font-mono font-semibold text-neutral-400" title={upload.original_name || upload.filename}>{upload.original_name || upload.filename}</span>
+                        </div>
+                      </div>
+                      <button
+                        className="shrink-0 rounded-lg bg-neutral-950 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700 hover:shadow-md"
+                        onClick={() => useRecentUpload(upload)}
+                      >
+                        使用
+                      </button>
                     </div>
                   ))}
                 </div>
               </div>
             )}
           </div>
-          <div className="grid gap-5">
+          <div className="grid min-w-0 gap-5">
             <div className="grid gap-3 md:grid-cols-2">
               <AdminField label="名称"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value, slug: current.slug || slugifyToolName(e.target.value) }))} placeholder="例如 Clash Verge Rev" /></AdminField>
               <AdminField label="Slug"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} placeholder="clash-verge-rev" /></AdminField>
@@ -2141,7 +2149,7 @@ function ToolsDownloadAdminPage() {
                 ))}
               </div>
             </div>
-            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+            <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
               <AdminField label="详情"><textarea className="min-h-28 w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="默认会按名称和平台生成，可按需补充。" /></AdminField>
               <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
                 <div className="text-sm font-black text-neutral-900">下载按钮策略</div>
@@ -2188,12 +2196,15 @@ function ToolsDownloadAdminPage() {
                 </div>
               )}
             </div>
-            <div className="flex flex-wrap gap-2">
-              <button className="inline-flex items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-neutral-200 disabled:opacity-50" disabled={saving} onClick={() => void saveItem()}>
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
+              <div className="text-xs font-bold text-neutral-500">
+                {form.local_file_url ? '安装包已选择，保存后才会出现在前台下载页。' : '先上传或选择最近安装包，再保存软件。'}
+              </div>
+              <button className="inline-flex items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-neutral-200 transition hover:-translate-y-0.5 hover:bg-cyan-700 disabled:translate-y-0 disabled:opacity-50" disabled={saving} onClick={() => void saveItem()}>
                 <CheckCircle2 className="h-4 w-4" />
                 {saving ? '保存中...' : '保存软件'}
               </button>
-              {editing && <button className="rounded-xl border border-neutral-200 px-4 py-2.5 text-sm font-bold text-neutral-700 hover:bg-neutral-50" onClick={resetForm}>取消编辑</button>}
+              {editing && <button className="rounded-xl border border-neutral-200 bg-white px-4 py-2.5 text-sm font-bold text-neutral-700 hover:bg-neutral-50" onClick={resetForm}>取消编辑</button>}
             </div>
           </div>
         </div>
@@ -2838,6 +2849,16 @@ function formatRecentUploadTime(value: string): string {
     hour: '2-digit',
     minute: '2-digit',
   });
+}
+
+function formatRecentUploadTitle(upload: RecentToolUpload): string {
+  const original = upload.original_name || upload.filename;
+  const looksGenerated = /^\d{10,}-[a-f0-9-]+\.[a-z0-9.]+$/i.test(original);
+  if (!looksGenerated) {
+    return original;
+  }
+  const extension = upload.extension.replace('.', '').toUpperCase() || '文件';
+  return `${extension} 安装包`;
 }
 
 function delay(ms: number): Promise<void> {
