@@ -26,9 +26,7 @@ import {
   ListChecks,
   Download,
   UploadCloud,
-  Wand2,
   Link2,
-  PackageCheck,
   CheckCircle2,
   Globe2,
 } from 'lucide-react';
@@ -1801,7 +1799,6 @@ function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
 function ToolsDownloadAdminPage() {
   const [items, setItems] = useState<ToolDownloadItem[]>([]);
   const [config, setConfig] = useState<ToolsDownloadPageConfig | null>(null);
-  const [recentUploads, setRecentUploads] = useState<RecentToolUpload[]>([]);
   const [editing, setEditing] = useState<ToolDownloadItem | null>(null);
   const [form, setForm] = useState(() => createDefaultToolDownloadForm());
   const [loading, setLoading] = useState(false);
@@ -1817,14 +1814,12 @@ function ToolsDownloadAdminPage() {
     setLoading(true);
     setError('');
     try {
-      const [listData, configData, recentData] = await Promise.all([
+      const [listData, configData] = await Promise.all([
         apiFetch('/api/v1/admin/tools/downloads?page_size=100') as Promise<{ items: ToolDownloadItem[] }>,
         apiFetch('/api/v1/admin/tools/download-page') as Promise<ToolsDownloadPageConfig>,
-        apiFetch('/api/v1/admin/tools/uploads/recent?limit=12') as Promise<{ items: RecentToolUpload[] }>,
       ]);
       setItems(listData.items);
       setConfig(configData);
-      setRecentUploads(recentData.items);
     } catch (err) {
       setError(err instanceof Error ? err.message : '加载失败');
     } finally {
@@ -1907,15 +1902,6 @@ function ToolsDownloadAdminPage() {
         setForm((current) => ({ ...current, icon_url: data.url }));
       } else {
         setForm((current) => applyToolFileUploadInference(current, file, data));
-        setRecentUploads((current) => mergeRecentToolUploads(current, {
-          url: data.url,
-          filename: data.filename || filenameFromUrl(data.url),
-          original_name: data.original_name || file.name,
-          file_size_label: data.file_size_label || formatUploadBytes(file.size),
-          size: file.size,
-          extension: toolUploadExtension(file.name),
-          uploaded_at: new Date().toISOString(),
-        }));
       }
       completed = true;
     } catch (err) {
@@ -1960,44 +1946,11 @@ function ToolsDownloadAdminPage() {
     uploadToolFile(event.dataTransfer.files?.[0]);
   };
 
-  const localPackageCount = items.filter((item) => item.local_file_url).length;
-  const publishedCount = items.filter((item) => item.status === 'published').length;
   const fileUploadProgress = uploadProgress?.kind === 'file' ? uploadProgress : null;
   const iconUploadProgress = uploadProgress?.kind === 'icon' ? uploadProgress : null;
 
-  const useRecentUpload = (upload: RecentToolUpload) => {
-    setForm((current) => applyToolFileUploadInference(current, { name: upload.original_name || upload.filename }, {
-      url: upload.url,
-      file_size_label: upload.file_size_label,
-    }));
-    setError('');
-  };
-
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-2xl border border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-orange-50 p-5 shadow-sm">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/80 px-3 py-1 text-xs font-black text-cyan-800">
-              <PackageCheck className="h-4 w-4" />
-              下载中心运营台
-            </div>
-            <h1 className="mt-3 text-2xl font-black tracking-normal text-neutral-950">工具下载</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">上传安装包优先，系统会从文件名自动识别名称、slug、平台、版本和文件大小；URL 字段收进高级设置，日常运营只检查核心下载信息。</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <a className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-bold text-neutral-700 shadow-sm hover:border-cyan-300 hover:text-cyan-800" href="/download" target="_blank" rel="noreferrer">
-              <Eye className="h-4 w-4" />
-              查看前台
-            </a>
-          </div>
-        </div>
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <AdminMetricCard label="软件总数" value={items.length} tone="cyan" />
-          <AdminMetricCard label="已发布" value={publishedCount} tone="green" />
-          <AdminMetricCard label="本地安装包" value={localPackageCount} tone="orange" />
-        </div>
-      </section>
       {error && <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
       <section className="rounded-2xl border border-neutral-200 bg-white shadow-sm">
         <div className="border-b border-neutral-100 px-5 py-4">
@@ -2006,10 +1959,16 @@ function ToolsDownloadAdminPage() {
               <h2 className="text-lg font-black tracking-normal">{editing ? `编辑 ${editing.name}` : '新增软件'}</h2>
               <p className="mt-1 text-sm text-neutral-500">先上传安装包，系统自动补齐能识别的字段；URL 和图标放在高级设置里。</p>
             </div>
-            {editing && <button className="rounded-xl border border-neutral-200 px-3 py-2 text-sm font-bold text-neutral-600 hover:bg-neutral-50" onClick={resetForm}>退出编辑</button>}
+            <div className="flex flex-wrap items-center gap-2">
+              <a className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-bold text-neutral-700 hover:border-cyan-300 hover:text-cyan-800" href="/download" target="_blank" rel="noreferrer">
+                <Eye className="h-4 w-4" />
+                查看前台
+              </a>
+              {editing && <button className="rounded-xl border border-neutral-200 px-3 py-2 text-sm font-bold text-neutral-600 hover:bg-neutral-50" onClick={resetForm}>退出编辑</button>}
+            </div>
           </div>
         </div>
-        <div className="grid gap-5 p-5 2xl:grid-cols-[420px_minmax(0,1fr)]">
+        <div className="grid gap-5 p-5 xl:grid-cols-2">
           <div className="grid min-w-0 content-start gap-4">
             <label
               data-testid="tool-file-dropzone"
@@ -2031,60 +1990,6 @@ function ToolsDownloadAdminPage() {
                 uploadToolFile(file);
               }} />
             </label>
-            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-              <div className="flex items-center gap-2 text-sm font-black text-neutral-800">
-                <Wand2 className="h-4 w-4 text-cyan-700" />
-                自动识别结果
-              </div>
-              <div className="mt-3 grid gap-2 text-sm">
-                <AutoDetectRow label="本地安装包" value={form.local_file_url ? '已上传' : '等待上传'} active={Boolean(form.local_file_url)} />
-                <AutoDetectRow label="软件名称" value={form.name || '待识别'} active={Boolean(form.name)} />
-                <AutoDetectRow label="系统平台" value={form.platforms.map(formatToolPlatform).join(' / ')} active={form.platforms.length > 0} />
-                <AutoDetectRow label="客户端版本" value={form.version || '待识别'} active={Boolean(form.version)} />
-                <AutoDetectRow label="文件大小" value={form.file_size_label || '待上传'} active={Boolean(form.file_size_label)} />
-              </div>
-            </div>
-            {recentUploads.length > 0 && (
-              <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <div className="min-w-0 px-4 pt-4">
-                    <div className="flex items-center gap-2 text-sm font-black text-neutral-900">
-                      <FileDown className="h-4 w-4 text-cyan-700" />
-                      最近上传安装包
-                    </div>
-                    <p className="mt-1 text-xs leading-5 text-neutral-500">上传 524 或刷新后，从这里恢复已到服务器的文件。</p>
-                  </div>
-                  <button className="mr-4 mt-4 shrink-0 rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-black text-neutral-600 hover:border-cyan-300 hover:text-cyan-800" onClick={() => void load()}>刷新</button>
-                </div>
-                <div className="mt-3 max-h-[360px] overflow-y-auto border-t border-neutral-100 p-2">
-                  {recentUploads.slice(0, 6).map((upload) => (
-                    <div key={`${upload.url}-${upload.uploaded_at}`} className="grid grid-cols-[40px_minmax(0,1fr)_auto] items-center gap-3 rounded-xl px-3 py-2.5 transition hover:bg-cyan-50/60">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-neutral-100 text-neutral-600">
-                        <FileDown className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <span className="truncate text-sm font-black text-neutral-900">{formatRecentUploadTitle(upload)}</span>
-                          <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-black uppercase tracking-[0.08em] text-neutral-500">{upload.extension.replace('.', '') || 'file'}</span>
-                        </div>
-                        <div className="mt-1 flex min-w-0 items-center gap-2 text-xs font-bold text-neutral-500">
-                          <span className="shrink-0">{upload.file_size_label}</span>
-                          <span className="shrink-0 text-neutral-300">/</span>
-                          <span className="shrink-0">{formatRecentUploadTime(upload.uploaded_at)}</span>
-                          <span className="min-w-0 truncate font-mono font-semibold text-neutral-400" title={upload.original_name || upload.filename}>{upload.original_name || upload.filename}</span>
-                        </div>
-                      </div>
-                      <button
-                        className="shrink-0 rounded-lg bg-neutral-950 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-cyan-700 hover:shadow-md"
-                        onClick={() => useRecentUpload(upload)}
-                      >
-                        使用
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
           <div className="grid min-w-0 gap-5">
             <div className="grid gap-3 md:grid-cols-2">
@@ -2149,27 +2054,8 @@ function ToolsDownloadAdminPage() {
                 ))}
               </div>
             </div>
-            <div className="grid min-w-0 gap-3 lg:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="grid min-w-0 gap-3">
               <AdminField label="详情"><textarea className="min-h-28 w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="默认会按名称和平台生成，可按需补充。" /></AdminField>
-              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
-                <div className="text-sm font-black text-neutral-900">下载按钮策略</div>
-                <p className="mt-1 text-xs leading-5 text-neutral-500">前台优先突出本地下载；官方页面只作为备用入口。</p>
-                <label className="mt-3 flex items-center gap-2 rounded-xl border border-cyan-200 bg-white px-3 py-2 text-sm font-bold text-cyan-800">
-                  <input type="radio" checked={form.primary_action === 'local'} onChange={() => setForm({ ...form, primary_action: 'local' })} />
-                  本地下载主按钮
-                </label>
-                <label className="mt-2 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-bold text-neutral-600">
-                  <input type="radio" checked={form.primary_action === 'official'} onChange={() => setForm({ ...form, primary_action: 'official' })} />
-                  官方页面备用
-                </label>
-                <label className="mt-3 flex items-start gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm font-bold text-neutral-700">
-                  <input className="mt-1" type="checkbox" checked={form.is_hot} onChange={(e) => setForm({ ...form, is_hot: e.target.checked })} />
-                  <span>
-                    <span className="block">同系统内优先展示</span>
-                    <span className="mt-1 block text-xs font-medium leading-5 text-neutral-500">勾选后会排在同系统未勾选的软件前面，并在前台卡片右上角显示“热门”标签。</span>
-                  </span>
-                </label>
-              </div>
             </div>
             <div className="rounded-2xl border border-neutral-200">
               <button type="button" className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-black text-neutral-800" onClick={() => setAdvancedOpen((open) => !open)}>
@@ -2198,8 +2084,12 @@ function ToolsDownloadAdminPage() {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
               <div className="text-xs font-bold text-neutral-500">
-                {form.local_file_url ? '安装包已选择，保存后才会出现在前台下载页。' : '先上传或选择最近安装包，再保存软件。'}
+                {form.local_file_url ? '安装包已选择，保存后才会出现在前台下载页。' : '先上传安装包，再保存软件。'}
               </div>
+              <label className="inline-flex items-center gap-2 text-sm font-bold text-neutral-700">
+                <input type="checkbox" checked={form.is_hot} onChange={(e) => setForm({ ...form, is_hot: e.target.checked })} />
+                同系统内优先展示
+              </label>
               <button className="inline-flex items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-neutral-200 transition hover:-translate-y-0.5 hover:bg-cyan-700 disabled:translate-y-0 disabled:opacity-50" disabled={saving} onClick={() => void saveItem()}>
                 <CheckCircle2 className="h-4 w-4" />
                 {saving ? '保存中...' : '保存软件'}
@@ -2300,16 +2190,6 @@ interface ToolUploadProgress {
   lengthComputable: boolean;
 }
 
-interface RecentToolUpload {
-  url: string;
-  filename: string;
-  original_name: string;
-  file_size_label: string;
-  size: number;
-  extension: string;
-  uploaded_at: string;
-}
-
 function AdminField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1 text-sm">
@@ -2352,32 +2232,6 @@ function ToolUploadProgressBar({ progress, compact = false }: { progress: ToolUp
   );
 }
 
-function AdminMetricCard({ label, value, tone }: { label: string; value: number | string; tone: 'cyan' | 'green' | 'orange' }) {
-  const toneClass = {
-    cyan: 'border-cyan-100 bg-cyan-50 text-cyan-900',
-    green: 'border-emerald-100 bg-emerald-50 text-emerald-900',
-    orange: 'border-orange-100 bg-orange-50 text-orange-900',
-  }[tone];
-  return (
-    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
-      <div className="text-xs font-black uppercase tracking-[0.12em] opacity-70">{label}</div>
-      <div className="mt-2 text-2xl font-black tracking-normal">{value}</div>
-    </div>
-  );
-}
-
-function AutoDetectRow({ label, value, active }: { label: string; value: string; active: boolean }) {
-  return (
-    <div className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
-      <span className="text-neutral-500">{label}</span>
-      <span className={`inline-flex items-center gap-1.5 text-right font-black ${active ? 'text-cyan-800' : 'text-neutral-400'}`}>
-        {active && <CheckCircle2 className="h-3.5 w-3.5" />}
-        {value}
-      </span>
-    </div>
-  );
-}
-
 function createDefaultToolDownloadForm(): ToolDownloadFormState {
   return {
     slug: '',
@@ -2398,12 +2252,13 @@ function createDefaultToolDownloadForm(): ToolDownloadFormState {
 }
 
 function toToolDownloadForm(item: ToolDownloadItem): ToolDownloadFormState {
+  const platform = item.platforms[0] || 'windows';
   return {
     slug: item.slug,
     name: item.name,
     summary: item.summary,
     description: item.description,
-    platforms: item.platforms,
+    platforms: [platform],
     platform_versions: item.platform_versions || {},
     icon_url: item.icon_url,
     local_file_url: item.local_file_url,
@@ -2482,10 +2337,8 @@ function applyToolFileUploadInference(
   data: { url: string; file_size_label?: string },
 ): ToolDownloadFormState {
   const inferred = inferToolFile(file.name);
-  const isFreshDefault = !current.local_file_url && !current.name.trim() && !current.slug.trim() && current.platforms.length === 1 && current.platforms[0] === 'windows';
-  const nextPlatforms = inferred.platforms.length > 0
-    ? (isFreshDefault ? inferred.platforms : mergeToolPlatforms(current.platforms, inferred.platforms))
-    : current.platforms;
+  const nextPlatform = inferred.platforms[0] || current.platforms[0] || 'windows';
+  const nextPlatforms: ToolDownloadPlatform[] = [nextPlatform];
   const nextName = current.name.trim() || inferred.name;
   const nextSlug = current.slug.trim() || slugifyToolName(nextName || inferred.slugSource);
   const nextVersions = { ...current.platform_versions };
@@ -2725,11 +2578,6 @@ async function uploadToolAsset(
     xhr.onload = async () => {
       const data = parseUploadResponse(xhr.responseText);
       if (xhr.status < 200 || xhr.status >= 300) {
-        const recovered = await recoverToolUploadAfterInterruptedResponse(kind, file, onProgress);
-        if (recovered) {
-          resolve(recovered);
-          return;
-        }
         reject(new Error(data?.message || `上传失败: ${xhr.status}`));
         return;
       }
@@ -2747,20 +2595,10 @@ async function uploadToolAsset(
       });
       resolve({ url: data.url, filename: data.filename, original_name: data.original_name, file_size_label: data.file_size_label });
     };
-    xhr.onerror = async () => {
-      const recovered = await recoverToolUploadAfterInterruptedResponse(kind, file, onProgress);
-      if (recovered) {
-        resolve(recovered);
-        return;
-      }
+    xhr.onerror = () => {
       reject(new Error('网络异常，上传失败'));
     };
-    xhr.onabort = async () => {
-      const recovered = await recoverToolUploadAfterInterruptedResponse(kind, file, onProgress);
-      if (recovered) {
-        resolve(recovered);
-        return;
-      }
+    xhr.onabort = () => {
       reject(new Error('上传已取消'));
     };
     xhr.send(body);
@@ -2928,95 +2766,6 @@ function parseUploadResponse(responseText: string): { url?: string; filename?: s
   } catch {
     return {};
   }
-}
-
-async function recoverToolUploadAfterInterruptedResponse(
-  kind: 'icon' | 'file',
-  file: File,
-  onProgress?: (progress: ToolUploadProgress) => void,
-): Promise<{ url: string; filename?: string; original_name?: string; file_size_label?: string } | null> {
-  if (kind !== 'file' || file.size <= 0) {
-    return null;
-  }
-
-  const extension = toolUploadExtension(file.name);
-  const query = new URLSearchParams({
-    size: String(file.size),
-    since_seconds: '900',
-  });
-  if (extension) {
-    query.set('extension', extension);
-  }
-
-  for (let attempt = 0; attempt < 8; attempt += 1) {
-    if (attempt > 0) {
-      await delay(1500);
-    }
-    try {
-      const response = await fetch(`${getApiBase()}/api/v1/admin/tools/upload-file/recent?${query.toString()}`, {
-        credentials: 'include',
-      });
-      if (!response.ok) {
-        continue;
-      }
-      const data = await response.json() as { url?: string; filename?: string; original_name?: string; file_size_label?: string };
-      if (!data.url) {
-        continue;
-      }
-      onProgress?.({
-        kind,
-        fileName: file.name,
-        loaded: file.size,
-        total: file.size,
-        percent: 100,
-        lengthComputable: true,
-      });
-      return { url: data.url, filename: data.filename, original_name: data.original_name, file_size_label: data.file_size_label };
-    } catch {
-      continue;
-    }
-  }
-
-  return null;
-}
-
-function toolUploadExtension(filename: string): string {
-  const lower = filename.toLowerCase();
-  if (lower.endsWith('.tar.gz')) return '.tar.gz';
-  const dot = lower.lastIndexOf('.');
-  return dot >= 0 ? lower.slice(dot) : '';
-}
-
-function filenameFromUrl(url: string): string {
-  const clean = String(url || '').split('?')[0] || '';
-  return clean.slice(clean.lastIndexOf('/') + 1) || 'uploaded-file';
-}
-
-function mergeRecentToolUploads(current: RecentToolUpload[], next: RecentToolUpload): RecentToolUpload[] {
-  return [next, ...current.filter((item) => item.url !== next.url)].slice(0, 12);
-}
-
-function formatRecentUploadTime(value: string): string {
-  const date = new Date(value);
-  if (!Number.isFinite(date.getTime())) {
-    return '刚刚';
-  }
-  return date.toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function formatRecentUploadTitle(upload: RecentToolUpload): string {
-  const original = upload.original_name || upload.filename;
-  const looksGenerated = /^\d{10,}-[a-f0-9-]+\.[a-z0-9.]+$/i.test(original);
-  if (!looksGenerated) {
-    return original;
-  }
-  const extension = upload.extension.replace('.', '').toUpperCase() || '文件';
-  return `${extension} 安装包`;
 }
 
 function delay(ms: number): Promise<void> {
