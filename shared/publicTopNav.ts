@@ -69,14 +69,22 @@ export const PUBLIC_TOP_NAV_STYLES = `
     letter-spacing: 2.34px;
   }
   .public-top-nav-link {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 8px;
+    border: 0;
     padding: 8px 16px;
     border-radius: 999px;
+    background: transparent;
     color: rgb(115,115,115);
+    font: inherit;
+    letter-spacing: inherit;
     text-decoration: none;
     transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease;
+  }
+  .public-top-nav-trigger {
+    cursor: default;
   }
   .public-top-nav-link:hover {
     background: rgb(245,245,245);
@@ -96,6 +104,65 @@ export const PUBLIC_TOP_NAV_STYLES = `
     line-height: 10px;
     letter-spacing: 1.8px;
     color: #ffffff;
+  }
+  .public-top-nav-item {
+    position: relative;
+    display: inline-flex;
+  }
+  .public-top-nav-submenu {
+    position: absolute;
+    left: 0;
+    top: calc(100% + 8px);
+    display: none;
+    min-width: 260px;
+    box-sizing: border-box;
+    border: 1px solid rgb(229,229,229);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.98);
+    padding: 8px;
+    box-shadow: 0 18px 46px rgba(15,23,42,0.12);
+  }
+  .public-top-nav-submenu::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -9px;
+    height: 9px;
+  }
+  .public-top-nav-item:hover .public-top-nav-submenu,
+  .public-top-nav-item:focus-within .public-top-nav-submenu {
+    display: grid;
+    gap: 4px;
+  }
+  .public-top-nav-submenu-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    border-radius: 6px;
+    padding: 9px 10px;
+    color: rgb(64,64,64);
+    text-decoration: none;
+    letter-spacing: 0;
+    line-height: 1.35;
+  }
+  .public-top-nav-submenu-link > span:first-child {
+    white-space: nowrap;
+  }
+  .public-top-nav-submenu-link:hover {
+    background: rgb(245,245,245);
+    color: rgb(23,23,23);
+  }
+  .public-top-nav-submenu-badge {
+    flex: 0 0 auto;
+    border-radius: 5px;
+    background: rgb(245,245,245);
+    padding: 3px 5px;
+    color: rgb(115,115,115);
+    font-size: 10px;
+    font-weight: 900;
+    white-space: nowrap;
   }
   .public-top-nav-actions {
     display: flex;
@@ -181,7 +248,7 @@ export const PUBLIC_TOP_NAV_STYLES = `
   }
 `;
 
-export function renderPublicTopNav(active: PublicNavigationKind): string {
+export function renderPublicTopNav(active: PublicNavigationKind | null): string {
   return `
     <nav class="public-top-nav" data-public-top-nav="true">
       <div class="public-top-nav-inner">
@@ -209,13 +276,20 @@ export function renderPublicTopNav(active: PublicNavigationKind): string {
   `;
 }
 
-function renderTopNavItem(item: PublicNavigationItem, active: PublicNavigationKind): string {
+function renderTopNavItem(item: PublicNavigationItem, active: PublicNavigationKind | null): string {
   const classes = ['public-top-nav-link'];
   if (item.kind === active) {
     classes.push('is-active');
   }
+  const label = `${escapeHtml(item.label)}${item.badge ? `<span class="public-top-nav-badge">${escapeHtml(item.badge)}</span>` : ''}`;
   const clientNavAttribute = item.kind === 'news' ? '' : ' data-client-nav="true"';
-  return `<a class="${classes.join(' ')}" href="${escapeAttribute(item.href)}"${clientNavAttribute}>${escapeHtml(item.label)}${item.badge ? `<span class="public-top-nav-badge">${escapeHtml(item.badge)}</span>` : ''}</a>`;
+  const link = item.href
+    ? `<a class="${classes.join(' ')}" href="${escapeAttribute(item.href)}"${clientNavAttribute}>${label}</a>`
+    : `<button class="${classes.concat('public-top-nav-trigger').join(' ')}" type="button" aria-haspopup="true">${label}</button>`;
+  if (!item.children || item.children.length === 0) {
+    return link;
+  }
+  return `<span class="public-top-nav-item">${link}<span class="public-top-nav-submenu">${item.children.map((child) => `<a class="public-top-nav-submenu-link" href="${escapeAttribute(child.href)}" data-client-nav="true"><span>${escapeHtml(child.label)}</span>${child.badge ? `<span class="public-top-nav-submenu-badge">${escapeHtml(child.badge)}</span>` : ''}</a>`).join('')}</span></span>`;
 }
 
 function renderZapIcon(): string {

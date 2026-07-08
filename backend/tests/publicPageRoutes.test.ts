@@ -50,9 +50,10 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(html, /<script type="application\/ld\+json">/);
       assert.match(html, /<link rel="stylesheet" href="\/assets\/index-BzS9fL3m\.css" \/>/);
       assert.match(html, /<script type="module" src="\/assets\/index-CkG9aP2q\.js"><\/script>/);
-      assert.match(html, /\.topbar nav a\.active \{ background: #fff1f2; color: #e11d48;/);
-      assert.match(html, /\.topbar nav a\.apply-link \{ background: #111111; color: #fff;/);
-      assert.match(html, /\.topbar nav a\.apply-link\.active \{ background: #111111; color: #fff;/);
+      assert.match(html, /data-public-top-nav="true"/);
+      assert.match(html, /\.public-top-nav-inner\s*\{[\s\S]*height:\s*72px;/);
+      assert.match(html, /<span class="public-top-nav-brand-title">机场榜GateRank<\/span>/);
+      assert.doesNotMatch(html, /<header class="topbar">/);
       if (path === '/') {
         assert.match(html, /<strong class="hero-highlight">行业首创，每日更新<\/strong>/);
         assert.match(html, /基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单/);
@@ -210,6 +211,183 @@ test('GET /deals returns crawlable advertising deal HTML', async () => {
     assert.match(html, /"itemOffered":\{"@type":"Service","name":"星云机场","url":"http:\/\/127\.0\.0\.1:\d+\/airports\/nebula"/);
     assert.doesNotMatch(html, /最佳|官方推荐|最强|永久稳定/);
     assert.match(html, /"kind":"deals"/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /download returns crawlable SEO download page HTML', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    toolsDownloadService: {
+      getDownloadPageView: async (platform?: string | null) => ({
+        config: {
+          seo_title: '翻墙工具下载 | Clash Verge Rev、v2rayN、Shadowrocket 客户端',
+          seo_description: 'GateRank 翻墙工具下载页收录 Windows、macOS、iOS、Android、Linux 常用科学上网客户端，支持官方页面跳转和后台上传文件。',
+          seo_keywords: '翻墙工具下载,科学上网客户端下载,Clash Verge Rev,v2rayN,Shadowrocket,Stash,sing-box,Hiddify',
+          h1: '翻墙工具下载：科学上网客户端与机场订阅工具',
+          hero_description: '按系统筛选常用代理客户端，优先展示官方页面和后台上传的可信安装包。',
+          content_sections: [
+            { title: '如何选择翻墙工具', body: 'Windows 和 macOS 用户可优先查看 Clash Verge Rev、v2rayN、sing-box、Hiddify 等客户端。' },
+          ],
+          faq_items: [
+            { question: '这些翻墙工具和机场有什么关系？', answer: '机场通常提供订阅链接，客户端负责导入订阅并连接节点。' },
+          ],
+        },
+        platform: platform ?? null,
+        platforms: ['windows', 'macos', 'ios', 'android', 'linux'],
+        items: [
+          createToolDownloadItem({
+            slug: 'clash-verge-rev',
+            name: 'Clash Verge Rev',
+            platforms: ['windows', 'macos', 'linux'],
+            local_file_url: '/uploads/tools/files/1783493370824-8654d0d0-9b6f-49ce-bcbf-ddd79a05bbc9.dmg',
+            version: '2.5.1',
+          }),
+          createToolDownloadItem({ slug: 'v2rayn', name: 'v2rayN', platforms: ['windows'] }),
+          createToolDownloadItem({ slug: 'shadowrocket', name: 'Shadowrocket', platforms: ['ios'] }),
+          createToolDownloadItem({ slug: 'stash', name: 'Stash', platforms: ['ios', 'macos'] }),
+          createToolDownloadItem({ slug: 'sing-box', name: 'sing-box', platforms: ['windows', 'macos', 'ios', 'android', 'linux'] }),
+          createToolDownloadItem({ slug: 'hiddify', name: 'Hiddify', platforms: ['windows', 'macos', 'ios', 'android', 'linux'] }),
+        ],
+        hotItems: [
+          createToolDownloadItem({ slug: 'clash-verge-rev', name: 'Clash Verge Rev', platforms: ['windows', 'macos', 'linux'] }),
+          createToolDownloadItem({ slug: 'v2rayn', name: 'v2rayN', platforms: ['windows'] }),
+        ],
+        total: 6,
+      }),
+    } as never,
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const response = await fetch(`${baseUrl}/download`, { headers: { host: `127.0.0.1:${port}` } });
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<h1>翻墙工具下载：科学上网客户端与机场订阅工具<\/h1>/);
+    assert.match(html, /<title>翻墙工具下载 \| Clash Verge Rev、v2rayN、Shadowrocket 客户端<\/title>/);
+    assert.match(html, /<meta name="keywords" content="翻墙工具下载,科学上网客户端下载,Clash Verge Rev,v2rayN,Shadowrocket,Stash,sing-box,Hiddify" \/>/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/download"/);
+    assert.match(html, /<button class="public-top-nav-link is-active public-top-nav-trigger" type="button" aria-haspopup="true">工具<\/button>/);
+    assert.match(html, /\.public-top-nav-submenu \{[\s\S]*?min-width: 260px;/);
+    assert.match(html, /\.public-top-nav-submenu-link > span:first-child \{[\s\S]*?white-space: nowrap;/);
+    assert.doesNotMatch(html, /href="\/tools"[^/]/);
+    assert.match(html, /Windows 端/);
+    assert.match(html, /macOS 端/);
+    assert.match(html, /iOS 端/);
+    assert.match(html, /Android 端/);
+    assert.match(html, /Linux 端/);
+    assert.match(html, /支持版本：macOS 12\+/);
+    assert.match(html, /支持版本：Windows 10\/11/);
+    assert.match(html, /download="Clash-Verge-Rev-macOS-2\.5\.1\.dmg"/);
+    assert.match(html, /\.tools-download-card-grid \{ display: grid; grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
+    assert.doesNotMatch(html, /\.tools-download-card-grid \{ display: grid; grid-template-columns: repeat\(auto-fit/);
+    assert.match(html, /class="tool-card is-hot"/);
+    assert.match(html, /class="tool-hot-badge" data-tool-hot-badge>热门<\/span>/);
+    assert.match(html, /\.tool-hot-badge \{ position: absolute;/);
+    assert.doesNotMatch(html, /Download Center/);
+    assert.doesNotMatch(html, /选择你的设备系统/);
+    assert.doesNotMatch(html, /热门客户端推荐/);
+    assert.doesNotMatch(html, /class="tool-platform-row"/);
+    assert.doesNotMatch(html, /href="\/download\?platform=windows"/);
+    assert.doesNotMatch(html, /href="\/tools\/download"/);
+    assert.match(html, /Clash Verge Rev/);
+    assert.match(html, /v2rayN/);
+    assert.match(html, /Shadowrocket/);
+    assert.match(html, /Stash/);
+    assert.match(html, /sing-box/);
+    assert.match(html, /Hiddify/);
+    assert.match(html, /"@type":"SoftwareApplication"/);
+    assert.match(html, /"@type":"FAQPage"/);
+    assert.match(html, /"kind":"tools_download"/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /download platform filter is noindex and canonicalizes to base page', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    toolsDownloadService: {
+      getDownloadPageView: async (platform?: string | null) => ({
+        config: {
+          seo_title: '翻墙工具下载',
+          seo_description: '翻墙工具下载页面。',
+          seo_keywords: '翻墙工具下载',
+          h1: '翻墙工具下载',
+          hero_description: '下载工具。',
+          content_sections: [],
+          faq_items: [],
+        },
+        platform: platform ?? null,
+        platforms: ['windows', 'macos', 'ios', 'android', 'linux'],
+        items: [createToolDownloadItem({ slug: 'stash', name: 'Stash', platforms: ['macos'] })],
+        hotItems: [],
+        total: 1,
+      }),
+    } as never,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/download?platform=macos`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<meta name="robots" content="noindex,follow" \/>/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/download"/);
+    assert.match(html, /macOS 端/);
+    assert.doesNotMatch(html, /Windows 端/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('legacy tools routes redirect to /download and unfinished tool placeholders are noindex', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    toolsDownloadService: {
+      getDownloadPageView: async () => ({
+        config: {
+          seo_title: '翻墙工具下载',
+          seo_description: '翻墙工具下载页面。',
+          seo_keywords: '翻墙工具下载',
+          h1: '翻墙工具下载',
+          hero_description: '下载工具。',
+          content_sections: [],
+          faq_items: [],
+        },
+        platform: null,
+        platforms: ['windows', 'macos', 'ios', 'android', 'linux'],
+        items: [],
+        hotItems: [],
+        total: 0,
+      }),
+    } as never,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const indexResponse = await fetch(`http://127.0.0.1:${port}/tools`, { redirect: 'manual' });
+    assert.equal(indexResponse.status, 301);
+    assert.equal(indexResponse.headers.get('location'), '/download');
+
+    const legacyDownloadResponse = await fetch(`http://127.0.0.1:${port}/tools/download?platform=macos`, { redirect: 'manual' });
+    assert.equal(legacyDownloadResponse.status, 301);
+    assert.equal(legacyDownloadResponse.headers.get('location'), '/download?platform=macos');
+
+    const placeholderResponse = await fetch(`http://127.0.0.1:${port}/tools/ip-check`);
+    assert.equal(placeholderResponse.status, 200);
+    const placeholderHtml = await placeholderResponse.text();
+    assert.match(placeholderHtml, /IP 检测工具即将上线/);
+    assert.match(placeholderHtml, /<meta name="robots" content="noindex,follow" \/>/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -995,6 +1173,37 @@ function createMonthlyReport(input: Partial<ReturnType<typeof createMonthlyRepor
     content_markdown: '## 本月摘要\n\n**重点机场** 表现稳定。',
     content_html: '<h2 id="summary" class="news-heading news-heading-2">本月摘要</h2><p class="news-paragraph"><strong>重点机场</strong> 表现稳定。</p>',
     ...input,
+  };
+}
+
+function createToolDownloadItem(input: { slug: string; name: string; platforms: string[]; local_file_url?: string; version?: string }) {
+  const platform_versions = {
+    windows: 'Windows 10/11',
+    macos: 'macOS 12+',
+    ios: 'iOS 15+',
+    android: 'Android 8+',
+    linux: 'Ubuntu 20.04+',
+  };
+  return {
+    id: Math.floor(Math.random() * 1000) + 1,
+    slug: input.slug,
+    name: input.name,
+    summary: `${input.name} 科学上网客户端`,
+    description: `${input.name} 可用于导入机场订阅并连接代理节点。`,
+    platforms: input.platforms,
+    platform_versions,
+    icon_url: `/uploads/tools/icons/${input.slug}.webp`,
+    local_file_url: input.local_file_url || '',
+    official_url: `https://example.com/${input.slug}`,
+    primary_action: 'official' as const,
+    version: input.version || 'latest',
+    file_size_label: '',
+    is_hot: true,
+    sort_order: 1,
+    status: 'published' as const,
+    published_at: '2026-07-08 10:00:00',
+    created_at: '2026-07-08 09:00:00',
+    updated_at: '2026-07-08 10:00:00',
   };
 }
 

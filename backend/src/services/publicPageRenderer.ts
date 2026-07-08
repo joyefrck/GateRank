@@ -47,6 +47,11 @@ import {
 import type { AirportDealView } from '../../../shared/airportAds';
 import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
 import {
+  PUBLIC_TOP_NAV_STYLES,
+  renderPublicTopNav,
+} from '../../../shared/publicTopNav';
+import type { PublicNavigationKind } from '../../../shared/publicNavigation';
+import {
   FALLBACK_PUBLIC_FRONTEND_ASSETS,
   type PublicFrontendAssets,
 } from './frontendAssets';
@@ -70,12 +75,20 @@ import {
   hasFullRankingFilters,
   type FullRankingFilters,
 } from '../../../shared/fullRankingFilters';
+import {
+  buildToolDownloadFilename,
+  getToolDownloadPlatformLabel,
+  TOOL_DOWNLOAD_PLATFORMS,
+  type ToolDownloadItem,
+  type ToolDownloadPlatform,
+  type ToolsDownloadPageView,
+} from '../../../shared/toolDownloads';
 
 interface RenderOptions {
   siteUrl: string;
   canonicalPath: string;
   seo: PublicSeoText;
-  active: 'home' | 'rankings' | 'monthlyReports' | 'deals' | 'risk' | 'methodology' | 'apply' | 'forAi';
+  active: 'home' | 'rankings' | 'monthlyReports' | 'deals' | 'risk' | 'methodology' | 'apply' | 'forAi' | 'tools';
   jsonLd: unknown;
   body: string;
   status?: number;
@@ -94,7 +107,7 @@ interface DynamicOgImage {
 }
 
 interface PublicInitialData {
-  kind: 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'monthly_reports' | 'monthly_report';
+  kind: 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'monthly_reports' | 'monthly_report' | 'tools_download';
   params: {
     date?: string | null;
     page?: number | null;
@@ -537,6 +550,107 @@ export function renderMonthlyReportDetailPage(
             ${renderLinkedInfoCard('测评方法', '/methodology')}
             ${renderLinkedInfoCard('月度报告列表', '/monthly-reports')}
           </div>
+        </section>
+      </main>
+    `,
+  });
+}
+
+export function renderToolsDownloadPublicPage(
+  siteUrl: string,
+  view: ToolsDownloadPageView,
+  frontendAssets?: PublicFrontendAssets,
+): string {
+  const canonicalPath = '/download';
+  const seo = {
+    title: view.config.seo_title,
+    description: view.config.seo_description,
+    keywords: view.config.seo_keywords,
+  };
+  return renderPublicDocument({
+    siteUrl,
+    canonicalPath,
+    seo,
+    robots: view.platform ? 'noindex,follow' : undefined,
+    active: 'tools',
+    jsonLd: [
+      buildCollectionPageJsonLd(siteUrl, canonicalPath, seo),
+      buildBreadcrumbJsonLd(siteUrl, [
+        ['今日推荐', '/'],
+        ['翻墙工具下载', canonicalPath],
+      ]),
+      buildToolDownloadItemListJsonLd(siteUrl, view.items),
+      ...buildToolDownloadSoftwareJsonLd(siteUrl, view.items),
+      ...(view.config.faq_items.length > 0 ? [{
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: view.config.faq_items.map((item) => ({
+          '@type': 'Question',
+          name: item.question,
+          acceptedAnswer: {
+            '@type': 'Answer',
+            text: item.answer,
+          },
+        })),
+      }] : []),
+    ],
+    initialData: {
+      kind: 'tools_download',
+      params: {
+        page: null,
+      },
+      payload: view,
+    },
+    frontendAssets,
+    body: `
+      <main class="page-main tools-download-page">
+        <section class="tools-download-intro">
+          <div class="eyebrow">翻墙工具下载</div>
+          <h1>${escapeHtml(view.config.h1)}</h1>
+          <p>${escapeHtml(view.config.hero_description)}</p>
+        </section>
+        ${renderToolDownloadGroups(view)}
+        ${renderToolDownloadContentSections(view.config.content_sections)}
+        ${renderToolDownloadFaq(view.config.faq_items)}
+      </main>
+    `,
+  });
+}
+
+export function renderToolPlaceholderPublicPage(
+  siteUrl: string,
+  tool: 'streaming-check' | 'ip-check',
+  frontendAssets?: PublicFrontendAssets,
+): string {
+  const isIp = tool === 'ip-check';
+  const title = isIp ? 'IP 检测工具即将上线' : '流媒体解锁检测工具即将上线';
+  const path = isIp ? '/tools/ip-check' : '/tools/streaming-check';
+  const description = isIp
+    ? 'GateRank IP 检测工具将用于查看当前 IP、地区、网络类型和代理环境。'
+    : 'GateRank 流媒体解锁检测工具将用于检查 Netflix、Disney+、YouTube Premium 等服务的解锁状态。';
+  return renderPublicDocument({
+    siteUrl,
+    canonicalPath: path,
+    seo: {
+      title: `${title} | GateRank 工具箱`,
+      description,
+      keywords: isIp ? 'IP检测,代理IP检测,机场VPN工具' : '流媒体解锁检测,Netflix解锁检测,机场VPN工具',
+    },
+    robots: 'noindex,follow',
+    active: 'tools',
+    jsonLd: buildBreadcrumbJsonLd(siteUrl, [
+      ['今日推荐', '/'],
+      ['翻墙工具下载', '/download'],
+      [title, path],
+    ]),
+    frontendAssets,
+    body: `
+      <main class="page-main">
+        <section class="hero">
+          <div class="eyebrow">Coming Soon</div>
+          <h1>${escapeHtml(title)}</h1>
+          <p>${escapeHtml(description)} 当前版本先上线翻墙工具下载页面。</p>
+          <p><a class="primary-link" href="/download">进入翻墙工具下载</a></p>
         </section>
       </main>
     `,
@@ -1268,13 +1382,13 @@ function renderPublicDocument(options: RenderOptions): string {
     <meta name="twitter:description" content="${escapeAttribute(options.seo.description)}" />
     ${twitterImageMeta}
     <link rel="stylesheet" href="${escapeAttribute(frontendAssets.stylesheet)}" />
-    <style>${styles}</style>
+    <style>${PUBLIC_TOP_NAV_STYLES}${styles}</style>
     <script type="application/ld+json">${JSON.stringify(options.jsonLd)}</script>
   </head>
   <body>
     <div id="root">
       <div class="page-shell">
-        ${renderTopbar(options.active)}
+        ${renderPublicTopNav(resolvePublicTopNavActive(options.active))}
         ${options.body}
         ${renderFooter()}
       </div>
@@ -1285,21 +1399,16 @@ function renderPublicDocument(options: RenderOptions): string {
 </html>`;
 }
 
-function renderTopbar(active: RenderOptions['active']): string {
-  return `
-    <header class="topbar">
-      <a class="brand" href="/">${escapeHtml(PUBLIC_SITE_BRAND_NAME)}</a>
-      <nav>
-        <a class="${active === 'home' ? 'active' : ''}" href="/">今日推荐</a>
-        <a class="${active === 'rankings' ? 'active' : ''}" href="/rankings/all">机场排行</a>
-        <a class="${active === 'monthlyReports' ? 'active' : ''}" href="/monthly-reports">月度报告</a>
-        <a class="${active === 'deals' ? 'active' : ''}" href="/deals">活动优惠</a>
-        <a class="${active === 'risk' ? 'active' : ''}" href="/risk-monitor">跑路监测</a>
-        <a href="/news">News</a>
-        <a class="apply-link ${active === 'apply' ? 'active' : ''}" href="/apply">申请入驻</a>
-      </nav>
-    </header>
-  `;
+function resolvePublicTopNavActive(active: RenderOptions['active']): PublicNavigationKind | null {
+  const map: Partial<Record<RenderOptions['active'], PublicNavigationKind>> = {
+    home: 'home',
+    rankings: 'full_ranking',
+    monthlyReports: 'monthly_reports',
+    deals: 'deals',
+    risk: 'risk_monitor',
+    tools: 'tools',
+  };
+  return map[active] || null;
 }
 
 function renderFooter(): string {
@@ -1309,6 +1418,140 @@ function renderFooter(): string {
       <p>以公开监测数据、评分趋势和风险记录构建机场推荐体系。</p>
     </footer>
   `;
+}
+
+function renderToolDownloadGroups(view: ToolsDownloadPageView): string {
+  const platforms = view.platform ? [view.platform] : TOOL_DOWNLOAD_PLATFORMS;
+  const groups = platforms.map((platform) => {
+    const items = view.items
+      .filter((item) => item.platforms.includes(platform))
+      .sort(compareToolDownloadItems);
+    if (items.length === 0) {
+      return '';
+    }
+    const label = getToolDownloadPlatformLabel(platform);
+    return `
+      <section class="tools-download-group">
+        <div class="tools-group-head">
+          <div>
+            <div class="eyebrow">${escapeHtml(label)} 下载</div>
+            <h2>${escapeHtml(label)} 端</h2>
+          </div>
+          <p>适合 ${escapeHtml(label)} 设备使用的翻墙工具下载，本地安装包优先展示，官方页面作为备用入口。</p>
+        </div>
+        <div class="tools-download-card-grid">
+          ${items.map((item) => renderToolDownloadCard(item, platform)).join('')}
+        </div>
+      </section>
+    `;
+  }).filter(Boolean);
+  if (groups.length === 0) {
+    return '<section id="tools-download-list" class="tools-download-group"><p class="muted">当前筛选下暂无工具。</p></section>';
+  }
+  return `<div id="tools-download-list" class="tools-download-groups">${groups.join('')}</div>`;
+}
+
+function compareToolDownloadItems(a: ToolDownloadItem, b: ToolDownloadItem): number {
+  return Number(b.is_hot) - Number(a.is_hot) || a.sort_order - b.sort_order || a.id - b.id;
+}
+
+function renderToolDownloadCard(item: ToolDownloadItem, platform: ToolDownloadPlatform): string {
+  const hasLocalFile = Boolean(item.local_file_url);
+  const iconClass = `tool-icon-fallback tool-icon-${String(item.slug.length % 5)}`;
+  const supportVersion = getToolDownloadSupportVersion(item, platform);
+  return `
+    <article id="tool-${escapeAttribute(item.slug)}-${escapeAttribute(platform)}" class="tool-card${item.is_hot ? ' is-hot' : ''}">
+      ${item.is_hot ? '<span class="tool-hot-badge" data-tool-hot-badge>热门</span>' : ''}
+      <div class="tool-card-head">
+        ${item.icon_url ? `<img src="${escapeAttribute(item.icon_url)}" alt="${escapeAttribute(item.name)} 图标" loading="lazy" />` : `<span class="${iconClass}">${escapeHtml(item.name.slice(0, 1).toUpperCase())}</span>`}
+        <div>
+          <h3>${escapeHtml(item.name)}</h3>
+          <p class="muted">${escapeHtml(item.summary)}</p>
+        </div>
+      </div>
+      <p>${escapeHtml(item.description || item.summary)}</p>
+      <p class="muted tool-version-line">支持版本：${escapeHtml(supportVersion)}${item.file_size_label ? ` · 大小：${escapeHtml(item.file_size_label)}` : ''}</p>
+      <div class="tool-action-row">
+        ${hasLocalFile ? `<a class="tool-download-primary" href="${escapeAttribute(item.local_file_url)}" download="${escapeAttribute(buildToolDownloadFilename(item, platform))}">本地下载</a>` : '<span class="tool-download-primary is-disabled">本地下载待上传</span>'}
+        ${item.official_url ? `<a class="tool-official-link" href="${escapeAttribute(item.official_url)}" target="_blank" rel="nofollow noreferrer noopener">官方页面</a>` : ''}
+      </div>
+    </article>
+  `;
+}
+
+function getToolDownloadSupportVersion(item: ToolDownloadItem, platform: ToolDownloadPlatform): string {
+  return item.platform_versions?.[platform] || item.version || '待补充';
+}
+
+function renderToolDownloadContentSections(sections: Array<{ title: string; body: string }>): string {
+  if (sections.length === 0) {
+    return '';
+  }
+  return `
+    <section class="content-card">
+      <div class="eyebrow">下载指南</div>
+      <h2>翻墙工具下载与选择说明</h2>
+      <div class="card-grid">
+        ${sections.map((section) => `
+          <article class="mini-card">
+            <h3>${escapeHtml(section.title)}</h3>
+            <p>${escapeHtml(section.body)}</p>
+          </article>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderToolDownloadFaq(items: Array<{ question: string; answer: string }>): string {
+  if (items.length === 0) {
+    return '';
+  }
+  return `
+    <section class="content-card">
+      <div class="eyebrow">FAQ</div>
+      <h2>翻墙工具下载常见问题</h2>
+      <div class="home-seo-faq-list">
+        ${items.map((item) => `
+          <section>
+            <h3>${escapeHtml(item.question)}</h3>
+            <p>${escapeHtml(item.answer)}</p>
+          </section>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function buildToolDownloadItemListJsonLd(siteUrl: string, items: ToolDownloadItem[]): Record<string, unknown> {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    itemListElement: items.map((item, index) => ({
+      '@type': 'ListItem',
+      position: index + 1,
+      name: item.name,
+      url: `${siteUrl}/download#tool-${item.slug}`,
+    })),
+  };
+}
+
+function buildToolDownloadSoftwareJsonLd(siteUrl: string, items: ToolDownloadItem[]): Array<Record<string, unknown>> {
+  return items.map((item) => ({
+    '@context': 'https://schema.org',
+    '@type': 'SoftwareApplication',
+    name: item.name,
+    description: item.description || item.summary,
+    operatingSystem: item.platforms.map((platform) => {
+      const version = getToolDownloadSupportVersion(item, platform);
+      const label = getToolDownloadPlatformLabel(platform);
+      return version === '待补充' ? label : `${label} (${version})`;
+    }).join(', '),
+    applicationCategory: 'NetworkApplication',
+    url: item.official_url || `${siteUrl}/download#tool-${item.slug}`,
+    downloadUrl: item.local_file_url || undefined,
+    image: item.icon_url ? absoluteImageUrl(siteUrl, item.icon_url) : undefined,
+  }));
 }
 
 function renderHomeSections(view: HomePageView): string {
@@ -1938,6 +2181,41 @@ const styles = `
   .metric div, .muted { color: #666; font-size: 13px; }
   .metric strong, .score { display: block; margin-top: 8px; font-size: 28px; font-weight: 900; }
   .content-card { border: 1px solid #e5e5e5; border-radius: 24px; padding: 26px; background: #fff; }
+  .tools-download-page { width: min(1280px, calc(100vw - 32px)); gap: 26px; }
+  .tools-download-page > section,
+  .tools-download-page .filter-chip-row,
+  .tools-hero-copy,
+  .tools-hero-panel { min-width: 0; }
+  .tools-download-hero { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 28px; align-items: stretch; overflow: hidden; border-color: #dbeafe; border-radius: 8px; padding: 34px; background: radial-gradient(circle at 84% 16%, rgba(236,72,153,.16), transparent 28%), linear-gradient(135deg, #ecfeff 0%, #f8fafc 45%, #fff7ed 100%); box-shadow: 0 24px 70px rgba(14,116,144,.12); }
+  .tools-hero-copy { display: flex; min-width: 0; flex-direction: column; justify-content: center; }
+  .tools-download-hero h1 { max-width: 780px; margin: 0; color: #083344; font-size: clamp(34px, 5.2vw, 58px); line-height: 1.02; letter-spacing: 0; }
+  .tools-download-hero p { max-width: 700px; color: #475569; font-size: 16px; line-height: 1.9; }
+  .tools-hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+  .tools-primary-cta,
+  .tools-secondary-cta { display: inline-flex; min-height: 46px; align-items: center; justify-content: center; border-radius: 8px; padding: 0 18px; text-decoration: none; font-size: 14px; font-weight: 900; }
+  .tools-primary-cta { background: linear-gradient(135deg, #0891b2, #10b981); color: #fff; box-shadow: 0 16px 34px rgba(8,145,178,.22); }
+  .tools-secondary-cta { border: 1px solid #bae6fd; background: rgba(255,255,255,.74); color: #0369a1; }
+  .tools-hero-panel { display: grid; align-content: space-between; gap: 18px; border: 1px solid rgba(8,145,178,.18); border-radius: 8px; background: rgba(255,255,255,.78); padding: 18px; box-shadow: 0 20px 54px rgba(15,23,42,.08); backdrop-filter: blur(16px); }
+  .tools-panel-topline { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #64748b; font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
+  .tools-panel-topline strong { color: #0e7490; letter-spacing: 0; text-transform: none; }
+  .tools-panel-orbit { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; }
+  .tools-panel-orbit span { display: inline-flex; min-height: 54px; align-items: center; justify-content: center; border-radius: 8px; color: #fff; font-size: 12px; font-weight: 900; box-shadow: inset 0 1px 0 rgba(255,255,255,.28); }
+  .tools-panel-orbit span:nth-child(1) { background: #0ea5e9; }
+  .tools-panel-orbit span:nth-child(2) { background: #14b8a6; }
+  .tools-panel-orbit span:nth-child(3) { background: #ec4899; }
+  .tools-panel-orbit span:nth-child(4) { background: #f97316; }
+  .tools-panel-orbit span:nth-child(5) { background: #6366f1; }
+  .tools-panel-metrics { display: grid; gap: 8px; }
+  .tools-panel-metrics .metric { border-color: #dbeafe; border-radius: 8px; background: #f8fafc; padding: 12px; }
+  .tools-panel-metrics .metric strong { font-size: 22px; }
+  .tools-filter-section,
+  .tools-hot-strip,
+  .tools-download-list { border: 1px solid #e0f2fe; border-radius: 8px; background: rgba(255,255,255,.86); padding: 22px; box-shadow: 0 12px 34px rgba(15,23,42,.04); }
+  .tools-filter-section,
+  .tools-hot-strip { display: flex; align-items: end; justify-content: space-between; gap: 22px; }
+  .tools-filter-section h2,
+  .tools-hot-strip h2,
+  .tools-download-list h2 { margin: 6px 0 0; color: #0f172a; letter-spacing: 0; }
   .home-seo-guide { border: 1px solid #e2e8f0; border-radius: 18px; padding: 32px; background: #fff; box-shadow: 0 18px 54px rgba(15,23,42,.045); }
   .home-seo-guide-head { display: flex; justify-content: space-between; gap: 24px; align-items: end; border-bottom: 1px solid #e2e8f0; padding-bottom: 24px; }
   .home-seo-guide-head h2 { margin: 8px 0 0; color: #020617; font-size: 30px; letter-spacing: 0; }
@@ -2020,6 +2298,50 @@ const styles = `
   .filter-chip,
   .filter-clear { display: inline-flex; min-height: 34px; align-items: center; border-radius: 999px; padding: 0 12px; border: 1px solid #e5e5e5; background: #fafafa; color: #404040; font-size: 13px; font-weight: 900; text-decoration: none; }
   .filter-chip.active { border-color: #111; background: #111; color: #fff; }
+  .tools-download-page { width: min(1280px, calc(100vw - 32px)); overflow-x: hidden; }
+  .tools-download-intro { border: 1px solid #dbeafe; border-radius: 8px; background: linear-gradient(135deg, #f8fafc 0%, #ecfeff 48%, #fff7ed 100%); padding: 28px; box-shadow: 0 18px 44px rgba(14,116,144,.08); }
+  .tools-download-intro h1 { max-width: 860px; margin: 8px 0 0; color: #164e63; font-size: clamp(30px, 5vw, 48px); line-height: 1.08; letter-spacing: 0; }
+  .tools-download-intro p { max-width: 780px; margin: 16px 0 0; color: #475569; font-size: 16px; line-height: 1.9; }
+  .tools-download-groups { display: grid; gap: 28px; }
+  .tools-download-group { display: grid; gap: 16px; }
+  .tools-group-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; }
+  .tools-group-head h2 { margin: 4px 0 0; color: #0f172a; font-size: 28px; letter-spacing: 0; }
+  .tools-group-head p { max-width: 560px; margin: 0; color: #64748b; font-size: 14px; line-height: 1.8; }
+  .tools-download-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; min-width: 0; }
+  .tools-download-page .card-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+  .tool-card { position: relative; display: flex; min-width: 0; min-height: 100%; flex-direction: column; border: 1px solid #dbeafe; border-radius: 8px; padding: 20px; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); color: #0f172a; box-shadow: 0 16px 40px rgba(15,23,42,.06); }
+  .tool-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .tool-card.is-hot .tool-card-head { padding-right: 68px; }
+  .tool-hot-badge { position: absolute; top: 16px; right: 16px; display: inline-flex; min-height: 24px; align-items: center; justify-content: center; border-radius: 999px; padding: 0 10px; background: linear-gradient(135deg, #f97316, #e11d48); color: #fff; font-size: 12px; font-weight: 900; box-shadow: 0 10px 24px rgba(225,29,72,.18); }
+  .tool-card-head img,
+  .tool-icon-fallback { width: 50px; min-width: 50px; max-width: 50px; height: 50px; min-height: 50px; max-height: 50px; aspect-ratio: 1 / 1; border-radius: 8px; object-fit: cover; flex: 0 0 50px; overflow: hidden; }
+  .tool-icon-fallback { display: inline-flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #0891b2, #14b8a6); color: #fff; font-size: 20px; font-weight: 900; }
+  .tool-icon-1 { background: linear-gradient(135deg, #0ea5e9, #6366f1); }
+  .tool-icon-2 { background: linear-gradient(135deg, #ec4899, #f97316); }
+  .tool-icon-3 { background: linear-gradient(135deg, #10b981, #84cc16); }
+  .tool-icon-4 { background: linear-gradient(135deg, #8b5cf6, #ec4899); }
+  .tool-card h3 { margin-bottom: 4px; color: #0f172a; }
+  .tool-card p { margin: 0; color: #475569; }
+  .tool-card > p { margin-top: 12px; }
+  .tool-version-line { margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 12px; font-weight: 800; }
+  .tool-action-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-top: auto; padding-top: 18px; }
+  .tool-download-primary,
+  .tool-official-link { display: inline-flex; min-height: 42px; align-items: center; justify-content: center; border-radius: 8px; padding: 0 14px; text-decoration: none; font-size: 13px; font-weight: 900; }
+  .tool-download-primary { background: linear-gradient(135deg, #0891b2, #10b981); color: #fff; box-shadow: 0 14px 30px rgba(8,145,178,.18); }
+  .tool-download-primary.is-disabled { background: #e2e8f0; color: #64748b; box-shadow: none; cursor: not-allowed; }
+  .tool-official-link { border: 1px solid #e2e8f0; background: #fff; color: #475569; }
+  @media (max-width: 1024px) {
+    .tools-download-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .tools-download-page { width: min(100%, calc(100vw - 24px)); }
+    .tools-download-intro { padding: 22px; }
+    .tools-download-intro h1 { font-size: 30px; line-height: 1.18; }
+    .tools-group-head { flex-direction: column; align-items: flex-start; gap: 8px; }
+    .tools-group-head h2 { font-size: 28px; }
+    .tools-group-head p { max-width: none; }
+    .tools-download-card-grid { grid-template-columns: minmax(0, 1fr); }
+  }
   .filter-clear { border-color: #fecdd3; background: #fff1f2; color: #be123c; }
   .report-page { width: min(1180px, calc(100vw - 32px)); padding-top: 16px; gap: 28px; }
   .report-anchor-target { scroll-margin-top: 144px; }
@@ -2161,6 +2483,17 @@ const styles = `
   @media (max-width: 900px) {
     .page-main { width: min(100vw - 24px, 1280px); padding-top: 24px; gap: 20px; }
     .hero, .content-card, .home-seo-guide { border-radius: 18px; padding: 20px; }
+    .tools-download-page { width: min(100vw - 24px, 1280px); }
+    .tools-download-page > section { max-width: 100%; }
+    .tools-download-hero { grid-template-columns: 1fr; padding: 22px; }
+    .tools-download-hero h1 { font-size: 31px; overflow-wrap: anywhere; }
+    .tools-panel-orbit { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+    .tools-panel-orbit span { min-height: 50px; }
+    .tools-filter-section,
+    .tools-hot-strip { align-items: start; flex-direction: column; }
+    .tools-filter-section .filter-chip-row,
+    .tools-hot-strip .filter-chip-row { width: 100%; max-width: 100%; }
+    .tool-action-row { grid-template-columns: 1fr; }
     .hero-content { grid-template-columns: 1fr; }
     .home-seo-guide-head { align-items: start; flex-direction: column; }
     .home-seo-guide-grid, .home-seo-link-grid { grid-template-columns: 1fr; }

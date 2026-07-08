@@ -19,6 +19,7 @@ import { ApplicantBillingRepository } from './repositories/applicantBillingRepos
 import { AuditRepository } from './repositories/auditRepository';
 import { NewsRepository } from './repositories/newsRepository';
 import { MonthlyReportRepository } from './repositories/monthlyReportRepository';
+import { ToolDownloadRepository } from './repositories/toolDownloadRepository';
 import { MetricsRepository } from './repositories/metricsRepository';
 import { PerformanceNodePreferenceRepository } from './repositories/performanceNodePreferenceRepository';
 import { PerformanceRunRepository } from './repositories/performanceRunRepository';
@@ -41,6 +42,8 @@ import { createOutboundRoutes } from './routes/outboundRoutes';
 import { createPublishRoutes } from './routes/publishRoutes';
 import { createPublicPageRoutes } from './routes/publicPageRoutes';
 import { createNewsPublicRoutes } from './routes/newsPublicRoutes';
+import { createToolsAdminRoutes } from './routes/toolsAdminRoutes';
+import { createToolsPublicRoutes } from './routes/toolsPublicRoutes';
 import { createMachineReadableRoutes } from './routes/machineReadableRoutes';
 import { createPublicRoutes } from './routes/publicRoutes';
 import { createUserTelegramBotRoutes } from './routes/userTelegramBotRoutes';
@@ -62,6 +65,7 @@ import { PexelsCoverService } from './services/pexelsCoverService';
 import { NewsPublicService } from './services/newsPublicService';
 import { MonthlyReportPublicService } from './services/monthlyReportPublicService';
 import { MonthlyReportGenerationService } from './services/monthlyReportGenerationService';
+import { ToolsDownloadService } from './services/toolsDownloadService';
 import { PublicViewService } from './services/publicViewService';
 import { RecomputeService } from './services/recomputeService';
 import { RiskCheckService } from './services/riskCheckService';
@@ -126,6 +130,8 @@ export async function createApp() {
   await newsRepository.ensureSchema();
   const monthlyReportRepository = new MonthlyReportRepository(pool);
   await monthlyReportRepository.ensureSchema();
+  const toolDownloadRepository = new ToolDownloadRepository(pool);
+  await toolDownloadRepository.ensureSchema();
   const scoreRepository = new ScoreRepository(pool);
   const rankingRepository = new RankingRepository(pool);
   const statsRepository = new StatsRepository(pool);
@@ -239,6 +245,7 @@ export async function createApp() {
   const pexelsCoverService = new PexelsCoverService(mediaLibrarySettingsService, newsCoverImageService);
   const newsPublicService = new NewsPublicService(newsRepository, newsContentService);
   const monthlyReportPublicService = new MonthlyReportPublicService(monthlyReportRepository, airportRepository);
+  const toolsDownloadService = new ToolsDownloadService(toolDownloadRepository, systemSettingRepository);
   const applicationNotificationService = new TelegramNotificationService({
     systemSettingRepository,
   });
@@ -274,6 +281,12 @@ export async function createApp() {
       pageCache: publicPageCache,
       marketingRepository: marketingEventRepository,
       marketingSettingsService,
+    }),
+  );
+  app.use(
+    '/api/v1',
+    createToolsPublicRoutes({
+      toolsDownloadService,
     }),
   );
 
@@ -373,6 +386,15 @@ export async function createApp() {
       accessTokenService,
     }),
   );
+  app.use(
+    '/api/v1/admin',
+    adminAuth,
+    createToolsAdminRoutes({
+      auditRepository,
+      publicPageCache,
+      toolsDownloadService,
+    }),
+  );
 
   app.use(
     '/api/v1/admin',
@@ -420,6 +442,7 @@ export async function createApp() {
       publicViewService,
       airportAdCampaignRepository,
       monthlyReportPublicService,
+      toolsDownloadService,
       pageCache: publicPageCache,
     }),
   );

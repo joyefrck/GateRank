@@ -1,10 +1,15 @@
-export type PublicNavigationKind = 'home' | 'full_ranking' | 'monthly_reports' | 'deals' | 'risk_monitor' | 'methodology' | 'news';
+export type PublicNavigationKind = 'home' | 'full_ranking' | 'monthly_reports' | 'deals' | 'risk_monitor' | 'tools' | 'methodology' | 'news';
 
 export interface PublicNavigationItem {
   kind: PublicNavigationKind;
   label: string;
-  href: string;
+  href?: string;
   badge?: string;
+  children?: Array<{
+    label: string;
+    href: string;
+    badge?: string;
+  }>;
 }
 
 export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
@@ -33,6 +38,26 @@ export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
     label: '跑路监测',
     href: '/risk-monitor',
     badge: '快照',
+  },
+  {
+    kind: 'tools',
+    label: '工具',
+    children: [
+      {
+        label: '翻墙工具下载',
+        href: '/download',
+      },
+      {
+        label: '流媒体解锁检测',
+        href: '/tools/streaming-check',
+        badge: '即将上线',
+      },
+      {
+        label: 'IP 检测',
+        href: '/tools/ip-check',
+        badge: '即将上线',
+      },
+    ],
   },
   {
     kind: 'news',

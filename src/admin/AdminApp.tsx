@@ -24,6 +24,13 @@ import {
   FileDown,
   FileText,
   ListChecks,
+  Download,
+  UploadCloud,
+  Wand2,
+  Link2,
+  PackageCheck,
+  CheckCircle2,
+  Globe2,
 } from 'lucide-react';
 import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
@@ -110,6 +117,42 @@ type PublishTokenScope = 'news:create' | 'news:update' | 'news:publish' | 'news:
 type SchedulerTaskKey = 'stability' | 'performance' | 'risk' | 'aggregate_recompute' | 'billing_listing_sync';
 type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
 type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
+type ToolDownloadPlatform = 'windows' | 'macos' | 'ios' | 'android' | 'linux';
+type ToolDownloadStatus = 'draft' | 'published' | 'archived';
+type ToolDownloadPrimaryAction = 'official' | 'local';
+type ToolDownloadPlatformVersions = Partial<Record<ToolDownloadPlatform, string>>;
+
+interface ToolDownloadItem {
+  id: number;
+  slug: string;
+  name: string;
+  summary: string;
+  description: string;
+  platforms: ToolDownloadPlatform[];
+  platform_versions: ToolDownloadPlatformVersions;
+  icon_url: string;
+  local_file_url: string;
+  official_url: string;
+  primary_action: ToolDownloadPrimaryAction;
+  version: string;
+  file_size_label: string;
+  is_hot: boolean;
+  sort_order: number;
+  status: ToolDownloadStatus;
+  published_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ToolsDownloadPageConfig {
+  seo_title: string;
+  seo_description: string;
+  seo_keywords: string;
+  h1: string;
+  hero_description: string;
+  content_sections: Array<{ title: string; body: string }>;
+  faq_items: Array<{ question: string; answer: string }>;
+}
 
 interface Airport {
   id: number;
@@ -1134,6 +1177,12 @@ const ADMIN_NAV_ITEMS = [
     isActive: (path: string) => path.startsWith('/admin/monthly-reports'),
   },
   {
+    path: '/admin/tools-downloads',
+    label: '工具下载',
+    icon: Download,
+    isActive: (path: string) => path.startsWith('/admin/tools-downloads'),
+  },
+  {
     path: '/admin/scheduler',
     label: '任务调度',
     icon: Activity,
@@ -1643,6 +1692,7 @@ export default function AdminApp() {
               onNavigateToReport={(id) => navigate(`/admin/monthly-reports/${id}`)}
             />
           )}
+          {path === '/admin/tools-downloads' && <ToolsDownloadAdminPage />}
           {path === '/admin/scheduler' && <SchedulerPage />}
           {path === '/admin/settings' && <SystemSettingsPage />}
           {path.match(/^\/admin\/airports\/\d+\/data$/) && (
@@ -1746,6 +1796,777 @@ function LoginPage({ onLoggedIn }: { onLoggedIn: () => void }) {
       </form>
     </div>
   );
+}
+
+function ToolsDownloadAdminPage() {
+  const [items, setItems] = useState<ToolDownloadItem[]>([]);
+  const [config, setConfig] = useState<ToolsDownloadPageConfig | null>(null);
+  const [editing, setEditing] = useState<ToolDownloadItem | null>(null);
+  const [form, setForm] = useState(() => createDefaultToolDownloadForm());
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState<'icon' | 'file' | null>(null);
+  const [fileDragActive, setFileDragActive] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [seoOpen, setSeoOpen] = useState(false);
+  const [error, setError] = useState('');
+
+  const load = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const [listData, configData] = await Promise.all([
+        apiFetch('/api/v1/admin/tools/downloads?page_size=100') as Promise<{ items: ToolDownloadItem[] }>,
+        apiFetch('/api/v1/admin/tools/download-page') as Promise<ToolsDownloadPageConfig>,
+      ]);
+      setItems(listData.items);
+      setConfig(configData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '加载失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, []);
+
+  const startEdit = (item: ToolDownloadItem) => {
+    setEditing(item);
+    setForm(toToolDownloadForm(item));
+    setAdvancedOpen(false);
+  };
+
+  const resetForm = () => {
+    setEditing(null);
+    setForm(createDefaultToolDownloadForm());
+    setAdvancedOpen(false);
+  };
+
+  const saveItem = async () => {
+    setSaving(true);
+    setError('');
+    try {
+      const payload = buildToolDownloadPayload(form);
+      const saved = editing
+        ? await apiFetch(`/api/v1/admin/tools/downloads/${editing.id}`, { method: 'PATCH', body: JSON.stringify(payload) }) as ToolDownloadItem
+        : await apiFetch('/api/v1/admin/tools/downloads', { method: 'POST', body: JSON.stringify(payload) }) as ToolDownloadItem;
+      setItems((current) => [saved, ...current.filter((item) => item.id !== saved.id)]);
+      resetForm();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const updateStatus = async (item: ToolDownloadItem, action: 'publish' | 'archive') => {
+    setError('');
+    try {
+      const saved = await apiFetch(`/api/v1/admin/tools/downloads/${item.id}/${action}`, { method: 'POST' }) as ToolDownloadItem;
+      setItems((current) => current.map((currentItem) => (currentItem.id === saved.id ? saved : currentItem)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '状态更新失败');
+    }
+  };
+
+  const saveConfig = async () => {
+    if (!config) return;
+    setSaving(true);
+    setError('');
+    try {
+      const saved = await apiFetch('/api/v1/admin/tools/download-page', { method: 'PATCH', body: JSON.stringify(config) }) as ToolsDownloadPageConfig;
+      setConfig(saved);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'SEO 配置保存失败');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const uploadAsset = async (kind: 'icon' | 'file', file: File) => {
+    setError('');
+    setUploading(kind);
+    try {
+      const data = await uploadToolAsset(kind, file);
+      if (kind === 'icon') {
+        setForm((current) => ({ ...current, icon_url: data.url }));
+      } else {
+        setForm((current) => applyToolFileUploadInference(current, file, data));
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '上传失败');
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const uploadToolFile = (file: File | undefined) => {
+    if (!file || uploading === 'file') return;
+    void uploadAsset('file', file);
+  };
+
+  const handleToolFileDrag = (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (uploading !== 'file') {
+      event.dataTransfer.dropEffect = 'copy';
+      setFileDragActive(true);
+    }
+  };
+
+  const handleToolFileDragLeave = (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setFileDragActive(false);
+  };
+
+  const handleToolFileDrop = (event: React.DragEvent<HTMLLabelElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setFileDragActive(false);
+    uploadToolFile(event.dataTransfer.files?.[0]);
+  };
+
+  const localPackageCount = items.filter((item) => item.local_file_url).length;
+  const publishedCount = items.filter((item) => item.status === 'published').length;
+
+  return (
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-2xl border border-cyan-100 bg-gradient-to-br from-cyan-50 via-white to-orange-50 p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-white/80 px-3 py-1 text-xs font-black text-cyan-800">
+              <PackageCheck className="h-4 w-4" />
+              下载中心运营台
+            </div>
+            <h1 className="mt-3 text-2xl font-black tracking-normal text-neutral-950">工具下载</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-neutral-600">上传安装包优先，系统会从文件名自动识别名称、slug、平台、版本和文件大小；URL 字段收进高级设置，日常运营只检查核心下载信息。</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <a className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-bold text-neutral-700 shadow-sm hover:border-cyan-300 hover:text-cyan-800" href="/download" target="_blank" rel="noreferrer">
+              <Eye className="h-4 w-4" />
+              查看前台
+            </a>
+          </div>
+        </div>
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <AdminMetricCard label="软件总数" value={items.length} tone="cyan" />
+          <AdminMetricCard label="已发布" value={publishedCount} tone="green" />
+          <AdminMetricCard label="本地安装包" value={localPackageCount} tone="orange" />
+        </div>
+      </section>
+      {error && <div className="rounded border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{error}</div>}
+      <section className="rounded-2xl border border-neutral-200 bg-white shadow-sm">
+        <div className="border-b border-neutral-100 px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-black tracking-normal">{editing ? `编辑 ${editing.name}` : '新增软件'}</h2>
+              <p className="mt-1 text-sm text-neutral-500">先上传安装包，系统自动补齐能识别的字段；URL 和图标放在高级设置里。</p>
+            </div>
+            {editing && <button className="rounded-xl border border-neutral-200 px-3 py-2 text-sm font-bold text-neutral-600 hover:bg-neutral-50" onClick={resetForm}>退出编辑</button>}
+          </div>
+        </div>
+        <div className="grid gap-5 p-5 xl:grid-cols-[360px_minmax(0,1fr)]">
+          <div className="grid gap-4">
+            <label
+              data-testid="tool-file-dropzone"
+              onDragEnter={handleToolFileDrag}
+              onDragOver={handleToolFileDrag}
+              onDragLeave={handleToolFileDragLeave}
+              onDrop={handleToolFileDrop}
+              className={`group flex min-h-64 cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed px-5 py-8 text-center transition ${fileDragActive ? 'border-cyan-600 bg-cyan-100 shadow-lg shadow-cyan-100' : 'border-cyan-300 bg-cyan-50/80 hover:border-cyan-500 hover:bg-cyan-100/70'}`}
+            >
+              <span className={`flex h-14 w-14 items-center justify-center rounded-2xl text-white shadow-lg transition ${fileDragActive ? 'scale-105 bg-cyan-700 shadow-cyan-300' : 'bg-cyan-600 shadow-cyan-200'}`}>
+                <UploadCloud className="h-7 w-7" />
+              </span>
+              <span className="mt-4 text-lg font-black text-cyan-950">{uploading === 'file' ? '安装包上传中...' : fileDragActive ? '松开即可上传' : '第一步：上传安装包'}</span>
+              <span className="mt-2 max-w-xs text-sm leading-6 text-cyan-800">点击选择或直接拖入安装包。支持 exe、msi、dmg、pkg、apk、ipa、deb、rpm、AppImage、zip、tar.gz。</span>
+              <input className="hidden" type="file" disabled={uploading === 'file'} onChange={(event) => {
+                const file = event.currentTarget.files?.[0];
+                event.currentTarget.value = '';
+                uploadToolFile(file);
+              }} />
+            </label>
+            <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+              <div className="flex items-center gap-2 text-sm font-black text-neutral-800">
+                <Wand2 className="h-4 w-4 text-cyan-700" />
+                自动识别结果
+              </div>
+              <div className="mt-3 grid gap-2 text-sm">
+                <AutoDetectRow label="本地安装包" value={form.local_file_url ? '已上传' : '等待上传'} active={Boolean(form.local_file_url)} />
+                <AutoDetectRow label="软件名称" value={form.name || '待识别'} active={Boolean(form.name)} />
+                <AutoDetectRow label="系统平台" value={form.platforms.map(formatToolPlatform).join(' / ')} active={form.platforms.length > 0} />
+                <AutoDetectRow label="客户端版本" value={form.version || '待识别'} active={Boolean(form.version)} />
+                <AutoDetectRow label="文件大小" value={form.file_size_label || '待上传'} active={Boolean(form.file_size_label)} />
+              </div>
+            </div>
+          </div>
+          <div className="grid gap-5">
+            <div className="grid gap-3 md:grid-cols-2">
+              <AdminField label="名称"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.name} onChange={(e) => setForm((current) => ({ ...current, name: e.target.value, slug: current.slug || slugifyToolName(e.target.value) }))} placeholder="例如 Clash Verge Rev" /></AdminField>
+              <AdminField label="Slug"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} placeholder="clash-verge-rev" /></AdminField>
+              <AdminField label="摘要"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.summary} onChange={(e) => setForm({ ...form, summary: e.target.value })} placeholder="一句话说明适用系统和用途" /></AdminField>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <AdminField label="客户端版本"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.version} onChange={(e) => setForm({ ...form, version: e.target.value })} placeholder="latest / 1.8.2" /></AdminField>
+                <AdminField label="文件大小"><input className="w-full rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.file_size_label} onChange={(e) => setForm({ ...form, file_size_label: e.target.value })} placeholder="自动读取" /></AdminField>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-neutral-200 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-black text-neutral-900">系统平台与支持版本</div>
+                  <p className="mt-1 text-xs text-neutral-500">单选。平台会按安装包扩展名预选，仍可人工修正。</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {TOOL_PLATFORM_OPTIONS.map((platform) => {
+                    const selected = form.platforms.includes(platform);
+                    return (
+                      <label
+                        key={platform}
+                        data-testid={`tool-platform-${platform}`}
+                        className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border px-3 py-2 text-xs font-black transition ${selected ? 'border-cyan-500 bg-cyan-50 text-cyan-900 shadow-sm shadow-cyan-100' : 'border-neutral-200 bg-white text-neutral-600 hover:border-cyan-300 hover:text-cyan-800'}`}
+                      >
+                        <input
+                          type="radio"
+                          name="tool-platform"
+                          data-testid={`tool-platform-input-${platform}`}
+                          className="h-4 w-4 border-neutral-300 text-cyan-600 focus:ring-cyan-500"
+                          checked={selected}
+                          onChange={() => setForm((current) => ({
+                            ...current,
+                            platforms: [platform],
+                            platform_versions: ensureToolPlatformVersion(current.platform_versions, platform),
+                          }))}
+                        />
+                        {formatToolPlatform(platform)}
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {form.platforms.map((platform) => (
+                  <label key={platform} className="grid gap-1 text-xs text-neutral-600">
+                    <span className="font-bold">支持版本（{formatToolPlatform(platform)}）</span>
+                    <input
+                      className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100"
+                      value={form.platform_versions[platform] || ''}
+                      placeholder={getToolPlatformVersionPlaceholder(platform)}
+                      onChange={(event) => setForm((current) => ({
+                        ...current,
+                        platform_versions: {
+                          ...current.platform_versions,
+                          [platform]: event.target.value,
+                        },
+                      }))}
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+            <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_260px]">
+              <AdminField label="详情"><textarea className="min-h-28 w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="默认会按名称和平台生成，可按需补充。" /></AdminField>
+              <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="text-sm font-black text-neutral-900">下载按钮策略</div>
+                <p className="mt-1 text-xs leading-5 text-neutral-500">前台优先突出本地下载；官方页面只作为备用入口。</p>
+                <label className="mt-3 flex items-center gap-2 rounded-xl border border-cyan-200 bg-white px-3 py-2 text-sm font-bold text-cyan-800">
+                  <input type="radio" checked={form.primary_action === 'local'} onChange={() => setForm({ ...form, primary_action: 'local' })} />
+                  本地下载主按钮
+                </label>
+                <label className="mt-2 flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-bold text-neutral-600">
+                  <input type="radio" checked={form.primary_action === 'official'} onChange={() => setForm({ ...form, primary_action: 'official' })} />
+                  官方页面备用
+                </label>
+                <label className="mt-3 flex items-start gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 text-sm font-bold text-neutral-700">
+                  <input className="mt-1" type="checkbox" checked={form.is_hot} onChange={(e) => setForm({ ...form, is_hot: e.target.checked })} />
+                  <span>
+                    <span className="block">同系统内优先展示</span>
+                    <span className="mt-1 block text-xs font-medium leading-5 text-neutral-500">勾选后会排在同系统未勾选的软件前面，并在前台卡片右上角显示“热门”标签。</span>
+                  </span>
+                </label>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-neutral-200">
+              <button type="button" className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-black text-neutral-800" onClick={() => setAdvancedOpen((open) => !open)}>
+                <span className="inline-flex items-center gap-2"><Link2 className="h-4 w-4 text-neutral-500" />高级链接设置（通常不用填）</span>
+                <span className="text-xs text-neutral-400">{advancedOpen ? '收起' : '展开'}</span>
+              </button>
+              {advancedOpen && (
+                <div className="grid gap-3 border-t border-neutral-100 p-4 md:grid-cols-2">
+                  <AdminField label="官方页面 URL"><input className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.official_url} onChange={(e) => setForm({ ...form, official_url: e.target.value })} placeholder="可选，官方发布页或 App Store 页面" /></AdminField>
+                  <AdminField label="本地文件 URL"><input className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.local_file_url} onChange={(e) => setForm({ ...form, local_file_url: e.target.value })} /></AdminField>
+                  <AdminField label="图标 URL"><input className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={form.icon_url} onChange={(e) => setForm({ ...form, icon_url: e.target.value })} /></AdminField>
+                  <div className="flex items-end gap-2">
+                    <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-neutral-200 px-3 py-2.5 text-sm font-bold text-neutral-700 hover:border-cyan-300 hover:text-cyan-800">
+                      <Globe2 className="h-4 w-4" />
+                      {uploading === 'icon' ? '图标上传中...' : '上传图标'}
+                      <input className="hidden" type="file" accept="image/*" disabled={uploading === 'icon'} onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        event.currentTarget.value = '';
+                        if (file) void uploadAsset('icon', file);
+                      }} />
+                    </label>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <button className="inline-flex items-center gap-2 rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-black text-white shadow-lg shadow-neutral-200 disabled:opacity-50" disabled={saving} onClick={() => void saveItem()}>
+                <CheckCircle2 className="h-4 w-4" />
+                {saving ? '保存中...' : '保存软件'}
+              </button>
+              {editing && <button className="rounded-xl border border-neutral-200 px-4 py-2.5 text-sm font-bold text-neutral-700 hover:bg-neutral-50" onClick={resetForm}>取消编辑</button>}
+            </div>
+          </div>
+        </div>
+      </section>
+      <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-black tracking-normal">软件列表</h2>
+            <p className="mt-1 text-sm text-neutral-500">重点检查发布状态、本地包和支持系统。</p>
+          </div>
+        </div>
+        <div className="mt-4 overflow-x-auto rounded-2xl border border-neutral-200">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-neutral-50 text-xs text-neutral-500"><tr><th className="px-4 py-3">软件</th><th className="px-4 py-3">平台与版本</th><th className="px-4 py-3">下载</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">操作</th></tr></thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-t border-neutral-100 align-top">
+                  <td className="px-4 py-3">
+                    <div className="font-black text-neutral-950">{item.name}</div>
+                    <div className="mt-1 text-xs text-neutral-500">{item.slug}</div>
+                    {item.is_hot && <div className="mt-2 inline-flex rounded-full bg-cyan-50 px-2 py-1 text-[11px] font-black text-cyan-700">同系统优先</div>}
+                  </td>
+                  <td className="px-4 py-3 text-neutral-700">{formatToolPlatformVersions(item)}</td>
+                  <td className="px-4 py-3">
+                    <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-black ${item.local_file_url ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>
+                      <FileDown className="h-3.5 w-3.5" />
+                      {item.local_file_url ? `本地包 ${item.file_size_label || ''}`.trim() : '本地包待上传'}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3">{formatToolStatus(item.status)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-2">
+                      <button className="rounded-lg border border-neutral-200 px-2.5 py-1.5 font-bold text-neutral-700 hover:bg-neutral-50" onClick={() => startEdit(item)}>编辑</button>
+                      {item.status !== 'published' && <button className="rounded-lg border border-emerald-200 px-2.5 py-1.5 font-bold text-emerald-700 hover:bg-emerald-50" onClick={() => void updateStatus(item, 'publish')}>发布</button>}
+                      {item.status !== 'archived' && <button className="rounded-lg border border-neutral-200 px-2.5 py-1.5 font-bold text-neutral-600 hover:bg-neutral-50" onClick={() => void updateStatus(item, 'archive')}>归档</button>}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!loading && items.length === 0 && <tr><td className="px-3 py-6 text-center text-neutral-500" colSpan={5}>暂无软件</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section className="rounded-2xl border border-neutral-200 bg-white shadow-sm">
+        <button type="button" className="flex w-full items-center justify-between px-5 py-4 text-left" onClick={() => setSeoOpen((open) => !open)}>
+          <div>
+            <h2 className="font-black tracking-normal">页面 SEO 配置</h2>
+            <p className="mt-1 text-sm text-neutral-500">低频维护项，默认收起，不干扰日常上传软件。</p>
+          </div>
+          <span className="text-sm font-bold text-neutral-500">{seoOpen ? '收起' : '展开'}</span>
+        </button>
+        {seoOpen && config && (
+          <div className="grid gap-3 border-t border-neutral-100 p-5">
+            <AdminField label="SEO Title"><input className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={config.seo_title} onChange={(e) => setConfig({ ...config, seo_title: e.target.value })} /></AdminField>
+            <AdminField label="SEO Description"><textarea className="min-h-20 w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={config.seo_description} onChange={(e) => setConfig({ ...config, seo_description: e.target.value })} /></AdminField>
+            <AdminField label="SEO Keywords"><input className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={config.seo_keywords} onChange={(e) => setConfig({ ...config, seo_keywords: e.target.value })} /></AdminField>
+            <AdminField label="H1"><input className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={config.h1} onChange={(e) => setConfig({ ...config, h1: e.target.value })} /></AdminField>
+            <AdminField label="首屏描述"><textarea className="min-h-20 w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-cyan-400 focus:ring-4 focus:ring-cyan-100" value={config.hero_description} onChange={(e) => setConfig({ ...config, hero_description: e.target.value })} /></AdminField>
+            <button className="w-fit rounded-xl bg-neutral-950 px-4 py-2.5 text-sm font-black text-white disabled:opacity-50" disabled={saving} onClick={() => void saveConfig()}>{saving ? '保存中...' : '保存 SEO 配置'}</button>
+          </div>
+        )}
+      </section>
+    </div>
+  );
+}
+
+const TOOL_PLATFORM_OPTIONS: ToolDownloadPlatform[] = ['windows', 'macos', 'ios', 'android', 'linux'];
+
+interface ToolDownloadFormState {
+  slug: string;
+  name: string;
+  summary: string;
+  description: string;
+  platforms: ToolDownloadPlatform[];
+  platform_versions: ToolDownloadPlatformVersions;
+  icon_url: string;
+  local_file_url: string;
+  official_url: string;
+  primary_action: ToolDownloadPrimaryAction;
+  version: string;
+  file_size_label: string;
+  is_hot: boolean;
+  sort_order: string;
+}
+
+function AdminField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="grid gap-1 text-sm">
+      <span className="font-bold text-neutral-700">{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function AdminMetricCard({ label, value, tone }: { label: string; value: number | string; tone: 'cyan' | 'green' | 'orange' }) {
+  const toneClass = {
+    cyan: 'border-cyan-100 bg-cyan-50 text-cyan-900',
+    green: 'border-emerald-100 bg-emerald-50 text-emerald-900',
+    orange: 'border-orange-100 bg-orange-50 text-orange-900',
+  }[tone];
+  return (
+    <div className={`rounded-2xl border px-4 py-3 ${toneClass}`}>
+      <div className="text-xs font-black uppercase tracking-[0.12em] opacity-70">{label}</div>
+      <div className="mt-2 text-2xl font-black tracking-normal">{value}</div>
+    </div>
+  );
+}
+
+function AutoDetectRow({ label, value, active }: { label: string; value: string; active: boolean }) {
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-xl bg-white px-3 py-2">
+      <span className="text-neutral-500">{label}</span>
+      <span className={`inline-flex items-center gap-1.5 text-right font-black ${active ? 'text-cyan-800' : 'text-neutral-400'}`}>
+        {active && <CheckCircle2 className="h-3.5 w-3.5" />}
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function createDefaultToolDownloadForm(): ToolDownloadFormState {
+  return {
+    slug: '',
+    name: '',
+    summary: '',
+    description: '',
+    platforms: ['windows'],
+    platform_versions: {},
+    icon_url: '',
+    local_file_url: '',
+    official_url: '',
+    primary_action: 'official',
+    version: '',
+    file_size_label: '',
+    is_hot: false,
+    sort_order: '0',
+  };
+}
+
+function toToolDownloadForm(item: ToolDownloadItem): ToolDownloadFormState {
+  return {
+    slug: item.slug,
+    name: item.name,
+    summary: item.summary,
+    description: item.description,
+    platforms: item.platforms,
+    platform_versions: item.platform_versions || {},
+    icon_url: item.icon_url,
+    local_file_url: item.local_file_url,
+    official_url: item.official_url,
+    primary_action: item.primary_action,
+    version: item.version,
+    file_size_label: item.file_size_label,
+    is_hot: item.is_hot,
+    sort_order: String(item.sort_order),
+  };
+}
+
+function buildToolDownloadPayload(form: ToolDownloadFormState) {
+  return {
+    slug: form.slug.trim(),
+    name: form.name.trim(),
+    summary: form.summary.trim(),
+    description: form.description.trim(),
+    platforms: form.platforms,
+    platform_versions: sanitizeToolPlatformVersions(form),
+    icon_url: form.icon_url.trim(),
+    local_file_url: form.local_file_url.trim(),
+    official_url: form.official_url.trim(),
+    primary_action: form.primary_action,
+    version: form.version.trim(),
+    file_size_label: form.file_size_label.trim(),
+    is_hot: form.is_hot,
+    sort_order: Number(form.sort_order || 0),
+  };
+}
+
+function sanitizeToolPlatformVersions(form: ToolDownloadFormState): ToolDownloadPlatformVersions {
+  const versions: ToolDownloadPlatformVersions = {};
+  for (const platform of form.platforms) {
+    const version = form.platform_versions[platform]?.trim();
+    if (version) {
+      versions[platform] = version;
+    }
+  }
+  return versions;
+}
+
+function formatToolPlatform(platform: ToolDownloadPlatform): string {
+  const labels: Record<ToolDownloadPlatform, string> = {
+    windows: 'Windows',
+    macos: 'macOS',
+    ios: 'iOS',
+    android: 'Android',
+    linux: 'Linux',
+  };
+  return labels[platform];
+}
+
+function getToolPlatformVersionPlaceholder(platform: ToolDownloadPlatform): string {
+  const placeholders: Record<ToolDownloadPlatform, string> = {
+    windows: 'Windows 10/11',
+    macos: 'macOS 12+',
+    ios: 'iOS 15+',
+    android: 'Android 8+',
+    linux: 'Ubuntu 20.04+ / Debian 11+',
+  };
+  return placeholders[platform];
+}
+
+function ensureToolPlatformVersion(versions: ToolDownloadPlatformVersions, platform: ToolDownloadPlatform): ToolDownloadPlatformVersions {
+  if (versions[platform]) return versions;
+  return {
+    ...versions,
+    [platform]: getToolPlatformVersionPlaceholder(platform),
+  };
+}
+
+function applyToolFileUploadInference(
+  current: ToolDownloadFormState,
+  file: File,
+  data: { url: string; file_size_label?: string },
+): ToolDownloadFormState {
+  const inferred = inferToolFile(file.name);
+  const isFreshDefault = !current.local_file_url && !current.name.trim() && !current.slug.trim() && current.platforms.length === 1 && current.platforms[0] === 'windows';
+  const nextPlatforms = inferred.platforms.length > 0
+    ? (isFreshDefault ? inferred.platforms : mergeToolPlatforms(current.platforms, inferred.platforms))
+    : current.platforms;
+  const nextName = current.name.trim() || inferred.name;
+  const nextSlug = current.slug.trim() || slugifyToolName(nextName || inferred.slugSource);
+  const nextVersions = { ...current.platform_versions };
+  for (const platform of nextPlatforms) {
+    if (!nextVersions[platform]) {
+      nextVersions[platform] = getToolPlatformVersionPlaceholder(platform);
+    }
+  }
+  return {
+    ...current,
+    slug: nextSlug,
+    name: nextName,
+    summary: current.summary.trim() || inferred.summary || buildDefaultToolSummary(nextName, nextPlatforms),
+    description: current.description.trim() || inferred.description || buildDefaultToolDescription(nextName, nextPlatforms),
+    platforms: nextPlatforms,
+    platform_versions: nextVersions,
+    local_file_url: data.url,
+    official_url: current.official_url.trim() || inferred.officialUrl,
+    primary_action: 'local',
+    version: current.version.trim() || inferred.version,
+    file_size_label: data.file_size_label || current.file_size_label,
+  };
+}
+
+interface InferredToolFile {
+  name: string;
+  slugSource: string;
+  platforms: ToolDownloadPlatform[];
+  version: string;
+  officialUrl: string;
+  summary: string;
+  description: string;
+}
+
+interface KnownToolProfile {
+  tokens: string[];
+  name: string;
+  platforms: ToolDownloadPlatform[];
+  officialUrl: string;
+  summary: string;
+  description: string;
+}
+
+const KNOWN_TOOL_PROFILES: KnownToolProfile[] = [
+  {
+    tokens: ['clash-verge-rev', 'clash verge rev', 'clash-verge', 'clash verge'],
+    name: 'Clash Verge Rev',
+    platforms: ['windows', 'macos', 'linux'],
+    officialUrl: 'https://github.com/clash-verge-rev/clash-verge-rev',
+    summary: '适合 Windows、macOS、Linux 的 Clash Meta 图形客户端。',
+    description: 'Clash Verge Rev 是常见的跨平台代理客户端，适合导入机场订阅并管理规则、代理组和节点切换。',
+  },
+  {
+    tokens: ['v2rayn', 'v2ray-n'],
+    name: 'v2rayN',
+    platforms: ['windows'],
+    officialUrl: 'https://github.com/2dust/v2rayN',
+    summary: 'Windows 常用 V2Ray、Xray 和 sing-box 客户端。',
+    description: 'v2rayN 是 Windows 用户常用的科学上网客户端，适合导入多种代理协议和机场订阅。',
+  },
+  {
+    tokens: ['shadowrocket'],
+    name: 'Shadowrocket',
+    platforms: ['ios'],
+    officialUrl: 'https://apps.apple.com/us/app/shadowrocket/id932747118',
+    summary: 'iPhone 和 iPad 常用代理客户端。',
+    description: 'Shadowrocket 是 iOS 平台常见的代理客户端，适合导入机场订阅并按规则转发流量。',
+  },
+  {
+    tokens: ['stash'],
+    name: 'Stash',
+    platforms: ['ios', 'macos'],
+    officialUrl: 'https://apps.apple.com/us/app/stash-rule-based-proxy/id1596063349',
+    summary: 'iOS 和 macOS 规则代理客户端。',
+    description: 'Stash 支持规则代理和订阅导入，适合 Apple 生态用户统一管理科学上网配置。',
+  },
+  {
+    tokens: ['sing-box', 'sing box', 'singbox'],
+    name: 'sing-box',
+    platforms: ['windows', 'macos', 'ios', 'android', 'linux'],
+    officialUrl: 'https://sing-box.sagernet.org/',
+    summary: '跨平台通用代理核心与客户端生态。',
+    description: 'sing-box 是跨平台代理工具生态，适合需要多协议、多平台和高级配置的用户。',
+  },
+  {
+    tokens: ['hiddify'],
+    name: 'Hiddify',
+    platforms: ['windows', 'macos', 'ios', 'android', 'linux'],
+    officialUrl: 'https://github.com/hiddify/hiddify-app',
+    summary: '新手友好的跨平台代理客户端。',
+    description: 'Hiddify 提供跨平台代理客户端体验，适合需要图形界面和快速导入订阅的新手用户。',
+  },
+];
+
+function inferToolFile(filename: string): InferredToolFile {
+  const basename = stripToolFileExtension(filename);
+  const normalized = normalizeToolFilename(basename);
+  const profile = KNOWN_TOOL_PROFILES.find((item) => item.tokens.some((token) => normalized.includes(normalizeToolFilename(token))));
+  const platforms = inferToolPlatforms(filename, normalized);
+  const version = inferToolVersion(basename);
+  const name = profile?.name || inferToolNameFromFilename(basename, version);
+  return {
+    name,
+    slugSource: name || basename,
+    platforms: platforms.length > 0 ? platforms : profile?.platforms || [],
+    version,
+    officialUrl: profile?.officialUrl || '',
+    summary: profile?.summary || '',
+    description: profile?.description || '',
+  };
+}
+
+function inferToolPlatforms(filename: string, normalized: string): ToolDownloadPlatform[] {
+  const lower = filename.toLowerCase();
+  const platforms = new Set<ToolDownloadPlatform>();
+  if (lower.endsWith('.exe') || lower.endsWith('.msi') || /\b(win|windows)\b/.test(normalized)) platforms.add('windows');
+  if (lower.endsWith('.dmg') || lower.endsWith('.pkg') || /\b(mac|macos|darwin|apple)\b/.test(normalized)) platforms.add('macos');
+  if (lower.endsWith('.ipa') || /\b(ios|iphone|ipad)\b/.test(normalized)) platforms.add('ios');
+  if (lower.endsWith('.apk') || /\b(android|apk)\b/.test(normalized)) platforms.add('android');
+  if (
+    lower.endsWith('.deb')
+    || lower.endsWith('.rpm')
+    || lower.endsWith('.appimage')
+    || lower.endsWith('.tar.gz')
+    || /\b(linux|ubuntu|debian|fedora|appimage)\b/.test(normalized)
+  ) {
+    platforms.add('linux');
+  }
+  return TOOL_PLATFORM_OPTIONS.filter((platform) => platforms.has(platform));
+}
+
+function inferToolVersion(filenameWithoutExtension: string): string {
+  const match = filenameWithoutExtension.match(/(?:^|[._\-\s])v?(\d+(?:\.\d+){1,4}(?:[-+][0-9a-z.-]+)?)(?=$|[._\-\s])/i);
+  return match?.[1] || '';
+}
+
+function inferToolNameFromFilename(filenameWithoutExtension: string, version: string): string {
+  let value = filenameWithoutExtension;
+  if (version) {
+    value = value.replace(new RegExp(`(^|[._\\-\\s])v?${escapeToolRegExp(version)}(?=$|[._\\-\\s])`, 'i'), ' ');
+  }
+  value = value
+    .replace(/\b(x64|x86|x86_64|amd64|arm64|aarch64|universal|setup|installer|install|release|stable|signed|portable)\b/gi, ' ')
+    .replace(/\b(win|windows|mac|macos|darwin|ios|iphone|ipad|android|linux|ubuntu|debian|fedora|rpm|deb|appimage)\b/gi, ' ')
+    .replace(/[._\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!value) return filenameWithoutExtension;
+  return value.split(' ').map((part) => {
+    if (/^(vpn|ios|ip|ui|cli)$/i.test(part)) return part.toUpperCase();
+    if (/^v2rayn$/i.test(part)) return 'v2rayN';
+    return part.charAt(0).toUpperCase() + part.slice(1);
+  }).join(' ');
+}
+
+function stripToolFileExtension(filename: string): string {
+  if (filename.toLowerCase().endsWith('.tar.gz')) return filename.slice(0, -7);
+  return filename.replace(/\.[^.]+$/, '');
+}
+
+function normalizeToolFilename(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function slugifyToolName(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 80);
+}
+
+function mergeToolPlatforms(current: ToolDownloadPlatform[], inferred: ToolDownloadPlatform[]): ToolDownloadPlatform[] {
+  const merged = new Set<ToolDownloadPlatform>([...current, ...inferred]);
+  return TOOL_PLATFORM_OPTIONS.filter((platform) => merged.has(platform));
+}
+
+function buildDefaultToolSummary(name: string, platforms: ToolDownloadPlatform[]): string {
+  const platformLabel = platforms.map(formatToolPlatform).join('、') || '多平台';
+  return name ? `${name} 适合 ${platformLabel} 的科学上网客户端。` : '';
+}
+
+function buildDefaultToolDescription(name: string, platforms: ToolDownloadPlatform[]): string {
+  const platformLabel = platforms.map(formatToolPlatform).join('、') || '对应系统';
+  return name ? `${name} 可用于导入机场订阅、管理代理节点和切换网络规则，当前安装包适合 ${platformLabel} 用户下载。` : '';
+}
+
+function escapeToolRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function formatToolPlatformVersions(item: ToolDownloadItem): string {
+  return item.platforms
+    .map((platform) => {
+      const version = item.platform_versions?.[platform];
+      return version ? `${formatToolPlatform(platform)} (${version})` : formatToolPlatform(platform);
+    })
+    .join(' / ');
+}
+
+function formatToolStatus(status: ToolDownloadStatus): string {
+  if (status === 'published') return '已发布';
+  if (status === 'archived') return '已归档';
+  return '草稿';
+}
+
+async function uploadToolAsset(kind: 'icon' | 'file', file: File): Promise<{ url: string; file_size_label?: string }> {
+  const body = new FormData();
+  body.append('file', file);
+  const response = await fetch(`${getApiBase()}/api/v1/admin/tools/upload-${kind}`, {
+    method: 'POST',
+    credentials: 'include',
+    body,
+  });
+  if (!response.ok) {
+    const data = await safeJson(response) as { message?: string };
+    throw new Error(data?.message || `上传失败: ${response.status}`);
+  }
+  return safeJson(response) as Promise<{ url: string; file_size_label?: string }>;
 }
 
 function SchedulerPage() {

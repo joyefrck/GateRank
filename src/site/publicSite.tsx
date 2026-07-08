@@ -94,6 +94,14 @@ export function buildNewsHref(): string {
   return '/news';
 }
 
+export function buildToolsHref(): string {
+  return '/download';
+}
+
+export function buildToolsDownloadHref(platform?: string): string {
+  return `/download${buildQuery({ platform })}`;
+}
+
 function ensureMetaTag(selector: string, create: () => HTMLMetaElement): HTMLMetaElement {
   let meta = document.head.querySelector(selector) as HTMLMetaElement | null;
   if (!meta) {
@@ -286,6 +294,8 @@ function SiteFooter() {
           <a href={buildDealsHref()} onClick={(event) => { event.preventDefault(); navigate(buildDealsHref()); }} className="hover:text-black transition-colors">活动优惠</a>
           <a href={buildRiskMonitorHref()} onClick={(event) => { event.preventDefault(); navigate(buildRiskMonitorHref()); }} className="hover:text-black transition-colors">跑路监测</a>
           <a href={buildMethodologyHref()} onClick={(event) => { event.preventDefault(); navigate(buildMethodologyHref()); }} className="hover:text-black transition-colors">测评方法</a>
+          <a href={buildToolsHref()} onClick={(event) => { event.preventDefault(); navigate(buildToolsHref()); }} className="hover:text-black transition-colors">工具</a>
+          <a href={buildToolsDownloadHref()} onClick={(event) => { event.preventDefault(); navigate(buildToolsDownloadHref()); }} className="hover:text-black transition-colors">翻墙工具下载</a>
           <a href={buildNewsHref()} className="hover:text-black transition-colors">News</a>
           <a href="/apply" className="hover:text-black transition-colors">申请入驻</a>
         </div>

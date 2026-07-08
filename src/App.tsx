@@ -28,6 +28,8 @@ import {
   Unlink,
   Send,
   Headphones,
+  Download,
+  Globe2,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -42,6 +44,7 @@ import {
   buildMonthlyReportsHref,
   buildPublishTokenDocsHref,
   buildRiskMonitorHref,
+  buildToolsDownloadHref,
   buildQuery,
   navigate,
   PageFrame,
@@ -89,6 +92,15 @@ import {
   parseFullRankingFilters,
   type FullRankingFilters,
 } from '../shared/fullRankingFilters';
+import {
+  buildToolDownloadFilename,
+  getToolDownloadPlatformLabel,
+  isToolDownloadPlatform,
+  TOOL_DOWNLOAD_PLATFORMS,
+  type ToolDownloadItem,
+  type ToolDownloadPlatform,
+  type ToolsDownloadPageView,
+} from '../shared/toolDownloads';
 import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import { DealsPage } from './pages/deals/DealsPage';
 import { MonthlyReportDetailPage, MonthlyReportsPage } from './pages/monthlyReports/MonthlyReportsPage';
@@ -361,7 +373,7 @@ interface ReportCapabilityItem {
   label: string;
 }
 
-type InitialPublicDataKind = 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'monthly_reports' | 'monthly_report';
+type InitialPublicDataKind = 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'monthly_reports' | 'monthly_report' | 'tools_download';
 
 interface InitialPublicDataEnvelope<T> {
   kind: InitialPublicDataKind;
@@ -393,13 +405,15 @@ interface CardProps {
 }
 
 interface RouteState {
-  kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'monthly_reports' | 'monthly_report' | 'deals' | 'risk_monitor' | 'methodology' | 'publish_token_docs' | 'not_found';
+  kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'monthly_reports' | 'monthly_report' | 'deals' | 'risk_monitor' | 'methodology' | 'publish_token_docs' | 'tools_download' | 'tool_placeholder' | 'not_found';
   airportId?: number;
   airportSlug?: string;
   monthlyReportSlug?: string;
+  toolPlaceholder?: 'streaming-check' | 'ip-check';
   date?: string;
   page?: number;
   filters?: FullRankingFilters;
+  platform?: ToolDownloadPlatform;
 }
 
 type AirportStatus = 'normal' | 'risk' | 'down';
@@ -1378,6 +1392,10 @@ function parseRoute(): RouteState {
   const monthlyReportMatch = path.match(/^\/monthly-reports\/([a-z0-9-]+)$/);
   const dealsMatch = path.match(/^\/deals\/?$/);
   const riskMonitorMatch = path.match(/^\/risk-monitor\/?$/);
+  const toolsMatch = path.match(/^\/tools\/?$/);
+  const toolsDownloadMatch = path.match(/^\/tools\/download\/?$/);
+  const downloadMatch = path.match(/^\/download\/?$/);
+  const toolPlaceholderMatch = path.match(/^\/tools\/(streaming-check|ip-check)\/?$/);
   const params = new URLSearchParams(window.location.search);
 
   if (path === buildMethodologyHref() || path === `${buildMethodologyHref()}/`) {
@@ -1473,6 +1491,37 @@ function parseRoute(): RouteState {
   if (dealsMatch) {
     return {
       kind: 'deals',
+    };
+  }
+
+  if (toolsMatch) {
+    canonicalizeCurrentPublicListUrl(buildToolsDownloadHref());
+    return {
+      kind: 'tools_download',
+    };
+  }
+
+  if (toolsDownloadMatch) {
+    const platform = params.get('platform');
+    canonicalizeCurrentPublicListUrl(buildToolsDownloadHref(isToolDownloadPlatform(platform) ? platform : undefined));
+    return {
+      kind: 'tools_download',
+      platform: isToolDownloadPlatform(platform) ? platform : undefined,
+    };
+  }
+
+  if (downloadMatch) {
+    const platform = params.get('platform');
+    return {
+      kind: 'tools_download',
+      platform: isToolDownloadPlatform(platform) ? platform : undefined,
+    };
+  }
+
+  if (toolPlaceholderMatch) {
+    return {
+      kind: 'tool_placeholder',
+      toolPlaceholder: toolPlaceholderMatch[1] as 'streaming-check' | 'ip-check',
     };
   }
 
@@ -3974,6 +4023,195 @@ function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airp
           </>
         )}
         </div>
+      </main>
+    </PageFrame>
+  );
+}
+
+function ToolsDownloadPage({ platform }: { platform?: ToolDownloadPlatform }) {
+  const initialData = useMemo(
+    () => getInitialPublicData<ToolsDownloadPageView>('tools_download', () => true),
+    [],
+  );
+  const [view, setView] = useState<ToolsDownloadPageView | null>(() => initialData);
+
+  useEffect(() => {
+    if (initialData && (initialData.platform ?? null) === (platform ?? null)) {
+      return;
+    }
+    const query = buildQuery({ platform });
+    void apiFetch<ToolsDownloadPageView>(`/api/v1/tools/download-page${query}`)
+      .then(setView)
+      .catch(() => setView(null));
+  }, [initialData, platform]);
+
+  const config = view?.config;
+  usePageSeo({
+    title: config?.seo_title || '翻墙工具下载 | GateRank',
+    description: config?.seo_description || 'GateRank 翻墙工具下载页。',
+    keywords: config?.seo_keywords || '翻墙工具下载,科学上网客户端',
+    canonicalPath: buildToolsDownloadHref(),
+    robots: platform ? 'noindex,follow' : undefined,
+    structuredData: {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: config?.seo_title || '翻墙工具下载',
+      url: buildAbsoluteUrl(buildToolsDownloadHref()),
+    },
+  });
+
+  const platformGroups = useMemo(() => buildToolDownloadGroups(view, platform), [view, platform]);
+
+  return (
+    <PageFrame active="tools">
+      <main className="mx-auto grid w-full max-w-7xl gap-8 overflow-x-hidden px-4 py-10 text-slate-950">
+        <section className="rounded-[8px] border border-sky-100 bg-[linear-gradient(135deg,#f8fafc_0%,#ecfeff_48%,#fff7ed_100%)] p-6 shadow-[0_18px_44px_rgba(14,116,144,0.08)] md:p-7">
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">翻墙工具下载</div>
+          <h1 className="mt-2 max-w-4xl text-3xl font-black leading-tight tracking-normal text-cyan-950 md:text-5xl">{config?.h1 || '翻墙工具下载'}</h1>
+          <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">{config?.hero_description || '按系统整理常用科学上网客户端，本地下载优先展示，官方页面作为备用入口。'}</p>
+        </section>
+        <div id="tools-download-list" className="grid gap-8">
+          {platformGroups.length > 0 ? platformGroups.map(({ platform: groupPlatform, items }) => (
+            <section key={groupPlatform} className="grid min-w-0 gap-4">
+              <div className="flex flex-col gap-2 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <div className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">{getToolDownloadPlatformLabel(groupPlatform)} 下载</div>
+                  <h2 className="mt-1 text-2xl font-black tracking-normal text-slate-950 md:text-3xl">{getToolDownloadPlatformLabel(groupPlatform)} 端</h2>
+                </div>
+                <p className="max-w-xl text-sm leading-7 text-slate-500">适合 {getToolDownloadPlatformLabel(groupPlatform)} 设备使用的翻墙工具下载，本地安装包优先展示，官方页面作为备用入口。</p>
+              </div>
+              <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))]">
+                {items.map((item) => (
+                  <React.Fragment key={`${groupPlatform}-${item.slug}`}>
+                    <ToolDownloadCard item={item} platform={groupPlatform} />
+                  </React.Fragment>
+                ))}
+              </div>
+            </section>
+          )) : (
+            <section className="rounded-[8px] border border-slate-200 bg-white p-5 text-sm text-slate-500">当前筛选下暂无工具。</section>
+          )}
+        </div>
+        {(config?.content_sections || []).length > 0 && (
+          <section className="grid gap-4 md:grid-cols-3">
+            {(config?.content_sections || []).map((section) => (
+              <article key={section.title} className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
+                <h2 className="text-lg font-black">{section.title}</h2>
+                <p className="mt-3 text-sm leading-7 text-neutral-600">{section.body}</p>
+              </article>
+            ))}
+          </section>
+        )}
+        {(config?.faq_items || []).length > 0 && (
+          <section className="grid gap-3 rounded-[8px] border border-slate-200 bg-white p-5">
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">FAQ</div>
+            <h2 className="text-2xl font-black tracking-normal">翻墙工具下载常见问题</h2>
+            {(config?.faq_items || []).map((item) => (
+              <section key={item.question} className="rounded-[8px] border border-slate-200 bg-slate-50 p-4">
+                <h3 className="text-base font-black tracking-normal text-slate-950">{item.question}</h3>
+                <p className="mt-2 text-sm leading-7 text-slate-600">{item.answer}</p>
+              </section>
+            ))}
+          </section>
+        )}
+      </main>
+    </PageFrame>
+  );
+}
+
+function buildToolDownloadGroups(view: ToolsDownloadPageView | null, activePlatform?: ToolDownloadPlatform) {
+  const platforms = activePlatform ? [activePlatform] : TOOL_DOWNLOAD_PLATFORMS;
+  return platforms
+    .map((groupPlatform) => ({
+      platform: groupPlatform,
+      items: (view?.items || [])
+        .filter((item) => item.platforms.includes(groupPlatform))
+        .slice()
+        .sort(compareToolDownloadItems),
+    }))
+    .filter((group) => group.items.length > 0);
+}
+
+function compareToolDownloadItems(a: ToolDownloadItem, b: ToolDownloadItem): number {
+  return Number(b.is_hot) - Number(a.is_hot) || a.sort_order - b.sort_order || a.id - b.id;
+}
+
+function getToolDownloadSupportVersion(item: ToolDownloadItem, platform: ToolDownloadPlatform): string {
+  return item.platform_versions?.[platform] || item.version || '待补充';
+}
+
+function ToolDownloadCard({ item, platform }: { item: ToolDownloadItem; platform: ToolDownloadPlatform }) {
+  const hasLocalFile = Boolean(item.local_file_url);
+  const iconTone = [
+    'bg-[linear-gradient(135deg,#0891b2,#14b8a6)]',
+    'bg-[linear-gradient(135deg,#0ea5e9,#6366f1)]',
+    'bg-[linear-gradient(135deg,#ec4899,#f97316)]',
+    'bg-[linear-gradient(135deg,#10b981,#84cc16)]',
+    'bg-[linear-gradient(135deg,#8b5cf6,#ec4899)]',
+  ][item.slug.length % 5];
+  const supportVersion = getToolDownloadSupportVersion(item, platform);
+  return (
+    <article id={`tool-${item.slug}-${platform}`} className="relative flex min-h-full min-w-0 flex-col rounded-[8px] border border-sky-100 bg-[linear-gradient(180deg,#ffffff_0%,#f8fbff_100%)] p-5 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
+      {item.is_hot ? (
+        <span data-tool-hot-badge className="absolute right-4 top-4 inline-flex min-h-6 items-center justify-center rounded-full bg-[linear-gradient(135deg,#f97316,#e11d48)] px-2.5 text-xs font-black text-white shadow-[0_10px_24px_rgba(225,29,72,0.18)]">
+          热门
+        </span>
+      ) : null}
+      <div className={`flex items-center gap-3 ${item.is_hot ? 'pr-16' : ''}`}>
+        {item.icon_url ? <img className="h-12 max-h-12 min-h-12 w-12 min-w-12 max-w-12 shrink-0 rounded-[8px] object-cover" src={item.icon_url} alt={`${item.name} 图标`} /> : <div className={`flex h-12 max-h-12 min-h-12 w-12 min-w-12 max-w-12 shrink-0 items-center justify-center rounded-[8px] text-lg font-black text-white ${iconTone}`}>{item.name.slice(0, 1).toUpperCase()}</div>}
+        <div className="min-w-0">
+          <h2 className="truncate text-lg font-black text-slate-950">{item.name}</h2>
+          <p className="truncate text-sm text-slate-500">{item.summary}</p>
+        </div>
+      </div>
+      <p className="mt-4 text-sm leading-7 text-slate-600">{item.description || item.summary}</p>
+      <p className="mt-4 border-t border-slate-200 pt-3 text-xs font-extrabold text-slate-500">支持版本：{supportVersion}{item.file_size_label ? ` · 大小：${item.file_size_label}` : ''}</p>
+      <div className="mt-auto grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 pt-5">
+        {hasLocalFile ? (
+          <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,#0891b2,#10b981)] px-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(8,145,178,0.18)]" href={item.local_file_url} download={buildToolDownloadFilename(item, platform)}>
+            <Download size={15} />
+            本地下载
+          </a>
+        ) : (
+          <span className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-slate-200 px-4 text-sm font-black text-slate-500">
+            <Download size={15} />
+            本地下载待上传
+          </span>
+        )}
+        {item.official_url ? (
+          <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 text-sm font-black text-slate-600 hover:border-slate-300 hover:text-slate-950" href={item.official_url} target="_blank" rel="nofollow noreferrer noopener">
+            <Globe2 size={15} />
+            官方
+          </a>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function ToolPlaceholderPage({ tool }: { tool: 'streaming-check' | 'ip-check' }) {
+  const isIp = tool === 'ip-check';
+  const title = isIp ? 'IP 检测工具即将上线' : '流媒体解锁检测工具即将上线';
+  const path = isIp ? '/tools/ip-check' : '/tools/streaming-check';
+  usePageSeo({
+    title: `${title} | GateRank 工具箱`,
+    description: isIp ? 'GateRank IP 检测工具将用于查看当前 IP、地区、网络类型和代理环境。' : 'GateRank 流媒体解锁检测工具将用于检查 Netflix、Disney+、YouTube Premium 等服务的解锁状态。',
+    keywords: isIp ? 'IP检测,代理IP检测,机场VPN工具' : '流媒体解锁检测,Netflix解锁检测,机场VPN工具',
+    canonicalPath: path,
+    robots: 'noindex,follow',
+  });
+  return (
+    <PageFrame active="tools">
+      <main className="mx-auto w-full max-w-4xl px-4 py-10">
+        <section className="rounded-2xl border border-neutral-200 bg-white p-8">
+          <div className="text-xs font-black uppercase tracking-[0.18em] text-neutral-400">Coming Soon</div>
+          <h1 className="mt-4 text-4xl font-black tracking-tight md:text-6xl">{title}</h1>
+          <p className="mt-5 text-base leading-8 text-neutral-600">当前版本先上线翻墙工具下载页面。</p>
+          <a href={buildToolsDownloadHref()} onClick={(event) => { event.preventDefault(); navigate(buildToolsDownloadHref()); }} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-neutral-900 px-4 py-2 text-sm font-black text-white">
+            进入翻墙工具下载
+            <ArrowRight size={15} />
+          </a>
+        </section>
       </main>
     </PageFrame>
   );
@@ -8337,6 +8575,14 @@ export default function App() {
 
   if (route.kind === 'risk_monitor') {
     return <RiskMonitorPage date={route.date} page={route.page} />;
+  }
+
+  if (route.kind === 'tools_download') {
+    return <ToolsDownloadPage platform={route.platform} />;
+  }
+
+  if (route.kind === 'tool_placeholder' && route.toolPlaceholder) {
+    return <ToolPlaceholderPage tool={route.toolPlaceholder} />;
   }
 
   if (route.kind === 'home') {

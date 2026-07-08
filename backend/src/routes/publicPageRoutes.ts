@@ -20,6 +20,8 @@ import {
   renderPublicHtmlError,
   renderReportPublicPage,
   renderRiskMonitorPublicPage,
+  renderToolPlaceholderPublicPage,
+  renderToolsDownloadPublicPage,
 } from '../services/publicPageRenderer';
 import {
   resolvePublicFrontendAssets,
@@ -33,6 +35,8 @@ import {
   type FullRankingFilters,
 } from '../../../shared/fullRankingFilters';
 import type { MonthlyReportPublicService } from '../services/monthlyReportPublicService';
+import type { ToolsDownloadService } from '../services/toolsDownloadService';
+import { isToolDownloadPlatform } from '../../../shared/toolDownloads';
 
 interface PublicPageDeps {
   publicViewService: {
@@ -46,6 +50,7 @@ interface PublicPageDeps {
     listActiveDeals(): Promise<AirportDealView[]>;
   };
   monthlyReportPublicService?: MonthlyReportPublicService;
+  toolsDownloadService?: Pick<ToolsDownloadService, 'getDownloadPageView'>;
   pageCache?: TimedPromiseCache;
   frontendAssets?: PublicFrontendAssets;
 }
@@ -193,6 +198,62 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     }
   });
 
+  const redirectToDownload = (req: { url: string }, res: { redirect: (status: number, url: string) => void }) => {
+    const queryIndex = req.url.indexOf('?');
+    const query = queryIndex >= 0 ? req.url.slice(queryIndex) : '';
+    res.redirect(301, `/download${query}`);
+  };
+
+  router.get('/tools', redirectToDownload);
+  router.get('/tools/', redirectToDownload);
+  router.get('/tools/download', redirectToDownload);
+
+  router.get('/download', async (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    try {
+      const service = requireToolsDownloadService(deps);
+      const platform = isToolDownloadPlatform(req.query.platform) ? req.query.platform : null;
+      const view = await pageCache.getOrLoad(
+        `tools-download:${platform || 'all'}`,
+        () => service.getDownloadPageView(platform),
+      );
+      setPublicCacheHeaders(res);
+      res.status(200).type('html').send(renderToolsDownloadPublicPage(siteUrl, view, frontendAssets));
+    } catch (error) {
+      console.error('[public-page] failed to render download page', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '工具下载页加载失败', frontendAssets));
+    }
+  });
+
+  router.get('/download/', async (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    try {
+      const service = requireToolsDownloadService(deps);
+      const platform = isToolDownloadPlatform(req.query.platform) ? req.query.platform : null;
+      const view = await pageCache.getOrLoad(
+        `tools-download:${platform || 'all'}`,
+        () => service.getDownloadPageView(platform),
+      );
+      setPublicCacheHeaders(res);
+      res.status(200).type('html').send(renderToolsDownloadPublicPage(siteUrl, view, frontendAssets));
+    } catch (error) {
+      console.error('[public-page] failed to render download page', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '工具下载页加载失败', frontendAssets));
+    }
+  });
+
+  router.get('/tools/streaming-check', (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    setPublicCacheHeaders(res);
+    res.status(200).type('html').send(renderToolPlaceholderPublicPage(siteUrl, 'streaming-check', frontendAssets));
+  });
+
+  router.get('/tools/ip-check', (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    setPublicCacheHeaders(res);
+    res.status(200).type('html').send(renderToolPlaceholderPublicPage(siteUrl, 'ip-check', frontendAssets));
+  });
+
   router.get('/api/v1/monthly-reports', async (req, res, next) => {
     try {
       const service = requireMonthlyReportPublicService(deps);
@@ -327,6 +388,13 @@ function requireMonthlyReportPublicService(deps: PublicPageDeps): MonthlyReportP
     throw new Error('monthlyReportPublicService is not configured');
   }
   return deps.monthlyReportPublicService;
+}
+
+function requireToolsDownloadService(deps: PublicPageDeps): Pick<ToolsDownloadService, 'getDownloadPageView'> {
+  if (!deps.toolsDownloadService) {
+    throw new Error('toolsDownloadService is not configured');
+  }
+  return deps.toolsDownloadService;
 }
 
 const PUBLIC_RANKING_PATH = '/rankings/all';

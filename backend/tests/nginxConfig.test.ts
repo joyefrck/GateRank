@@ -37,6 +37,13 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
     '/data/rankings.md',
     '/data/risk-monitor.md',
     '/publish-token-docs',
+    '/download',
+    '/download/',
+    '/tools',
+    '/tools/',
+    '/tools/download',
+    '/tools/streaming-check',
+    '/tools/ip-check',
   ]) {
     const block = getLocationBlock(config, `= ${route}`);
     assert.match(block, /proxy_pass\s+http:\/\/gaterank-api:8787/);
@@ -47,6 +54,7 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
   assert.match(getLocationBlock(config, '^~ /rankings/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.match(getLocationBlock(config, '^~ /monthly-reports/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.match(getLocationBlock(config, '/news'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
+  assert.match(getLocationBlock(config, '^~ /tools/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.match(getLocationBlock(config, '= /deals/'), /proxy_pass\s+http:\/\/gaterank-api:8787\/deals\/;/);
 });
 

@@ -26,6 +26,7 @@ function emitSeoAssets(siteUrl: string): Plugin {
         ['/risk-monitor', PUBLIC_SEO_STATIC_LASTMOD],
         ['/for-ai', PUBLIC_SEO_STATIC_LASTMOD],
         ['/publish-token-docs', PUBLISH_TOKEN_DOCS_LAST_UPDATED],
+        ['/download', PUBLIC_SEO_STATIC_LASTMOD],
         ...DEFAULT_NEWS_CATEGORIES.map((item) => [`/news/category/${item.slug}`, PUBLIC_SEO_STATIC_LASTMOD] as const),
         ...DEFAULT_NEWS_TOPICS.map((item) => [`/news/topic/${item.slug}`, PUBLIC_SEO_STATIC_LASTMOD] as const),
       ] as const;
@@ -108,6 +109,14 @@ export default defineConfig(({mode}) => {
           changeOrigin: true,
         },
         '/publish-token-docs.md': {
+          target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8787',
+          changeOrigin: true,
+        },
+        '/tools': {
+          target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8787',
+          changeOrigin: true,
+        },
+        '/download': {
           target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8787',
           changeOrigin: true,
         },
