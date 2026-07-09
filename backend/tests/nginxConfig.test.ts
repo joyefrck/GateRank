@@ -16,6 +16,8 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
     '/monthly-reports',
     '/monthly-reports/',
     '/methodology',
+    '/ranking-transparency',
+    '/ranking-transparency/',
     '/deals',
     '/apply',
     '/risk-monitor',
