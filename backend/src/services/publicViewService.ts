@@ -915,15 +915,16 @@ function collectRankingAirportIds(...rankingLists: Array<Array<Pick<RankingItem,
 }
 
 function selectHomeToolDownloadCtaItems(view: ToolsDownloadPageView): HomeToolDownloadCtaItem[] {
-  const bySlug = new Map<string, ToolDownloadItem>();
+  const byFamily = new Map<string, ToolDownloadItem>();
   for (const item of [...view.hotItems, ...view.items]) {
-    if (!item.icon_url || bySlug.has(item.slug)) {
+    const familyKey = getHomeToolDownloadFamilyKey(item);
+    if (!item.icon_url || byFamily.has(familyKey)) {
       continue;
     }
-    bySlug.set(item.slug, item);
+    byFamily.set(familyKey, item);
   }
 
-  return Array.from(bySlug.values())
+  return Array.from(byFamily.values())
     .sort((left, right) => {
       const priorityDelta = getHomeToolDownloadPriority(left) - getHomeToolDownloadPriority(right);
       if (priorityDelta !== 0) {
@@ -950,6 +951,16 @@ function getHomeToolDownloadPriority(item: Pick<ToolDownloadItem, 'slug' | 'name
   if (value.includes('clash') || value.includes('mihomo')) return 2;
   if (value.includes('sing-box') || value.includes('singbox')) return 3;
   return 100;
+}
+
+function getHomeToolDownloadFamilyKey(item: Pick<ToolDownloadItem, 'slug' | 'name'>): string {
+  const value = `${item.slug} ${item.name}`.toLowerCase();
+  if (value.includes('v2rayn')) return 'v2rayn';
+  if (value.includes('karing')) return 'karing';
+  if (value.includes('clash') || value.includes('mihomo')) return 'clash';
+  if (value.includes('sing-box') || value.includes('singbox')) return 'sing-box';
+  if (value.includes('hiddify')) return 'hiddify';
+  return `slug:${item.slug}`;
 }
 
 function resolvePublicAirportSlug(airport: Pick<Airport, 'id' | 'slug' | 'name' | 'website'>): string {

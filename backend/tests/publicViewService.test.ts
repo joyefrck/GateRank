@@ -95,7 +95,10 @@ test('PublicViewService.getHomePageView builds prioritized tool download CTA fro
         platform: null,
         platforms: ['windows', 'macos', 'ios', 'android', 'linux'],
         hotItems: [
-          createToolDownloadItem('hiddify', 'Hiddify', '/uploads/tools/icons/hiddify.webp', 10),
+          createToolDownloadItem('v2rayn-android', 'v2rayN', '/uploads/tools/icons/v2rayn-android.webp', 10),
+          createToolDownloadItem('v2rayn-windows', 'v2rayN', '/uploads/tools/icons/v2rayn-windows.webp', 11),
+          createToolDownloadItem('v2rayn-macos', 'v2rayN', '/uploads/tools/icons/v2rayn-macos.webp', 12),
+          createToolDownloadItem('hiddify', 'Hiddify', '/uploads/tools/icons/hiddify.webp', 13),
           createToolDownloadItem('clash-verge-rev', 'Clash Verge Rev', '/uploads/tools/icons/clash.webp', 20),
         ],
         items: [
@@ -114,11 +117,12 @@ test('PublicViewService.getHomePageView builds prioritized tool download CTA fro
   assert.equal(result.tool_download_cta.href, '/download');
   assert.equal(result.tool_download_cta.title, '翻墙工具客户端下载');
   assert.deepEqual(result.tool_download_cta.items.map((item) => item.slug), [
-    'v2rayn',
+    'v2rayn-android',
     'karing',
     'clash-verge-rev',
     'sing-box',
   ]);
+  assert.equal(result.tool_download_cta.items.filter((item) => item.name === 'v2rayN').length, 1);
   assert.ok(result.tool_download_cta.items.every((item) => item.icon_url));
 });
 
