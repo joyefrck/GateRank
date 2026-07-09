@@ -78,17 +78,15 @@ test('nginx protects tool installer downloads with rate, connection and internal
   assert.match(protectedUploadsBlock, /limit_rate\s+2m;/);
 });
 
-test('nginx reserves SPA fallback only for admin and portal entry routes', async () => {
+test('nginx reserves private SPA fallbacks with noindex headers', async () => {
   const config = await readFile(path.join(process.cwd(), 'nginx.conf'), 'utf8');
 
-  assert.match(getLocationBlock(config, '= /admin'), /try_files\s+\/index\.html\s+=404;/);
-  assert.match(getLocationBlock(config, '^~ /admin/'), /try_files\s+\/index\.html\s+=404;/);
-  assert.match(getLocationBlock(config, '= /portal'), /try_files\s+\/index\.html\s+=404;/);
-  assert.match(getLocationBlock(config, '= /portal/'), /try_files\s+\/index\.html\s+=404;/);
-  assert.match(getLocationBlock(config, '= /admin'), /Cache-Control\s+"no-cache"/);
-  assert.match(getLocationBlock(config, '^~ /admin/'), /Cache-Control\s+"no-cache"/);
-  assert.match(getLocationBlock(config, '= /portal'), /Cache-Control\s+"no-cache"/);
-  assert.match(getLocationBlock(config, '= /portal/'), /Cache-Control\s+"no-cache"/);
+  for (const location of ['= /admin', '^~ /admin/', '= /portal', '= /portal/', '^~ /portal/']) {
+    const block = getLocationBlock(config, location);
+    assert.match(block, /try_files\s+\/index\.html\s+=404;/);
+    assert.match(block, /Cache-Control\s+"no-cache"/);
+    assert.match(block, /X-Robots-Tag\s+"noindex, nofollow, noarchive, nosnippet"\s+always/);
+  }
 });
 
 test('nginx proxies API routes and returns hard 404 for unknown public paths', async () => {
@@ -99,6 +97,8 @@ test('nginx proxies API routes and returns hard 404 for unknown public paths', a
   assert.match(apiBlock, /proxy_request_buffering\s+off;/);
   assert.match(apiBlock, /proxy_send_timeout\s+300s;/);
   assert.match(apiBlock, /proxy_read_timeout\s+300s;/);
+  assert.match(getLocationBlock(config, '^~ /api/v1/admin'), /X-Robots-Tag\s+"noindex, nofollow, noarchive, nosnippet"\s+always/);
+  assert.match(getLocationBlock(config, '^~ /api/v1/portal'), /X-Robots-Tag\s+"noindex, nofollow, noarchive, nosnippet"\s+always/);
   assert.match(getLocationBlock(config, '^~ /uploads/'), /proxy_pass\s+http:\/\/gaterank-api:8787\/uploads\/;/);
 
   const catchAll = getLocationBlock(config, '/');

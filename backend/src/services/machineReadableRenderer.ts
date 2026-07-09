@@ -324,6 +324,10 @@ export function renderLlmsFullTxt(siteUrl: string, summary: PublicSummaryData, r
 export function renderRobotsTxt(siteUrl: string): string {
   return [
     'User-agent: *',
+    'Disallow: /admin',
+    'Disallow: /api/v1/admin',
+    'Disallow: /portal',
+    'Disallow: /api/v1/portal',
     'Allow: /',
     '',
     `Sitemap: ${siteUrl}/sitemap.xml`,

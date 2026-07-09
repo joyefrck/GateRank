@@ -1,4 +1,8 @@
 User-agent: *
+Disallow: /admin
+Disallow: /api/v1/admin
+Disallow: /portal
+Disallow: /api/v1/portal
 Allow: /
 
 Sitemap: http://localhost:3000/sitemap.xml

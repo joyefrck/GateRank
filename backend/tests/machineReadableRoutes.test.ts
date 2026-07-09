@@ -43,6 +43,10 @@ test('GET /robots.txt returns explicit crawl policy and content signals', async 
     );
     const body = await response.text();
     assert.match(body, /^User-agent: \*/m);
+    assert.match(body, /^Disallow: \/admin$/m);
+    assert.match(body, /^Disallow: \/api\/v1\/admin$/m);
+    assert.match(body, /^Disallow: \/portal$/m);
+    assert.match(body, /^Disallow: \/api\/v1\/portal$/m);
     assert.match(body, /^Allow: \/$/m);
     assert.match(body, new RegExp(`^Sitemap: ${baseUrl.replace(/\//g, '\\/')}/sitemap\\.xml$`, 'm'));
     assert.match(body, /^Content-Signal: search=yes, ai-input=yes, ai-train=no$/m);

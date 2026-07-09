@@ -4,6 +4,7 @@ import { getDbPool } from './db/mysql';
 import { adminAuth } from './middleware/adminAuth';
 import { corsAllowlist } from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
+import { privateSeoGuard } from './middleware/privateSeoGuard';
 import { requestContext } from './middleware/requestContext';
 import { AccessTokenRepository } from './repositories/accessTokenRepository';
 import { ApplicantAccountRepository } from './repositories/applicantAccountRepository';
@@ -258,6 +259,7 @@ export async function createApp() {
   app.use(express.urlencoded({ extended: false, limit: process.env.URLENCODED_BODY_LIMIT || '100kb' }));
   app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
   app.use(requestContext);
+  app.use(privateSeoGuard);
   app.use('/uploads', express.static(getNewsUploadRootDir()));
   app.use(corsAllowlist);
 

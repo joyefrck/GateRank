@@ -41,6 +41,10 @@ ${urls.map(([pathname, lastmod]) => `  <url>
 `;
 
       const robots = `User-agent: *
+Disallow: /admin
+Disallow: /api/v1/admin
+Disallow: /portal
+Disallow: /api/v1/portal
 Allow: /
 
 Sitemap: ${normalizedSiteUrl}/sitemap.xml
