@@ -154,6 +154,7 @@ test('core public SEO pages expose dedicated 1200x630 OG images', async () => {
       ['/deals', '/og/deals-coupons.png', 'GateRank 机场优惠码大全分享图'],
       ['/risk-monitor', '/og/risk-monitor.png', 'GateRank 跑路机场监测分享图'],
       ['/methodology', '/og/methodology.png', 'GateRank 机场测评方法分享图'],
+      ['/apply', '/og/apply.png', 'GateRank 申请入驻测试分享图'],
     ] as const;
 
     for (const [pathname, imagePath, alt] of checks) {
@@ -281,6 +282,8 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
     assert.match(html, /<title>翻墙工具下载 \| Clash Verge Rev、v2rayN、Shadowrocket 客户端<\/title>/);
     assert.match(html, /<meta name="keywords" content="翻墙工具下载,科学上网客户端下载,Clash Verge Rev,v2rayN,Shadowrocket,Stash,sing-box,Hiddify" \/>/);
     assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/download"/);
+    assert.match(html, /<meta property="og:image" content="http:\/\/127\.0\.0\.1:\d+\/og\/download\.png" \/>/);
+    assert.match(html, /<meta property="og:image:alt" content="GateRank 翻墙工具下载页分享图" \/>/);
     assert.match(html, /<button class="public-top-nav-link is-active public-top-nav-trigger" type="button" aria-haspopup="true">工具<\/button>/);
     assert.match(html, /\.public-top-nav-submenu \{[\s\S]*?min-width: 260px;/);
     assert.match(html, /\.public-top-nav-submenu-link > span:first-child \{[\s\S]*?white-space: nowrap;/);
@@ -812,6 +815,7 @@ test('GET /rankings/payment/alipay renders indexable static single-filter SEO pa
     assert.match(html, /<h1>支持支付宝的机场 VPN 推荐排名<\/h1>/);
     assert.match(html, /<meta name="robots" content="index,follow,max-image-preview:large"/);
     assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/rankings\/payment\/alipay"/);
+    assertStaticOgImage(html, `http://127.0.0.1:${port}`, '/og/rankings-payment.png', 'GateRank 支持支付宝机场排行分享图');
     assert.match(html, /搜索与分类筛选/);
     assert.match(html, /支付宝机场怎么选/);
     assert.match(html, /支付宝机场的优点和风险/);
@@ -964,6 +968,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     const okHtml = await okResponse.text();
     assert.match(okHtml, /<title>星云机场怎么样？星云机场测评、官网入口、稳定性与跑路风险分析 \| 机场榜GateRank<\/title>/);
     assert.match(okHtml, /<h1>星云机场测评：官网入口、稳定性、速度与跑路风险分析<\/h1>/);
+    assertStaticOgImage(okHtml, `http://127.0.0.1:${port}`, '/og/airport-report.png', 'GateRank 机场测评报告分享图');
     assert.match(okHtml, /id="report-top"/);
     assert.match(okHtml, /报告日期：2026-03-23/);
     assert.match(okHtml, /<div class="breadcrumb"><a href="\/">首页<\/a><span>\/<\/span>星云机场<\/div>/);
@@ -1205,6 +1210,18 @@ function extractMetaDescription(html: string): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function assertStaticOgImage(html: string, baseUrl: string, imagePath: string, alt: string) {
+  const imageUrl = `${baseUrl}${imagePath}`;
+  assert.match(html, new RegExp(`<meta property="og:image" content="${escapeRegExp(imageUrl)}" />`));
+  assert.match(html, new RegExp(`<meta property="og:image:secure_url" content="${escapeRegExp(imageUrl)}" />`));
+  assert.match(html, /<meta property="og:image:type" content="image\/png" \/>/);
+  assert.match(html, /<meta property="og:image:width" content="1200" \/>/);
+  assert.match(html, /<meta property="og:image:height" content="630" \/>/);
+  assert.match(html, new RegExp(`<meta property="og:image:alt" content="${escapeRegExp(alt)}" />`));
+  assert.match(html, new RegExp(`<meta name="twitter:image" content="${escapeRegExp(imageUrl)}" />`));
+  assert.match(html, new RegExp(`<meta name="twitter:image:alt" content="${escapeRegExp(alt)}" />`));
 }
 
 function createDealView(id: number): AirportDealView {

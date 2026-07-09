@@ -127,9 +127,82 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
     assert.doesNotMatch(html, /\.nav-link\s*\{/);
     assert.match(html, /<h1 class="news-index-title">机场榜资讯中心：机场推荐、跑路预警与科学上网指南<\/h1>/);
     assert.match(html, /<h2 class="hero-title"><a href="\/news\/headline">头条文章<\/a><\/h2>/);
+    assertNewsOgImage(html, `http://127.0.0.1:${port}`, '/uploads/news/headline.jpg', '头条文章', 'image/jpeg');
     assert.match(html, /42 次访问/);
     assert.match(html, /87 次访问/);
     assert.doesNotMatch(html, /<h1 class="hero-title">/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /news and /news/category/:slug use static OG fallbacks when no featured cover exists', async () => {
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async (_page: number, _pageSize: number, filters?: { category_slug?: string }) => ({
+          page: 1,
+          page_size: 12,
+          total: 1,
+          total_pages: 1,
+          query: '',
+          category: filters?.category_slug
+            ? {
+              id: 20,
+              name: '风险预警',
+              slug: filters.category_slug,
+              description: '跑路机场、支付风险、服务异常和订阅安全预警。',
+              sort_order: 20,
+              is_active: true,
+              updated_at: '2026-04-02 09:30:00',
+            }
+            : null,
+          topic: null,
+          categories: [],
+          topics: [],
+          featured: null,
+          items: [
+            {
+              id: 2,
+              title: '无封面文章',
+              slug: 'no-cover-story',
+              excerpt: '这篇文章没有封面。',
+              cover_image_url: '',
+              published_at: '2026-03-27 10:00:00',
+              view_count: 87,
+              reading_minutes: 4,
+              category: null,
+              topics: [],
+              is_featured: false,
+              is_recommended: false,
+              recommend_weight: 0,
+            },
+          ],
+          recommended: [],
+          risk_watch: [],
+          guides: [],
+        }),
+        getArticleViewBySlug: async () => null,
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+
+    const newsResponse = await fetch(`${baseUrl}/news`, { headers: { host: `127.0.0.1:${port}` } });
+    assert.equal(newsResponse.status, 200);
+    assertNewsOgImage(await newsResponse.text(), baseUrl, '/og/news.png', 'GateRank News 资讯中心分享图', 'image/png');
+
+    const categoryResponse = await fetch(`${baseUrl}/news/category/risk-warning`, { headers: { host: `127.0.0.1:${port}` } });
+    assert.equal(categoryResponse.status, 200);
+    assertNewsOgImage(await categoryResponse.text(), baseUrl, '/og/news-category.png', 'GateRank News 分类页分享图', 'image/png');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -376,6 +449,75 @@ test('GET /news/topic/:slug returns independent topic SEO page with pinned artic
   }
 });
 
+test('GET /news/topic/:slug uses static topic OG fallback when topic has no cover', async () => {
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async () => ({
+          page: 1,
+          page_size: 12,
+          total: 0,
+          total_pages: 1,
+          query: '',
+          category: null,
+          topic: null,
+          categories: [],
+          topics: [],
+          featured: null,
+          items: [],
+          recommended: [],
+          risk_watch: [],
+          guides: [],
+        }),
+        getTopicPageView: async (slug: string) => ({
+          page: 1,
+          page_size: 12,
+          total: 0,
+          total_pages: 1,
+          query: '',
+          topic: {
+            id: 10,
+            name: '无封面专题',
+            slug,
+            description: '没有封面的专题描述。',
+            seo_title: '无封面专题 SEO 标题',
+            seo_description: '无封面专题 SEO 描述。',
+            h1: '无封面专题',
+            intro: '没有封面的专题导语。',
+            cover_image_url: '',
+            accent_color: '#d43d31',
+            faq_items: [],
+            sort_order: 10,
+            is_active: true,
+            updated_at: '2026-04-02 09:30:00',
+          },
+          categories: [],
+          topics: [],
+          pinned: [],
+          items: [],
+          recommended: [],
+        }),
+        getArticleViewBySlug: async () => null,
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const response = await fetch(`${baseUrl}/news/topic/no-cover-topic`, { headers: { host: `127.0.0.1:${port}` } });
+    assert.equal(response.status, 200);
+    assertNewsOgImage(await response.text(), baseUrl, '/og/news-topic.png', 'GateRank News 专题页分享图', 'image/png');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /news/topic/:slug returns 404 html for inactive or missing topic', async () => {
   const app = express();
   app.use(
@@ -448,6 +590,7 @@ test('GET /publish-token-docs returns server-rendered HTML with crawlable doc co
     assert.match(description, /GateRank News API/);
     assert.match(html, /<h1>机场榜GateRank 发布令牌接入说明<\/h1>/);
     assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/publish-token-docs"/);
+    assertNewsOgImage(html, `http://127.0.0.1:${port}`, '/og/publish-token-docs.png', 'GateRank 发布令牌接入说明分享图', 'image/png');
     assert.match(html, /<link rel="alternate" type="text\/markdown" href="http:\/\/127\.0\.0\.1:\d+\/publish-token-docs\.md"/);
     assert.match(
       html,
@@ -470,6 +613,20 @@ function extractMetaDescription(html: string): string {
   const matched = html.match(/<meta name="description" content="([^"]+)"/);
   assert.ok(matched, 'meta description missing');
   return matched[1];
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function assertNewsOgImage(html: string, baseUrl: string, imagePath: string, alt: string, type: string) {
+  const imageUrl = `${baseUrl}${imagePath}`;
+  assert.match(html, new RegExp(`<meta property="og:image" content="${escapeRegExp(imageUrl)}" />`));
+  assert.match(html, new RegExp(`<meta property="og:image:secure_url" content="${escapeRegExp(imageUrl)}" />`));
+  assert.match(html, new RegExp(`<meta property="og:image:type" content="${escapeRegExp(type)}" />`));
+  assert.match(html, new RegExp(`<meta property="og:image:alt" content="${escapeRegExp(alt)}" />`));
+  assert.match(html, new RegExp(`<meta name="twitter:image" content="${escapeRegExp(imageUrl)}" />`));
+  assert.match(html, new RegExp(`<meta name="twitter:image:alt" content="${escapeRegExp(alt)}" />`));
 }
 
 function createPreviewRouteApp() {
@@ -617,6 +774,52 @@ test('GET /news/:slug returns server-rendered HTML with seo metadata', async () 
     assert.doesNotMatch(html, /\.nav-link\.is-news/);
     assert.doesNotMatch(html, /\.topbar-inner/);
     assert.doesNotMatch(html, /\.nav-link\s*\{/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /news/:slug uses static article OG fallback when article has no cover', async () => {
+  const app = express();
+  app.use(
+    createNewsPublicRoutes({
+      newsPublicService: {
+        getListView: async () => ({
+          page: 1,
+          page_size: 12,
+          total: 0,
+          total_pages: 1,
+          featured: null,
+          items: [],
+        }),
+        getArticleViewBySlug: async (slug: string) => ({
+          id: 9,
+          title: '无封面文章',
+          slug,
+          excerpt: '用于验证文章详情页无封面时也有分享图。',
+          cover_image_url: '',
+          published_at: '2026-03-28 18:00:00',
+          view_count: 123,
+          reading_minutes: 6,
+          content_html: '<p class="news-paragraph">hello world</p>',
+          headings: [],
+          previous: null,
+          next: null,
+        }),
+        getPreviewArticleView: async () => null,
+        getSitemapItems: async () => [{ slug: 'no-cover-article' }],
+      } as never,
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const baseUrl = `http://127.0.0.1:${port}`;
+    const response = await fetch(`${baseUrl}/news/no-cover-article`, { headers: { host: `127.0.0.1:${port}` } });
+    assert.equal(response.status, 200);
+    assertNewsOgImage(await response.text(), baseUrl, '/og/news-article.png', 'GateRank News 文章分享图', 'image/png');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

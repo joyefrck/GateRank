@@ -46,6 +46,7 @@ export function renderPublishTokenDocsPage(siteUrl: string): string {
   const canonicalUrl = buildPublishTokenDocsUrl(siteUrl);
   const markdownUrl = buildPublishTokenDocsMarkdownUrl(siteUrl);
   const publishApiBase = buildPublishApiBase(siteUrl);
+  const ogImageUrl = `${siteUrl}/og/publish-token-docs.png`;
   const jsonLd = buildPublishTokenDocsStructuredData(siteUrl);
 
   return `<!DOCTYPE html>
@@ -64,9 +65,15 @@ export function renderPublishTokenDocsPage(siteUrl: string): string {
     <meta property="og:title" content="${escapeAttribute(PUBLISH_TOKEN_DOCS_META.title)}" />
     <meta property="og:description" content="${escapeAttribute(PUBLISH_TOKEN_DOCS_META.description)}" />
     <meta property="og:url" content="${escapeAttribute(canonicalUrl)}" />
+    <meta property="og:image" content="${escapeAttribute(ogImageUrl)}" />
+    <meta property="og:image:secure_url" content="${escapeAttribute(ogImageUrl)}" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="GateRank 发布令牌接入说明分享图" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="${escapeAttribute(PUBLISH_TOKEN_DOCS_META.title)}" />
     <meta name="twitter:description" content="${escapeAttribute(PUBLISH_TOKEN_DOCS_META.description)}" />
+    <meta name="twitter:image" content="${escapeAttribute(ogImageUrl)}" />
+    <meta name="twitter:image:alt" content="GateRank 发布令牌接入说明分享图" />
     <style>${styles}</style>
     <script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
   </head>

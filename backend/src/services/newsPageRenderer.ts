@@ -18,6 +18,25 @@ interface RenderTopicPageOptions {
   topicView: PublicNewsTopicPageView;
 }
 
+const NEWS_FALLBACK_OG_IMAGES = {
+  index: {
+    path: '/og/news.png',
+    alt: 'GateRank News 资讯中心分享图',
+  },
+  category: {
+    path: '/og/news-category.png',
+    alt: 'GateRank News 分类页分享图',
+  },
+  topic: {
+    path: '/og/news-topic.png',
+    alt: 'GateRank News 专题页分享图',
+  },
+  article: {
+    path: '/og/news-article.png',
+    alt: 'GateRank News 文章分享图',
+  },
+} as const;
+
 const sharedStyles = `
   @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap');
   :root {
@@ -1190,6 +1209,13 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
   const featured = listView.featured;
   const leadStory = featured || (listView.page > 1 ? listView.items[0] || null : null);
   const featuredCoverImage = featured ? toAbsoluteUrl(siteUrl, featured.cover_image_url) : null;
+  const listOgImage = featuredCoverImage
+    ? {
+      url: featuredCoverImage,
+      alt: featured?.title || title,
+      type: inferImageMimeType(featuredCoverImage),
+    }
+    : buildStaticNewsOgImage(siteUrl, listView.category ? 'category' : 'index');
   const feedItems = leadStory && !featured
     ? listView.items.filter((item) => item.id !== leadStory.id)
     : listView.items;
@@ -1233,9 +1259,9 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
     title,
     description,
     canonicalUrl,
-    ogImage: featuredCoverImage,
-    ogImageAlt: featured?.title || null,
-    ogImageType: featuredCoverImage ? inferImageMimeType(featuredCoverImage) : null,
+    ogImage: listOgImage.url,
+    ogImageAlt: listOgImage.alt,
+    ogImageType: listOgImage.type,
     ogType: 'website',
     robots: isSearch ? 'noindex,follow,max-image-preview:large' : 'index,follow,max-image-preview:large',
     jsonLd,
@@ -1306,6 +1332,13 @@ export function renderNewsTopicPage(options: RenderTopicPageOptions): string {
   const h1 = topic.h1?.trim() || topic.name;
   const intro = topic.intro?.trim() || topic.description;
   const coverImage = toAbsoluteUrl(siteUrl, topic.cover_image_url || '');
+  const topicOgImage = coverImage
+    ? {
+      url: coverImage,
+      alt: topic.name,
+      type: inferImageMimeType(coverImage),
+    }
+    : buildStaticNewsOgImage(siteUrl, 'topic');
   const faqItems = (topic.faq_items || []).filter((item) => item.question.trim() && item.answer.trim()).slice(0, 8);
   const accentColor = normalizeTopicAccent(topic.accent_color);
   const pinnedHtml = topicView.pinned.map((item) => renderFeedCard(item)).join('');
@@ -1372,9 +1405,9 @@ export function renderNewsTopicPage(options: RenderTopicPageOptions): string {
     title,
     description,
     canonicalUrl,
-    ogImage: coverImage,
-    ogImageAlt: coverImage ? topic.name : null,
-    ogImageType: coverImage ? inferImageMimeType(coverImage) : null,
+    ogImage: topicOgImage.url,
+    ogImageAlt: topicOgImage.alt,
+    ogImageType: topicOgImage.type,
     ogType: 'website',
     robots: isSearch ? 'noindex,follow,max-image-preview:large' : 'index,follow,max-image-preview:large',
     jsonLd,
@@ -1448,6 +1481,13 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
   const { siteUrl, article, preview = false } = options;
   const hasCover = Boolean(article.cover_image_url && article.cover_image_url.trim());
   const absoluteCoverImage = hasCover ? toAbsoluteUrl(siteUrl, article.cover_image_url) : null;
+  const articleOgImage = absoluteCoverImage
+    ? {
+      url: absoluteCoverImage,
+      alt: article.title,
+      type: inferImageMimeType(absoluteCoverImage),
+    }
+    : buildStaticNewsOgImage(siteUrl, 'article');
   const contentHtml = preview ? rewriteAirportPaidLinksForPreview(article.content_html) : article.content_html;
   const articleBodyHtml = demoteBodyH1(contentHtml);
   const articlePath = preview ? `/api/v1/admin/news/${article.id}/preview` : `/news/${article.slug}`;
@@ -1521,9 +1561,9 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
     title,
     description,
     canonicalUrl,
-    ogImage: absoluteCoverImage,
-    ogImageAlt: article.title,
-    ogImageType: absoluteCoverImage ? inferImageMimeType(absoluteCoverImage) : null,
+    ogImage: articleOgImage.url,
+    ogImageAlt: articleOgImage.alt,
+    ogImageType: articleOgImage.type,
     robots: preview ? 'noindex,nofollow,noarchive' : 'index,follow,max-image-preview:large',
     jsonLd,
     body: `
@@ -1948,6 +1988,15 @@ function renderDocument(options: {
   </head>
   <body>${options.body}</body>
 </html>`;
+}
+
+function buildStaticNewsOgImage(siteUrl: string, key: keyof typeof NEWS_FALLBACK_OG_IMAGES) {
+  const image = NEWS_FALLBACK_OG_IMAGES[key];
+  return {
+    url: `${siteUrl}${image.path}`,
+    alt: image.alt,
+    type: 'image/png',
+  };
 }
 
 function toIsoDate(value: string | null): string | undefined {

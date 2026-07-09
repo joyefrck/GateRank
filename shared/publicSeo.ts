@@ -4,6 +4,7 @@ import {
   getFullRankingFilterCount,
   getFullRankingSeoDecision,
   hasFullRankingFilters,
+  parseFullRankingStaticPath,
   type FullRankingFilters,
   type FullRankingStaticFilterRoute,
 } from './fullRankingFilters';
@@ -12,6 +13,7 @@ import {
   AIRPORT_PAYMENT_FILTERS,
   AIRPORT_STREAMING_FILTERS,
   getAirportFilterLabel,
+  getAirportFilterSeoLabel,
   type AirportPrimaryIndexableFilterCategory,
 } from './airportFilterCatalog';
 import type { AirportDealView } from './airportAds';
@@ -267,6 +269,7 @@ export interface PublicMonthlyReportSeoView {
 export const PUBLIC_SEO_PATHS = {
   home: '/',
   fullRanking: '/rankings/all',
+  download: '/download',
   monthlyReports: '/monthly-reports',
   deals: '/deals',
   methodology: '/methodology',
@@ -301,6 +304,13 @@ export const PUBLIC_CORE_OG_IMAGES = {
     height: 630,
     type: 'image/png',
   },
+  download: {
+    path: '/og/download.png',
+    alt: 'GateRank 翻墙工具下载页分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
   monthlyReports: {
     path: '/og/monthly-reports.png',
     alt: 'GateRank 机场 VPN 月度报告分享图',
@@ -329,19 +339,113 @@ export const PUBLIC_CORE_OG_IMAGES = {
     height: 630,
     type: 'image/png',
   },
+  rankingsPayment: {
+    path: '/og/rankings-payment.png',
+    alt: 'GateRank 支付方式机场排行分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  rankingsUnlock: {
+    path: '/og/rankings-unlock.png',
+    alt: 'GateRank 解锁服务机场排行分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  rankingsClient: {
+    path: '/og/rankings-client.png',
+    alt: 'GateRank 客户端机场排行分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  rankingsRegion: {
+    path: '/og/rankings-region.png',
+    alt: 'GateRank 节点地区机场排行分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  rankingsLine: {
+    path: '/og/rankings-line.png',
+    alt: 'GateRank 线路类型机场排行分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  apply: {
+    path: '/og/apply.png',
+    alt: 'GateRank 申请入驻测试分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  forAi: {
+    path: '/og/for-ai.png',
+    alt: 'GateRank for AI 数据入口分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  publishTokenDocs: {
+    path: '/og/publish-token-docs.png',
+    alt: 'GateRank 发布令牌接入说明分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  airportReport: {
+    path: '/og/airport-report.png',
+    alt: 'GateRank 机场测评报告分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
 } as const satisfies Record<string, PublicOgImage>;
+
+const RANKING_STATIC_OG_IMAGE_BY_CATEGORY = {
+  payment: PUBLIC_CORE_OG_IMAGES.rankingsPayment,
+  streaming: PUBLIC_CORE_OG_IMAGES.rankingsUnlock,
+  client: PUBLIC_CORE_OG_IMAGES.rankingsClient,
+  region: PUBLIC_CORE_OG_IMAGES.rankingsRegion,
+  line: PUBLIC_CORE_OG_IMAGES.rankingsLine,
+} as const satisfies Record<AirportPrimaryIndexableFilterCategory, PublicOgImage>;
 
 export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | undefined {
   const pathname = normalizePublicSeoPath(canonicalPath);
   if (pathname === PUBLIC_SEO_PATHS.home) return PUBLIC_CORE_OG_IMAGES.home;
   if (pathname === PUBLIC_SEO_PATHS.fullRanking) return PUBLIC_CORE_OG_IMAGES.fullRanking;
+  const fullRankingFilterOgImage = buildFullRankingFilterOgImage(pathname);
+  if (fullRankingFilterOgImage) return fullRankingFilterOgImage;
+  if (pathname === PUBLIC_SEO_PATHS.download) return PUBLIC_CORE_OG_IMAGES.download;
   if (pathname === PUBLIC_SEO_PATHS.monthlyReports || pathname.startsWith(`${PUBLIC_SEO_PATHS.monthlyReports}/`)) {
     return PUBLIC_CORE_OG_IMAGES.monthlyReports;
   }
   if (pathname === PUBLIC_SEO_PATHS.deals) return PUBLIC_CORE_OG_IMAGES.deals;
   if (pathname === PUBLIC_SEO_PATHS.riskMonitor) return PUBLIC_CORE_OG_IMAGES.riskMonitor;
   if (pathname === PUBLIC_SEO_PATHS.methodology) return PUBLIC_CORE_OG_IMAGES.methodology;
+  if (pathname === PUBLIC_SEO_PATHS.apply) return PUBLIC_CORE_OG_IMAGES.apply;
+  if (pathname === PUBLIC_SEO_PATHS.forAi) return PUBLIC_CORE_OG_IMAGES.forAi;
+  if (pathname.startsWith('/airports/')) return PUBLIC_CORE_OG_IMAGES.airportReport;
   return undefined;
+}
+
+function buildFullRankingFilterOgImage(pathname: string): PublicOgImage | undefined {
+  const route = parseFullRankingStaticPath(pathname);
+  if (!route) {
+    return undefined;
+  }
+  const image = RANKING_STATIC_OG_IMAGE_BY_CATEGORY[route.category];
+  const filterLabel = getAirportFilterSeoLabel(route.category, route.value);
+  return {
+    ...image,
+    alt: `GateRank ${formatAirportFilterOgLabel(filterLabel)}机场排行分享图`,
+  };
+}
+
+function formatAirportFilterOgLabel(label: string): string {
+  return /[A-Za-z0-9]$/.test(label) ? `${label} ` : label;
 }
 
 export function buildMonthlyReportsSeo(input?: { total?: number }): PublicSeoText {

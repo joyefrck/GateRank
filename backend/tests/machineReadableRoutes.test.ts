@@ -65,6 +65,10 @@ test('GET /for-ai returns an indexable HTML guide for AI applications', async ()
     assert.match(html, /<h1>GateRank for AI：机场榜数据、引用方式与机器可读入口<\/h1>/);
     assert.match(html, /<meta name="robots" content="index,follow,max-image-preview:large"/);
     assert.match(html, new RegExp(`<link rel="canonical" href="${baseUrl.replace(/\//g, '\\/')}/for-ai"`));
+    assert.match(html, new RegExp(`<meta property="og:image" content="${baseUrl.replace(/\//g, '\\/')}/og/for-ai\\.png" />`));
+    assert.match(html, new RegExp(`<meta property="og:image:secure_url" content="${baseUrl.replace(/\//g, '\\/')}/og/for-ai\\.png" />`));
+    assert.match(html, /<meta property="og:image:alt" content="GateRank for AI 数据入口分享图" \/>/);
+    assert.match(html, new RegExp(`<meta name="twitter:image" content="${baseUrl.replace(/\//g, '\\/')}/og/for-ai\\.png" />`));
     assert.match(html, /\/data\/summary\.json/);
     assert.match(html, /\/data\/rankings\.json/);
     assert.match(html, /\/data\/risk-monitor\.json/);
