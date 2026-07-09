@@ -134,6 +134,7 @@ interface ToolDownloadItem {
   primary_action: ToolDownloadPrimaryAction;
   version: string;
   file_size_label: string;
+  download_count: number;
   is_hot: boolean;
   sort_order: number;
   status: ToolDownloadStatus;
@@ -2135,7 +2136,14 @@ function ToolsDownloadAdminPage() {
                       {item.local_file_url ? `本地包 ${item.file_size_label || ''}`.trim() : '本地包待上传'}
                     </div>
                   </td>
-                  <td className="px-4 py-3">{formatToolStatus(item.status)}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span>{formatToolStatus(item.status)}</span>
+                      <span className="inline-flex items-center rounded-full bg-neutral-100 px-2.5 py-1 text-xs font-black text-neutral-600">
+                        下载量 {formatCountValue(item.download_count)}
+                      </span>
+                    </div>
+                  </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-2">
                       <button className="rounded-lg border border-neutral-200 px-2.5 py-1.5 font-bold text-neutral-700 hover:bg-neutral-50" onClick={() => startEdit(item)}>编辑</button>

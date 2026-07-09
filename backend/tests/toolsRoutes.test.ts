@@ -32,6 +32,7 @@ test('tools public routes expose published downloads and page config', async () 
           primary_action: 'official',
           version: '',
           file_size_label: '',
+          download_count: 6,
           is_hot: true,
           sort_order: 1,
           status: 'published',
@@ -50,11 +51,12 @@ test('tools public routes expose published downloads and page config', async () 
     const port = (server.address() as AddressInfo).port;
     const response = await fetch(`http://127.0.0.1:${port}/api/v1/tools/downloads?platform=ios`);
     assert.equal(response.status, 200);
-    const data = await response.json() as { platform: string; items: Array<{ name: string; local_file_url: string; file_extension?: string }> };
+    const data = await response.json() as { platform: string; items: Array<{ name: string; local_file_url: string; file_extension?: string; download_count: number }> };
     assert.equal(data.platform, 'ios');
     assert.equal(data.items[0].name, 'Shadowrocket');
     assert.equal(data.items[0].local_file_url, '/download/file.ipa');
     assert.equal(data.items[0].file_extension, '.ipa');
+    assert.equal(data.items[0].download_count, 6);
     assert.deepEqual((data.items[0] as { platform_versions?: Record<string, string> }).platform_versions, { ios: 'iOS 15+' });
 
     const pageResponse = await fetch(`http://127.0.0.1:${port}/api/v1/tools/download-page`);
@@ -105,6 +107,7 @@ test('tools admin routes update page SEO config and publish downloads', async ()
           primary_action: payload.primary_action,
           version: payload.version || '',
           file_size_label: payload.file_size_label || '',
+          download_count: 0,
           is_hot: Boolean(payload.is_hot),
           sort_order: payload.sort_order || 0,
           status: 'draft',
@@ -129,6 +132,7 @@ test('tools admin routes update page SEO config and publish downloads', async ()
           primary_action: 'official',
           version: '',
           file_size_label: '',
+          download_count: 0,
           is_hot: true,
           sort_order: 1,
           status,

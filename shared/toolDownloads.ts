@@ -40,6 +40,7 @@ export interface ToolDownloadItem {
   version: string;
   file_size_label: string;
   file_extension?: string;
+  download_count: number;
   is_hot: boolean;
   sort_order: number;
   status: ToolDownloadStatus;
@@ -152,7 +153,7 @@ export const DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG: ToolsDownloadPageConfig = {
   ],
 };
 
-export const DEFAULT_HOT_TOOL_DOWNLOADS: Omit<ToolDownloadItem, 'id' | 'created_at' | 'updated_at' | 'published_at' | 'status'>[] = [
+export const DEFAULT_HOT_TOOL_DOWNLOADS: Omit<ToolDownloadItem, 'id' | 'created_at' | 'updated_at' | 'published_at' | 'status' | 'download_count'>[] = [
   {
     slug: 'clash-verge-rev',
     name: 'Clash Verge Rev',

@@ -3029,6 +3029,7 @@ function createToolDownloadItem(slug: string, name: string, iconUrl: string, sor
     primary_action: 'official',
     version: 'latest',
     file_size_label: '',
+    download_count: 0,
     is_hot: sortOrder <= 20,
     sort_order: sortOrder,
     status: 'published',

@@ -22,6 +22,7 @@ interface ToolDownloadRow extends RowDataPacket {
   primary_action: ToolDownloadPrimaryAction;
   version: string;
   file_size_label: string;
+  download_count: number;
   is_hot: number;
   sort_order: number;
   status: ToolDownloadStatus;
@@ -78,6 +79,7 @@ export class ToolDownloadRepository {
         primary_action ENUM('official', 'local') NOT NULL DEFAULT 'official',
         version VARCHAR(128) NOT NULL DEFAULT '',
         file_size_label VARCHAR(128) NOT NULL DEFAULT '',
+        download_count BIGINT UNSIGNED NOT NULL DEFAULT 0,
         is_hot TINYINT(1) NOT NULL DEFAULT 0,
         sort_order INT NOT NULL DEFAULT 0,
         status ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft',
@@ -102,7 +104,8 @@ export class ToolDownloadRepository {
     await this.ensureColumn('primary_action', "ENUM('official', 'local') NOT NULL DEFAULT 'official' AFTER official_url");
     await this.ensureColumn('version', "VARCHAR(128) NOT NULL DEFAULT '' AFTER primary_action");
     await this.ensureColumn('file_size_label', "VARCHAR(128) NOT NULL DEFAULT '' AFTER version");
-    await this.ensureColumn('is_hot', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER file_size_label');
+    await this.ensureColumn('download_count', 'BIGINT UNSIGNED NOT NULL DEFAULT 0 AFTER file_size_label');
+    await this.ensureColumn('is_hot', 'TINYINT(1) NOT NULL DEFAULT 0 AFTER download_count');
     await this.ensureColumn('sort_order', 'INT NOT NULL DEFAULT 0 AFTER is_hot');
     await this.ensureColumn('status', "ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft' AFTER sort_order");
     await this.ensureColumn('published_at', 'DATETIME NULL AFTER status');
@@ -216,6 +219,14 @@ export class ToolDownloadRepository {
     return result.affectedRows > 0;
   }
 
+  async incrementDownloadCount(id: number): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      'UPDATE tool_download_items SET download_count = download_count + 1 WHERE id = ?',
+      [id],
+    );
+    return result.affectedRows > 0;
+  }
+
   private async ensureColumn(columnName: string, definition: string): Promise<void> {
     const [rows] = await this.pool.query<RowDataPacket[]>(
       `SELECT 1
@@ -272,7 +283,7 @@ function buildListFilters(query: ToolDownloadListQuery): { whereSql: string; arg
 function selectSql(): string {
   return `SELECT
     id, slug, name, summary, description, platforms_json, platform_versions_json, icon_url, local_file_url,
-    official_url, primary_action, version, file_size_label, is_hot, sort_order, status,
+    official_url, primary_action, version, file_size_label, download_count, is_hot, sort_order, status,
     DATE_FORMAT(published_at, '%Y-%m-%d %H:%i:%s') AS published_at,
     DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
     DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
@@ -294,6 +305,7 @@ function toToolDownloadItem(row: ToolDownloadRow): ToolDownloadItem {
     primary_action: row.primary_action === 'local' ? 'local' : 'official',
     version: row.version || '',
     file_size_label: row.file_size_label || '',
+    download_count: Number(row.download_count || 0),
     is_hot: Boolean(row.is_hot),
     sort_order: Number(row.sort_order || 0),
     status: row.status,

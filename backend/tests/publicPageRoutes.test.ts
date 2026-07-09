@@ -328,6 +328,7 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
 });
 
 test('GET /download/file/:slug uses controlled download headers and rejects obvious bots', async () => {
+  let recordedDownloads = 0;
   const app = express();
   app.use(createPublicPageRoutes({
     publicViewService: createPublicViewServiceStub(),
@@ -361,6 +362,9 @@ test('GET /download/file/:slug uses controlled download headers and rejects obvi
         absolutePath: '/tmp/gaterank-test-clash-verge-rev.dmg',
         internalRedirectPath: '/_protected_uploads/tools/files/clash-verge-rev.dmg',
       }),
+      recordDownload: async () => {
+        recordedDownloads += 1;
+      },
     } as never,
   }));
 
@@ -377,6 +381,16 @@ test('GET /download/file/:slug uses controlled download headers and rejects obvi
     assert.equal(browserResponse.headers.get('x-accel-redirect'), '/_protected_uploads/tools/files/clash-verge-rev.dmg');
     assert.match(browserResponse.headers.get('content-disposition') || '', /attachment/);
     assert.match(browserResponse.headers.get('content-disposition') || '', /filename\*=UTF-8''Clash-Verge-Rev-macOS-2\.5\.1\.dmg/);
+    assert.equal(recordedDownloads, 1);
+
+    const repeatResponse = await fetch(`http://127.0.0.1:${port}/download/file/clash-verge-rev?platform=macos`, {
+      headers: {
+        'user-agent': 'Mozilla/5.0 GateRank download test',
+        'accept-language': 'zh-CN,zh;q=0.9',
+      },
+    });
+    assert.equal(repeatResponse.status, 200);
+    assert.equal(recordedDownloads, 2);
 
     const botResponse = await fetch(`http://127.0.0.1:${port}/download/file/clash-verge-rev?platform=macos`, {
       headers: {
@@ -385,6 +399,7 @@ test('GET /download/file/:slug uses controlled download headers and rejects obvi
     });
     assert.equal(botResponse.status, 403);
     assert.equal((await botResponse.json()).code, 'DOWNLOAD_FORBIDDEN');
+    assert.equal(recordedDownloads, 2);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

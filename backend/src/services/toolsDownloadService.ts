@@ -166,6 +166,10 @@ export class ToolsDownloadService {
     };
   }
 
+  async recordDownload(itemId: number): Promise<void> {
+    await this.toolDownloadRepository.incrementDownloadCount(itemId);
+  }
+
   private async getDownloadPageConfig(): Promise<ToolsDownloadPageConfig> {
     const record = await this.systemSettingRepository.getByKey(TOOLS_DOWNLOAD_PAGE_SETTING_KEY);
     return normalizePageConfig(record?.value_json || DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG);
@@ -264,6 +268,7 @@ function getDefaultPublishedItems(platform: ToolDownloadPlatform | null): ToolDo
     .map((item, index) => ({
       id: index + 1,
       ...item,
+      download_count: 0,
       status: 'published',
       published_at: now,
       created_at: now,

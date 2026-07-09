@@ -51,7 +51,7 @@ interface PublicPageDeps {
     listActiveDeals(): Promise<AirportDealView[]>;
   };
   monthlyReportPublicService?: MonthlyReportPublicService;
-  toolsDownloadService?: Pick<ToolsDownloadService, 'getDownloadPageView' | 'getDownloadFileTarget'>;
+  toolsDownloadService?: Pick<ToolsDownloadService, 'getDownloadPageView' | 'getDownloadFileTarget' | 'recordDownload'>;
   pageCache?: TimedPromiseCache;
   frontendAssets?: PublicFrontendAssets;
 }
@@ -230,6 +230,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         String(req.params.slug || ''),
         req.query.platform,
       );
+      await requireToolsDownloadService(deps).recordDownload(target.item.id);
       res.setHeader('Cache-Control', 'private, no-store');
       res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive');
       res.setHeader('Content-Type', 'application/octet-stream');
@@ -431,7 +432,7 @@ function requireMonthlyReportPublicService(deps: PublicPageDeps): MonthlyReportP
   return deps.monthlyReportPublicService;
 }
 
-function requireToolsDownloadService(deps: PublicPageDeps): Pick<ToolsDownloadService, 'getDownloadPageView' | 'getDownloadFileTarget'> {
+function requireToolsDownloadService(deps: PublicPageDeps): Pick<ToolsDownloadService, 'getDownloadPageView' | 'getDownloadFileTarget' | 'recordDownload'> {
   if (!deps.toolsDownloadService) {
     throw new Error('toolsDownloadService is not configured');
   }

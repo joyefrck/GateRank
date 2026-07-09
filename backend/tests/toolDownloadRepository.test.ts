@@ -25,6 +25,7 @@ test('ToolDownloadRepository.ensureSchema creates download item table and indexe
   assert.ok(calls.some((call) => call.sql.includes('platforms_json JSON NOT NULL')));
   assert.ok(calls.some((call) => call.sql.includes('platform_versions_json JSON NULL')));
   assert.ok(calls.some((call) => call.sql.includes("primary_action ENUM('official', 'local')")));
+  assert.ok(calls.some((call) => call.sql.includes('download_count BIGINT UNSIGNED NOT NULL DEFAULT 0')));
   assert.ok(calls.some((call) => call.sql.includes('CREATE UNIQUE INDEX uk_tool_download_items_slug')));
   assert.ok(calls.some((call) => call.sql.includes('CREATE INDEX idx_tool_download_items_status_sort')));
 });
@@ -51,6 +52,7 @@ test('ToolDownloadRepository.listPublished filters by platform and maps JSON fie
         primary_action: 'official',
         version: 'latest',
         file_size_label: '',
+        download_count: 12,
         is_hot: 1,
         sort_order: 10,
         status: 'published',
@@ -69,8 +71,26 @@ test('ToolDownloadRepository.listPublished filters by platform and maps JSON fie
   assert.deepEqual(result.items[0].platforms, ['windows', 'macos', 'linux']);
   assert.deepEqual(result.items[0].platform_versions, { windows: 'Windows 10/11', macos: 'macOS 12+', linux: 'Ubuntu 20.04+' });
   assert.equal(result.items[0].is_hot, true);
+  assert.equal(result.items[0].download_count, 12);
   assert.match(queries[1].sql, /JSON_CONTAINS\(platforms_json, JSON_QUOTE\(\?\)\)/);
   assert.deepEqual(queries[1].params, ['published', 'windows', 100, 0]);
+});
+
+test('ToolDownloadRepository.incrementDownloadCount increments every successful download request', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const pool = {
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 1 }, []];
+    },
+  };
+
+  const repository = new ToolDownloadRepository(pool as never);
+  const updated = await repository.incrementDownloadCount(7);
+
+  assert.equal(updated, true);
+  assert.match(calls[0].sql, /download_count = download_count \+ 1/);
+  assert.deepEqual(calls[0].params, [7]);
 });
 
 test('ToolDownloadRepository.create persists per-platform version labels', async () => {
