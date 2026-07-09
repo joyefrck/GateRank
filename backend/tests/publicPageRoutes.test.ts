@@ -752,7 +752,7 @@ test('GET /rankings/all requests the full public page size and exposes more than
     const port = (server.address() as AddressInfo).port;
     const response = await fetch(`http://127.0.0.1:${port}/rankings/all?date=2026-03-23&page=1`);
     assert.equal(response.status, 200);
-    assert.deepEqual(calls, [{ page: 1, pageSize: 100 }]);
+    assert.ok(calls.some((call) => call.page === 1 && call.pageSize === 100));
 
     const html = await response.text();
     const reportLinks = new Set(
@@ -760,6 +760,53 @@ test('GET /rankings/all requests the full public page size and exposes more than
     );
     assert.equal(reportLinks.size, 25);
     assert.ok(reportLinks.size > 20);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /rankings/all embeds client-sized initial payload for React pagination after refresh', async () => {
+  const calls: Array<{ page: number; pageSize: number }> = [];
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: {
+      ...createPublicViewServiceStub(),
+      getFullRankingView: async (_date: string, page: number, pageSize: number, filters): Promise<FullRankingView> => {
+        calls.push({ page, pageSize });
+        const total = 25;
+        return {
+          ...buildFullRankingViewWithAirportCount(total),
+          page,
+          page_size: pageSize,
+          total,
+          total_pages: Math.max(1, Math.ceil(total / pageSize)),
+          filters,
+          items: buildFullRankingViewWithAirportCount(total).items.slice(0, pageSize),
+        };
+      },
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/all?date=2026-03-23&page=1`);
+    assert.equal(response.status, 200);
+    assert.deepEqual(calls, [
+      { page: 1, pageSize: 100 },
+      { page: 1, pageSize: 20 },
+    ]);
+
+    const html = await response.text();
+    const matched = html.match(/<script id="__GATERANK_INITIAL_DATA__" type="application\/json">([^<]+)<\/script>/);
+    assert.ok(matched);
+    const initialData = JSON.parse(matched[1]) as {
+      payload: { page_size: number; total: number; total_pages: number; items: unknown[] };
+    };
+    assert.equal(initialData.payload.page_size, 20);
+    assert.equal(initialData.payload.total, 25);
+    assert.equal(initialData.payload.total_pages, 2);
+    assert.equal(initialData.payload.items.length, 20);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -927,7 +974,7 @@ test('public data routes reuse prerender view within ttl', async () => {
 
     assert.equal(first.status, 200);
     assert.equal(second.status, 200);
-    assert.equal(fullRankingCalls, 1);
+    assert.equal(fullRankingCalls, 2);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

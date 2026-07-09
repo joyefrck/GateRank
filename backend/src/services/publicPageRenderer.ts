@@ -223,6 +223,7 @@ export function renderFullRankingPublicPage(
   requestedPage: number,
   filters: FullRankingFilters = view.filters || EMPTY_FULL_RANKING_FILTERS,
   frontendAssets?: PublicFrontendAssets,
+  initialView: FullRankingView = view,
 ): string {
   const page = view.page || requestedPage || 1;
   const seo = buildFullRankingSeo({ dateLabel: view.date, total: view.total, filters });
@@ -270,7 +271,7 @@ export function renderFullRankingPublicPage(
         page,
         filters,
       },
-      payload: view,
+      payload: initialView,
     },
     frontendAssets,
     body: `

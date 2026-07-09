@@ -57,6 +57,7 @@ interface PublicPageDeps {
 }
 
 const FULL_RANKING_PUBLIC_PAGE_SIZE = 100;
+const FULL_RANKING_CLIENT_PAGE_SIZE = 20;
 
 export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   const router = Router();
@@ -90,15 +91,10 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         return;
       }
       const renderDate = requestedDate || getDateInTimezone();
-      const view = await pageCache.getOrLoad(
-        `full-ranking:${renderDate}:${page}:${FULL_RANKING_PUBLIC_PAGE_SIZE}:${JSON.stringify(filters)}`,
-        () => deps.publicViewService.getFullRankingView(
-          renderDate,
-          page,
-          FULL_RANKING_PUBLIC_PAGE_SIZE,
-          filters,
-        ),
-      );
+      const [view, clientView] = await Promise.all([
+        getCachedFullRankingView(pageCache, deps.publicViewService, renderDate, page, FULL_RANKING_PUBLIC_PAGE_SIZE, filters),
+        getCachedFullRankingView(pageCache, deps.publicViewService, renderDate, page, FULL_RANKING_CLIENT_PAGE_SIZE, filters),
+      ]);
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderFullRankingPublicPage(
         siteUrl,
@@ -107,6 +103,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         page,
         filters,
         frontendAssets,
+        clientView,
       ));
     } catch (error) {
       console.error('[public-page] failed to render full ranking page', { error, requestId: req.requestId || 'unknown' });
@@ -132,15 +129,10 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         return;
       }
       const renderDate = requestedDate || getDateInTimezone();
-      const view = await pageCache.getOrLoad(
-        `full-ranking:${renderDate}:${page}:${FULL_RANKING_PUBLIC_PAGE_SIZE}:${JSON.stringify(filters)}`,
-        () => deps.publicViewService.getFullRankingView(
-          renderDate,
-          page,
-          FULL_RANKING_PUBLIC_PAGE_SIZE,
-          filters,
-        ),
-      );
+      const [view, clientView] = await Promise.all([
+        getCachedFullRankingView(pageCache, deps.publicViewService, renderDate, page, FULL_RANKING_PUBLIC_PAGE_SIZE, filters),
+        getCachedFullRankingView(pageCache, deps.publicViewService, renderDate, page, FULL_RANKING_CLIENT_PAGE_SIZE, filters),
+      ]);
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderFullRankingPublicPage(
         siteUrl,
@@ -149,6 +141,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         page,
         filters,
         frontendAssets,
+        clientView,
       ));
     } catch (error) {
       console.error('[public-page] failed to render static full ranking page', { error, requestId: req.requestId || 'unknown' });
@@ -423,6 +416,20 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   });
 
   return router;
+}
+
+function getCachedFullRankingView(
+  pageCache: TimedPromiseCache,
+  publicViewService: PublicPageDeps['publicViewService'],
+  renderDate: string,
+  page: number,
+  pageSize: number,
+  filters: FullRankingFilters,
+): Promise<FullRankingView> {
+  return pageCache.getOrLoad(
+    `full-ranking:${renderDate}:${page}:${pageSize}:${JSON.stringify(filters)}`,
+    () => publicViewService.getFullRankingView(renderDate, page, pageSize, filters),
+  );
 }
 
 function requireMonthlyReportPublicService(deps: PublicPageDeps): MonthlyReportPublicService {
