@@ -1,4 +1,5 @@
 import type { FullRankingFilters } from '../../../shared/fullRankingFilters';
+import type { HomeToolDownloadCta } from '../../../shared/toolDownloads';
 
 export type AirportStatus = 'normal' | 'risk' | 'down';
 export type AirportStreamingSupport =
@@ -341,6 +342,7 @@ export interface HomePageView {
     monitored_airports: number;
     realtime_tests: number;
   };
+  tool_download_cta: HomeToolDownloadCta;
   sections: {
     today_pick: HomeSectionView;
     most_stable: HomeSectionView;

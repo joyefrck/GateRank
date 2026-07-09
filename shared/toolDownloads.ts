@@ -57,6 +57,37 @@ export interface ToolsDownloadPageView {
   total: number;
 }
 
+export interface HomeToolDownloadCtaItem {
+  slug: string;
+  name: string;
+  icon_url: string;
+}
+
+export interface HomeToolDownloadCta {
+  href: string;
+  title: string;
+  description: string;
+  platforms: string[];
+  items: HomeToolDownloadCtaItem[];
+}
+
+export const HOME_TOOL_DOWNLOAD_CTA_COPY = {
+  href: '/download',
+  title: '翻墙工具客户端下载',
+  description: 'Android、macOS、Windows、Linux 常用客户端集中下载，覆盖 v2rayN、Karing、Clash Meta 等订阅工具。',
+  platforms: ['Android', 'macOS', 'Windows', 'Linux'],
+} as const;
+
+export function buildHomeToolDownloadCta(items: HomeToolDownloadCtaItem[]): HomeToolDownloadCta {
+  return {
+    href: HOME_TOOL_DOWNLOAD_CTA_COPY.href,
+    title: HOME_TOOL_DOWNLOAD_CTA_COPY.title,
+    description: HOME_TOOL_DOWNLOAD_CTA_COPY.description,
+    platforms: [...HOME_TOOL_DOWNLOAD_CTA_COPY.platforms],
+    items,
+  };
+}
+
 export const DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG: ToolsDownloadPageConfig = {
   seo_title: '翻墙工具下载 | 科学上网客户端、机场订阅工具与代理软件下载',
   seo_description: 'GateRank 翻墙工具下载页收录 Windows、macOS、iOS、Android、Linux 常用科学上网客户端，支持 Clash Verge Rev、v2rayN、Shadowrocket、Stash、sing-box、Hiddify 等工具的官方页面跳转与后台上传安装包。',

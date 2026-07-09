@@ -194,6 +194,7 @@ export async function createApp() {
     auditRepository,
   });
   await manualJobService.initialize();
+  const toolsDownloadService = new ToolsDownloadService(toolDownloadRepository, systemSettingRepository);
     const publicViewService = new PublicViewService({
       airportRepository,
       metricsRepository,
@@ -203,6 +204,7 @@ export async function createApp() {
       rankingRepository,
       statsRepository,
       subscriptionNodeSnapshotRepository,
+      toolsDownloadService,
     });
   const newsContentService = new NewsContentService();
   const newsCoverImageService = new NewsCoverImageService();
@@ -245,7 +247,6 @@ export async function createApp() {
   const pexelsCoverService = new PexelsCoverService(mediaLibrarySettingsService, newsCoverImageService);
   const newsPublicService = new NewsPublicService(newsRepository, newsContentService);
   const monthlyReportPublicService = new MonthlyReportPublicService(monthlyReportRepository, airportRepository);
-  const toolsDownloadService = new ToolsDownloadService(toolDownloadRepository, systemSettingRepository);
   const applicationNotificationService = new TelegramNotificationService({
     systemSettingRepository,
   });

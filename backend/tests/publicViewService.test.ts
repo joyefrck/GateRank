@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PublicViewService } from '../src/services/publicViewService';
+import type { ToolDownloadItem } from '../../shared/toolDownloads';
 
 test('PublicViewService.getHomePageView falls back to latest ranking date', async () => {
   const rankingDates: string[] = [];
@@ -55,6 +56,70 @@ test('PublicViewService.getHomePageView falls back to latest ranking date', asyn
     '2026-03-24',
     '2026-03-24',
   ]);
+});
+
+test('PublicViewService.getHomePageView builds prioritized tool download CTA from published icons', async () => {
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => null,
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => null,
+      getTrend: async () => [],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => null,
+      getPublicDisplayScoreByAirportAndDate: async () => null,
+      getTrend: async () => [],
+      getPublicFullRankingByDate: async () => ({
+        total: 0,
+        items: [],
+      }),
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 3,
+        realtime_tests: 12,
+        latest_data_at: '2026-03-24T10:00:00+08:00',
+      }),
+    },
+    toolsDownloadService: {
+      getDownloadPageView: async () => ({
+        config: {} as never,
+        platform: null,
+        platforms: ['windows', 'macos', 'ios', 'android', 'linux'],
+        hotItems: [
+          createToolDownloadItem('hiddify', 'Hiddify', '/uploads/tools/icons/hiddify.webp', 10),
+          createToolDownloadItem('clash-verge-rev', 'Clash Verge Rev', '/uploads/tools/icons/clash.webp', 20),
+        ],
+        items: [
+          createToolDownloadItem('sing-box', 'sing-box', '/uploads/tools/icons/sing-box.webp', 30),
+          createToolDownloadItem('karing', 'Karing', '/uploads/tools/icons/karing.webp', 40),
+          createToolDownloadItem('v2rayn', 'v2rayN', '/uploads/tools/icons/v2rayn.webp', 50),
+          createToolDownloadItem('no-icon', 'No Icon', '', 60),
+        ],
+        total: 6,
+      }),
+    },
+  });
+
+  const result = await service.getHomePageView('2026-03-25');
+
+  assert.equal(result.tool_download_cta.href, '/download');
+  assert.equal(result.tool_download_cta.title, '翻墙工具客户端下载');
+  assert.deepEqual(result.tool_download_cta.items.map((item) => item.slug), [
+    'v2rayn',
+    'karing',
+    'clash-verge-rev',
+    'sing-box',
+  ]);
+  assert.ok(result.tool_download_cta.items.every((item) => item.icon_url));
 });
 
 test('PublicViewService.getHomePageView uses configured home section limits for source queries', async () => {
@@ -2948,3 +3013,27 @@ test('PublicViewService.getRiskMonitorView includes down airports and risk-watch
   assert.deepEqual(result.items[1]?.risk_reasons, ['recent_complaints']);
   assert.match(result.items[1]?.risk_reason_summary || '', /官网当前探测正常/);
 });
+
+function createToolDownloadItem(slug: string, name: string, iconUrl: string, sortOrder: number): ToolDownloadItem {
+  return {
+    id: sortOrder,
+    slug,
+    name,
+    summary: `${name} 科学上网客户端`,
+    description: `${name} 可用于导入机场订阅。`,
+    platforms: ['windows'],
+    platform_versions: { windows: 'Windows 10/11' },
+    icon_url: iconUrl,
+    local_file_url: '',
+    official_url: `https://example.com/${slug}`,
+    primary_action: 'official',
+    version: 'latest',
+    file_size_label: '',
+    is_hot: sortOrder <= 20,
+    sort_order: sortOrder,
+    status: 'published',
+    published_at: '2026-07-08 10:00:00',
+    created_at: '2026-07-08 09:00:00',
+    updated_at: '2026-07-08 10:00:00',
+  };
+}

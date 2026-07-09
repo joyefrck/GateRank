@@ -58,6 +58,16 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       if (path === '/') {
         assert.match(html, /<strong class="hero-highlight">行业首创，每日更新<\/strong>/);
         assert.match(html, /基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单/);
+        assert.match(html, /class="home-tool-download-cta"/);
+        assert.match(html, /href="\/download"/);
+        assert.match(html, /翻墙工具客户端下载/);
+        assert.match(html, /Android、macOS、Windows、Linux 常用客户端集中下载/);
+        assert.match(html, /src="\/uploads\/tools\/icons\/v2rayn\.webp"/);
+        assert.ok(
+          html.indexOf('今日推荐机场') < html.indexOf('home-tool-download-cta')
+            && html.indexOf('home-tool-download-cta') < html.indexOf('新入榜潜力'),
+          'home download CTA should render between today pick and new entries',
+        );
         assert.match(html, /<h2>读懂机场推荐逻辑<\/h2>/);
         assert.match(html, /<h3>机场榜 GateRank 是什么？<\/h3>/);
         assert.match(html, /<h3>GateRank 如何评测机场 VPN？<\/h3>/);
@@ -1306,6 +1316,17 @@ const homeView: HomePageView = {
     monitored_airports: 12,
     realtime_tests: 345,
   },
+  tool_download_cta: {
+    href: '/download',
+    title: '翻墙工具客户端下载',
+    description: 'Android、macOS、Windows、Linux 常用客户端集中下载，覆盖 v2rayN、Karing、Clash Meta 等订阅工具。',
+    platforms: ['Android', 'macOS', 'Windows', 'Linux'],
+    items: [
+      { slug: 'v2rayn', name: 'v2rayN', icon_url: '/uploads/tools/icons/v2rayn.webp' },
+      { slug: 'karing', name: 'Karing', icon_url: '/uploads/tools/icons/karing.webp' },
+      { slug: 'clash-verge-rev', name: 'Clash Verge Rev', icon_url: '/uploads/tools/icons/clash-verge-rev.webp' },
+    ],
+  },
   sections: {
     today_pick: {
       title: '今日推荐机场',
@@ -1331,7 +1352,28 @@ const homeView: HomePageView = {
     },
     most_stable: { title: '长期稳定机场', subtitle: 'Most Stable', items: [] },
     best_value: { title: '性价比最佳', subtitle: 'Best Value', items: [] },
-    new_entries: { title: '新入榜潜力', subtitle: 'New Entries', items: [] },
+    new_entries: {
+      title: '新入榜潜力',
+      subtitle: 'New Entries',
+      items: [
+        {
+          type: 'new',
+          airport_id: 8,
+          name: '极光机场',
+          website: 'https://aurora.example.com',
+          tags: ['新入榜'],
+          score: 86.2,
+          score_delta_vs_yesterday: { label: '对比昨天', value: null },
+          stability_tier: 'minor_fluctuation',
+          details: [
+            { label: '上架时间', value: '2026-03-20' },
+            { label: '月付价格', value: '¥18/月' },
+          ],
+          conclusion: '新入榜机场，建议先短周期观察。',
+          report_url: '/airports/aurora',
+        },
+      ],
+    },
     risk_alerts: { title: '风险预警', subtitle: 'Risk Alerts', items: [] },
   },
 };

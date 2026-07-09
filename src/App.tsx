@@ -100,6 +100,7 @@ import {
   getToolDownloadPlatformLabel,
   isToolDownloadPlatform,
   TOOL_DOWNLOAD_PLATFORMS,
+  type HomeToolDownloadCta as HomeToolDownloadCtaView,
   type ToolDownloadItem,
   type ToolDownloadPlatform,
   type ToolsDownloadPageView,
@@ -200,6 +201,7 @@ interface HomePageResponse {
     monitored_airports: number;
     realtime_tests: number;
   };
+  tool_download_cta: HomeToolDownloadCtaView;
   sections: Record<HomeSectionKey, HomeSection>;
 }
 
@@ -3055,7 +3057,7 @@ function HomePage({ date }: { date?: string }) {
             )
             : undefined;
 
-          return (
+          const renderedSection = (
             <section id={sectionKey} key={sectionKey}>
               <SectionHeader
                 icon={display.icon}
@@ -3105,10 +3107,74 @@ function HomePage({ date }: { date?: string }) {
               )}
             </section>
           );
+          return sectionKey === 'today_pick' ? (
+            <React.Fragment key="today-pick-with-download-cta">
+              {renderedSection}
+              <HomeToolDownloadCta cta={data.tool_download_cta} />
+            </React.Fragment>
+          ) : renderedSection;
         })}
         {!loading && !error && data ? <HomeSeoContent /> : null}
       </main>
     </PageFrame>
+  );
+}
+
+function HomeToolDownloadCta({ cta }: { cta?: HomeToolDownloadCtaView }) {
+  if (!cta) {
+    return null;
+  }
+  const visibleItems = cta.items.filter((item) => item.icon_url).slice(0, 4);
+
+  return (
+    <a
+      href={cta.href}
+      onClick={(event) => {
+        event.preventDefault();
+        navigate(cta.href, { scrollToTop: true });
+      }}
+      className="group relative flex min-h-[84px] flex-col gap-2.5 overflow-hidden rounded-[18px] border border-sky-100 bg-[radial-gradient(circle_at_9%_45%,rgba(14,165,233,0.13),transparent_28%),linear-gradient(135deg,#ffffff_0%,#f8fbff_52%,#eef7ff_100%)] px-4 py-3 text-slate-950 no-underline shadow-[0_16px_44px_rgba(15,23,42,0.06)] transition duration-200 ease-out hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-[0_20px_54px_rgba(14,116,144,0.12)] md:min-h-[88px] md:flex-row md:items-center md:justify-between md:gap-5 md:px-5 md:py-4"
+      aria-label={cta.title}
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-200 to-transparent" />
+      <div className="flex min-w-0 items-start gap-2.5 md:gap-3">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-white/80 bg-slate-950 text-white shadow-[0_14px_28px_rgba(15,23,42,0.16)] ring-1 ring-slate-900/5 transition group-hover:scale-[1.03] md:h-11 md:w-11 md:rounded-[14px]">
+          <Download className="h-[18px] w-[18px] md:h-5 md:w-5" />
+        </span>
+        <div className="min-w-0">
+        <div className="text-base font-black tracking-normal text-slate-950 md:text-lg">{cta.title}</div>
+        <p className="mt-0.5 max-w-3xl text-xs font-semibold leading-5 text-slate-500 md:mt-1 md:text-[13px]">
+          {cta.description}
+        </p>
+        </div>
+      </div>
+
+      <div className="flex w-full shrink-0 items-center justify-between gap-2 md:w-auto md:justify-end md:gap-3">
+        {visibleItems.length > 0 ? (
+          <div className="flex shrink-0 items-center" aria-label="热门客户端">
+            {visibleItems.map((item) => (
+              <span
+                key={item.slug}
+                className="-ml-2 first:ml-0 flex h-8 w-8 items-center justify-center overflow-hidden rounded-[9px] border border-white bg-white shadow-[0_10px_22px_rgba(15,23,42,0.1)] ring-1 ring-slate-200/70 md:h-9 md:w-9"
+                title={item.name}
+              >
+                <img src={item.icon_url} alt={item.name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
+              </span>
+            ))}
+          </div>
+        ) : null}
+        <div className="flex min-w-0 flex-wrap justify-start gap-1.5 md:justify-end">
+          {cta.platforms.map((platform) => (
+            <span key={platform} className="inline-flex min-h-[24px] items-center rounded-full border border-sky-100 bg-white/85 px-2 text-[10px] font-black text-slate-600 shadow-[0_6px_16px_rgba(14,116,144,0.06)] md:min-h-[26px] md:px-2.5 md:text-[11px]">
+              {platform}
+            </span>
+          ))}
+        </div>
+        <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-950 text-white transition group-hover:translate-x-0.5">
+          <ArrowRight className="h-4 w-4" />
+        </span>
+      </div>
+    </a>
   );
 }
 
@@ -3124,9 +3190,6 @@ function HomeSeoContent() {
           <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">SEO Guide</div>
           <h2 className="mt-2 text-2xl font-black tracking-normal text-slate-950 md:text-3xl">读懂机场推荐逻辑</h2>
         </div>
-        <p className="max-w-xl text-sm leading-7 text-slate-500">
-          从榜单结果继续往下看，理解 GateRank 如何承接机场推荐、VPN 推荐、梯子推荐和机场 VPN 排名这几类搜索意图。
-        </p>
       </div>
 
       <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,1.05fr)_minmax(340px,0.95fr)]">

@@ -30,6 +30,13 @@ import { buildTodayPickRows, isTodayPickEligible, type RankedAirportInput } from
 import { DEFAULT_HOME_SECTION_LIMITS, type HomeSectionLimits } from './marketingSettingsService';
 import { buildAirportReportPath, buildAirportSlugCandidate } from '../../../shared/publicSeo';
 import { EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../../shared/fullRankingFilters';
+import {
+  buildHomeToolDownloadCta,
+  type HomeToolDownloadCta,
+  type HomeToolDownloadCtaItem,
+  type ToolDownloadItem,
+  type ToolsDownloadPageView,
+} from '../../../shared/toolDownloads';
 
 type HomeSectionKey =
   | 'today_pick'
@@ -177,6 +184,9 @@ interface PublicViewDeps {
   subscriptionNodeSnapshotRepository?: {
     getLatestByAirport(airportId: number): Promise<SubscriptionNodeSnapshot | null>;
   };
+  toolsDownloadService?: {
+    getDownloadPageView(platform?: null): Promise<ToolsDownloadPageView>;
+  };
 }
 
 interface CardContext {
@@ -250,6 +260,7 @@ const DEFAULT_SCORE_VISIBILITY: PublicScoreVisibility = {
   score_hidden: false,
   score_hidden_reason: null,
 };
+const HOME_TOOL_DOWNLOAD_CTA_LIMIT = 4;
 
 export class PublicViewService {
   constructor(private readonly deps: PublicViewDeps) {}
@@ -268,6 +279,7 @@ export class PublicViewService {
       newest,
       latestApprovedApplicationAirports,
       riskMonitor,
+      toolDownloadCta,
     ] = await Promise.all([
       this.deps.statsRepository.getHomeStats(resolvedDate),
         this.deps.scoreRepository.getPublicFullRankingByDate(
@@ -293,6 +305,7 @@ export class PublicViewService {
               clickChargeAmount,
             )
         : Promise.resolve({ total: 0, items: [] }),
+      this.buildHomeToolDownloadCta(),
     ]);
     const preloadedContexts = await this.preloadCardContexts(
       collectRankingAirportIds(
@@ -357,6 +370,7 @@ export class PublicViewService {
         monitored_airports: stats.monitored_airports,
         realtime_tests: stats.realtime_tests,
       },
+      tool_download_cta: toolDownloadCta,
       sections: {
         today_pick: {
           title: SECTION_CONFIG.today_pick.title,
@@ -577,6 +591,18 @@ export class PublicViewService {
       click_charge_amount: Number.isFinite(amount) && amount > 0 ? amount : CLICK_CHARGE_AMOUNT,
       home_section_limits: normalizeHomeSectionLimits(config.home_section_limits),
     };
+  }
+
+  private async buildHomeToolDownloadCta(): Promise<HomeToolDownloadCta> {
+    if (!this.deps.toolsDownloadService) {
+      return buildHomeToolDownloadCta([]);
+    }
+    try {
+      const view = await this.deps.toolsDownloadService.getDownloadPageView(null);
+      return buildHomeToolDownloadCta(selectHomeToolDownloadCtaItems(view));
+    } catch {
+      return buildHomeToolDownloadCta([]);
+    }
   }
 
   private async getScoreVisibilityByAirportIds(
@@ -886,6 +912,44 @@ function collectRankingAirportIds(...rankingLists: Array<Array<Pick<RankingItem,
       rankingLists.flatMap((items) => items.map((item) => item.airport_id)),
     ),
   );
+}
+
+function selectHomeToolDownloadCtaItems(view: ToolsDownloadPageView): HomeToolDownloadCtaItem[] {
+  const bySlug = new Map<string, ToolDownloadItem>();
+  for (const item of [...view.hotItems, ...view.items]) {
+    if (!item.icon_url || bySlug.has(item.slug)) {
+      continue;
+    }
+    bySlug.set(item.slug, item);
+  }
+
+  return Array.from(bySlug.values())
+    .sort((left, right) => {
+      const priorityDelta = getHomeToolDownloadPriority(left) - getHomeToolDownloadPriority(right);
+      if (priorityDelta !== 0) {
+        return priorityDelta;
+      }
+      const hotDelta = Number(right.is_hot) - Number(left.is_hot);
+      if (hotDelta !== 0) {
+        return hotDelta;
+      }
+      return left.sort_order - right.sort_order || left.name.localeCompare(right.name);
+    })
+    .slice(0, HOME_TOOL_DOWNLOAD_CTA_LIMIT)
+    .map((item) => ({
+      slug: item.slug,
+      name: item.name,
+      icon_url: item.icon_url,
+    }));
+}
+
+function getHomeToolDownloadPriority(item: Pick<ToolDownloadItem, 'slug' | 'name'>): number {
+  const value = `${item.slug} ${item.name}`.toLowerCase();
+  if (value.includes('v2rayn')) return 0;
+  if (value.includes('karing')) return 1;
+  if (value.includes('clash') || value.includes('mihomo')) return 2;
+  if (value.includes('sing-box') || value.includes('singbox')) return 3;
+  return 100;
 }
 
 function resolvePublicAirportSlug(airport: Pick<Airport, 'id' | 'slug' | 'name' | 'website'>): string {

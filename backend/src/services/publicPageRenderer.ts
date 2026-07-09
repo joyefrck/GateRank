@@ -84,6 +84,7 @@ import {
   getToolDownloadPlatformLabel,
   getToolDownloadFileExtension,
   TOOL_DOWNLOAD_PLATFORMS,
+  type HomeToolDownloadCta,
   type ToolDownloadItem,
   type ToolDownloadPlatform,
   type ToolsDownloadPageView,
@@ -120,6 +121,14 @@ interface PublicInitialData {
   };
   payload: unknown;
 }
+
+const HOME_SECTION_RENDER_ORDER: Array<keyof HomePageView['sections']> = [
+  'today_pick',
+  'new_entries',
+  'most_stable',
+  'best_value',
+  'risk_alerts',
+];
 
 const reportAnchorSections = [
   { id: 'report-overview', label: '概览' },
@@ -1573,18 +1582,70 @@ function buildToolDownloadSoftwareJsonLd(siteUrl: string, items: ToolDownloadIte
 }
 
 function renderHomeSections(view: HomePageView): string {
-  return Object.entries(view.sections)
-    .filter(([, section]) => section.items.length > 0)
-    .map(([, section]) => `
-      <section class="content-card">
-        <div class="eyebrow">${escapeHtml(section.subtitle)}</div>
-        <h2>${escapeHtml(section.title)}</h2>
-        <div class="card-grid">
-          ${section.items.map((item) => renderAirportCard(item)).join('')}
-        </div>
-      </section>
+  return HOME_SECTION_RENDER_ORDER
+    .map((sectionKey) => {
+      const section = view.sections[sectionKey];
+      if (section.items.length === 0) {
+        return sectionKey === 'today_pick' ? renderHomeToolDownloadCta(view.tool_download_cta) : '';
+      }
+      const renderedSection = `
+        <section class="content-card">
+          <div class="eyebrow">${escapeHtml(section.subtitle)}</div>
+          <h2>${escapeHtml(section.title)}</h2>
+          <div class="card-grid">
+            ${section.items.map((item) => renderAirportCard(item)).join('')}
+          </div>
+        </section>
+      `;
+      return sectionKey === 'today_pick'
+        ? `${renderedSection}${renderHomeToolDownloadCta(view.tool_download_cta)}`
+        : renderedSection;
+    })
+    .join('');
+}
+
+function renderHomeToolDownloadCta(cta?: HomeToolDownloadCta): string {
+  if (!cta) {
+    return '';
+  }
+  const icons = cta.items
+    .filter((item) => item.icon_url)
+    .map((item) => `
+      <span class="home-tool-download-icon">
+        <img src="${escapeAttribute(item.icon_url)}" alt="${escapeAttribute(item.name)}" loading="lazy" decoding="async" />
+      </span>
     `)
     .join('');
+  const platformLabels = cta.platforms
+    .map((platform) => `<span>${escapeHtml(platform)}</span>`)
+    .join('');
+
+  return `
+    <a class="home-tool-download-cta" href="${escapeAttribute(cta.href)}" aria-label="${escapeAttribute(cta.title)}">
+      <div class="home-tool-download-copy">
+        <span class="home-tool-download-badge" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M12 3v10m0 0 4-4m-4 4-4-4" />
+            <path d="M5 17v1.5A2.5 2.5 0 0 0 7.5 21h9a2.5 2.5 0 0 0 2.5-2.5V17" />
+          </svg>
+        </span>
+        <span class="home-tool-download-text">
+          <strong>${escapeHtml(cta.title)}</strong>
+          <p>${escapeHtml(cta.description)}</p>
+        </span>
+      </div>
+      <div class="home-tool-download-meta">
+        ${icons ? `<div class="home-tool-download-icons">${icons}</div>` : ''}
+        <div class="home-tool-download-platforms">${platformLabels}</div>
+        <span class="home-tool-download-arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24" focusable="false">
+            <path d="M5 12h14" />
+            <path d="m13 6 6 6-6 6" />
+          </svg>
+        </span>
+      </div>
+    </a>
+  `;
 }
 
 function renderHomeSeoContent(): string {
@@ -1599,7 +1660,6 @@ function renderHomeSeoContent(): string {
           <div class="eyebrow">SEO Guide</div>
           <h2>读懂机场推荐逻辑</h2>
         </div>
-        <p>从榜单结果继续往下看，理解 GateRank 如何承接机场推荐、VPN 推荐、梯子推荐和机场 VPN 排名这几类搜索意图。</p>
       </div>
       <div class="home-seo-guide-grid">
         <div class="home-seo-column">
@@ -2199,6 +2259,24 @@ const styles = `
   .metric div, .muted { color: #666; font-size: 13px; }
   .metric strong, .score { display: block; margin-top: 8px; font-size: 28px; font-weight: 900; }
   .content-card { border: 1px solid #e5e5e5; border-radius: 24px; padding: 26px; background: #fff; }
+  .home-tool-download-cta { position: relative; display: flex; min-height: 88px; align-items: center; justify-content: space-between; overflow: hidden; gap: 18px; border: 1px solid #e0f2fe; border-radius: 18px; background: radial-gradient(circle at 9% 45%, rgba(14,165,233,.13), transparent 28%), linear-gradient(135deg, #fff 0%, #f8fbff 52%, #eef7ff 100%); padding: 15px 18px; color: #0f172a; text-decoration: none; box-shadow: 0 16px 44px rgba(15,23,42,.06); transition: transform .2s ease-out, box-shadow .2s ease-out, border-color .2s ease-out; }
+  .home-tool-download-cta::before { content: ""; position: absolute; inset: 0 0 auto; height: 1px; background: linear-gradient(90deg, transparent, #bae6fd, transparent); pointer-events: none; }
+  .home-tool-download-cta:hover { transform: translateY(-2px); border-color: #bae6fd; box-shadow: 0 20px 54px rgba(14,116,144,.12); }
+  .home-tool-download-copy { display: flex; min-width: 0; align-items: flex-start; gap: 12px; }
+  .home-tool-download-badge { display: inline-flex; width: 44px; height: 44px; flex: 0 0 auto; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,.8); border-radius: 14px; background: #020617; color: #fff; box-shadow: 0 14px 28px rgba(15,23,42,.16); }
+  .home-tool-download-badge svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  .home-tool-download-text { min-width: 0; }
+  .home-tool-download-copy strong { display: block; font-size: 18px; font-weight: 900; letter-spacing: 0; }
+  .home-tool-download-copy p { margin: 4px 0 0; max-width: 760px; color: #64748b; font-size: 13px; line-height: 1.55; }
+  .home-tool-download-meta { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; }
+  .home-tool-download-icons { display: flex; align-items: center; }
+  .home-tool-download-icon { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; overflow: hidden; border: 1px solid #fff; border-radius: 9px; background: #fff; box-shadow: 0 10px 22px rgba(15,23,42,.1); outline: 1px solid rgba(226,232,240,.7); }
+  .home-tool-download-icon + .home-tool-download-icon { margin-left: -8px; }
+  .home-tool-download-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .home-tool-download-platforms { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+  .home-tool-download-platforms span { display: inline-flex; min-height: 28px; align-items: center; border: 1px solid #e0f2fe; border-radius: 999px; background: rgba(255,255,255,.85); padding: 0 10px; color: #475569; font-size: 11px; font-weight: 900; box-shadow: 0 6px 16px rgba(14,116,144,.06); }
+  .home-tool-download-arrow { display: inline-flex; width: 32px; height: 32px; align-items: center; justify-content: center; border-radius: 999px; background: #0f172a; color: #fff; }
+  .home-tool-download-arrow svg { width: 17px; height: 17px; stroke: currentColor; stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }
   .tools-download-page { width: min(1280px, calc(100vw - 32px)); gap: 26px; }
   .tools-download-page > section,
   .tools-download-page .filter-chip-row,
@@ -2507,6 +2585,15 @@ const styles = `
   @media (max-width: 900px) {
     .page-main { width: min(100vw - 24px, 1280px); padding-top: 24px; gap: 20px; }
     .hero, .content-card, .home-seo-guide { border-radius: 18px; padding: 20px; }
+    .home-tool-download-cta { align-items: flex-start; flex-direction: column; gap: 10px; padding: 12px 14px; }
+    .home-tool-download-copy { gap: 10px; }
+    .home-tool-download-badge { width: 40px; height: 40px; border-radius: 12px; }
+    .home-tool-download-badge svg { width: 18px; height: 18px; }
+    .home-tool-download-copy strong { font-size: 16px; }
+    .home-tool-download-copy p { font-size: 12px; }
+    .home-tool-download-meta { width: 100%; justify-content: space-between; gap: 10px; }
+    .home-tool-download-platforms { justify-content: flex-start; }
+    .home-tool-download-platforms span { min-height: 24px; padding: 0 8px; font-size: 10px; }
     .tools-download-page { width: min(100vw - 24px, 1280px); }
     .tools-download-page > section { max-width: 100%; }
     .tools-download-hero { grid-template-columns: 1fr; padding: 22px; }

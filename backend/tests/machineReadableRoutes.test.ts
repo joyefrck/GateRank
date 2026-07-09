@@ -437,6 +437,13 @@ const homeView: HomePageView = {
     monitored_airports: 12,
     realtime_tests: 345,
   },
+  tool_download_cta: {
+    href: '/download',
+    title: '翻墙工具客户端下载',
+    description: 'Android、macOS、Windows、Linux 常用客户端集中下载，覆盖 v2rayN、Karing、Clash Meta 等订阅工具。',
+    platforms: ['Android', 'macOS', 'Windows', 'Linux'],
+    items: [],
+  },
   sections: {
     today_pick: { title: '今日推荐机场', subtitle: "Today's Top Pick", items: [] },
     most_stable: { title: '长期稳定机场', subtitle: 'Most Stable', items: [] },
