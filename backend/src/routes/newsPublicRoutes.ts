@@ -9,7 +9,7 @@ import { buildServerPageViewRecord } from '../utils/marketing';
 import { setPublicCacheHeaders } from '../utils/publicCache';
 import { getDateInTimezone } from '../utils/time';
 import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from '../../../shared/publishTokenDocs';
-import { PUBLIC_DEALS_LASTMOD, PUBLIC_SEO_STATIC_LASTMOD } from '../../../shared/publicSeo';
+import { PUBLIC_DEALS_LASTMOD, PUBLIC_SEO_STATIC_LASTMOD, RANKING_TRANSPARENCY_LASTMOD } from '../../../shared/publicSeo';
 import { getIndexableFullRankingFilterPaths } from '../../../shared/fullRankingFilters';
 
 interface NewsPublicDeps {
@@ -197,6 +197,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       '/monthly-reports',
       '/deals',
       '/methodology',
+      '/ranking-transparency',
       '/apply',
       '/risk-monitor',
       '/for-ai',
@@ -217,6 +218,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       '/deals': PUBLIC_DEALS_LASTMOD,
       '/risk-monitor': dataLastmod,
       '/methodology': PUBLIC_SEO_STATIC_LASTMOD,
+      '/ranking-transparency': RANKING_TRANSPARENCY_LASTMOD,
       '/apply': PUBLIC_SEO_STATIC_LASTMOD,
       '/for-ai': PUBLIC_SEO_STATIC_LASTMOD,
       '/publish-token-docs': PUBLISH_TOKEN_DOCS_LAST_UPDATED,

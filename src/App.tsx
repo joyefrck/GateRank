@@ -43,6 +43,7 @@ import {
   buildMethodologyHref,
   buildMonthlyReportsHref,
   buildPublishTokenDocsHref,
+  buildRankingTransparencyHref,
   buildRiskMonitorHref,
   buildToolsDownloadHref,
   buildQuery,
@@ -56,6 +57,8 @@ import {
   HOME_HERO_HIGHLIGHT_TEXT,
   HOME_HERO_SUPPORTING_TEXT,
   HOME_SEO_CONTENT_SECTIONS,
+  RANKING_TRANSPARENCY_ARTICLE,
+  RANKING_TRANSPARENCY_SEO,
   buildAirportReportPath,
   buildFullRankingHeading,
   buildFullRankingSeo,
@@ -410,7 +413,7 @@ interface CardProps {
 }
 
 interface RouteState {
-  kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'monthly_reports' | 'monthly_report' | 'deals' | 'risk_monitor' | 'methodology' | 'publish_token_docs' | 'tools_download' | 'tool_placeholder' | 'not_found';
+  kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'monthly_reports' | 'monthly_report' | 'deals' | 'risk_monitor' | 'methodology' | 'ranking_transparency' | 'publish_token_docs' | 'tools_download' | 'tool_placeholder' | 'not_found';
   airportId?: number;
   airportSlug?: string;
   monthlyReportSlug?: string;
@@ -1409,6 +1412,12 @@ function parseRoute(): RouteState {
     };
   }
 
+  if (path === buildRankingTransparencyHref() || path === `${buildRankingTransparencyHref()}/`) {
+    return {
+      kind: 'ranking_transparency',
+    };
+  }
+
   if (path === buildPublishTokenDocsHref() || path === `${buildPublishTokenDocsHref()}/`) {
     return {
       kind: 'publish_token_docs',
@@ -1586,6 +1595,7 @@ function toMarketingPageKind(routeKind: RouteState['kind']): MarketingPageKind |
   if (routeKind === 'deals') return 'deals';
   if (routeKind === 'risk_monitor') return 'risk_monitor';
   if (routeKind === 'methodology') return 'methodology';
+  if (routeKind === 'ranking_transparency') return null;
   if (routeKind === 'publish_token_docs') return 'publish_token_docs';
   return null;
 }
@@ -2876,6 +2886,141 @@ function EmptySection({ message }: { message: string }) {
   );
 }
 
+function TransparencyStatementNotice({ className = '' }: { className?: string }) {
+  const href = buildRankingTransparencyHref();
+  return (
+    <section className={`mx-auto max-w-7xl px-4 ${className}`} aria-label="评分与排名独立性声明">
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(event) => {
+          event.preventDefault();
+          window.open(href, '_blank', 'noopener,noreferrer');
+        }}
+        className="group flex min-h-[34px] items-center justify-between gap-3 rounded-[8px] border border-rose-100 bg-white/88 px-4 py-1 text-neutral-950 no-underline shadow-[0_8px_22px_rgba(15,23,42,0.045)] transition duration-200 hover:border-rose-200 hover:bg-white hover:shadow-[0_12px_28px_rgba(15,23,42,0.07)] md:px-5"
+      >
+        <span className="min-w-0 truncate text-sm font-black leading-6 md:text-base">
+          关于 GateRank 评分、收费与排名独立性的声明
+        </span>
+        <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] bg-neutral-950 text-white transition group-hover:translate-x-0.5">
+          <ExternalLink className="h-3 w-3" />
+        </span>
+      </a>
+    </section>
+  );
+}
+
+function RankingTransparencyPage() {
+  const article = RANKING_TRANSPARENCY_ARTICLE;
+  const structuredData = useMemo(
+    () => [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: article.title,
+        name: RANKING_TRANSPARENCY_SEO.title,
+        description: RANKING_TRANSPARENCY_SEO.description,
+        url: buildAbsoluteUrl(buildRankingTransparencyHref()),
+        about: [
+          'GateRank Score',
+          '机场榜评分',
+          '机场排名独立性',
+          '机场主充值',
+          '付费排名声明',
+        ],
+        articleSection: article.sections.map((section) => section.title),
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          {
+            '@type': 'ListItem',
+            position: 1,
+            name: '今日推荐',
+            item: buildAbsoluteUrl(buildHomeHref()),
+          },
+          {
+            '@type': 'ListItem',
+            position: 2,
+            name: '评分与排名独立性声明',
+            item: buildAbsoluteUrl(buildRankingTransparencyHref()),
+          },
+        ],
+      },
+    ],
+    [article],
+  );
+
+  usePageSeo({
+    title: RANKING_TRANSPARENCY_SEO.title,
+    description: RANKING_TRANSPARENCY_SEO.description,
+    keywords: RANKING_TRANSPARENCY_SEO.keywords,
+    canonicalPath: buildRankingTransparencyHref(),
+    structuredData,
+  });
+
+  return (
+    <PageFrame active="methodology">
+      <main className="mx-auto max-w-5xl px-4 pb-12 pt-8 md:pb-16 md:pt-12">
+        <article className="overflow-hidden rounded-[8px] border border-neutral-200 bg-white shadow-[0_22px_70px_rgba(15,23,42,0.08)]">
+          <header className="border-b border-neutral-200 bg-[linear-gradient(135deg,#111827_0%,#3f0f19_52%,#fff1f2_100%)] px-5 py-8 text-white md:px-9 md:py-10">
+            <div className="inline-flex rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-black uppercase tracking-[0.2em] text-white/78">
+              GateRank Statement
+            </div>
+            <h1 className="mt-5 max-w-4xl text-3xl font-black leading-tight tracking-normal md:text-5xl">
+              {article.title}
+            </h1>
+            <p className="mt-4 max-w-3xl text-sm font-semibold leading-7 text-white/72 md:text-base">
+              本页公开说明评分算法、数据采集、机场主充值用途、停费处理，以及 GateRank 不参与付费排名的原则。
+            </p>
+          </header>
+
+          <div className="grid gap-0">
+            {article.sections.map((section) => (
+              <section key={section.index} className="grid gap-4 border-b border-neutral-200 px-5 py-6 last:border-b-0 md:grid-cols-[88px_minmax(0,1fr)] md:px-9 md:py-8">
+                <div className="flex h-11 w-11 items-center justify-center rounded-[8px] bg-neutral-950 font-mono text-lg font-black text-white">
+                  {section.index}
+                </div>
+                <div className="min-w-0">
+                  <h2 className="text-xl font-black tracking-normal text-neutral-950 md:text-2xl">{section.title}</h2>
+                  <p className="mt-3 text-[15px] leading-8 text-neutral-600 md:text-base md:leading-8">
+                    <RankingTransparencySectionBody section={section} />
+                  </p>
+                </div>
+              </section>
+            ))}
+          </div>
+        </article>
+      </main>
+    </PageFrame>
+  );
+}
+
+function RankingTransparencySectionBody({ section }: { section: (typeof RANKING_TRANSPARENCY_ARTICLE.sections)[number] }) {
+  if (section.index !== 2) {
+    return <>{section.body}</>;
+  }
+
+  const linkText = '测评方法页';
+  const [before, after = ''] = section.body.split(linkText);
+  return (
+    <>
+      {before}
+      <a
+        href={buildMethodologyHref()}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="font-black text-rose-700 underline decoration-rose-300 underline-offset-4 transition hover:text-rose-900"
+      >
+        {linkText}
+      </a>
+      {after}
+    </>
+  );
+}
+
 function HomePage({ date }: { date?: string }) {
   const initialData = useMemo(
     () => getInitialPublicData<HomePageResponse>(
@@ -3003,19 +3148,20 @@ function HomePage({ date }: { date?: string }) {
 
   return (
     <PageFrame active="home">
+      <TransparencyStatementNotice className="pt-7 md:pt-8" />
       <header className="max-w-7xl mx-auto px-4 pt-8 md:pt-10 pb-5 md:pb-6 text-center">
         <h1 className="text-[34px] md:text-5xl lg:text-[56px] font-black tracking-tight mb-3 leading-[0.95] text-neutral-900">
           机场榜：机场 VPN 推荐与<span className="text-neutral-400">可靠性榜单</span>
         </h1>
         <div className="max-w-4xl mx-auto flex flex-col md:flex-row items-center justify-center gap-3 md:gap-6 text-neutral-500">
           <p className="text-[13px] md:text-sm font-medium tracking-tight leading-7">
-            <strong className="inline-flex items-center rounded-lg border border-orange-200 bg-orange-50 px-1.5 py-0.5 font-black text-orange-700">
+            <strong className="mr-2 inline-flex items-center rounded-lg border border-orange-200 bg-orange-50 px-1.5 py-0.5 font-black text-orange-700 md:mr-2.5">
               {HOME_HERO_HIGHLIGHT_TEXT}
             </strong>
             {HOME_HERO_SUPPORTING_TEXT}
           </p>
           <div className="hidden md:block w-px h-4 bg-neutral-200" />
-          <div className="flex flex-wrap items-center justify-center gap-3 md:gap-5">
+          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-3 md:gap-x-5 md:gap-y-3 md:translate-y-0.5">
             <div className="flex items-center gap-2 text-[11px] md:text-xs font-black uppercase tracking-[0.18em]">
               <span className="text-neutral-300"><Search className="w-3.5 h-3.5" /></span>
               <span className="text-neutral-400">监测机场</span>
@@ -3417,6 +3563,7 @@ function FullRankingPage({
 
   return (
     <PageFrame active="full_ranking">
+      <TransparencyStatementNotice className="pt-7 md:pt-8" />
       <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-10">
         <ListPageHero
           eyebrow="机场排行"
@@ -8613,6 +8760,10 @@ export default function App() {
 
   if (route.kind === 'methodology') {
     return <MethodologyPage />;
+  }
+
+  if (route.kind === 'ranking_transparency') {
+    return <RankingTransparencyPage />;
   }
 
   if (route.kind === 'publish_token_docs') {

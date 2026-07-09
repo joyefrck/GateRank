@@ -230,6 +230,12 @@ export interface PublicHomeFaqItem {
   answer: string;
 }
 
+export interface PublicArticleSection {
+  index: number;
+  title: string;
+  body: string;
+}
+
 export interface PublicFullRankingTopicSection {
   title: string;
   body: string;
@@ -273,12 +279,14 @@ export const PUBLIC_SEO_PATHS = {
   monthlyReports: '/monthly-reports',
   deals: '/deals',
   methodology: '/methodology',
+  rankingTransparency: '/ranking-transparency',
   apply: '/apply',
   riskMonitor: '/risk-monitor',
   forAi: '/for-ai',
 } as const;
 
 export const PUBLIC_SEO_STATIC_LASTMOD = '2026-05-17T00:00:00+08:00';
+export const RANKING_TRANSPARENCY_LASTMOD = '2026-07-09T00:00:00+08:00';
 export const PUBLIC_DEALS_LASTMOD = '2026-05-26T00:00:00+08:00';
 
 export interface PublicOgImage {
@@ -425,6 +433,12 @@ export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | 
   if (pathname === PUBLIC_SEO_PATHS.deals) return PUBLIC_CORE_OG_IMAGES.deals;
   if (pathname === PUBLIC_SEO_PATHS.riskMonitor) return PUBLIC_CORE_OG_IMAGES.riskMonitor;
   if (pathname === PUBLIC_SEO_PATHS.methodology) return PUBLIC_CORE_OG_IMAGES.methodology;
+  if (pathname === PUBLIC_SEO_PATHS.rankingTransparency) {
+    return {
+      ...PUBLIC_CORE_OG_IMAGES.methodology,
+      alt: 'GateRank 评分收费与排名独立性声明分享图',
+    };
+  }
   if (pathname === PUBLIC_SEO_PATHS.apply) return PUBLIC_CORE_OG_IMAGES.apply;
   if (pathname === PUBLIC_SEO_PATHS.forAi) return PUBLIC_CORE_OG_IMAGES.forAi;
   if (pathname.startsWith('/airports/')) return PUBLIC_CORE_OG_IMAGES.airportReport;
@@ -1156,6 +1170,56 @@ export const METHODOLOGY_SEO: PublicSeoText = {
   title: `机场测评方法 | 评分规则、测速标准、风险扣分与推荐依据 | ${PUBLIC_SITE_BRAND_NAME}`,
   description: `${PUBLIC_SITE_BRAND_NAME} 方法页系统说明机场测评方法、机场评分规则与机场测速标准，拆解稳定性、性能、价格、风险扣分、阈值分段、时间衰减、每日重算和机场推荐依据，帮助理解机场 VPN 排名如何生成。`,
   keywords: '机场榜GateRank,机场测评方法,机场评分规则,机场测速标准,机场推荐依据,机场VPN排名,VPN机场测评,风险扣分,时间衰减,GateRank',
+};
+
+export const RANKING_TRANSPARENCY_SEO: PublicSeoText = {
+  title: `关于 GateRank 评分、收费与排名独立性的声明 | ${PUBLIC_SITE_BRAND_NAME}`,
+  description: `${PUBLIC_SITE_BRAND_NAME} 公开说明 GateRank Score 评分算法、数据采集频率、机场主充值用途、扣费边界、停费处理，以及不参与付费排名的原则。`,
+  keywords: 'GateRank声明,机场榜评分,机场排名独立性,机场付费排名,机场主充值,机场测评收费,机场榜收费,GateRank Score',
+};
+
+export const RANKING_TRANSPARENCY_ARTICLE: {
+  title: string;
+  sections: PublicArticleSection[];
+} = {
+  title: '关于 GateRank 评分、收费与排名独立性的声明',
+  sections: [
+    {
+      index: 1,
+      title: '我们为什么公开这份声明',
+      body: 'GateRank 的职责，是把机场服务的公开监测结果、长期表现和风险信号整理成可解释的榜单，而不是替任何机场售卖名次。我们以平台管理人的身份明确说明：机场是否付费、付费多少、是否购买广告、是否提供优惠码，都不进入 GateRank Score，也不改变机场在今日推荐、全量排行、长期稳定、性价比、新入榜和风险预警中的排序。',
+    },
+    {
+      index: 2,
+      title: '评分算法看什么',
+      body: 'GateRank 评分采用固定维度：稳定性、性能、价格、风险。稳定性重点观察可用率、连续健康天数和延迟波动；性能观察中位延迟、下载速率和丢包；价格观察月付、年付折算、试用门槛和性价比；风险观察官网可访问性、证书状态、投诉、历史异常与人工复核记录。最终展示分按既定权重生成，当前口径以测评方法页公开说明为准。单次测速、临时活动、站长主观评价或商业沟通不会单独决定排名。',
+    },
+    {
+      index: 3,
+      title: '数据多久更新一次',
+      body: '数据采集按监测任务滚动进行，公开榜单每日重算并展示对应数据日期。测速、可用性、官网状态、SSL 与风险信号会在不同任务批次中更新；当采样异常、订阅失效、官网不可访问或出现投诉线索时，我们会保留人工复核空间，避免把短时波动误写成长期结论，也避免让历史高分掩盖新的风险。',
+    },
+    {
+      index: 4,
+      title: '机场主充值到底用于什么',
+      body: '首先入驻商家支付的是测试、采集、账号维护和页面维护成本，不是排名费用。付费只代表该机场进入持续维护流程，并不代表获得推荐资格，更不代表分数保底、排名保底或负面信息豁免。机场主后续充值，本质上是为持续测评和公开维护支付成本，不是购买排名。费用用于维持测试账号或订阅样本、自动监控任务、测速与可用性采集、异常复核、资料更新、报告页面维护、沟通通知以及必要的人工处理。充值只能让机场具备被持续观察和维护的条件，不能换取推荐、保分、提分、压低风险或删除负面记录。',
+    },
+    {
+      index: 5,
+      title: '停止付费后会发生什么',
+      body: '当机场停止付费、余额不足或无法继续提供有效测试条件时，我们会按规则处理公开展示：公开总分可被隐藏，该机场不再参与需要公开分数的榜单排序和推荐展示；但既有页面、基础资料、状态、风险记录和必要维护仍可继续保留。这样做是为了避免用户看到失去维护条件的分数后误以为它仍具备同等可信度，同时也避免用删除历史的方式掩盖风险。',
+    },
+    {
+      index: 6,
+      title: '广告、优惠与排名的关系',
+      body: '我们允许广告位、优惠活动存在，但这些商业内容与评分系统隔离。优惠信息只说明商家正在提供折扣或活动，不构成 GateRank 推荐。广告投放不会提高分数，停止广告也不会降低分数。任何以“加钱买排名”“充值保高分”“付费压负面”为目标的沟通，都会被视为对榜单独立性的误解。',
+    },
+    {
+      index: 7,
+      title: '我们希望建立的边界',
+      body: 'GateRank 希望同时降低用户疑虑和机场主无解：用户应该看到清楚的评分依据、更新频率和商业边界；机场主也应理解，真正影响排名的是长期稳定、真实性能、合理价格和较低风险。我们愿意维护认真经营的服务，但不会出售榜单位置。',
+    },
+  ],
 };
 
 export const APPLY_SEO: PublicSeoText = {

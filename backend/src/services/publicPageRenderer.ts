@@ -19,6 +19,8 @@ import {
   HOME_SEO_CONTENT_SECTIONS,
   METHODOLOGY_SEO,
   PUBLIC_SEO_PATHS,
+  RANKING_TRANSPARENCY_ARTICLE,
+  RANKING_TRANSPARENCY_SEO,
   buildMonthlyReportPath,
   buildMonthlyReportSeo,
   buildMonthlyReportsSeo,
@@ -197,6 +199,7 @@ export function renderHomePublicPage(
     },
     frontendAssets,
     body: `
+      ${renderTransparencyStatementNotice()}
       <main class="page-main">
         <section class="hero">
           <div class="eyebrow">今日推荐</div>
@@ -275,6 +278,7 @@ export function renderFullRankingPublicPage(
     },
     frontendAssets,
     body: `
+      ${renderTransparencyStatementNotice()}
       <main class="page-main">
         <section class="hero hero-dark">
           <div class="eyebrow">机场排行</div>
@@ -1181,6 +1185,72 @@ export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: Pu
   });
 }
 
+export function renderRankingTransparencyPublicPage(siteUrl: string, frontendAssets?: PublicFrontendAssets): string {
+  const article = RANKING_TRANSPARENCY_ARTICLE;
+  const canonicalPath = PUBLIC_SEO_PATHS.rankingTransparency;
+  return renderPublicDocument({
+    siteUrl,
+    canonicalPath,
+    seo: RANKING_TRANSPARENCY_SEO,
+    active: 'methodology',
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'Article',
+        headline: article.title,
+        name: RANKING_TRANSPARENCY_SEO.title,
+        description: RANKING_TRANSPARENCY_SEO.description,
+        url: `${siteUrl}${canonicalPath}`,
+        about: [
+          'GateRank Score',
+          '机场榜评分',
+          '机场排名独立性',
+          '机场主充值',
+          '付费排名声明',
+        ],
+        articleSection: article.sections.map((section) => section.title),
+      },
+      buildBreadcrumbJsonLd(siteUrl, [
+        ['今日推荐', '/'],
+        ['评分与排名独立性声明', canonicalPath],
+      ]),
+    ],
+    frontendAssets,
+    body: `
+      <main class="page-main transparency-page">
+        <article class="transparency-article">
+          <header class="transparency-hero">
+            <div class="eyebrow">GateRank Statement</div>
+            <h1>${escapeHtml(article.title)}</h1>
+            <p>${escapeHtml(RANKING_TRANSPARENCY_SEO.description)}</p>
+          </header>
+          <div class="transparency-section-list">
+            ${article.sections.map((section) => `
+              <section class="transparency-section">
+                <div class="transparency-section-index">${section.index}</div>
+                <div>
+                  <h2>${escapeHtml(section.title)}</h2>
+                  <p>${renderRankingTransparencySectionBody(section)}</p>
+                </div>
+              </section>
+            `).join('')}
+          </div>
+        </article>
+      </main>
+    `,
+  });
+}
+
+function renderRankingTransparencySectionBody(section: (typeof RANKING_TRANSPARENCY_ARTICLE.sections)[number]): string {
+  if (section.index !== 2) {
+    return escapeHtml(section.body);
+  }
+
+  const linkText = '测评方法页';
+  const [before, after = ''] = section.body.split(linkText);
+  return `${escapeHtml(before)}<a class="transparency-inline-link" href="${escapeAttribute(PUBLIC_SEO_PATHS.methodology)}" target="_blank" rel="noopener noreferrer">${escapeHtml(linkText)}</a>${escapeHtml(after)}`;
+}
+
 export function renderApplyPublicPage(siteUrl: string, frontendAssets?: PublicFrontendAssets): string {
   return renderPublicDocument({
     siteUrl,
@@ -1445,6 +1515,17 @@ function renderFooter(): string {
       <strong>${escapeHtml(PUBLIC_SITE_BRAND_NAME)}</strong>
       <p>以公开监测数据、评分趋势和风险记录构建机场推荐体系。</p>
     </footer>
+  `;
+}
+
+function renderTransparencyStatementNotice(): string {
+  return `
+    <section class="transparency-notice" aria-label="评分与排名独立性声明">
+      <a href="${escapeAttribute(PUBLIC_SEO_PATHS.rankingTransparency)}" target="_blank" rel="noopener noreferrer" onclick="window.open(this.href, '_blank', 'noopener,noreferrer'); return false;">
+        <strong>关于 GateRank 评分、收费与排名独立性的声明</strong>
+        <i aria-hidden="true">&#8599;</i>
+      </a>
+    </section>
   `;
 }
 
@@ -2229,6 +2310,24 @@ const styles = `
   .topbar nav a.apply-link:hover { background: #262626; color: #fff; -webkit-text-fill-color: #fff; }
   .topbar nav a.apply-link.active { background: #111111; color: #fff; -webkit-text-fill-color: #fff; box-shadow: 0 14px 32px rgba(17,17,17,.18); }
   .page-main { width: min(1280px, calc(100vw - 32px)); margin: 0 auto; padding: 40px 0 72px; display: grid; gap: 32px; }
+  .transparency-notice { width: min(1280px, calc(100vw - 32px)); margin: 0 auto; padding-top: 32px; }
+  .transparency-notice a { display: flex; min-height: 34px; align-items: center; justify-content: space-between; gap: 12px; border: 1px solid #ffe4e6; border-radius: 8px; background: rgba(255,255,255,.88); padding: 4px 18px; color: #0a0a0a; text-decoration: none; box-shadow: 0 8px 22px rgba(15,23,42,.045); transition: border-color .2s ease, background .2s ease, box-shadow .2s ease; }
+  .transparency-notice a:hover { border-color: #fecdd3; background: #fff; box-shadow: 0 12px 28px rgba(15,23,42,.07); }
+  .transparency-notice strong { display: block; min-width: 0; overflow: hidden; color: #0a0a0a; font-size: 16px; font-weight: 900; line-height: 1.5; text-overflow: ellipsis; white-space: nowrap; }
+  .transparency-notice i { display: inline-flex; width: 24px; height: 24px; flex: 0 0 auto; align-items: center; justify-content: center; border-radius: 6px; background: #0a0a0a; color: #fff; font-style: normal; font-weight: 900; }
+  .transparency-page { width: min(960px, calc(100vw - 32px)); }
+  .transparency-article { overflow: hidden; border: 1px solid #e5e5e5; border-radius: 8px; background: #fff; box-shadow: 0 22px 70px rgba(15,23,42,.08); }
+  .transparency-hero { border-bottom: 1px solid #e5e5e5; padding: 40px 36px; background: linear-gradient(135deg,#111827 0%,#3f0f19 52%,#fff1f2 100%); color: #fff; }
+  .transparency-hero .eyebrow { display: inline-flex; border: 1px solid rgba(255,255,255,.15); border-radius: 999px; background: rgba(255,255,255,.1); padding: 7px 12px; color: rgba(255,255,255,.78); }
+  .transparency-hero h1 { max-width: 820px; margin: 20px 0 0; color: #fff; font-size: clamp(32px, 5vw, 48px); line-height: 1.16; letter-spacing: 0; }
+  .transparency-hero p { max-width: 780px; margin-top: 16px; color: rgba(255,255,255,.74); font-size: 16px; line-height: 1.8; }
+  .transparency-section { display: grid; grid-template-columns: 88px minmax(0, 1fr); gap: 16px; border-bottom: 1px solid #e5e5e5; padding: 30px 36px; }
+  .transparency-section:last-child { border-bottom: 0; }
+  .transparency-section-index { display: flex; width: 44px; height: 44px; align-items: center; justify-content: center; border-radius: 8px; background: #0a0a0a; color: #fff; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 18px; font-weight: 900; }
+  .transparency-section h2 { margin: 0; color: #0a0a0a; font-size: 24px; line-height: 1.2; letter-spacing: 0; }
+  .transparency-section p { margin-top: 12px; color: #525252; font-size: 16px; line-height: 2; }
+  .transparency-inline-link { color: #be123c; font-weight: 900; text-decoration: underline; text-decoration-color: #fda4af; text-underline-offset: 4px; }
+  .transparency-inline-link:hover { color: #881337; }
   .hero { border: 1px solid #e5e5e5; border-radius: 28px; padding: 32px; background: linear-gradient(135deg, #fafafa, #fff); }
   .hero-dark { background: linear-gradient(135deg, #111827, #f8fafc); color: #fff; }
   .hero-risk { background: linear-gradient(135deg, #3f0f19, #f7f2f4); color: #fff; }
@@ -2247,7 +2346,7 @@ const styles = `
   h3 { margin: 0 0 10px; font-size: 18px; }
   p { line-height: 1.8; }
   .hero p { max-width: 820px; font-size: 16px; }
-  .hero-highlight { display: inline-flex; align-items: center; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #c2410c; padding: 2px 7px; font-weight: 900; }
+  .hero-highlight { display: inline-flex; align-items: center; margin-right: 10px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #c2410c; padding: 2px 7px; font-weight: 900; }
   .metric-grid, .card-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-top: 24px; }
   .metric, .mini-card { border: 1px solid #e5e5e5; border-radius: 18px; padding: 18px; background: rgba(255,255,255,.86); color: #111; }
   .hero-content .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
@@ -2585,6 +2684,14 @@ const styles = `
   th { font-size: 12px; text-transform: uppercase; letter-spacing: .12em; color: #666; }
   @media (max-width: 900px) {
     .page-main { width: min(100vw - 24px, 1280px); padding-top: 24px; gap: 20px; }
+    .transparency-page { width: min(100vw - 24px, 960px); }
+    .transparency-notice { width: min(100vw - 24px, 1280px); padding-top: 28px; }
+    .transparency-notice a { padding: 4px 14px; }
+    .transparency-notice strong { font-size: 14px; }
+    .transparency-hero { padding: 28px 20px; }
+    .transparency-section { grid-template-columns: 1fr; gap: 12px; padding: 24px 20px; }
+    .transparency-section h2 { font-size: 21px; }
+    .transparency-section p { font-size: 15px; line-height: 1.9; }
     .hero, .content-card, .home-seo-guide { border-radius: 18px; padding: 20px; }
     .home-tool-download-cta { align-items: flex-start; flex-direction: column; gap: 10px; padding: 12px 14px; }
     .home-tool-download-copy { gap: 10px; }

@@ -43,6 +43,14 @@ test('resolvePageOgImageMeta returns static OG images for indexable public utili
     type: 'image/png',
   });
 
+  assert.deepEqual(resolvePageOgImageMeta('/ranking-transparency'), {
+    path: '/og/methodology.png',
+    alt: 'GateRank 评分收费与排名独立性声明分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  });
+
   assert.deepEqual(resolvePageOgImageMeta('/airports/nebula'), {
     path: '/og/airport-report.png',
     alt: 'GateRank 机场测评报告分享图',

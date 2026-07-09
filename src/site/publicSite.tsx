@@ -86,6 +86,10 @@ export function buildMethodologyHref(): string {
   return '/methodology';
 }
 
+export function buildRankingTransparencyHref(): string {
+  return '/ranking-transparency';
+}
+
 export function buildPublishTokenDocsHref(): string {
   return '/publish-token-docs';
 }

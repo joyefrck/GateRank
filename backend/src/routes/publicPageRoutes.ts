@@ -18,6 +18,7 @@ import {
   renderMonthlyReportDetailPage,
   renderMonthlyReportsPublicPage,
   renderPublicHtmlError,
+  renderRankingTransparencyPublicPage,
   renderReportPublicPage,
   renderRiskMonitorPublicPage,
   renderToolPlaceholderPublicPage,
@@ -361,6 +362,12 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     const siteUrl = getSiteOrigin(_req);
     setPublicCacheHeaders(res);
     res.status(200).type('html').send(renderMethodologyPublicPage(siteUrl, frontendAssets));
+  });
+
+  router.get('/ranking-transparency', (_req, res) => {
+    const siteUrl = getSiteOrigin(_req);
+    setPublicCacheHeaders(res);
+    res.status(200).type('html').send(renderRankingTransparencyPublicPage(siteUrl, frontendAssets));
   });
 
   router.get('/apply', (_req, res) => {
