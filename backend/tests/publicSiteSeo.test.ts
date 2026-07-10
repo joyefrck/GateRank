@@ -26,6 +26,16 @@ test('resolvePageOgImageMeta returns the download page OG image', () => {
   });
 });
 
+test('resolvePageOgImageMeta reuses the unlock OG image for streaming check', () => {
+  assert.deepEqual(resolvePageOgImageMeta('/tools/streaming-check'), {
+    path: '/og/rankings-unlock.png',
+    alt: 'GateRank 流媒体与 AI 服务检测工具分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  });
+});
+
 test('resolvePageOgImageMeta returns static OG images for indexable public utility pages', () => {
   assert.deepEqual(resolvePageOgImageMeta('/apply'), {
     path: '/og/apply.png',

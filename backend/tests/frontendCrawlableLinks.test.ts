@@ -3,6 +3,20 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+test('React streaming check only starts from the button and probes six services once per run', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/pages/streamingCheck/StreamingCheckPage.tsx'), 'utf8');
+  assert.match(source, /onClick=\{\(\) => \{ void runCheck\(\); \}\}/);
+  assert.match(source, /const apiTask = requestStreamingCheck\(\)/);
+  assert.match(source, /const probeTasks = STREAMING_SERVICES\.map/);
+  assert.match(source, /mode: 'no-cors'/);
+  assert.match(source, /credentials: 'omit'/);
+  assert.match(source, /cache: 'no-store'/);
+  assert.match(source, /window\.setTimeout\(\(\) => controller\.abort\('timeout'\), 8000\)/);
+  assert.match(source, /NETFLIX_MANUAL_TESTS\.map/);
+  assert.match(source, /rel="nofollow noreferrer noopener"/);
+  assert.doesNotMatch(source, /useEffect\([\s\S]{0,200}runCheck/);
+});
+
 test('React full ranking report action remains a crawlable anchor', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
   const panelStart = source.indexOf('操作入口');

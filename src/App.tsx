@@ -111,6 +111,7 @@ import {
 } from '../shared/toolDownloads';
 import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import { DealsPage } from './pages/deals/DealsPage';
+import { StreamingCheckPage } from './pages/streamingCheck/StreamingCheckPage';
 import { MonthlyReportDetailPage, MonthlyReportsPage } from './pages/monthlyReports/MonthlyReportsPage';
 import { trackPageView } from './site/analytics';
 import { getCapabilityIcon, type CapabilityIconCategory } from '../shared/capabilityIcons';
@@ -8822,6 +8823,9 @@ export default function App() {
   }
 
   if (route.kind === 'tool_placeholder' && route.toolPlaceholder) {
+    if (route.toolPlaceholder === 'streaming-check') {
+      return <StreamingCheckPage />;
+    }
     return <ToolPlaceholderPage tool={route.toolPlaceholder} />;
   }
 

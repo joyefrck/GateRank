@@ -21,6 +21,7 @@ import {
   renderRankingTransparencyPublicPage,
   renderReportPublicPage,
   renderRiskMonitorPublicPage,
+  renderStreamingCheckPublicPage,
   renderToolPlaceholderPublicPage,
   renderToolsDownloadPublicPage,
 } from '../services/publicPageRenderer';
@@ -281,7 +282,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   router.get('/tools/streaming-check', (req, res) => {
     const siteUrl = getSiteOrigin(req);
     setPublicCacheHeaders(res);
-    res.status(200).type('html').send(renderToolPlaceholderPublicPage(siteUrl, 'streaming-check', frontendAssets));
+    res.status(200).type('html').send(renderStreamingCheckPublicPage(siteUrl, frontendAssets));
   });
 
   router.get('/tools/ip-check', (req, res) => {

@@ -92,6 +92,7 @@ import {
   type ToolDownloadPlatform,
   type ToolsDownloadPageView,
 } from '../../../shared/toolDownloads';
+import { STREAMING_SERVICES } from '../../../shared/streamingCheck';
 
 interface RenderOptions {
   siteUrl: string;
@@ -685,6 +686,88 @@ export function renderToolPlaceholderPublicPage(
           <h1>${escapeHtml(title)}</h1>
           <p>${escapeHtml(description)} 当前版本先上线翻墙工具下载页面。</p>
           <p><a class="primary-link" href="/download">进入翻墙工具下载</a></p>
+        </section>
+      </main>
+    `,
+  });
+}
+
+export function renderStreamingCheckPublicPage(
+  siteUrl: string,
+  frontendAssets?: PublicFrontendAssets,
+): string {
+  const canonicalPath = PUBLIC_SEO_PATHS.streamingCheck;
+  const title = '流媒体解锁检测 | ChatGPT、Netflix、Claude、TikTok、Disney+、HBO Max';
+  const description = '检测当前出口网络对 ChatGPT、Netflix、Claude、TikTok、Disney+ 和 HBO Max 的浏览器连通性与地区支持情况，并提供 Netflix 美区、日区、新加坡区片源复核入口。';
+  const faqItems = [
+    ['检测结果为什么写“地区可能支持”？', '网页可以检测当前出口地区和平台官网连通性，但不能代替账号登录或视频播放验证，因此不会把推断写成真实解锁。'],
+    ['Netflix 如何确认美区、日区或新加坡区？', '自动结果显示当前出口地区推断；用户还可以打开对应地区的测试片源进行手动复核。'],
+    ['检测会保存我的 IP 吗？', '检测结果仅用于当前响应展示，不写入检测历史，也不会生成公开分享链接。'],
+  ];
+  return renderPublicDocument({
+    siteUrl,
+    canonicalPath,
+    seo: {
+      title,
+      description,
+      keywords: '流媒体解锁检测,Netflix解锁检测,ChatGPT检测,Claude检测,TikTok检测,Disney+检测,HBO Max检测',
+    },
+    active: 'tools',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'WebApplication',
+          name: 'GateRank 流媒体解锁检测',
+          applicationCategory: 'UtilitiesApplication',
+          operatingSystem: 'Web',
+          url: `${siteUrl}${canonicalPath}`,
+          description,
+          offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
+        },
+        buildBreadcrumbJsonLd(siteUrl, [
+          ['今日推荐', '/'],
+          ['翻墙工具下载', '/download'],
+          ['流媒体解锁检测', canonicalPath],
+        ]),
+        {
+          '@type': 'FAQPage',
+          mainEntity: faqItems.map(([question, answer]) => ({
+            '@type': 'Question',
+            name: question,
+            acceptedAnswer: { '@type': 'Answer', text: answer },
+          })),
+        },
+      ],
+    },
+    frontendAssets,
+    body: `
+      <main class="streaming-check-page">
+        <section class="streaming-check-command">
+          <div>
+            <div class="eyebrow">Network capability check</div>
+            <h1>流媒体解锁检测</h1>
+            <p>检查当前出口网络对常用 AI 与流媒体服务的连通性和地区支持情况。检测只在点击后开始。</p>
+          </div>
+          <button type="button" class="streaming-check-button">开始检测</button>
+        </section>
+        <section class="streaming-check-network" aria-label="当前网络">
+          <span>当前网络</span>
+          <strong>点击检测后显示出口 IP 与地区</strong>
+          <span>尚未检测</span>
+        </section>
+        <section class="streaming-check-results" aria-label="检测项目">
+          ${STREAMING_SERVICES.map((service) => `
+            <article class="streaming-check-row${service.key === 'netflix' ? ' is-netflix' : ''}">
+              <span class="streaming-check-mark">${escapeHtml(service.short_label)}</span>
+              <div><h2>${escapeHtml(service.label)}</h2><p>等待用户开始检测</p></div>
+              <strong>待检测</strong>
+            </article>
+          `).join('')}
+        </section>
+        <section class="streaming-check-note">
+          <h2>如何理解检测结果</h2>
+          <p>“可连接”只代表浏览器能够触达平台官网；“地区可能支持”来自当前出口国家与官方覆盖信息，不代表账号登录、完整片库或播放一定成功。</p>
         </section>
       </main>
     `,
@@ -2557,6 +2640,31 @@ const styles = `
     .tools-download-card-grid { grid-template-columns: minmax(0, 1fr); }
   }
   .filter-clear { border-color: #fecdd3; background: #fff1f2; color: #be123c; }
+  .streaming-check-page { width: min(1120px, calc(100vw - 32px)); margin: 0 auto; padding: 48px 0 72px; color: #171717; }
+  .streaming-check-command { display: flex; align-items: end; justify-content: space-between; gap: 32px; border-bottom: 1px solid #e5e5e5; padding: 12px 0 32px; }
+  .streaming-check-command h1 { margin: 8px 0 0; font-size: clamp(38px, 6vw, 68px); line-height: 1; letter-spacing: -.045em; }
+  .streaming-check-command p { max-width: 720px; margin: 18px 0 0; color: #737373; font-size: 16px; line-height: 1.8; }
+  .streaming-check-button { min-height: 48px; flex: 0 0 auto; border: 0; border-radius: 8px; background: #e11d48; padding: 0 24px; color: #fff; font: inherit; font-size: 14px; font-weight: 900; cursor: pointer; box-shadow: 0 14px 30px rgba(225,29,72,.2); }
+  .streaming-check-network { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 18px; align-items: center; margin-top: 28px; border-bottom: 1px solid #e5e5e5; padding: 0 0 20px; color: #737373; font-size: 13px; }
+  .streaming-check-network strong { overflow: hidden; color: #262626; text-overflow: ellipsis; }
+  .streaming-check-results { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 32px; }
+  .streaming-check-row { display: grid; grid-template-columns: 48px minmax(0,1fr) auto; gap: 14px; align-items: center; min-width: 0; border-bottom: 1px solid #e5e5e5; padding: 22px 0; }
+  .streaming-check-row.is-netflix { grid-column: 1 / -1; }
+  .streaming-check-mark { display: inline-flex; width: 42px; height: 42px; align-items: center; justify-content: center; border-radius: 10px; background: #171717; color: #fff; font-size: 11px; font-weight: 900; }
+  .streaming-check-row h2 { margin: 0; font-size: 18px; letter-spacing: -.02em; }
+  .streaming-check-row p { margin: 4px 0 0; color: #a3a3a3; font-size: 13px; }
+  .streaming-check-row > strong { color: #737373; font-size: 12px; }
+  .streaming-check-note { margin-top: 34px; max-width: 760px; }
+  .streaming-check-note h2 { margin: 0; font-size: 20px; }
+  .streaming-check-note p { margin: 10px 0 0; color: #737373; font-size: 14px; line-height: 1.8; }
+  @media (max-width: 700px) {
+    .streaming-check-page { width: min(100%, calc(100vw - 24px)); padding-top: 28px; }
+    .streaming-check-command { align-items: stretch; flex-direction: column; gap: 22px; }
+    .streaming-check-button { width: 100%; }
+    .streaming-check-network { grid-template-columns: 1fr; gap: 5px; }
+    .streaming-check-results { grid-template-columns: minmax(0,1fr); }
+    .streaming-check-row.is-netflix { grid-column: auto; }
+  }
   .report-page { width: min(1180px, calc(100vw - 32px)); padding-top: 16px; gap: 28px; }
   .report-anchor-target { scroll-margin-top: 144px; }
   .report-date-status { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; color: #94a3b8; font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }

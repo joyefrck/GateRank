@@ -487,6 +487,24 @@ test('legacy tools routes redirect to /download and unfinished tool placeholders
     const placeholderHtml = await placeholderResponse.text();
     assert.match(placeholderHtml, /IP 检测工具即将上线/);
     assert.match(placeholderHtml, /<meta name="robots" content="noindex,follow" \/>/);
+
+    const streamingResponse = await fetch(`http://127.0.0.1:${port}/tools/streaming-check`);
+    assert.equal(streamingResponse.status, 200);
+    assert.equal(
+      streamingResponse.headers.get('cache-control'),
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+    );
+    const streamingHtml = await streamingResponse.text();
+    assert.match(streamingHtml, /<h1>流媒体解锁检测<\/h1>/);
+    for (const service of ['ChatGPT', 'Netflix', 'Claude', 'TikTok', 'Disney+', 'HBO Max']) {
+      assert.match(streamingHtml, new RegExp(`<h2>${escapeRegExp(service)}<\\/h2>`));
+    }
+    assert.match(streamingHtml, /<meta name="robots" content="index,follow,max-image-preview:large" \/>/);
+    assert.match(streamingHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/tools\/streaming-check" \/>/);
+    assert.match(streamingHtml, /\/og\/rankings-unlock\.png/);
+    assert.match(streamingHtml, /"@type":"WebApplication"/);
+    assert.match(streamingHtml, /"@type":"FAQPage"/);
+    assert.doesNotMatch(streamingHtml, /流媒体解锁检测<\/span><span class="public-top-nav-submenu-badge">即将上线/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

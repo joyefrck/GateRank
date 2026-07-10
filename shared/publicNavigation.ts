@@ -50,7 +50,6 @@ export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
       {
         label: '流媒体解锁检测',
         href: '/tools/streaming-check',
-        badge: '即将上线',
       },
       {
         label: 'IP 检测',

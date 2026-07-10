@@ -9,6 +9,82 @@ import { createToolsPublicRoutes } from '../src/routes/toolsPublicRoutes';
 import { createToolsAdminRoutes } from '../src/routes/toolsAdminRoutes';
 import { errorHandler } from '../src/middleware/errorHandler';
 import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG } from '../../shared/toolDownloads';
+import type { StreamingCheckResponse } from '../../shared/streamingCheck';
+
+test('streaming check returns private visitor network assessment from Cloudflare headers', async () => {
+  const app = express();
+  app.use('/api/v1', createToolsPublicRoutes({
+    toolsDownloadService: {
+      getDownloadPageView: async () => ({
+        config: DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
+        platform: null,
+        platforms: [],
+        items: [],
+        hotItems: [],
+        total: 0,
+      }),
+    } as never,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/tools/streaming-check`, {
+      method: 'POST',
+      headers: {
+        'cf-connecting-ip': '203.0.113.20',
+        'cf-ipcountry': 'SG',
+        'x-forwarded-for': '198.51.100.8',
+      },
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(response.headers.get('pragma'), 'no-cache');
+    const data = await response.json() as StreamingCheckResponse;
+    assert.equal(data.network.ip, '203.0.113.20');
+    assert.equal(data.network.country_code, 'SG');
+    assert.match(data.network.country_name, /新加坡/);
+    assert.equal(data.services.length, 6);
+    assert.equal(data.netflix.inferred_region, 'sg');
+    assert.equal(data.netflix.catalog_scope, 'unconfirmed');
+    assert.ok(data.checked_at);
+    assert.ok(data.policy_checked_at);
+
+    const getResponse = await fetch(`http://127.0.0.1:${port}/api/v1/tools/streaming-check`);
+    assert.equal(getResponse.status, 404);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('streaming check rate limit returns 429 with Retry-After', async () => {
+  const previousMax = process.env.STREAMING_CHECK_RATE_MAX;
+  process.env.STREAMING_CHECK_RATE_MAX = '2';
+  const app = express();
+  app.use('/api/v1', createToolsPublicRoutes({
+    toolsDownloadService: { getDownloadPageView: async () => ({}) } as never,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const request = () => fetch(`http://127.0.0.1:${port}/api/v1/tools/streaming-check`, {
+      method: 'POST',
+      headers: { 'cf-connecting-ip': '198.51.100.23', 'cf-ipcountry': 'US' },
+    });
+    assert.equal((await request()).status, 200);
+    assert.equal((await request()).status, 200);
+    const limited = await request();
+    assert.equal(limited.status, 429);
+    assert.ok(limited.headers.get('retry-after'));
+    const body = await limited.json() as { code: string };
+    assert.equal(body.code, 'STREAMING_CHECK_RATE_LIMITED');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    if (previousMax === undefined) delete process.env.STREAMING_CHECK_RATE_MAX;
+    else process.env.STREAMING_CHECK_RATE_MAX = previousMax;
+  }
+});
 
 test('tools public routes expose published downloads and page config', async () => {
   const app = express();

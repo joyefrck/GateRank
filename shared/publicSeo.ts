@@ -276,6 +276,7 @@ export const PUBLIC_SEO_PATHS = {
   home: '/',
   fullRanking: '/rankings/all',
   download: '/download',
+  streamingCheck: '/tools/streaming-check',
   monthlyReports: '/monthly-reports',
   deals: '/deals',
   methodology: '/methodology',
@@ -427,6 +428,12 @@ export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | 
   const fullRankingFilterOgImage = buildFullRankingFilterOgImage(pathname);
   if (fullRankingFilterOgImage) return fullRankingFilterOgImage;
   if (pathname === PUBLIC_SEO_PATHS.download) return PUBLIC_CORE_OG_IMAGES.download;
+  if (pathname === PUBLIC_SEO_PATHS.streamingCheck) {
+    return {
+      ...PUBLIC_CORE_OG_IMAGES.rankingsUnlock,
+      alt: 'GateRank 流媒体与 AI 服务检测工具分享图',
+    };
+  }
   if (pathname === PUBLIC_SEO_PATHS.monthlyReports || pathname.startsWith(`${PUBLIC_SEO_PATHS.monthlyReports}/`)) {
     return PUBLIC_CORE_OG_IMAGES.monthlyReports;
   }
