@@ -10,16 +10,17 @@ export type StreamingRegionSupport = 'supported' | 'unsupported' | 'unknown';
 export type StreamingReachability = 'pending' | 'reachable' | 'unreachable' | 'timeout';
 export type StreamingMergedState =
   | 'pending'
-  | 'likely_supported'
-  | 'reachable_region_unsupported'
+  | 'region_supported'
+  | 'region_unsupported'
   | 'reachable_only'
-  | 'unconfirmed';
+  | 'browser_limited';
 export type NetflixInferredRegion = 'us' | 'jp' | 'sg' | 'other' | 'unknown';
 
 export interface StreamingServiceDefinition {
   key: StreamingServiceKey;
   label: string;
   short_label: string;
+  official_url: string;
   probe_url: string;
 }
 
@@ -56,15 +57,51 @@ export interface NetflixManualTest {
   href: string;
 }
 
-export const STREAMING_POLICY_CHECKED_AT = '2026-07-10';
+export const STREAMING_POLICY_CHECKED_AT = '2026-07-11';
 
 export const STREAMING_SERVICES: readonly StreamingServiceDefinition[] = [
-  { key: 'chatgpt', label: 'ChatGPT', short_label: 'AI', probe_url: 'https://chatgpt.com/' },
-  { key: 'netflix', label: 'Netflix', short_label: 'NF', probe_url: 'https://www.netflix.com/' },
-  { key: 'claude', label: 'Claude', short_label: 'CL', probe_url: 'https://claude.ai/' },
-  { key: 'tiktok', label: 'TikTok', short_label: 'TT', probe_url: 'https://www.tiktok.com/' },
-  { key: 'disney_plus', label: 'Disney+', short_label: 'D+', probe_url: 'https://www.disneyplus.com/' },
-  { key: 'hbo_max', label: 'HBO Max', short_label: 'MAX', probe_url: 'https://www.hbomax.com/' },
+  {
+    key: 'chatgpt',
+    label: 'ChatGPT',
+    short_label: 'AI',
+    official_url: 'https://chatgpt.com/',
+    probe_url: 'https://chatgpt.com/favicon.ico',
+  },
+  {
+    key: 'netflix',
+    label: 'Netflix',
+    short_label: 'NF',
+    official_url: 'https://www.netflix.com/',
+    probe_url: 'https://assets.nflxext.com/us/ffe/siteui/common/icons/nficon2016.ico',
+  },
+  {
+    key: 'claude',
+    label: 'Claude',
+    short_label: 'CL',
+    official_url: 'https://claude.ai/',
+    probe_url: 'https://claude.ai/favicon.ico',
+  },
+  {
+    key: 'tiktok',
+    label: 'TikTok',
+    short_label: 'TT',
+    official_url: 'https://www.tiktok.com/',
+    probe_url: 'https://www.tiktok.com/favicon.ico',
+  },
+  {
+    key: 'disney_plus',
+    label: 'Disney+',
+    short_label: 'D+',
+    official_url: 'https://www.disneyplus.com/',
+    probe_url: 'https://www.disneyplus.com/favicon.ico',
+  },
+  {
+    key: 'hbo_max',
+    label: 'HBO Max',
+    short_label: 'MAX',
+    official_url: 'https://www.hbomax.com/',
+    probe_url: 'https://www.hbomax.com/favicon.ico',
+  },
 ] as const;
 
 export const NETFLIX_MANUAL_TESTS: readonly NetflixManualTest[] = [
@@ -140,9 +177,13 @@ export function buildStreamingRegionAssessments(countryCode: string): StreamingR
           ? DISNEY_PLUS_SUPPORTED_COUNTRIES
           : HBO_MAX_SUPPORTED_COUNTRIES;
 
-    return supportedCountries.has(country)
-      ? buildAssessment(service, 'supported', `${service.label} 官方覆盖信息包含当前国家或地区。`)
-      : buildAssessment(service, 'unknown', `${service.label} 当前地区无法仅凭现有官方覆盖表确认。`);
+    if (supportedCountries.has(country)) {
+      return buildAssessment(service, 'supported', `${service.label} 官方覆盖信息包含当前国家或地区。`);
+    }
+    if (service.key === 'hbo_max') {
+      return buildAssessment(service, 'unsupported', 'HBO Max 当前官方覆盖地区列表未包含当前国家或地区。');
+    }
+    return buildAssessment(service, 'unknown', `${service.label} 当前地区无法仅凭现有官方覆盖表确认。`);
   });
 }
 
@@ -161,10 +202,10 @@ export function mergeStreamingEvidence(
   hasKnownCountry: boolean,
 ): StreamingMergedState {
   if (reachability === 'pending') return 'pending';
-  if (reachability === 'unreachable' || reachability === 'timeout') return 'unconfirmed';
-  if (!hasKnownCountry || regionSupport === 'unknown') return 'reachable_only';
-  if (regionSupport === 'supported') return 'likely_supported';
-  return 'reachable_region_unsupported';
+  if (hasKnownCountry && regionSupport === 'supported') return 'region_supported';
+  if (hasKnownCountry && regionSupport === 'unsupported') return 'region_unsupported';
+  if (reachability === 'reachable') return 'reachable_only';
+  return 'browser_limited';
 }
 
 export function normalizeCountryCode(value: unknown): string {

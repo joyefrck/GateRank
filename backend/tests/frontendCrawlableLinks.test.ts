@@ -8,10 +8,11 @@ test('React streaming check only starts from the button and probes six services 
   assert.match(source, /onClick=\{\(\) => \{ void runCheck\(\); \}\}/);
   assert.match(source, /const apiTask = requestStreamingCheck\(\)/);
   assert.match(source, /const probeTasks = STREAMING_SERVICES\.map/);
-  assert.match(source, /mode: 'no-cors'/);
-  assert.match(source, /credentials: 'omit'/);
-  assert.match(source, /cache: 'no-store'/);
-  assert.match(source, /window\.setTimeout\(\(\) => controller\.abort\('timeout'\), 8000\)/);
+  assert.match(source, /const image = new Image\(\)/);
+  assert.match(source, /image\.referrerPolicy = 'no-referrer'/);
+  assert.match(source, /probeUrl\.searchParams\.set\('_gr_probe'/);
+  assert.match(source, /window\.setTimeout\(\(\) => finish\('timeout'\), 8000\)/);
+  assert.doesNotMatch(source, /mode: 'no-cors'/);
   assert.match(source, /NETFLIX_MANUAL_TESTS\.map/);
   assert.match(source, /rel="nofollow noreferrer noopener"/);
   assert.doesNotMatch(source, /useEffect\([\s\S]{0,200}runCheck/);

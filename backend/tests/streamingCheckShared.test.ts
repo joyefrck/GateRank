@@ -25,6 +25,18 @@ test('streaming assessments cover all services and keep TikTok connectivity-only
   assert.equal(assessments.find((item) => item.key === 'tiktok')?.basis, 'connectivity_only');
 });
 
+test('Japan uses official coverage for supported services and rejects unavailable HBO Max', () => {
+  const assessments = buildStreamingRegionAssessments('JP');
+  const supportByService = new Map(assessments.map((item) => [item.key, item.region_support]));
+
+  assert.equal(supportByService.get('chatgpt'), 'supported');
+  assert.equal(supportByService.get('netflix'), 'supported');
+  assert.equal(supportByService.get('claude'), 'supported');
+  assert.equal(supportByService.get('tiktok'), 'unknown');
+  assert.equal(supportByService.get('disney_plus'), 'supported');
+  assert.equal(supportByService.get('hbo_max'), 'unsupported');
+});
+
 test('unknown countries never produce a supported assessment', () => {
   const assessments = buildStreamingRegionAssessments('ZZ');
   assert.ok(assessments.every((item) => item.region_support !== 'supported'));
@@ -35,13 +47,16 @@ test('Netflix official unsupported countries are classified as unsupported', () 
   assert.equal(netflix?.region_support, 'unsupported');
 });
 
-test('mergeStreamingEvidence never upgrades unknown, failed or timed out evidence', () => {
-  assert.equal(mergeStreamingEvidence('reachable', 'supported', true), 'likely_supported');
-  assert.equal(mergeStreamingEvidence('reachable', 'unsupported', true), 'reachable_region_unsupported');
+test('mergeStreamingEvidence keeps official region policy authoritative', () => {
+  assert.equal(mergeStreamingEvidence('reachable', 'supported', true), 'region_supported');
+  assert.equal(mergeStreamingEvidence('unreachable', 'supported', true), 'region_supported');
+  assert.equal(mergeStreamingEvidence('timeout', 'supported', true), 'region_supported');
+  assert.equal(mergeStreamingEvidence('reachable', 'unsupported', true), 'region_unsupported');
+  assert.equal(mergeStreamingEvidence('unreachable', 'unsupported', true), 'region_unsupported');
   assert.equal(mergeStreamingEvidence('reachable', 'supported', false), 'reachable_only');
   assert.equal(mergeStreamingEvidence('reachable', 'unknown', true), 'reachable_only');
-  assert.equal(mergeStreamingEvidence('unreachable', 'supported', true), 'unconfirmed');
-  assert.equal(mergeStreamingEvidence('timeout', 'supported', true), 'unconfirmed');
+  assert.equal(mergeStreamingEvidence('unreachable', 'unknown', true), 'browser_limited');
+  assert.equal(mergeStreamingEvidence('timeout', 'unknown', true), 'browser_limited');
 });
 
 test('Netflix manual registry includes public, US, Japan and Singapore references', () => {

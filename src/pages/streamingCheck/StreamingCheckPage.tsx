@@ -3,14 +3,12 @@ import {
   Activity,
   CheckCircle2,
   CircleHelp,
-  Clock3,
   ExternalLink,
   Globe2,
   Loader2,
   Play,
   RotateCw,
   ShieldAlert,
-  WifiOff,
 } from 'lucide-react';
 
 import {
@@ -33,8 +31,8 @@ const INITIAL_REACHABILITY = Object.fromEntries(
 
 const STREAMING_CHECK_FAQ = [
   {
-    question: '检测结果为什么写“地区可能支持”？',
-    answer: '网页可以检测当前出口地区和平台官网连通性，但不能代替账号登录或视频播放验证，因此不会把推断写成真实解锁。',
+    question: '为什么官方地区支持和基础资源探测可能不同？',
+    answer: '官方地区支持来自出口国家与服务覆盖策略；基础资源探测可能被浏览器跨域策略或反机器人机制拦截，不能据此判定服务不可用。',
   },
   {
     question: 'Netflix 如何确认美区、日区或新加坡区？',
@@ -56,7 +54,7 @@ export function StreamingCheckPage() {
 
   usePageSeo({
     title: '流媒体解锁检测 | ChatGPT、Netflix、Claude、TikTok、Disney+、HBO Max',
-    description: '检测当前出口网络对 ChatGPT、Netflix、Claude、TikTok、Disney+ 和 HBO Max 的浏览器连通性与地区支持情况，并提供 Netflix 美区、日区、新加坡区片源复核入口。',
+    description: '根据当前出口地区检测 ChatGPT、Netflix、Claude、TikTok、Disney+ 和 HBO Max 的官方覆盖情况，并以基础资源连通结果辅助判断。',
     keywords: '流媒体解锁检测,Netflix解锁检测,ChatGPT检测,Claude检测,TikTok检测,Disney+检测,HBO Max检测',
     canonicalPath: '/tools/streaming-check',
     structuredData: {
@@ -125,7 +123,7 @@ export function StreamingCheckPage() {
             <div className="text-[11px] font-black uppercase tracking-[0.22em] text-rose-600">Network capability check</div>
             <h1 className="mt-3 max-w-4xl text-4xl font-black leading-none tracking-[-0.045em] md:text-6xl lg:text-7xl">流媒体解锁检测</h1>
             <p className="mt-5 max-w-3xl text-sm leading-7 text-neutral-500 md:text-base md:leading-8">
-              检查当前出口网络对常用 AI 与流媒体服务的连通性和地区支持情况。检测只在点击后开始。
+              先判断当前出口地区是否在官方覆盖范围，再以基础资源连通结果辅助验证。检测只在点击后开始。
             </p>
           </div>
           <button
@@ -169,7 +167,7 @@ export function StreamingCheckPage() {
             如何理解检测结果
           </div>
           <p className="mt-3 text-sm leading-7 text-neutral-500">
-            “可连接”只代表当前浏览器能够触达平台官网；“地区可能支持”来自出口国家与官方覆盖信息，不代表账号登录、完整片库或播放一定成功。IP 与结果不会写入检测历史。
+            “官方地区支持”来自出口国家与服务覆盖策略；基础资源探测失败可能由浏览器跨域策略或反机器人机制导致，不代表服务无法连接。检测仍不能证明账号登录、完整片库或播放一定成功，IP 与结果不会写入检测历史。
           </p>
         </section>
       </main>
@@ -259,7 +257,18 @@ function ServiceResult({
             {state.label}
           </span>
         </div>
-        {assessment ? <p className="mt-3 text-sm leading-6 text-neutral-500">{assessment.note}</p> : null}
+        <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          {assessment ? <p className="min-w-0 flex-1 text-sm leading-6 text-neutral-500">{assessment.note}</p> : null}
+          <a
+            href={service.official_url}
+            target="_blank"
+            rel="nofollow noreferrer noopener"
+            className="inline-flex shrink-0 items-center gap-1 text-xs font-black text-neutral-600 transition hover:text-rose-600 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-rose-100"
+          >
+            打开验证
+            <ExternalLink size={13} />
+          </a>
+        </div>
         {isNetflix && netflixRegion ? (
           <div className="mt-3 flex flex-wrap items-center gap-2 text-xs font-black">
             <span className="rounded-md bg-neutral-100 px-2.5 py-1.5 text-neutral-700">地区推断：{netflixRegionLabel(netflixRegion)}</span>
@@ -327,26 +336,26 @@ async function requestStreamingCheck(): Promise<StreamingCheckResponse> {
 }
 
 async function probeService(url: string): Promise<StreamingReachability> {
-  const controller = new AbortController();
-  const timeoutId = window.setTimeout(() => controller.abort('timeout'), 8000);
-  try {
-    await fetch(url, {
-      method: 'GET',
-      mode: 'no-cors',
-      credentials: 'omit',
-      cache: 'no-store',
-      redirect: 'follow',
-      referrerPolicy: 'no-referrer',
-      signal: controller.signal,
-    });
-    return 'reachable';
-  } catch (error) {
-    return controller.signal.aborted || (error instanceof DOMException && error.name === 'AbortError')
-      ? 'timeout'
-      : 'unreachable';
-  } finally {
-    window.clearTimeout(timeoutId);
-  }
+  return await new Promise<StreamingReachability>((resolve) => {
+    const image = new Image();
+    let settled = false;
+    const finish = (result: StreamingReachability) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeoutId);
+      image.onload = null;
+      image.onerror = null;
+      resolve(result);
+    };
+    const timeoutId = window.setTimeout(() => finish('timeout'), 8000);
+    const probeUrl = new URL(url);
+    probeUrl.searchParams.set('_gr_probe', String(Date.now()));
+    image.decoding = 'async';
+    image.referrerPolicy = 'no-referrer';
+    image.onload = () => finish('reachable');
+    image.onerror = () => finish('unreachable');
+    image.src = probeUrl.toString();
+  });
 }
 
 function getMergedState(
@@ -369,19 +378,18 @@ function getStatePresentation(
 ) {
   if (!hasRun) return { label: '待检测', tone: 'bg-neutral-100 text-neutral-500', icon: CircleHelp };
   if (state === 'pending' && running) return { label: '检测中', tone: 'bg-neutral-100 text-neutral-600', icon: Activity };
-  if (state === 'likely_supported') return { label: '地区可能支持', tone: 'bg-emerald-50 text-emerald-700', icon: CheckCircle2 };
-  if (state === 'reachable_region_unsupported') return { label: '地区不支持', tone: 'bg-rose-50 text-rose-700', icon: ShieldAlert };
-  if (state === 'reachable_only') return { label: '地区无法确认', tone: 'bg-amber-50 text-amber-800', icon: CircleHelp };
-  if (reachability === 'timeout') return { label: '连接超时', tone: 'bg-neutral-100 text-neutral-700', icon: Clock3 };
-  return { label: '无法确认', tone: 'bg-rose-50 text-rose-700', icon: WifiOff };
+  if (state === 'region_supported') return { label: '官方地区支持', tone: 'bg-emerald-50 text-emerald-700', icon: CheckCircle2 };
+  if (state === 'region_unsupported') return { label: '官方地区不支持', tone: 'bg-rose-50 text-rose-700', icon: ShieldAlert };
+  if (state === 'reachable_only') return { label: '基础资源可达', tone: 'bg-sky-50 text-sky-700', icon: CheckCircle2 };
+  return { label: '浏览器限制', tone: 'bg-amber-50 text-amber-800', icon: CircleHelp };
 }
 
 function reachabilityLabel(reachability: StreamingReachability, running: boolean, hasRun: boolean): string {
   if (!hasRun) return '等待用户开始检测';
-  if (reachability === 'pending') return running ? '正在连接平台官网' : '未完成连通检测';
-  if (reachability === 'reachable') return '浏览器可连接';
-  if (reachability === 'timeout') return '浏览器连接超时';
-  return '浏览器无法连接';
+  if (reachability === 'pending') return running ? '正在探测基础资源' : '未完成基础资源探测';
+  if (reachability === 'reachable') return '基础资源可达';
+  if (reachability === 'timeout') return '基础资源探测超时，地区结论不受影响';
+  return '浏览器限制，未完成基础资源验证';
 }
 
 function netflixRegionLabel(region: StreamingCheckResponse['netflix']['inferred_region']): string {
