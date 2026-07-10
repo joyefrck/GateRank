@@ -85,6 +85,7 @@ import {
   buildToolPublicLocalFileMarker,
   getToolDownloadPlatformLabel,
   getToolDownloadFileExtension,
+  resolveToolDownloadCtaCopy,
   TOOL_DOWNLOAD_PLATFORMS,
   type HomeToolDownloadCta,
   type ToolDownloadItem,
@@ -292,6 +293,7 @@ export function renderFullRankingPublicPage(
           </div>
         </section>
         ${renderFullRankingFilters(filters)}
+        ${renderToolDownloadCta(view.tool_download_cta, { context: 'ranking' })}
         ${renderFullRankingTopicContent(topicContent)}
         ${renderRankingTable(view.items)}
       </main>
@@ -799,6 +801,11 @@ function renderReportSummary(view: ReportView): string {
         ${renderCapabilityGroup('新手引导', view.capabilities.import_methods, 'import')}
       </div>
     </section>
+    ${renderToolDownloadCta(view.tool_download_cta, {
+      context: 'report',
+      airportName: view.airport.name,
+      supportedClients: view.capabilities.clients.map((client) => client.label),
+    })}
     <section id="report-score" class="report-section report-anchor-target">
       <h2>评分拆解</h2>
       <div class="score-grid">
@@ -1668,7 +1675,7 @@ function renderHomeSections(view: HomePageView): string {
     .map((sectionKey) => {
       const section = view.sections[sectionKey];
       if (section.items.length === 0) {
-        return sectionKey === 'today_pick' ? renderHomeToolDownloadCta(view.tool_download_cta) : '';
+        return sectionKey === 'today_pick' ? renderToolDownloadCta(view.tool_download_cta, { context: 'home' }) : '';
       }
       const renderedSection = `
         <section class="content-card">
@@ -1680,16 +1687,20 @@ function renderHomeSections(view: HomePageView): string {
         </section>
       `;
       return sectionKey === 'today_pick'
-        ? `${renderedSection}${renderHomeToolDownloadCta(view.tool_download_cta)}`
+        ? `${renderedSection}${renderToolDownloadCta(view.tool_download_cta, { context: 'home' })}`
         : renderedSection;
     })
     .join('');
 }
 
-function renderHomeToolDownloadCta(cta?: HomeToolDownloadCta): string {
+function renderToolDownloadCta(
+  cta: HomeToolDownloadCta | undefined,
+  options: { context: 'home' | 'ranking' | 'report'; airportName?: string; supportedClients?: string[] },
+): string {
   if (!cta) {
     return '';
   }
+  const copy = resolveToolDownloadCtaCopy(cta, options);
   const icons = cta.items
     .filter((item) => item.icon_url)
     .map((item) => `
@@ -1703,7 +1714,7 @@ function renderHomeToolDownloadCta(cta?: HomeToolDownloadCta): string {
     .join('');
 
   return `
-    <a class="home-tool-download-cta" href="${escapeAttribute(cta.href)}" aria-label="${escapeAttribute(cta.title)}">
+    <a class="home-tool-download-cta" href="${escapeAttribute(cta.href)}" aria-label="${escapeAttribute(copy.title)}">
       <div class="home-tool-download-copy">
         <span class="home-tool-download-badge" aria-hidden="true">
           <svg viewBox="0 0 24 24" focusable="false">
@@ -1712,8 +1723,8 @@ function renderHomeToolDownloadCta(cta?: HomeToolDownloadCta): string {
           </svg>
         </span>
         <span class="home-tool-download-text">
-          <strong>${escapeHtml(cta.title)}</strong>
-          <p>${escapeHtml(cta.description)}</p>
+          <strong>${escapeHtml(copy.title)}</strong>
+          <p>${escapeHtml(copy.description)}</p>
         </span>
       </div>
       <div class="home-tool-download-meta">
@@ -2362,6 +2373,7 @@ const styles = `
   .home-tool-download-cta { position: relative; display: flex; min-height: 88px; align-items: center; justify-content: space-between; overflow: hidden; gap: 18px; border: 1px solid #e0f2fe; border-radius: 18px; background: radial-gradient(circle at 9% 45%, rgba(14,165,233,.13), transparent 28%), linear-gradient(135deg, #fff 0%, #f8fbff 52%, #eef7ff 100%); padding: 15px 18px; color: #0f172a; text-decoration: none; box-shadow: 0 16px 44px rgba(15,23,42,.06); transition: transform .2s ease-out, box-shadow .2s ease-out, border-color .2s ease-out; }
   .home-tool-download-cta::before { content: ""; position: absolute; inset: 0 0 auto; height: 1px; background: linear-gradient(90deg, transparent, #bae6fd, transparent); pointer-events: none; }
   .home-tool-download-cta:hover { transform: translateY(-2px); border-color: #bae6fd; box-shadow: 0 20px 54px rgba(14,116,144,.12); }
+  .home-tool-download-cta:focus-visible { outline: 3px solid #bae6fd; outline-offset: 3px; }
   .home-tool-download-copy { display: flex; min-width: 0; align-items: flex-start; gap: 12px; }
   .home-tool-download-badge { display: inline-flex; width: 44px; height: 44px; flex: 0 0 auto; align-items: center; justify-content: center; border: 1px solid rgba(255,255,255,.8); border-radius: 14px; background: #020617; color: #fff; box-shadow: 0 14px 28px rgba(15,23,42,.16); }
   .home-tool-download-badge svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 2.2; fill: none; stroke-linecap: round; stroke-linejoin: round; }

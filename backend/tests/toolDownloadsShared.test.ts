@@ -3,9 +3,28 @@ import test from 'node:test';
 
 import {
   DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
+  buildHomeToolDownloadCta,
   buildToolDownloadPlatformHeading,
   buildToolDownloadTrustMeta,
+  resolveToolDownloadCtaCopy,
 } from '../../shared/toolDownloads';
+
+test('tool download CTA copy follows ranking and report context', () => {
+  const cta = buildHomeToolDownloadCta([]);
+
+  assert.equal(
+    resolveToolDownloadCtaCopy(cta, { context: 'ranking' }).description,
+    '按 Android、macOS、Windows、Linux 选择常用客户端，下载后可继续导入机场订阅。',
+  );
+  assert.equal(
+    resolveToolDownloadCtaCopy(cta, {
+      context: 'report',
+      airportName: '星云机场',
+      supportedClients: ['Clash', 'Shadowrocket', 'v2rayN', 'v2rayNG'],
+    }).description,
+    '星云机场已收录的客户端支持包括 Clash、Shadowrocket、v2rayN 等客户端，可按设备系统前往下载并导入订阅。',
+  );
+});
 
 test('tool download platform headings use SEO-friendly platform H2 text', () => {
   assert.equal(buildToolDownloadPlatformHeading('windows'), 'Windows 翻墙工具下载');

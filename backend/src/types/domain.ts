@@ -401,6 +401,7 @@ export interface FullRankingView {
   page_size: number;
   total: number;
   total_pages: number;
+  tool_download_cta: HomeToolDownloadCta;
   items: FullRankingItem[];
 }
 
@@ -475,6 +476,7 @@ export interface ReportView {
   date: string;
   resolved_from_fallback: boolean;
   fallback_notice: string | null;
+  tool_download_cta: HomeToolDownloadCta;
   airport: Pick<Airport, 'id' | 'name' | 'website' | 'status' | 'tags'> & { slug: string };
   summary_card: Omit<PublicCardItem, 'airport_id' | 'report_url' | 'website' | 'score_delta_vs_yesterday'>;
   ranking: {

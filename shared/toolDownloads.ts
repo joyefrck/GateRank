@@ -72,6 +72,14 @@ export interface HomeToolDownloadCta {
   items: HomeToolDownloadCtaItem[];
 }
 
+export type ToolDownloadCtaContext = 'home' | 'ranking' | 'report';
+
+export interface ToolDownloadCtaCopyOptions {
+  context: ToolDownloadCtaContext;
+  airportName?: string;
+  supportedClients?: string[];
+}
+
 export const HOME_TOOL_DOWNLOAD_CTA_COPY = {
   href: '/download',
   title: '翻墙工具客户端下载',
@@ -86,6 +94,39 @@ export function buildHomeToolDownloadCta(items: HomeToolDownloadCtaItem[]): Home
     description: HOME_TOOL_DOWNLOAD_CTA_COPY.description,
     platforms: [...HOME_TOOL_DOWNLOAD_CTA_COPY.platforms],
     items,
+  };
+}
+
+export function resolveToolDownloadCtaCopy(
+  cta: HomeToolDownloadCta,
+  options: ToolDownloadCtaCopyOptions,
+): Pick<HomeToolDownloadCta, 'title' | 'description'> {
+  if (options.context === 'ranking') {
+    return {
+      title: cta.title,
+      description: '按 Android、macOS、Windows、Linux 选择常用客户端，下载后可继续导入机场订阅。',
+    };
+  }
+
+  if (options.context === 'report') {
+    const clients = (options.supportedClients || []).filter(Boolean).slice(0, 3);
+    if (clients.length === 0) {
+      return {
+        title: cta.title,
+        description: `${options.airportName ? `${options.airportName}可按设备系统选择` : '可按设备系统选择'}常用订阅客户端，下载后可继续导入订阅。`,
+      };
+    }
+    const clientText = `${clients.join('、')}${(options.supportedClients?.length || 0) > clients.length ? ' 等客户端' : ''}`;
+    const airportPrefix = options.airportName ? `${options.airportName}已收录的客户端支持包括` : '该机场已收录的客户端支持包括';
+    return {
+      title: cta.title,
+      description: `${airportPrefix} ${clientText}，可按设备系统前往下载并导入订阅。`,
+    };
+  }
+
+  return {
+    title: cta.title,
+    description: cta.description,
   };
 }
 

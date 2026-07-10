@@ -468,6 +468,13 @@ const fullRankingView: FullRankingView = {
   page_size: 100,
   total: 1,
   total_pages: 1,
+  tool_download_cta: {
+    href: '/download',
+    title: '翻墙工具客户端下载',
+    description: '常用客户端集中下载。',
+    platforms: ['Android', 'macOS', 'Windows', 'Linux'],
+    items: [],
+  },
   items: [
     {
       airport_id: 7,
@@ -538,6 +545,13 @@ const reportView: ReportView = {
   date: '2026-03-23',
   resolved_from_fallback: false,
   fallback_notice: null,
+  tool_download_cta: {
+    href: '/download',
+    title: '翻墙工具客户端下载',
+    description: '常用客户端集中下载。',
+    platforms: ['Android', 'macOS', 'Windows', 'Linux'],
+    items: [],
+  },
   airport: {
     id: 7,
     slug: 'nebula',

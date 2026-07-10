@@ -724,6 +724,16 @@ test('GET /rankings/all includes ranking items and report links in raw HTML', as
     assert.match(html, /#1/);
     assert.match(html, /98\.6/);
     assert.match(html, /href="\/airports\/nebula">测评报告<\/a>/);
+    assert.match(html, /aria-label="翻墙工具客户端下载"/);
+    assert.match(html, /按 Android、macOS、Windows、Linux 选择常用客户端/);
+    const rankingFiltersStart = html.indexOf('class="content-card ranking-filter-card"');
+    const rankingDownloadCtaStart = html.indexOf('class="home-tool-download-cta"');
+    const rankingListStart = html.indexOf('<h2>机场排行列表</h2>');
+    assert.notEqual(rankingFiltersStart, -1);
+    assert.notEqual(rankingDownloadCtaStart, -1);
+    assert.notEqual(rankingListStart, -1);
+    assert.ok(rankingFiltersStart < rankingDownloadCtaStart);
+    assert.ok(rankingDownloadCtaStart < rankingListStart);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -1090,6 +1100,16 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /#26A5E4/);
     assert.match(okHtml, /香港 · 6 节点 · IEPL/);
     assert.match(okHtml, /🇭🇰/);
+    assert.match(okHtml, /aria-label="翻墙工具客户端下载"/);
+    assert.match(okHtml, /星云机场已收录的客户端支持包括 Clash、Shadowrocket/);
+    const capabilitySectionStart = okHtml.indexOf('<section id="report-capabilities"');
+    const reportDownloadCtaStart = okHtml.indexOf('class="home-tool-download-cta"');
+    const reportScoreStart = okHtml.indexOf('<section id="report-score"');
+    assert.notEqual(capabilitySectionStart, -1);
+    assert.notEqual(reportDownloadCtaStart, -1);
+    assert.notEqual(reportScoreStart, -1);
+    assert.ok(capabilitySectionStart < reportDownloadCtaStart);
+    assert.ok(reportDownloadCtaStart < reportScoreStart);
     assert.match(okHtml, /评分拆解/);
     const scoreSectionStart = okHtml.indexOf('<section id="report-score"');
     assert.notEqual(scoreSectionStart, -1);
@@ -1464,6 +1484,15 @@ const fullRankingView: FullRankingView = {
   page_size: 20,
   total: 1,
   total_pages: 1,
+  tool_download_cta: {
+    href: '/download',
+    title: '翻墙工具客户端下载',
+    description: '常用客户端集中下载。',
+    platforms: ['Android', 'macOS', 'Windows', 'Linux'],
+    items: [
+      { slug: 'clash-verge-rev', name: 'Clash Verge Rev', icon_url: '/uploads/tools/icons/clash-verge-rev.webp' },
+    ],
+  },
   items: [
     {
       airport_id: 7,
@@ -1506,6 +1535,15 @@ const reportView: ReportView = {
   date: '2026-03-23',
   resolved_from_fallback: false,
   fallback_notice: null,
+  tool_download_cta: {
+    href: '/download',
+    title: '翻墙工具客户端下载',
+    description: '常用客户端集中下载。',
+    platforms: ['Android', 'macOS', 'Windows', 'Linux'],
+    items: [
+      { slug: 'clash-verge-rev', name: 'Clash Verge Rev', icon_url: '/uploads/tools/icons/clash-verge-rev.webp' },
+    ],
+  },
   airport: {
     id: 7,
     slug: 'nebula',

@@ -305,7 +305,7 @@ export class PublicViewService {
               clickChargeAmount,
             )
         : Promise.resolve({ total: 0, items: [] }),
-      this.buildHomeToolDownloadCta(),
+      this.buildToolDownloadCta(),
     ]);
     const preloadedContexts = await this.preloadCardContexts(
       collectRankingAirportIds(
@@ -411,13 +411,16 @@ export class PublicViewService {
       const safePage = Math.max(1, page);
       const safePageSize = Math.max(1, pageSize);
       const clickChargeAmount = await this.getClickChargeAmount();
-      const result = await this.deps.scoreRepository.getPublicFullRankingByDate(
-        resolvedDate,
-        safePage,
-        safePageSize,
-        filters,
-        clickChargeAmount,
-      );
+      const [result, toolDownloadCta] = await Promise.all([
+        this.deps.scoreRepository.getPublicFullRankingByDate(
+          resolvedDate,
+          safePage,
+          safePageSize,
+          filters,
+          clickChargeAmount,
+        ),
+        this.buildToolDownloadCta(),
+      ]);
 
     return {
       date: resolvedDate,
@@ -427,6 +430,7 @@ export class PublicViewService {
       page_size: safePageSize,
       total: result.total,
       total_pages: Math.max(1, Math.ceil(result.total / safePageSize)),
+      tool_download_cta: toolDownloadCta,
       items: result.items,
     };
   }
@@ -469,9 +473,10 @@ export class PublicViewService {
       return null;
     }
 
-    const [rawRanking, nodeSnapshot] = await Promise.all([
+    const [rawRanking, nodeSnapshot, toolDownloadCta] = await Promise.all([
       this.deps.rankingRepository.getRanksForAirport(airportId, resolvedDate),
       this.deps.subscriptionNodeSnapshotRepository?.getLatestByAirport(airportId) ?? Promise.resolve(null),
+      this.buildToolDownloadCta(),
     ]);
     const todayRank = rawRanking.today ?? (await this.getTodayPickRankFromPublicRanking(
       airportId,
@@ -493,6 +498,7 @@ export class PublicViewService {
       date: resolvedDate,
       resolved_from_fallback: resolvedFromFallback,
       fallback_notice: resolvedFromFallback ? buildPublicFallbackNotice(date, resolvedDate) : null,
+      tool_download_cta: toolDownloadCta,
       airport: {
         id: base.airport.id,
         slug: resolvePublicAirportSlug(base.airport),
@@ -593,7 +599,7 @@ export class PublicViewService {
     };
   }
 
-  private async buildHomeToolDownloadCta(): Promise<HomeToolDownloadCta> {
+  private async buildToolDownloadCta(): Promise<HomeToolDownloadCta> {
     if (!this.deps.toolsDownloadService) {
       return buildHomeToolDownloadCta([]);
     }

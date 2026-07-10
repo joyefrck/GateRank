@@ -102,8 +102,9 @@ import {
   buildToolDownloadTrustMeta,
   getToolDownloadPlatformLabel,
   isToolDownloadPlatform,
+  resolveToolDownloadCtaCopy,
   TOOL_DOWNLOAD_PLATFORMS,
-  type HomeToolDownloadCta as HomeToolDownloadCtaView,
+  type HomeToolDownloadCta as ToolDownloadCtaView,
   type ToolDownloadItem,
   type ToolDownloadPlatform,
   type ToolsDownloadPageView,
@@ -204,7 +205,7 @@ interface HomePageResponse {
     monitored_airports: number;
     realtime_tests: number;
   };
-  tool_download_cta: HomeToolDownloadCtaView;
+  tool_download_cta: ToolDownloadCtaView;
   sections: Record<HomeSectionKey, HomeSection>;
 }
 
@@ -257,6 +258,7 @@ interface FullRankingPageResponse {
   page_size: number;
   total: number;
   total_pages: number;
+  tool_download_cta: ToolDownloadCtaView;
   items: FullRankingItemResponse[];
 }
 
@@ -283,6 +285,7 @@ interface ReportViewResponse {
   date: string;
   resolved_from_fallback: boolean;
   fallback_notice: string | null;
+  tool_download_cta: ToolDownloadCtaView;
   airport: {
     id: number;
     slug: string;
@@ -3256,7 +3259,7 @@ function HomePage({ date }: { date?: string }) {
           return sectionKey === 'today_pick' ? (
             <React.Fragment key="today-pick-with-download-cta">
               {renderedSection}
-              <HomeToolDownloadCta cta={data.tool_download_cta} />
+              <ToolDownloadCta cta={data.tool_download_cta} context="home" />
             </React.Fragment>
           ) : renderedSection;
         })}
@@ -3266,10 +3269,23 @@ function HomePage({ date }: { date?: string }) {
   );
 }
 
-function HomeToolDownloadCta({ cta }: { cta?: HomeToolDownloadCtaView }) {
+function ToolDownloadCta({
+  cta,
+  context,
+  airportName,
+  supportedClients,
+  className = '',
+}: {
+  cta?: ToolDownloadCtaView;
+  context: 'home' | 'ranking' | 'report';
+  airportName?: string;
+  supportedClients?: string[];
+  className?: string;
+}) {
   if (!cta) {
     return null;
   }
+  const copy = resolveToolDownloadCtaCopy(cta, { context, airportName, supportedClients });
   const visibleItems = cta.items.filter((item) => item.icon_url).slice(0, 4);
 
   return (
@@ -3279,8 +3295,8 @@ function HomeToolDownloadCta({ cta }: { cta?: HomeToolDownloadCtaView }) {
         event.preventDefault();
         navigate(cta.href, { scrollToTop: true });
       }}
-      className="group relative flex min-h-[84px] flex-col gap-2.5 overflow-hidden rounded-[18px] border border-sky-100 bg-[radial-gradient(circle_at_9%_45%,rgba(14,165,233,0.13),transparent_28%),linear-gradient(135deg,#ffffff_0%,#f8fbff_52%,#eef7ff_100%)] px-4 py-3 text-slate-950 no-underline shadow-[0_16px_44px_rgba(15,23,42,0.06)] transition duration-200 ease-out hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-[0_20px_54px_rgba(14,116,144,0.12)] md:min-h-[88px] md:flex-row md:items-center md:justify-between md:gap-5 md:px-5 md:py-4"
-      aria-label={cta.title}
+      className={`group relative flex min-h-[84px] flex-col gap-2.5 overflow-hidden rounded-[18px] border border-sky-100 bg-[radial-gradient(circle_at_9%_45%,rgba(14,165,233,0.13),transparent_28%),linear-gradient(135deg,#ffffff_0%,#f8fbff_52%,#eef7ff_100%)] px-4 py-3 text-slate-950 no-underline shadow-[0_16px_44px_rgba(15,23,42,0.06)] transition duration-200 ease-out hover:-translate-y-0.5 hover:border-sky-200 hover:shadow-[0_20px_54px_rgba(14,116,144,0.12)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sky-200 md:min-h-[88px] md:flex-row md:items-center md:justify-between md:gap-5 md:px-5 md:py-4 ${className}`}
+      aria-label={copy.title}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-sky-200 to-transparent" />
       <div className="flex min-w-0 items-start gap-2.5 md:gap-3">
@@ -3288,10 +3304,10 @@ function HomeToolDownloadCta({ cta }: { cta?: HomeToolDownloadCtaView }) {
           <Download className="h-[18px] w-[18px] md:h-5 md:w-5" />
         </span>
         <div className="min-w-0">
-        <div className="text-base font-black tracking-normal text-slate-950 md:text-lg">{cta.title}</div>
-        <p className="mt-0.5 max-w-3xl text-xs font-semibold leading-5 text-slate-500 md:mt-1 md:text-[13px]">
-          {cta.description}
-        </p>
+          <div className="text-base font-black tracking-normal text-slate-950 md:text-lg">{copy.title}</div>
+          <p className="mt-0.5 max-w-3xl text-xs font-semibold leading-5 text-slate-500 md:mt-1 md:text-[13px]">
+            {copy.description}
+          </p>
         </div>
       </div>
 
@@ -3579,6 +3595,7 @@ function FullRankingPage({
         />
 
         <FullRankingFilterPanel date={date} filters={activeFilters} />
+        <ToolDownloadCta cta={data?.tool_download_cta} context="ranking" className="mt-8" />
         <FullRankingTopicSection topicContent={topicContent} />
 
         <section className="mt-10 rounded-[28px] border border-neutral-200 bg-white px-5 py-6 md:px-7 md:py-8 shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
@@ -4478,6 +4495,12 @@ function ReportContentV2({
       <ReportContentNarrative data={data} />
       <ReportSnapshotGrid data={data} />
       <ReportCapabilitiesSection data={data} />
+      <ToolDownloadCta
+        cta={data.tool_download_cta}
+        context="report"
+        airportName={data.airport.name}
+        supportedClients={data.capabilities.clients.map((client) => client.label)}
+      />
       <ReportScoreBreakdown data={data} />
       <ReportCoreMetrics data={data} />
       <ReportTrendSection data={data} />
