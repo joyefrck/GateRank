@@ -434,6 +434,54 @@ test('aggregateForDate uses the latest stability latency batch for current-day l
   assert.equal(written[0].latency_mean_ms, 3.5);
 });
 
+test('aggregateAirportForDate replaces stale availability failures with the latest manual recheck', async () => {
+  const samples: ProbeSample[] = [
+    availabilitySample(1, '2026-07-11T01:00:00.000Z', false, 'scheduler-stability'),
+    availabilitySample(2, '2026-07-11T02:00:00.000Z', true, 'manual-stability'),
+    latencySample(3, '2026-07-11T02:01:00.000Z', 10, 'manual-stability'),
+    availabilitySample(4, '2026-07-12T01:00:00.000Z', false, 'scheduler-stability'),
+    availabilitySample(5, '2026-07-12T02:00:00.000Z', false, 'scheduler-stability'),
+    availabilitySample(6, '2026-07-12T03:00:00.000Z', false, 'scheduler-stability'),
+    availabilitySample(7, '2026-07-12T04:00:00.000Z', true, 'scheduler-stability'),
+    availabilitySample(8, '2026-07-12T05:00:00.000Z', true, 'manual-stability'),
+    latencySample(9, '2026-07-12T05:01:00.000Z', 5.33, 'manual-stability'),
+    latencySample(10, '2026-07-12T05:02:00.000Z', 5.28, 'manual-stability'),
+  ];
+
+  const written = await aggregateSamplesForDate(samples, '2026-07-12');
+
+  assert.equal(written.uptime_percent_today, 100);
+  assert.equal(written.uptime_percent_30d, 100);
+  assert.equal(written.stability_tier, 'stable');
+  assert.equal(written.stable_days_streak, 2);
+  assert.equal(written.healthy_days_streak, 2);
+});
+
+test('aggregateAirportForDate keeps ordinary availability observations cumulative', async () => {
+  const samples: ProbeSample[] = [
+    availabilitySample(1, '2026-07-12T01:00:00.000Z', false, 'scheduler-stability'),
+    availabilitySample(2, '2026-07-12T02:00:00.000Z', true, 'cron-stability'),
+    latencySample(3, '2026-07-12T02:01:00.000Z', 5, 'cron-stability'),
+  ];
+
+  const written = await aggregateSamplesForDate(samples, '2026-07-12');
+
+  assert.equal(written.uptime_percent_today, 50);
+});
+
+test('aggregateAirportForDate includes ordinary observations recorded after a recheck', async () => {
+  const samples: ProbeSample[] = [
+    availabilitySample(1, '2026-07-12T01:00:00.000Z', false, 'scheduler-stability'),
+    availabilitySample(2, '2026-07-12T02:00:00.000Z', true, 'manual-stability'),
+    availabilitySample(3, '2026-07-12T03:00:00.000Z', false, 'cron-stability'),
+    latencySample(4, '2026-07-12T03:01:00.000Z', 5, 'cron-stability'),
+  ];
+
+  const written = await aggregateSamplesForDate(samples, '2026-07-12');
+
+  assert.equal(written.uptime_percent_today, 50);
+});
+
 test('aggregateForDate keeps healthy streak across minor fluctuation days while strict streak resets', async () => {
   const written: DailyMetrics[] = [];
   const samples: ProbeSample[] = [
@@ -623,3 +671,65 @@ test('aggregateForDate preserves current-day domain_ok from prior risk inspectio
   assert.equal(written[0].domain_ok, true);
   assert.equal(written[0].ssl_days_left, 47);
 });
+
+function availabilitySample(
+  id: number,
+  sampledAt: string,
+  availability: boolean,
+  source: string,
+): ProbeSample {
+  return {
+    id,
+    airport_id: 1,
+    sampled_at: sampledAt,
+    sample_type: 'availability',
+    probe_scope: 'stability',
+    latency_ms: null,
+    download_mbps: null,
+    availability,
+    source,
+  };
+}
+
+function latencySample(
+  id: number,
+  sampledAt: string,
+  latencyMs: number,
+  source: string,
+): ProbeSample {
+  return {
+    id,
+    airport_id: 1,
+    sampled_at: sampledAt,
+    sample_type: 'latency',
+    probe_scope: 'stability',
+    latency_ms: latencyMs,
+    download_mbps: null,
+    availability: null,
+    source,
+  };
+}
+
+async function aggregateSamplesForDate(samples: ProbeSample[], date: string): Promise<DailyMetrics> {
+  const written: DailyMetrics[] = [];
+  const service = new AggregationService({
+    airportRepository: {
+      listAll: async () => [{ id: 1 }],
+    },
+    probeSampleRepository: {
+      getProbeSamplesInRange: async () => samples,
+      getPacketLossSamplesByDate: async () => [],
+    },
+    metricsRepository: {
+      getLatestByAirportBeforeDate: async () => null,
+      upsertDaily: async (input) => {
+        written.push(input);
+      },
+    },
+  });
+
+  const result = await service.aggregateAirportForDate(1, date);
+  assert.equal(result.aggregated, 1);
+  assert.equal(written.length, 1);
+  return written[0];
+}

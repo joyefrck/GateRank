@@ -57,6 +57,8 @@ export class AggregationService {
     }
 
     const daySamples = samples.filter((s) => s.sampled_at.slice(0, 10) === date);
+    const availByDay = buildAvailabilityMap(samples);
+    const dayAvail = availByDay.get(date) || [];
     const stabilityLatencies = getLatestStabilityLatencyBatch(daySamples);
     const performanceLatencies = daySamples
       .filter(
@@ -74,14 +76,6 @@ export class AggregationService {
           typeof s.download_mbps === 'number',
       )
       .map((s) => round2(Number(s.download_mbps)));
-    const dayAvail = daySamples
-      .filter(
-        (s) =>
-          s.sample_type === 'availability' &&
-          s.probe_scope === 'stability' &&
-          s.availability !== null,
-      )
-      .map((s) => (s.availability ? 1 : 0));
     const uptimePercentToday = dayAvail.length ? round2(average(dayAvail) * 100) : 0;
     const latencyStats = computeLatencyStats(stabilityLatencies);
 
@@ -115,16 +109,6 @@ export class AggregationService {
         ? average(dayAvail) >= 0.95
         : base?.domain_ok ?? false;
 
-    const availByDay = new Map<string, number[]>();
-    for (const sample of samples) {
-      if (sample.sample_type !== 'availability' || sample.availability === null) {
-        continue;
-      }
-      const key = sample.sampled_at.slice(0, 10);
-      const list = availByDay.get(key) || [];
-      list.push(sample.availability ? 1 : 0);
-      availByDay.set(key, list);
-    }
     const uptimePercent30d = calcUptimePercent(availByDay);
     const latenciesByDay = buildLatencyMap(samples, 'stability');
     const stabilityTier = getStabilityTier(uptimePercentToday, stabilityLatencies);
@@ -194,6 +178,55 @@ function calcUptimePercent(availByDay: Map<string, number[]>): number {
     return 0;
   }
   return round2(average(merged) * 100);
+}
+
+function buildAvailabilityMap(samples: ProbeSample[]): Map<string, number[]> {
+  const samplesByDay = new Map<string, ProbeSample[]>();
+  for (const sample of samples) {
+    if (
+      sample.sample_type !== 'availability' ||
+      sample.probe_scope !== 'stability' ||
+      sample.availability === null
+    ) {
+      continue;
+    }
+    const key = sample.sampled_at.slice(0, 10);
+    const list = samplesByDay.get(key) || [];
+    list.push(sample);
+    samplesByDay.set(key, list);
+  }
+
+  const availByDay = new Map<string, number[]>();
+  for (const [day, daySamples] of samplesByDay.entries()) {
+    availByDay.set(day, getEffectiveAvailabilityBatch(daySamples));
+  }
+  return availByDay;
+}
+
+function getEffectiveAvailabilityBatch(samples: ProbeSample[]): number[] {
+  const availabilitySamples = samples
+    .filter(
+      (sample) =>
+        sample.sample_type === 'availability' &&
+        sample.probe_scope === 'stability' &&
+        sample.availability !== null,
+    )
+    .slice()
+    .sort((left, right) => sampleTimeMs(left) - sampleTimeMs(right));
+  let latestRecheckIndex = -1;
+  for (let index = 0; index < availabilitySamples.length; index += 1) {
+    if (isAvailabilityRecheckSource(availabilitySamples[index].source)) {
+      latestRecheckIndex = index;
+    }
+  }
+  const effectiveSamples = latestRecheckIndex >= 0
+    ? availabilitySamples.slice(latestRecheckIndex)
+    : availabilitySamples;
+  return effectiveSamples.map((sample) => (sample.availability ? 1 : 0));
+}
+
+function isAvailabilityRecheckSource(source: string): boolean {
+  return source === 'manual-stability' || source === 'scheduler-stability-resample';
 }
 
 function buildLatencyMap(samples: ProbeSample[], probeScope: ProbeSample['probe_scope']): Map<string, number[]> {
