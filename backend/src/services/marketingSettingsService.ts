@@ -7,11 +7,16 @@ import { AIRPORT_AD_MONTHLY_PRICE } from '../../../shared/airportAds';
 export interface MarketingSettingsInput {
   application_fee_amount?: number;
   click_charge_amount?: number;
+  rank_click_charge_amounts?: Partial<RankClickChargeAmounts>;
   airport_ad_monthly_price?: number;
   recharge_amounts?: number[];
   admin_telegram_username?: string | null;
   home_section_limits?: Partial<HomeSectionLimits>;
 }
+
+export const CLICK_CHARGE_RANKS = [1, 2, 3, 4, 5, 6] as const;
+export type ClickChargeRank = (typeof CLICK_CHARGE_RANKS)[number];
+export type RankClickChargeAmounts = Record<ClickChargeRank, number | null>;
 
 export interface HomeSectionLimits {
   today_pick: number;
@@ -24,6 +29,7 @@ export interface HomeSectionLimits {
 export interface MarketingSettingsView {
   application_fee_amount: number;
   click_charge_amount: number;
+  rank_click_charge_amounts: RankClickChargeAmounts;
   airport_ad_monthly_price: number;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
@@ -35,6 +41,7 @@ export interface MarketingSettingsView {
 export interface MarketingBillingConfig {
   application_fee_amount: number;
   click_charge_amount: number;
+  rank_click_charge_amounts: RankClickChargeAmounts;
   airport_ad_monthly_price: number;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
@@ -104,6 +111,14 @@ export class MarketingSettingsService {
         input.click_charge_amount === undefined
           ? base.click_charge_amount
           : normalizePositiveAmount(input.click_charge_amount, 'click_charge_amount'),
+      rank_click_charge_amounts:
+        input.rank_click_charge_amounts === undefined
+          ? base.rank_click_charge_amounts
+          : normalizeRankClickChargeAmounts(
+              input.rank_click_charge_amounts,
+              base.rank_click_charge_amounts,
+              true,
+            ),
       airport_ad_monthly_price:
         input.airport_ad_monthly_price === undefined
           ? base.airport_ad_monthly_price
@@ -171,6 +186,7 @@ function getBaseDefaults(): MarketingBillingConfig {
   return {
     application_fee_amount: DEFAULT_MARKETING_APPLICATION_FEE_AMOUNT,
     click_charge_amount: DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT,
+    rank_click_charge_amounts: createDefaultRankClickChargeAmounts(),
     airport_ad_monthly_price: DEFAULT_AIRPORT_AD_MONTHLY_PRICE,
     recharge_amounts: [...DEFAULT_MARKETING_RECHARGE_AMOUNTS],
     admin_telegram_username: null,
@@ -189,6 +205,11 @@ function normalizeConfig(value: unknown, defaults: MarketingBillingConfig): Mark
       record.click_charge_amount,
       defaults.click_charge_amount,
     ),
+    rank_click_charge_amounts: normalizeRankClickChargeAmounts(
+      record.rank_click_charge_amounts,
+      defaults.rank_click_charge_amounts,
+      false,
+    ),
     airport_ad_monthly_price: normalizeStoredAmount(
       record.airport_ad_monthly_price,
       defaults.airport_ad_monthly_price,
@@ -205,6 +226,81 @@ function normalizeConfig(value: unknown, defaults: MarketingBillingConfig): Mark
       false,
     ),
   };
+}
+
+export function resolveClickChargeAmount(
+  config: {
+    click_charge_amount: number;
+    rank_click_charge_amounts?: Partial<RankClickChargeAmounts>;
+  },
+  rank: number | null,
+): number {
+  if (rank !== null && (CLICK_CHARGE_RANKS as readonly number[]).includes(rank)) {
+    const configured = config.rank_click_charge_amounts?.[rank as ClickChargeRank];
+    if (configured !== null && configured !== undefined) {
+      return configured;
+    }
+  }
+  return config.click_charge_amount;
+}
+
+export function createDefaultRankClickChargeAmounts(): RankClickChargeAmounts {
+  return {
+    1: null,
+    2: null,
+    3: null,
+    4: null,
+    5: null,
+    6: null,
+  };
+}
+
+function normalizeRankClickChargeAmounts(
+  value: unknown,
+  defaults: RankClickChargeAmounts,
+  strict: boolean,
+): RankClickChargeAmounts {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    if (strict) {
+      throw new HttpError(400, 'BAD_REQUEST', 'rank_click_charge_amounts must be an object');
+    }
+    return { ...defaults };
+  }
+
+  const record = value as Record<string, unknown>;
+  const allowedKeys = new Set(CLICK_CHARGE_RANKS.map(String));
+  if (strict) {
+    const unknownKey = Object.keys(record).find((key) => !allowedKeys.has(key));
+    if (unknownKey) {
+      throw new HttpError(
+        400,
+        'BAD_REQUEST',
+        `rank_click_charge_amounts.${unknownKey} is not supported`,
+      );
+    }
+  }
+
+  const result = { ...defaults };
+  for (const rank of CLICK_CHARGE_RANKS) {
+    const key = String(rank);
+    if (!Object.prototype.hasOwnProperty.call(record, key)) {
+      continue;
+    }
+    const amount = record[key];
+    if (amount === null) {
+      result[rank] = null;
+      continue;
+    }
+    try {
+      result[rank] = normalizePositiveAmount(amount, `rank_click_charge_amounts.${rank}`);
+    } catch (error) {
+      if (strict) {
+        throw error;
+      }
+      result[rank] = defaults[rank];
+    }
+  }
+  return result;
 }
 
 function normalizeStoredAmount(value: unknown, fallback: number): number {

@@ -159,6 +159,7 @@ test('GET /portal/me returns marketing billing fees', async () => {
         getConfig: async () => ({
           application_fee_amount: 456,
           click_charge_amount: 2.5,
+          rank_click_charge_amounts: { 1: 3.5, 6: 2.8 },
           recharge_amounts: [88, 188, 288],
           admin_telegram_username: 'gaterank_admin',
         }),
@@ -185,12 +186,21 @@ test('GET /portal/me returns marketing billing fees', async () => {
       payment_fee_amount: number;
       payment_methods: string[];
       click_price: number;
+      rank_click_charge_amounts: Record<string, number | null>;
       recharge_amounts: number[];
       admin_telegram_username: string | null;
     };
     assert.equal(data.payment_fee_amount, 456);
     assert.deepEqual(data.payment_methods, ['alipay', 'wxpay']);
     assert.equal(data.click_price, 2.5);
+    assert.deepEqual(data.rank_click_charge_amounts, {
+      1: 3.5,
+      2: null,
+      3: null,
+      4: null,
+      5: null,
+      6: 2.8,
+    });
     assert.deepEqual(data.recharge_amounts, [88, 188, 288]);
     assert.equal(data.admin_telegram_username, 'gaterank_admin');
   } finally {
@@ -363,6 +373,7 @@ test('GET /portal/wallet returns configured recharge amounts', async () => {
         getConfig: async () => ({
           application_fee_amount: 456,
           click_charge_amount: 2.5,
+          rank_click_charge_amounts: { 1: 3.5 },
           recharge_amounts: [120, 240],
         }),
       },
@@ -384,9 +395,15 @@ test('GET /portal/wallet returns configured recharge amounts', async () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     assert.equal(response.status, 200);
-    const data = (await response.json()) as { recharge_amounts: number[]; click_price: number };
+    const data = (await response.json()) as {
+      recharge_amounts: number[];
+      click_price: number;
+      rank_click_charge_amounts: Record<string, number | null>;
+    };
     assert.deepEqual(data.recharge_amounts, [120, 240]);
     assert.equal(data.click_price, 2.5);
+    assert.equal(data.rank_click_charge_amounts['1'], 3.5);
+    assert.equal(data.rank_click_charge_amounts['2'], null);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

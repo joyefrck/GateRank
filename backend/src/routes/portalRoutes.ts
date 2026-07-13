@@ -41,6 +41,11 @@ import {
   type UserTelegramBotConfig,
 } from '../services/userTelegramBotSettingsService';
 import { resolveAvailablePaymentMethods } from '../services/paymentMethodAvailability';
+import {
+  CLICK_CHARGE_RANKS,
+  createDefaultRankClickChargeAmounts,
+  type RankClickChargeAmounts,
+} from '../services/marketingSettingsService';
 import { PORTAL_AUTH_COOKIE, clearAuthCookie, setAuthCookie } from '../utils/authCookies';
 import type { UpdateAirportInput } from '../repositories/airportRepository';
 import type { Airport, AirportPaymentMethod, AirportProfile, AirportStreamingSupport } from '../types/domain';
@@ -238,6 +243,7 @@ interface PortalDeps {
     getConfig(): Promise<{
       application_fee_amount: number;
       click_charge_amount?: number;
+      rank_click_charge_amounts?: Partial<RankClickChargeAmounts>;
       airport_ad_monthly_price?: number;
       recharge_amounts?: number[];
       admin_telegram_username?: string | null;
@@ -588,6 +594,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         wallet: await deps.applicantBillingRepository.ensureWalletForAccount(account.id, account.application_id),
         recharge_amounts: marketingConfig.recharge_amounts,
         click_price: marketingConfig.click_charge_amount,
+        rank_click_charge_amounts: marketingConfig.rank_click_charge_amounts,
       });
     } catch (error) {
       next(error);
@@ -1327,6 +1334,7 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
     payment_fee_amount: Number(marketingConfig.application_fee_amount),
     payment_methods: paymentMethods,
     click_price: Number(marketingConfig.click_charge_amount),
+    rank_click_charge_amounts: marketingConfig.rank_click_charge_amounts,
     admin_telegram_username: marketingConfig.admin_telegram_username,
     recharge_amounts: marketingConfig.recharge_amounts,
     wallet,
@@ -1531,6 +1539,7 @@ function buildSyncedAirportProfile(
 async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
   application_fee_amount: number;
   click_charge_amount: number;
+  rank_click_charge_amounts: RankClickChargeAmounts;
   airport_ad_monthly_price: number;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
@@ -1539,6 +1548,7 @@ async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
     return {
       application_fee_amount: APPLICATION_FEE_AMOUNT,
       click_charge_amount: CLICK_CHARGE_AMOUNT,
+      rank_click_charge_amounts: createDefaultRankClickChargeAmounts(),
       airport_ad_monthly_price: AIRPORT_AD_MONTHLY_PRICE,
       recharge_amounts: [...RECHARGE_AMOUNTS],
       admin_telegram_username: null,
@@ -1551,10 +1561,22 @@ async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
   return {
     application_fee_amount: Number(config.application_fee_amount || APPLICATION_FEE_AMOUNT),
     click_charge_amount: Number(config.click_charge_amount || CLICK_CHARGE_AMOUNT),
+    rank_click_charge_amounts: normalizeRankClickChargeAmounts(config.rank_click_charge_amounts),
     airport_ad_monthly_price: Number(config.airport_ad_monthly_price || AIRPORT_AD_MONTHLY_PRICE),
     recharge_amounts: rechargeAmounts.length > 0 ? rechargeAmounts : [...RECHARGE_AMOUNTS],
     admin_telegram_username: config.admin_telegram_username ?? null,
   };
+}
+
+function normalizeRankClickChargeAmounts(
+  value: Partial<RankClickChargeAmounts> | undefined,
+): RankClickChargeAmounts {
+  const result = createDefaultRankClickChargeAmounts();
+  for (const rank of CLICK_CHARGE_RANKS) {
+    const amount = Number(value?.[rank]);
+    result[rank] = Number.isFinite(amount) && amount > 0 ? Number(amount.toFixed(2)) : null;
+  }
+  return result;
 }
 
 function toPortalAccountView(account: ApplicantAccount) {

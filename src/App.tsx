@@ -749,6 +749,7 @@ interface PortalViewResponse {
   payment_fee_amount: number;
   payment_methods: PaymentChannel[];
   click_price: number;
+  rank_click_charge_amounts: Record<'1' | '2' | '3' | '4' | '5' | '6', number | null>;
   admin_telegram_username: string | null;
   recharge_amounts: number[];
   wallet: PortalWalletView;
@@ -7289,7 +7290,7 @@ function PortalPage() {
     return (
       <PortalSectionCard
         title="余额充值"
-        description={`充值余额用于 GateRank 到机场链接的真实点击扣费。当前点击单价为 ${formatMetric(portalView.click_price)} 元/次。`}
+        description={`充值余额用于 GateRank 到机场链接的真实点击扣费。默认点击单价为 ${formatMetric(portalView.click_price)} 元/次，评分前六名按定制阶梯价执行。`}
         aside={<div className="rounded-full border border-emerald-100 bg-emerald-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-emerald-700">余额 ¥{formatMetric(portalView.wallet.balance)}</div>}
       >
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-4">
@@ -7484,9 +7485,9 @@ function PortalPage() {
   const renderBillingGuideSection = (portalView: PortalViewResponse) => {
     const guideItems = [
       {
-        title: '当前点击单价',
+        title: '默认点击单价',
         value: `¥${formatMetric(portalView.click_price)} / 次`,
-        description: '每次有效跳转从点击余额中扣除一次点击费用。',
+        description: '第 1～6 名优先使用下方阶梯价，未定制的名次继承默认价。',
         tone: 'blue' as const,
       },
       {
@@ -7531,13 +7532,30 @@ function PortalPage() {
           ))}
         </div>
 
+        <div className="mt-5 rounded-[24px] border border-cyan-100 bg-cyan-50/70 px-5 py-5">
+          <div className="text-sm font-black text-cyan-950">评分前六名点击费</div>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            {(['1', '2', '3', '4', '5', '6'] as const).map((rank) => {
+              const configuredAmount = portalView.rank_click_charge_amounts?.[rank];
+              const effectiveAmount = configuredAmount ?? portalView.click_price;
+              return (
+                <div key={rank} className="rounded-2xl border border-white/80 bg-white px-3 py-3 shadow-sm">
+                  <div className="text-xs font-black text-cyan-700">第 {rank} 名</div>
+                  <div className="mt-1 text-lg font-black text-slate-950">¥{formatMetric(effectiveAmount)}</div>
+                  <div className="mt-1 text-[11px] font-bold text-slate-500">{configuredAmount == null ? '默认价' : '定制价'}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="mt-5 rounded-[24px] border border-rose-100 bg-rose-50/90 px-5 py-5">
           <div className="flex items-start gap-3">
             <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-rose-600" />
             <div>
               <div className="text-sm font-black text-rose-900">余额不足与总分展示</div>
               <div className="mt-2 text-sm leading-7 text-rose-800">
-                当余额不足以支付一次点击时，官网跳转仍可正常访问且不会扣费；机场仍保留在 GateRank 并继续参与监测评分，但公开综合总分暂不展示，榜单会排在余额正常机场之后。充值后余额恢复到单次点击价以上，可自动恢复。
+                当余额不足以支付当次适用点击费时，官网跳转仍可正常访问且不会扣费。公开综合总分的余额门槛仍按默认点击费判断；余额低于默认点击费后，总分暂不展示并排在余额正常机场之后，充值恢复到默认点击费以上即可自动恢复。
               </div>
             </div>
           </div>
@@ -7984,7 +8002,7 @@ function PortalPage() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <PortalInfoCard eyebrow="Airport" title="机场名称" value={view.application.name} tone="blue" />
           <PortalInfoCard eyebrow="Balance" title="账户余额" value={`¥${formatMetric(view.wallet.balance)}`} tone={view.wallet.balance >= view.click_price ? 'green' : 'amber'} />
-          <PortalInfoCard eyebrow="Click Price" title="点击单价" value={`¥${formatMetric(view.click_price)} / 次`} tone="blue" />
+          <PortalInfoCard eyebrow="Click Price" title="默认点击价" value={`¥${formatMetric(view.click_price)} / 次`} tone="blue" />
           <PortalInfoCard eyebrow="Listing" title="上架状态" value={listingStatus.label} tone={listingStatus.tone} />
         </div>
         {view.admin_telegram_username && (

@@ -14,6 +14,11 @@ import type { ApplicantTelegramBinding } from '../repositories/applicantTelegram
 import { TELEGRAM_LOGIN_START_PREFIX } from '../repositories/applicantTelegramLoginFlowRepository';
 import type { PaymentGatewayChannel, PaymentGatewayService } from '../services/paymentGatewayService';
 import { resolveAvailablePaymentMethods } from '../services/paymentMethodAvailability';
+import {
+  CLICK_CHARGE_RANKS,
+  createDefaultRankClickChargeAmounts,
+  type RankClickChargeAmounts,
+} from '../services/marketingSettingsService';
 import type { UserTelegramBotConfig, UserTelegramBotSettingsService } from '../services/userTelegramBotSettingsService';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { getDateInTimezone } from '../utils/time';
@@ -72,6 +77,7 @@ interface UserTelegramBotDeps {
   marketingSettingsService?: {
     getConfig(): Promise<{
       click_charge_amount?: number;
+      rank_click_charge_amounts?: Partial<RankClickChargeAmounts>;
       recharge_amounts?: number[];
     }>;
   };
@@ -372,7 +378,13 @@ async function sendBalanceMessage(
     [
       `机场：${application?.name || '-'}`,
       `账户余额：¥${formatMoney(wallet.balance)}`,
-      `点击单价：¥${formatMoney(billingConfig.click_charge_amount)} / 次`,
+      `默认点击单价：¥${formatMoney(billingConfig.click_charge_amount)} / 次`,
+      '评分前六名点击费：',
+      ...CLICK_CHARGE_RANKS.map((rank) => {
+        const configuredAmount = billingConfig.rank_click_charge_amounts[rank];
+        const effectiveAmount = configuredAmount ?? billingConfig.click_charge_amount;
+        return `第${rank}名：¥${formatMoney(effectiveAmount)} / 次${configuredAmount === null ? '（默认价）' : '（定制价）'}`;
+      }),
       `上架状态：${listingStatus}`,
     ].join('\n'),
   );
@@ -547,10 +559,15 @@ async function createTelegramRechargeOrder(
 
 async function getBillingConfig(deps: UserTelegramBotDeps): Promise<{
   click_charge_amount: number;
+  rank_click_charge_amounts: RankClickChargeAmounts;
   recharge_amounts: number[];
 }> {
   if (!deps.marketingSettingsService) {
-    return { click_charge_amount: CLICK_CHARGE_AMOUNT, recharge_amounts: [...RECHARGE_AMOUNTS] };
+    return {
+      click_charge_amount: CLICK_CHARGE_AMOUNT,
+      rank_click_charge_amounts: createDefaultRankClickChargeAmounts(),
+      recharge_amounts: [...RECHARGE_AMOUNTS],
+    };
   }
   const config = await deps.marketingSettingsService.getConfig();
   const rechargeAmounts = Array.isArray(config.recharge_amounts) && config.recharge_amounts.length > 0
@@ -558,8 +575,20 @@ async function getBillingConfig(deps: UserTelegramBotDeps): Promise<{
     : [...RECHARGE_AMOUNTS];
   return {
     click_charge_amount: Number(config.click_charge_amount || CLICK_CHARGE_AMOUNT),
+    rank_click_charge_amounts: normalizeRankClickChargeAmounts(config.rank_click_charge_amounts),
     recharge_amounts: rechargeAmounts.length > 0 ? rechargeAmounts : [...RECHARGE_AMOUNTS],
   };
+}
+
+function normalizeRankClickChargeAmounts(
+  value: Partial<RankClickChargeAmounts> | undefined,
+): RankClickChargeAmounts {
+  const result = createDefaultRankClickChargeAmounts();
+  for (const rank of CLICK_CHARGE_RANKS) {
+    const amount = Number(value?.[rank]);
+    result[rank] = Number.isFinite(amount) && amount > 0 ? Number(amount.toFixed(2)) : null;
+  }
+  return result;
 }
 
 async function getAvailablePaymentMethods(deps: UserTelegramBotDeps): Promise<PaymentGatewayChannel[]> {

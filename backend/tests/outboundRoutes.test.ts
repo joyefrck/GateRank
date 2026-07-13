@@ -5,11 +5,18 @@ import { AddressInfo } from 'node:net';
 import { createOutboundRoutes } from '../src/routes/outboundRoutes';
 import { errorHandler } from '../src/middleware/errorHandler';
 
+const outboundRankingDeps = {
+  scoreRepository: {
+    getPublicBillingRankByDate: async () => null,
+  },
+};
+
 test('GET /outbound/airports/:id records click and redirects with GateRank source params', async () => {
   const processed: Array<Record<string, unknown>> = [];
   const app = express();
   app.use(
     createOutboundRoutes({
+      ...outboundRankingDeps,
       airportRepository: {
         getById: async () => ({
           id: 9,
@@ -67,10 +74,125 @@ test('GET /outbound/airports/:id records click and redirects with GateRank sourc
   }
 });
 
+test('GET /outbound/airports/:id applies ranked click charges and reads updated settings on every request', async () => {
+  const chargedAmounts: number[] = [];
+  let rank = 1;
+  let firstRankAmount = 1.2;
+  const app = express();
+  app.use(
+    createOutboundRoutes({
+      airportRepository: {
+        getById: async () => ({
+          id: 9,
+          name: 'Ranked Airport',
+          website: 'https://ranked.example.com/',
+          status: 'normal',
+          is_listed: true,
+          plan_price_month: 10,
+          has_trial: false,
+          tags: [],
+          created_at: '2026-05-04',
+        }),
+      },
+      applicantBillingRepository: {
+        processOutboundClick: async (input) => {
+          chargedAmounts.push(Number(input.click_charge_amount));
+          return {
+            status: 'billed',
+            billed_amount: Number(input.click_charge_amount),
+            airport_name: 'Ranked Airport',
+            balance_after: 9,
+          };
+        },
+      },
+      marketingSettingsService: {
+        getConfig: async () => ({
+          click_charge_amount: 0.6,
+          rank_click_charge_amounts: { 1: firstRankAmount },
+        }),
+      },
+      scoreRepository: {
+        getPublicBillingRankByDate: async (_airportId, _date, defaultAmount) => {
+          assert.equal(defaultAmount, 0.6);
+          return rank;
+        },
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    await fetch(`http://127.0.0.1:${port}/outbound/airports/9?target=website&placement=home_card`, { redirect: 'manual' });
+    firstRankAmount = 1.8;
+    await fetch(`http://127.0.0.1:${port}/outbound/airports/9?target=website&placement=report_header`, { redirect: 'manual' });
+    await fetch(`http://127.0.0.1:${port}/outbound/airports/9?target=website&placement=risk_monitor_item`, { redirect: 'manual' });
+    rank = 2;
+    await fetch(`http://127.0.0.1:${port}/outbound/airports/9?target=website&placement=news_article`, { redirect: 'manual' });
+    rank = 7;
+    await fetch(`http://127.0.0.1:${port}/outbound/airports/9?target=website&placement=full_ranking_item`, { redirect: 'manual' });
+
+    assert.deepEqual(chargedAmounts, [1.2, 1.8, 1.8, 0.6, 0.6]);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /outbound/airports/:id does not charge when billing rank lookup fails', async () => {
+  let processed = false;
+  const app = express();
+  app.use(
+    createOutboundRoutes({
+      airportRepository: {
+        getById: async () => ({
+          id: 9,
+          name: 'Ranked Airport',
+          website: 'https://ranked.example.com/',
+          status: 'normal',
+          is_listed: true,
+          plan_price_month: 10,
+          has_trial: false,
+          tags: [],
+          created_at: '2026-05-04',
+        }),
+      },
+      applicantBillingRepository: {
+        processOutboundClick: async () => {
+          processed = true;
+          throw new Error('must not charge');
+        },
+      },
+      marketingSettingsService: {
+        getConfig: async () => ({ click_charge_amount: 0.6, rank_click_charge_amounts: { 1: 1.2 } }),
+      },
+      scoreRepository: {
+        getPublicBillingRankByDate: async () => {
+          throw new Error('ranking unavailable');
+        },
+      },
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/outbound/airports/9?target=website&placement=home_card`, {
+      redirect: 'manual',
+    });
+    assert.equal(response.status, 500);
+    assert.equal(processed, false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /outbound/airports/:id redirects bare website domains as https URLs', async () => {
   const app = express();
   app.use(
     createOutboundRoutes({
+      ...outboundRankingDeps,
       airportRepository: {
         getById: async () => ({
           id: 4,
@@ -118,6 +240,7 @@ test('GET /outbound/airports/:id redirects subscription links without billing', 
   const app = express();
   app.use(
     createOutboundRoutes({
+      ...outboundRankingDeps,
       airportRepository: {
         getById: async () => ({
           id: 6,
@@ -173,6 +296,7 @@ test('GET /outbound/airports/:id redirects when balance is insufficient', async 
   const app = express();
   app.use(
     createOutboundRoutes({
+      ...outboundRankingDeps,
       airportRepository: {
         getById: async () => ({
           id: 9,
@@ -221,6 +345,7 @@ test('GET /outbound/airports/:id accepts news article placement for paid links',
   const app = express();
   app.use(
     createOutboundRoutes({
+      ...outboundRankingDeps,
       airportRepository: {
         getById: async () => ({
           id: 12,
@@ -268,6 +393,7 @@ test('GET /outbound/airports/:id rejects invalid placement', async () => {
   const app = express();
   app.use(
     createOutboundRoutes({
+      ...outboundRankingDeps,
       airportRepository: {
         getById: async () => ({
           id: 12,

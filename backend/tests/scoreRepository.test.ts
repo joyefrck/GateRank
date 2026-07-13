@@ -95,7 +95,46 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
 	  assert.ok(calls.some((call) => call.sql.includes('latest_score.airport_id = a.id')));
 	  assert.ok(calls.some((call) => call.sql.includes('LEFT JOIN applicant_wallets w')));
 	  assert.ok(calls.some((call) => call.sql.includes('score_hidden ASC')));
-	});
+});
+
+test('ScoreRepository.getPublicBillingRankByDate returns only scored airports in the public top six', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const rows = Array.from({ length: 6 }, (_, index) => ({
+    airport_id: index + 1,
+    display_score: 100 - index,
+  }));
+  const repository = new ScoreRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [rows];
+    },
+  } as never);
+
+  assert.equal(await repository.getPublicBillingRankByDate(1, '2026-07-13', 0.6), 1);
+  assert.equal(await repository.getPublicBillingRankByDate(6, '2026-07-13', 0.6), 6);
+  assert.equal(await repository.getPublicBillingRankByDate(7, '2026-07-13', 0.6), null);
+
+  const firstCall = calls[0];
+  assert.deepEqual(firstCall.params, [0.6, '2026-07-13']);
+  assert.match(firstCall.sql, /LIMIT 6/);
+  assert.match(firstCall.sql, /a\.status IN \('normal', 'risk'\)/);
+  assert.match(firstCall.sql, /score_hidden ASC/);
+  assert.match(firstCall.sql, /CASE WHEN s\.date IS NULL THEN 1 ELSE 0 END ASC/);
+  assert.match(firstCall.sql, /display_score DESC/);
+  assert.match(firstCall.sql, /a\.created_at DESC/);
+  assert.match(firstCall.sql, /a\.id ASC/);
+});
+
+test('ScoreRepository.getPublicBillingRankByDate falls back when a top-six airport has no score', async () => {
+  const repository = new ScoreRepository({
+    query: async () => [[
+      { airport_id: 1, display_score: 99 },
+      { airport_id: 2, display_score: null },
+    ]],
+  } as never);
+
+  assert.equal(await repository.getPublicBillingRankByDate(2, '2026-07-13', 0.6), null);
+});
 
 test('ScoreRepository.getPublicFullRankingByDate keeps airports without scores', async () => {
   const repository = new ScoreRepository({

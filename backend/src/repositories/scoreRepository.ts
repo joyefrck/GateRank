@@ -75,6 +75,11 @@ interface PublicDisplayScoreRow extends RowDataPacket {
   display_score: number | null;
 }
 
+interface PublicBillingRankRow extends RowDataPacket {
+  airport_id: number;
+  display_score: number | null;
+}
+
 interface PublicRiskMonitorRow extends RowDataPacket {
   airport_id: number;
   slug: string | null;
@@ -101,6 +106,13 @@ interface PublicRiskMonitorRow extends RowDataPacket {
 
 type FullRankingCapabilities = NonNullable<FullRankingItem['capabilities']>;
 
+const PUBLIC_FULL_RANKING_ORDER_SQL = `
+        score_hidden ASC,
+        CASE WHEN s.date IS NULL THEN 1 ELSE 0 END ASC,
+        display_score DESC,
+        a.created_at DESC,
+        a.id ASC`;
+
 export class ScoreRepository {
   constructor(private readonly pool: Pool) {}
 
@@ -114,6 +126,49 @@ export class ScoreRepository {
 
     const latestDate = rows[0]?.latest_date;
     return latestDate ? formatDateOnly(latestDate) : null;
+  }
+
+  async getPublicBillingRankByDate(
+    airportId: number,
+    date: string,
+    clickChargeAmount: number = CLICK_CHARGE_AMOUNT,
+  ): Promise<number | null> {
+    const rankingFilters = buildPublicFullRankingFilters(EMPTY_FULL_RANKING_FILTERS);
+    const [rows] = await this.pool.query<PublicBillingRankRow[]>(
+      `SELECT
+         a.id AS airport_id,
+         COALESCE(
+           CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.manual_total_score')) AS DECIMAL(10,2)),
+           CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.total_score')) AS DECIMAL(10,2)),
+           s.final_score
+         ) AS display_score,
+         (COALESCE(w.balance, 0) < ?) AS score_hidden
+       FROM airports a
+       LEFT JOIN applicant_wallets w
+         ON w.airport_id = a.id
+       LEFT JOIN (
+         SELECT airport_id, MAX(date) AS score_date
+           FROM airport_scores_daily
+          WHERE date <= ?
+          GROUP BY airport_id
+       ) latest_score
+         ON latest_score.airport_id = a.id
+       LEFT JOIN airport_scores_daily s
+         ON s.airport_id = a.id
+        AND s.date = latest_score.score_date
+      WHERE a.is_listed = 1
+        ${rankingFilters.whereSql}
+      ORDER BY
+        ${PUBLIC_FULL_RANKING_ORDER_SQL}
+      LIMIT 6`,
+      [clickChargeAmount, date, ...rankingFilters.params],
+    );
+
+    const index = rows.findIndex((row) => Number(row.airport_id) === airportId);
+    if (index < 0 || rows[index].display_score === null || rows[index].display_score === undefined) {
+      return null;
+    }
+    return index + 1;
   }
 
   async getTimeSeriesBeforeDate(airportId: number, beforeDate: string): Promise<TimeSeriesScorePoint[]> {
@@ -400,11 +455,7 @@ export class ScoreRepository {
       WHERE a.is_listed = 1
         ${rankingFilters.whereSql}
       ORDER BY
-        score_hidden ASC,
-        CASE WHEN s.date IS NULL THEN 1 ELSE 0 END ASC,
-        display_score DESC,
-        a.created_at DESC,
-        a.id ASC
+        ${PUBLIC_FULL_RANKING_ORDER_SQL}
       LIMIT ? OFFSET ?`,
       [clickChargeAmount, date, ...rankingFilters.params, safePageSize, offset],
     );

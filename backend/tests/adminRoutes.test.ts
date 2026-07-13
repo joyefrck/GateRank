@@ -5176,6 +5176,7 @@ test('GET /marketing/settings returns billing settings', async () => {
       marketingSettingsService: stubMarketingSettingsService({
         application_fee_amount: 288,
         click_charge_amount: 1.5,
+        rank_click_charge_amounts: { 1: 2.5, 2: null, 3: null, 4: null, 5: null, 6: 1.6 },
         airport_ad_monthly_price: 1288.88,
         recharge_amounts: [50, 150, 300],
         admin_telegram_username: 'gaterank_admin',
@@ -5198,6 +5199,7 @@ test('GET /marketing/settings returns billing settings', async () => {
     const data = (await response.json()) as {
       application_fee_amount: number;
       click_charge_amount: number;
+      rank_click_charge_amounts: Record<string, number | null>;
       airport_ad_monthly_price: number;
       recharge_amounts: number[];
       admin_telegram_username: string | null;
@@ -5205,6 +5207,7 @@ test('GET /marketing/settings returns billing settings', async () => {
     };
     assert.equal(data.application_fee_amount, 288);
     assert.equal(data.click_charge_amount, 1.5);
+    assert.deepEqual(data.rank_click_charge_amounts, { 1: 2.5, 2: null, 3: null, 4: null, 5: null, 6: 1.6 });
     assert.equal(data.airport_ad_monthly_price, 1288.88);
     assert.deepEqual(data.recharge_amounts, [50, 150, 300]);
     assert.equal(data.admin_telegram_username, 'gaterank_admin');
@@ -5262,6 +5265,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
           return {
             application_fee_amount: input.application_fee_amount,
             click_charge_amount: input.click_charge_amount,
+            rank_click_charge_amounts: input.rank_click_charge_amounts,
             airport_ad_monthly_price: input.airport_ad_monthly_price,
             recharge_amounts: input.recharge_amounts,
             admin_telegram_username: input.admin_telegram_username ?? null,
@@ -5288,6 +5292,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
       body: JSON.stringify({
         application_fee_amount: 399.99,
         click_charge_amount: 2.5,
+        rank_click_charge_amounts: { 1: 3.5, 2: null, 3: 3, 4: null, 5: null, 6: 2.6 },
         airport_ad_monthly_price: 1288.88,
         recharge_amounts: [120, 80, 240],
         admin_telegram_username: '@gaterank_admin',
@@ -5304,6 +5309,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
     assert.deepEqual(updates, [{
       application_fee_amount: 399.99,
       click_charge_amount: 2.5,
+      rank_click_charge_amounts: { 1: 3.5, 2: null, 3: 3, 4: null, 5: null, 6: 2.6 },
       airport_ad_monthly_price: 1288.88,
       recharge_amounts: [120, 80, 240],
       admin_telegram_username: '@gaterank_admin',
@@ -5321,6 +5327,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
     assert.deepEqual(audits[0].payload, {
       application_fee_amount: 399.99,
       click_charge_amount: 2.5,
+      rank_click_charge_amounts: { 1: 3.5, 2: null, 3: 3, 4: null, 5: null, 6: 2.6 },
       airport_ad_monthly_price: 1288.88,
       recharge_amounts: [120, 80, 240],
       admin_telegram_username: '@gaterank_admin',
@@ -7015,6 +7022,7 @@ function stubManualJobService() {
 function stubMarketingSettingsService(config: {
   application_fee_amount: number;
   click_charge_amount: number;
+  rank_click_charge_amounts?: Record<number, number | null>;
   airport_ad_monthly_price?: number;
   recharge_amounts?: number[];
   admin_telegram_username?: string | null;
@@ -7028,6 +7036,7 @@ function stubMarketingSettingsService(config: {
 } = {
   application_fee_amount: 300,
   click_charge_amount: 1,
+  rank_click_charge_amounts: { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
   airport_ad_monthly_price: 1000,
   recharge_amounts: [100, 300, 500, 1000],
   admin_telegram_username: null,
@@ -7041,6 +7050,7 @@ function stubMarketingSettingsService(config: {
 }) {
   const normalizedConfig = {
     ...config,
+    rank_click_charge_amounts: config.rank_click_charge_amounts ?? { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
     airport_ad_monthly_price: config.airport_ad_monthly_price ?? 1000,
     recharge_amounts: config.recharge_amounts ?? [100, 300, 500, 1000],
     admin_telegram_username: config.admin_telegram_username ?? null,
@@ -7061,6 +7071,7 @@ function stubMarketingSettingsService(config: {
     updateAdminSettings: async (input: {
       application_fee_amount?: number;
       click_charge_amount?: number;
+      rank_click_charge_amounts?: Record<number, number | null>;
       airport_ad_monthly_price?: number;
       recharge_amounts?: number[];
       admin_telegram_username?: string | null;
@@ -7074,6 +7085,7 @@ function stubMarketingSettingsService(config: {
     }, updatedBy: string) => ({
       application_fee_amount: input.application_fee_amount ?? normalizedConfig.application_fee_amount,
       click_charge_amount: input.click_charge_amount ?? normalizedConfig.click_charge_amount,
+      rank_click_charge_amounts: input.rank_click_charge_amounts ?? normalizedConfig.rank_click_charge_amounts,
       airport_ad_monthly_price: input.airport_ad_monthly_price ?? normalizedConfig.airport_ad_monthly_price,
       recharge_amounts: input.recharge_amounts ?? normalizedConfig.recharge_amounts,
       admin_telegram_username: input.admin_telegram_username ?? normalizedConfig.admin_telegram_username,

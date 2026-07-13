@@ -143,7 +143,11 @@ function createDeps(overrides: Record<string, unknown> = {}) {
       }),
     },
     marketingSettingsService: {
-      getConfig: async () => ({ click_charge_amount: 0.6, recharge_amounts: [100, 300, 500, 1000] }),
+      getConfig: async () => ({
+        click_charge_amount: 0.6,
+        rank_click_charge_amounts: { 1: 1.2 },
+        recharge_amounts: [100, 300, 500, 1000],
+      }),
     },
     ...overrides,
   };
@@ -203,7 +207,9 @@ test('user telegram webhook replies balance for bound user', async () => {
 
   assert.equal(telegramCalls[0]!.url, 'https://api.telegram.org/bot123456:abcdefghi/sendMessage');
   assert.match(String(telegramCalls[0]!.body.text), /账户余额：¥120\.00/);
-  assert.match(String(telegramCalls[0]!.body.text), /点击单价：¥0\.60 \/ 次/);
+  assert.match(String(telegramCalls[0]!.body.text), /默认点击单价：¥0\.60 \/ 次/);
+  assert.match(String(telegramCalls[0]!.body.text), /第1名：¥1\.20 \/ 次（定制价）/);
+  assert.match(String(telegramCalls[0]!.body.text), /第2名：¥0\.60 \/ 次（默认价）/);
   assert.match(String(telegramCalls[0]!.body.text), /上架状态：正常/);
 });
 

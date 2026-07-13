@@ -11,6 +11,10 @@ import {
 import type { Airport } from '../types/domain';
 import { buildMarketingIdentity } from '../utils/marketing';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
+import {
+  resolveClickChargeAmount,
+  type RankClickChargeAmounts,
+} from '../services/marketingSettingsService';
 
 interface OutboundDeps {
   airportRepository: {
@@ -37,7 +41,17 @@ interface OutboundDeps {
     }>;
   };
   marketingSettingsService?: {
-    getConfig(): Promise<{ click_charge_amount: number }>;
+    getConfig(): Promise<{
+      click_charge_amount: number;
+      rank_click_charge_amounts?: Partial<RankClickChargeAmounts>;
+    }>;
+  };
+  scoreRepository: {
+    getPublicBillingRankByDate(
+      airportId: number,
+      date: string,
+      clickChargeAmount?: number,
+    ): Promise<number | null>;
   };
   mailService?: BillingMailService;
   userTelegramBotMessageService?: UserTelegramBotBillingNotificationService;
@@ -73,8 +87,14 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
       }
 
       const occurredAt = new Date();
+      const eventDate = getDateInTimezone('Asia/Shanghai', occurredAt);
       const identity = buildMarketingIdentity(req, String(req.query.sid || req.requestId || clickId));
       const billingConfig = await getOutboundBillingConfig(deps);
+      const billingRank = await deps.scoreRepository.getPublicBillingRankByDate(
+        airportId,
+        eventDate,
+        billingConfig.click_charge_amount,
+      );
       const result = await deps.applicantBillingRepository.processOutboundClick({
         click_id: clickId,
         airport_id: airportId,
@@ -84,8 +104,8 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
         visitor_hash: identity.visitor_hash,
         session_hash: identity.session_hash,
         occurred_at: formatSqlDateTimeInTimezone(occurredAt, 'Asia/Shanghai'),
-        event_date: getDateInTimezone('Asia/Shanghai', occurredAt),
-        click_charge_amount: billingConfig.click_charge_amount,
+        event_date: eventDate,
+        click_charge_amount: resolveClickChargeAmount(billingConfig, billingRank),
       });
       await sendBillingMailNotificationsSafely(deps.mailService, result.notification_events);
       await sendUserTelegramBotBillingNotificationsSafely(
@@ -107,7 +127,10 @@ export function createOutboundRoutes(deps: OutboundDeps): Router {
   return router;
 }
 
-async function getOutboundBillingConfig(deps: OutboundDeps): Promise<{ click_charge_amount: number }> {
+async function getOutboundBillingConfig(deps: OutboundDeps): Promise<{
+  click_charge_amount: number;
+  rank_click_charge_amounts?: Partial<RankClickChargeAmounts>;
+}> {
   if (!deps.marketingSettingsService) {
     return { click_charge_amount: CLICK_CHARGE_AMOUNT };
   }

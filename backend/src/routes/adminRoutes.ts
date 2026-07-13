@@ -14,7 +14,11 @@ import {
   DEFAULT_MEDIA_LIBRARY_TIMEOUT_MS,
   type MediaLibrarySettingsInput,
 } from '../services/mediaLibrarySettingsService';
-import type { HomeSectionLimits, MarketingSettingsInput } from '../services/marketingSettingsService';
+import type {
+  HomeSectionLimits,
+  MarketingSettingsInput,
+  RankClickChargeAmounts,
+} from '../services/marketingSettingsService';
 import { SmtpSendError } from '../services/mailService';
 import type { PaymentGatewaySettingsInput } from '../services/paymentGatewaySettingsService';
 import type { SmtpSettingsInput, SmtpTemplateKey } from '../services/smtpSettingsService';
@@ -2984,6 +2988,10 @@ function parseMarketingSettingsPayload(
       payload.click_charge_amount === undefined
         ? undefined
         : mustNumber(payload.click_charge_amount, 'click_charge_amount'),
+    rank_click_charge_amounts:
+      payload.rank_click_charge_amounts === undefined
+        ? undefined
+        : parseRankClickChargeAmountsPayload(payload.rank_click_charge_amounts),
     airport_ad_monthly_price:
       payload.airport_ad_monthly_price === undefined
         ? undefined
@@ -3001,6 +3009,18 @@ function parseMarketingSettingsPayload(
         ? undefined
         : parseHomeSectionLimitsPayload(payload.home_section_limits),
   };
+}
+
+function parseRankClickChargeAmountsPayload(
+  payload: unknown,
+): Partial<RankClickChargeAmounts> {
+  const record = toPlainObject(payload, 'rank_click_charge_amounts');
+  return Object.fromEntries(
+    Object.entries(record).map(([rank, value]) => [
+      rank,
+      value === null ? null : mustNumber(value, `rank_click_charge_amounts.${rank}`),
+    ]),
+  ) as Partial<RankClickChargeAmounts>;
 }
 
 function parseRechargeAmountsPayload(payload: unknown): number[] {

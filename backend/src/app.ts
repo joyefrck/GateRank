@@ -339,6 +339,7 @@ export async function createApp() {
       airportRepository,
       applicantBillingRepository,
       marketingSettingsService,
+      scoreRepository,
       mailService,
       userTelegramBotMessageService,
     }),

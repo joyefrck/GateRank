@@ -902,6 +902,7 @@ interface PaymentGatewaySettingsFormState {
 interface MarketingSettingsView {
   application_fee_amount: number;
   click_charge_amount: number;
+  rank_click_charge_amounts: Record<MarketingClickChargeRank, number | null>;
   airport_ad_monthly_price: number;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
@@ -919,6 +920,7 @@ interface MarketingSettingsView {
 interface MarketingSettingsFormState {
   application_fee_amount: string;
   click_charge_amount: string;
+  rank_click_charge_amounts: Record<MarketingClickChargeRank, string>;
   airport_ad_monthly_price: string;
   recharge_amounts: string[];
   admin_telegram_username: string;
@@ -930,6 +932,19 @@ interface MarketingSettingsFormState {
     risk_alerts: string;
   };
 }
+
+type MarketingClickChargeRank = '1' | '2' | '3' | '4' | '5' | '6';
+
+const marketingClickChargeRanks: MarketingClickChargeRank[] = ['1', '2', '3', '4', '5', '6'];
+
+const defaultRankClickChargeAmountForm: Record<MarketingClickChargeRank, string> = {
+  1: '',
+  2: '',
+  3: '',
+  4: '',
+  5: '',
+  6: '',
+};
 
 interface SmtpSettingsView {
   enabled: boolean;
@@ -4267,6 +4282,7 @@ function MarketingSettingsPage() {
   const [form, setForm] = useState<MarketingSettingsFormState>({
     application_fee_amount: '300',
     click_charge_amount: '1',
+    rank_click_charge_amounts: { ...defaultRankClickChargeAmountForm },
     airport_ad_monthly_price: '1000',
     recharge_amounts: defaultRechargeAmountForm,
     admin_telegram_username: '',
@@ -4285,6 +4301,12 @@ function MarketingSettingsPage() {
     setForm({
       application_fee_amount: String(view.application_fee_amount || 300),
       click_charge_amount: String(view.click_charge_amount || 1),
+      rank_click_charge_amounts: Object.fromEntries(
+        marketingClickChargeRanks.map((rank) => [
+          rank,
+          view.rank_click_charge_amounts?.[rank] == null ? '' : String(view.rank_click_charge_amounts[rank]),
+        ]),
+      ) as Record<MarketingClickChargeRank, string>,
       airport_ad_monthly_price: String(airportAdMonthlyPrice),
       recharge_amounts: rechargeAmounts.map((amount) => String(amount)),
       admin_telegram_username: view.admin_telegram_username ? `@${view.admin_telegram_username}` : '',
@@ -4325,6 +4347,14 @@ function MarketingSettingsPage() {
         body: JSON.stringify({
           application_fee_amount: Number(form.application_fee_amount),
           click_charge_amount: Number(form.click_charge_amount),
+          rank_click_charge_amounts: Object.fromEntries(
+            marketingClickChargeRanks.map((rank) => [
+              rank,
+              form.rank_click_charge_amounts[rank].trim()
+                ? Number(form.rank_click_charge_amounts[rank])
+                : null,
+            ]),
+          ),
           airport_ad_monthly_price: Number(form.airport_ad_monthly_price),
           recharge_amounts: form.recharge_amounts.map((amount) => Number(amount)),
           admin_telegram_username: form.admin_telegram_username,
@@ -4410,7 +4440,9 @@ function MarketingSettingsPage() {
               <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
                 <div className="text-xs font-medium text-neutral-500">费用规则</div>
                 <div className="mt-2 text-sm font-bold text-neutral-950">
-                  {settings ? `入驻 ¥${settings.application_fee_amount} / 点击 ¥${settings.click_charge_amount} / 广告月费 ¥${settings.airport_ad_monthly_price || 1000}` : '-'}
+                  {settings
+                    ? `入驻 ¥${settings.application_fee_amount} / 点击默认 ¥${settings.click_charge_amount} / 前六名定制 ${marketingClickChargeRanks.filter((rank) => settings.rank_click_charge_amounts?.[rank] != null).length} 档 / 广告月费 ¥${settings.airport_ad_monthly_price || 1000}`
+                    : '-'}
                 </div>
               </div>
               <div className="rounded-2xl border border-neutral-200 bg-neutral-50 px-4 py-3">
@@ -4467,6 +4499,36 @@ function MarketingSettingsPage() {
                     onChange={(e) => setForm({ ...form, airport_ad_monthly_price: e.target.value })}
                   />
                 </FormField>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="text-sm font-bold text-neutral-950">评分前六名定制点击费</div>
+                <div className="mt-1 text-xs leading-5 text-neutral-500">
+                  单个名次留空时使用默认点击费 ¥{form.click_charge_amount || '0.00'}，保存后下一次官网点击立即生效。
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                  {marketingClickChargeRanks.map((rank) => (
+                    <div key={rank}>
+                      <FormField label={`第 ${rank} 名 (元)`} hint={form.rank_click_charge_amounts[rank] ? '使用定制价' : `默认 ¥${form.click_charge_amount || '0.00'}`}>
+                        <input
+                          className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={form.rank_click_charge_amounts[rank]}
+                          placeholder={`默认 ¥${form.click_charge_amount || '0.00'}`}
+                          onChange={(event) => setForm({
+                            ...form,
+                            rank_click_charge_amounts: {
+                              ...form.rank_click_charge_amounts,
+                              [rank]: event.target.value,
+                            },
+                          })}
+                        />
+                      </FormField>
+                    </div>
+                  ))}
+                </div>
               </div>
             </MarketingSettingsSection>
 
