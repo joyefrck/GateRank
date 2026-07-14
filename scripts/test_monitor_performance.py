@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, call, patch
 
 from scripts.monitor_performance import (
     Config,
@@ -14,6 +14,7 @@ from scripts.monitor_performance import (
     build_run_payload,
     check_nodes_availability,
     collect_airport_results,
+    fetch_subscription,
     list_airports,
     nodes_from_snapshot,
     normalize_subscription_text,
@@ -84,6 +85,24 @@ class MonitorPerformanceTests(unittest.TestCase):
 
         self.assertEqual(subscription_format, "clash_yaml")
         self.assertEqual(normalized, clash_yaml.strip())
+
+    def test_fetch_subscription_uses_explicit_user_agent(self) -> None:
+        config = self.make_config()
+        response = MagicMock()
+        response.__enter__.return_value = response
+        response.headers.get_content_charset.return_value = "utf-8"
+        response.read.return_value = b"trojan://secret@example.com:443#HK-1"
+
+        with patch("scripts.monitor_performance.urlopen", return_value=response) as urlopen_mock:
+            subscription = fetch_subscription(
+                config,
+                "https://sub.example.com/token",
+                user_agent="ClashMeta/1.19.8",
+            )
+
+        request = urlopen_mock.call_args.args[0]
+        self.assertEqual(request.get_header("User-agent"), "ClashMeta/1.19.8")
+        self.assertEqual(subscription, "trojan://secret@example.com:443#HK-1")
 
     def test_parse_clash_vless_reality_node_builds_sing_box_outbound(self) -> None:
         clash_yaml = """
@@ -699,6 +718,111 @@ proxies:
         self.assertEqual(summary["unsupported_nodes_count"], 0)
         self.assertEqual(saved_snapshots[0]["source"], "test-performance")
         self.assertEqual(saved_snapshots[0]["nodes"][0]["raw_uri"], "trojan://secret@hk.example.com:443#HK-1")
+
+    def test_fetch_parsed_subscription_prefers_clashmeta_and_keeps_anytls(self) -> None:
+        from scripts.capture_subscription_nodes import fetch_parsed_subscription
+
+        config = self.make_config()
+        subscription_url = "https://sub.example.com/secret-token"
+        clash_yaml = """
+proxies:
+  - name: JP Reality
+    type: vless
+    server: jp.example.com
+    port: 443
+    uuid: 11111111-1111-1111-1111-111111111111
+    tls: true
+  - name: US AnyTLS
+    type: anytls
+    server: us.example.com
+    port: 443
+    password: secret
+    sni: edge.example.com
+  - name: unsupported-node
+    type: hysteria2
+    server: h2.example.com
+    port: 443
+    password: secret
+"""
+
+        with patch("scripts.capture_subscription_nodes.fetch_subscription", return_value=clash_yaml) as fetch_mock:
+            subscription_format, nodes, unsupported_nodes = fetch_parsed_subscription(config, subscription_url)
+
+        fetch_mock.assert_called_once_with(
+            config,
+            subscription_url,
+            user_agent="ClashMeta/1.19.8",
+        )
+        self.assertEqual(subscription_format, "clash_yaml")
+        self.assertEqual([node.node_type for node in nodes], ["vless", "anytls"])
+        self.assertEqual(len(unsupported_nodes), 1)
+        self.assertEqual(unsupported_nodes[0]["reason"], "unsupported_clash_proxy_type_hysteria2")
+
+    def test_fetch_parsed_subscription_falls_back_after_clashmeta_fetch_failure(self) -> None:
+        from scripts.capture_subscription_nodes import fetch_parsed_subscription
+
+        config = self.make_config()
+        subscription_url = "https://sub.example.com/secret-token"
+
+        with patch(
+            "scripts.capture_subscription_nodes.fetch_subscription",
+            side_effect=[RuntimeError("primary fetch failed"), "trojan://secret@hk.example.com:443#HK-1"],
+        ) as fetch_mock:
+            subscription_format, nodes, unsupported_nodes = fetch_parsed_subscription(config, subscription_url)
+
+        self.assertEqual(
+            fetch_mock.call_args_list,
+            [
+                call(config, subscription_url, user_agent="ClashMeta/1.19.8"),
+                call(config, subscription_url, user_agent="GateRank-Performance-Monitor/1.0"),
+            ],
+        )
+        self.assertEqual(subscription_format, "plain")
+        self.assertEqual([node.node_type for node in nodes], ["trojan"])
+        self.assertEqual(unsupported_nodes, [])
+
+    def test_fetch_parsed_subscription_falls_back_after_unusable_clashmeta_response(self) -> None:
+        from scripts.capture_subscription_nodes import fetch_parsed_subscription
+
+        config = self.make_config()
+        subscription_url = "https://sub.example.com/secret-token"
+        fallback = "trojan://secret@hk.example.com:443#HK-1"
+
+        for primary_response in (
+            '{"outbounds": [{"type": "direct"}]}',
+            "hysteria2://secret@example.com:443#unsupported",
+        ):
+            with self.subTest(primary_response=primary_response):
+                with patch(
+                    "scripts.capture_subscription_nodes.fetch_subscription",
+                    side_effect=[primary_response, fallback],
+                ) as fetch_mock:
+                    subscription_format, nodes, unsupported_nodes = fetch_parsed_subscription(config, subscription_url)
+
+                self.assertEqual(fetch_mock.call_count, 2)
+                self.assertEqual(subscription_format, "plain")
+                self.assertEqual([node.node_type for node in nodes], ["trojan"])
+                self.assertEqual(unsupported_nodes, [])
+
+    def test_fetch_parsed_subscription_reports_safe_error_when_all_attempts_fail(self) -> None:
+        from scripts.capture_subscription_nodes import fetch_parsed_subscription
+
+        config = self.make_config()
+        subscription_url = "https://sub.example.com/private-token"
+        secret = "private-password"
+
+        with patch(
+            "scripts.capture_subscription_nodes.fetch_subscription",
+            side_effect=[
+                RuntimeError(f"failed {subscription_url}"),
+                RuntimeError(f"failed {secret}"),
+            ],
+        ):
+            with self.assertRaisesRegex(RuntimeError, "^subscription_fetch_or_parse_failed$") as context:
+                fetch_parsed_subscription(config, subscription_url)
+
+        self.assertNotIn(subscription_url, str(context.exception))
+        self.assertNotIn(secret, str(context.exception))
 
     def test_capture_subscription_nodes_script_runs_from_repo_root_without_import_error(self) -> None:
         env = {**os.environ, "PYTHONPATH": ""}

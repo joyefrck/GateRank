@@ -57,6 +57,8 @@ DEFAULT_NODE_AVAILABILITY_CHECK = "proxy_http"
 DEFAULT_SOURCE = "cron-performance"
 DEFAULT_TEST_URL_LATENCY = "https://www.google.com/generate_204"
 DEFAULT_TEST_URL_SPEED = "https://speed.cloudflare.com/__down?bytes=5000000"
+DEFAULT_SUBSCRIPTION_USER_AGENT = "GateRank-Performance-Monitor/1.0"
+CLASH_META_SUBSCRIPTION_USER_AGENT = "ClashMeta/1.19.8"
 
 REGION_PRIORITY = ("HK", "JP", "SG", "US", "KR", "UK")
 REGION_KEYWORDS = {
@@ -787,8 +789,13 @@ def summary_from_payload(payload: dict[str, Any], airport_name: str) -> dict[str
     }
 
 
-def fetch_subscription(config: Config, url: str) -> str:
-    request = Request(url, method="GET", headers={"User-Agent": "GateRank-Performance-Monitor/1.0"})
+def fetch_subscription(
+    config: Config,
+    url: str,
+    *,
+    user_agent: str = DEFAULT_SUBSCRIPTION_USER_AGENT,
+) -> str:
+    request = Request(url, method="GET", headers={"User-Agent": user_agent})
     with urlopen(request, timeout=config.http_timeout) as response:
         charset = response.headers.get_content_charset("utf-8")
         return response.read().decode(charset, errors="replace").strip()

@@ -15,7 +15,10 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.monitor_performance import (
+    CLASH_META_SUBSCRIPTION_USER_AGENT,
     Config,
+    DEFAULT_SUBSCRIPTION_USER_AGENT,
+    ParsedNode,
     build_config,
     fetch_subscription,
     normalize_subscription_text,
@@ -68,14 +71,7 @@ def capture_for_airport(config: Config, airport: dict[str, Any], captured_at: st
     if not subscription_url:
         raise RuntimeError("missing_subscription_url")
 
-    subscription_text = fetch_subscription(config, subscription_url)
-    normalized_subscription, subscription_format = normalize_subscription_text(subscription_text)
-    if not normalized_subscription:
-        raise RuntimeError(f"unsupported_subscription_format:{subscription_format}")
-
-    parsed_nodes, unsupported_nodes = parse_nodes(normalized_subscription, subscription_format)
-    if not parsed_nodes:
-        raise RuntimeError("no_supported_nodes")
+    subscription_format, parsed_nodes, unsupported_nodes = fetch_parsed_subscription(config, subscription_url)
 
     snapshot = post_subscription_node_snapshot(
         config,
@@ -102,6 +98,32 @@ def capture_for_airport(config: Config, airport: dict[str, Any], captured_at: st
         "supported_nodes_count": len(parsed_nodes),
         "unsupported_nodes_count": len(unsupported_nodes),
     }
+
+
+def fetch_parsed_subscription(
+    config: Config,
+    subscription_url: str,
+) -> tuple[str, list[ParsedNode], list[dict[str, str]]]:
+    for user_agent in (
+        CLASH_META_SUBSCRIPTION_USER_AGENT,
+        DEFAULT_SUBSCRIPTION_USER_AGENT,
+    ):
+        try:
+            subscription_text = fetch_subscription(
+                config,
+                subscription_url,
+                user_agent=user_agent,
+            )
+            normalized_subscription, subscription_format = normalize_subscription_text(subscription_text)
+            if not normalized_subscription:
+                continue
+            parsed_nodes, unsupported_nodes = parse_nodes(normalized_subscription, subscription_format)
+            if parsed_nodes:
+                return subscription_format, parsed_nodes, unsupported_nodes
+        except Exception:
+            continue
+
+    raise RuntimeError("subscription_fetch_or_parse_failed")
 
 
 if __name__ == "__main__":
