@@ -35,10 +35,27 @@ def main() -> int:
         config = build_config()
         captured_at = shanghai_now_iso()
         airports = resolve_airports(config)
+        skipped = []
+        targets = airports
+        if config.all_airports:
+            skipped = [
+                {
+                    "airport_id": airport.get("id"),
+                    "airport_name": airport.get("name"),
+                    "reason": "missing_subscription_url",
+                }
+                for airport in airports
+                if not str(airport.get("subscription_url") or "").strip()
+            ]
+            targets = [
+                airport
+                for airport in airports
+                if str(airport.get("subscription_url") or "").strip()
+            ]
         results: list[dict[str, Any]] = []
         failures: list[dict[str, Any]] = []
 
-        for airport in airports:
+        for airport in targets:
             try:
                 results.append(capture_for_airport(config, airport, captured_at))
             except Exception as exc:
@@ -51,10 +68,13 @@ def main() -> int:
         output: dict[str, Any] = {
             "captured_at": captured_at,
             "airport_count": len(airports),
+            "target_count": len(targets),
             "success_count": len(results),
             "failure_count": len(failures),
+            "skipped_count": len(skipped),
             "results": results,
             "failures": failures,
+            "skipped": skipped,
         }
         if len(results) == 1 and not failures:
             output.update(results[0])

@@ -7,8 +7,8 @@ import type {
 } from '../types/domain';
 import { formatDateOnly, formatDateTimeInTimezoneIso } from '../utils/time';
 
-const SCHEDULER_TASK_ENUM = "ENUM('stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard')";
-const SCHEDULER_TASK_ORDER = "'stability', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard'";
+const SCHEDULER_TASK_ENUM = "ENUM('stability', 'subscription_node_refresh', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard')";
+const SCHEDULER_TASK_ORDER = "'stability', 'subscription_node_refresh', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard'";
 
 interface SchedulerRunRow extends RowDataPacket {
   id: number;
@@ -140,6 +140,7 @@ export class SchedulerRunRepository {
   async listLatestByTaskKeys(taskKeys: SchedulerTaskKey[]): Promise<Record<SchedulerTaskKey, SchedulerRun | null>> {
     const result = {
       stability: null,
+      subscription_node_refresh: null,
       performance: null,
       risk: null,
       aggregate_recompute: null,

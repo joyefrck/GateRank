@@ -108,6 +108,7 @@ export type NewsStatus = 'draft' | 'published' | 'archived';
 export type MonthlyReportStatus = 'draft' | 'published' | 'archived';
 export type SchedulerTaskKey =
   | 'stability'
+  | 'subscription_node_refresh'
   | 'performance'
   | 'risk'
   | 'aggregate_recompute'

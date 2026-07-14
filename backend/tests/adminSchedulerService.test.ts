@@ -28,6 +28,7 @@ function emptyLatestRuns(): Record<SchedulerTaskKey, SchedulerRun | null> {
     aggregate_recompute: null,
     billing_listing_sync: null,
     stability_resample_guard: null,
+    subscription_node_refresh: null,
   };
 }
 

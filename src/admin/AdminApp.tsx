@@ -112,7 +112,7 @@ type ProbeScope = 'stability' | 'performance';
 type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
 type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 type PublishTokenScope = 'news:create' | 'news:update' | 'news:publish' | 'news:archive' | 'news:upload';
-type SchedulerTaskKey = 'stability' | 'performance' | 'risk' | 'aggregate_recompute' | 'billing_listing_sync';
+type SchedulerTaskKey = 'stability' | 'subscription_node_refresh' | 'performance' | 'risk' | 'aggregate_recompute' | 'billing_listing_sync' | 'stability_resample_guard';
 type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
 type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
 type ToolDownloadPlatform = 'windows' | 'macos' | 'ios' | 'android' | 'linux';
@@ -2971,7 +2971,7 @@ function SchedulerPage() {
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
           <h2 className="text-lg font-bold">任务调度</h2>
-          <p className="mt-1 text-sm text-neutral-500">统一管理稳定性采集、性能采集、风险体检和聚合重算四个全局任务。所有时间均按上海时间（UTC+08:00）显示。</p>
+          <p className="mt-1 text-sm text-neutral-500">统一管理订阅节点更新、监测采集、风险体检、聚合重算等后台任务。所有时间均按上海时间（UTC+08:00）显示。</p>
         </div>
         <button
           type="button"
@@ -3096,10 +3096,12 @@ function SchedulerPage() {
             <select className="rounded border border-neutral-300 px-3 py-2 text-sm" value={taskFilter} onChange={(event) => { setTaskFilter(event.target.value as 'all' | SchedulerTaskKey); setRunPage(1); }}>
               <option value="all">全部任务</option>
               <option value="stability">稳定性采集</option>
+              <option value="subscription_node_refresh">订阅节点更新</option>
               <option value="performance">性能采集</option>
               <option value="risk">风险体检</option>
               <option value="aggregate_recompute">聚合重算</option>
               <option value="billing_listing_sync">余额展示同步</option>
+              <option value="stability_resample_guard">稳定性复测保护</option>
             </select>
             <input type="date" className="rounded border border-neutral-300 px-3 py-2 text-sm" value={dateFrom} onChange={(event) => { setDateFrom(event.target.value); setRunPage(1); }} />
             <input type="date" className="rounded border border-neutral-300 px-3 py-2 text-sm" value={dateTo} onChange={(event) => { setDateTo(event.target.value); setRunPage(1); }} />
@@ -11394,9 +11396,11 @@ function formatScopeSummary(scopes: PublishTokenScope[]): string {
 
 function formatSchedulerTaskLabel(taskKey: SchedulerTaskKey): string {
   if (taskKey === 'stability') return '稳定性采集';
+  if (taskKey === 'subscription_node_refresh') return '订阅节点更新';
   if (taskKey === 'performance') return '性能采集';
   if (taskKey === 'risk') return '风险体检';
   if (taskKey === 'billing_listing_sync') return '余额展示同步';
+  if (taskKey === 'stability_resample_guard') return '稳定性复测保护';
   return '聚合重算';
 }
 

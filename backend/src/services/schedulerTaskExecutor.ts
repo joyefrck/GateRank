@@ -121,6 +121,9 @@ export class SchedulerTaskExecutor {
     if (taskKey === 'stability') {
       return this.runStabilityCollection(date);
     }
+    if (taskKey === 'subscription_node_refresh') {
+      return this.runSubscriptionNodeRefresh();
+    }
     if (taskKey === 'performance') {
       return this.runPerformanceCollection(date);
     }
@@ -158,6 +161,72 @@ export class SchedulerTaskExecutor {
         summary: result.detail,
       },
     };
+  }
+
+  async runSubscriptionNodeRefresh(): Promise<SchedulerTaskExecutionResult> {
+    if (!this.adminApiKey && !this.adminBearerToken) {
+      return {
+        status: 'failed',
+        message: '订阅节点更新失败：ADMIN_API_KEY / ADMIN_BEARER_TOKEN 未配置',
+        detail: {
+          stage: 'subscription_node_refresh',
+          summary: 'ADMIN_API_KEY / ADMIN_BEARER_TOKEN 未配置',
+        },
+      };
+    }
+
+    const scriptPath = path.resolve(this.repoRoot, 'scripts', 'capture_subscription_nodes.py');
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: this.runtimePath,
+      API_BASE: this.apiBase,
+      ADMIN_API_KEY: this.adminApiKey,
+      ADMIN_BEARER_TOKEN: this.adminBearerToken,
+      ALL_AIRPORTS: '1',
+      SOURCE: 'scheduler-subscription-node-refresh',
+    };
+    if (this.airportStatus) {
+      env.AIRPORT_STATUS = this.airportStatus;
+    }
+
+    try {
+      const { stdout, stderr } = await this.execFileFn(this.pythonBin, [scriptPath], {
+        cwd: this.repoRoot,
+        env,
+        maxBuffer: 10 * 1024 * 1024,
+        timeout: this.scriptTimeoutMs,
+      });
+      const summary = parseSubscriptionRefreshSummary(stdout, stderr);
+      if (!summary) {
+        return {
+          status: 'failed',
+          message: '订阅节点更新失败：脚本未返回有效汇总',
+          detail: {
+            stage: 'subscription_node_refresh',
+            summary: 'invalid_script_summary',
+          },
+        };
+      }
+      const status = summary.failure_count > 0 ? 'failed' : 'succeeded';
+      return buildSubscriptionRefreshResult(status, summary);
+    } catch (error) {
+      const execError = asExecFailure(error);
+      const summary = parseSubscriptionRefreshSummary(execError?.stdout, execError?.stderr);
+      if (summary) {
+        return buildSubscriptionRefreshResult('failed', summary);
+      }
+      const detail = sanitizeSchedulerDetail(
+        summarizeScriptFailure(error, this.singBoxBin, this.scriptTimeoutMs),
+      );
+      return {
+        status: 'failed',
+        message: `订阅节点更新失败：${detail}`,
+        detail: {
+          stage: 'subscription_node_refresh',
+          summary: detail,
+        },
+      };
+    }
   }
 
   async runRiskInspection(date: string): Promise<SchedulerTaskExecutionResult> {
@@ -490,6 +559,74 @@ function summarizeScriptOutput(stdout: string, stderr: string): string {
   } catch {
     return output.split('\n').slice(-1)[0].slice(0, 240);
   }
+}
+
+interface SubscriptionRefreshSummary {
+  airport_count: number;
+  target_count: number;
+  success_count: number;
+  failure_count: number;
+  skipped_count: number;
+  results: unknown[];
+  failures: Array<{ airport_id?: number; airport_name?: string; error?: string }>;
+  skipped: unknown[];
+}
+
+function parseSubscriptionRefreshSummary(stdout?: string, stderr?: string): SubscriptionRefreshSummary | null {
+  const output = stdout?.trim() || stderr?.trim();
+  if (!output) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(output) as Partial<SubscriptionRefreshSummary>;
+    const airportCount = Number(parsed.airport_count ?? 0);
+    return {
+      airport_count: airportCount,
+      target_count: Number(parsed.target_count ?? airportCount),
+      success_count: Number(parsed.success_count ?? 0),
+      failure_count: Number(parsed.failure_count ?? 0),
+      skipped_count: Number(parsed.skipped_count ?? 0),
+      results: Array.isArray(parsed.results) ? parsed.results : [],
+      failures: Array.isArray(parsed.failures)
+        ? parsed.failures.map((failure) => ({
+          airport_id: failure.airport_id,
+          airport_name: failure.airport_name,
+          error: sanitizeSchedulerDetail(String(failure.error || '')),
+        }))
+        : [],
+      skipped: Array.isArray(parsed.skipped) ? parsed.skipped : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function buildSubscriptionRefreshResult(
+  status: 'succeeded' | 'failed',
+  summary: SubscriptionRefreshSummary,
+): SchedulerTaskExecutionResult {
+  const firstFailure = summary.failures[0];
+  const firstFailureLabel = firstFailure
+    ? [firstFailure.airport_name, firstFailure.airport_id ? `#${firstFailure.airport_id}` : null]
+      .filter(Boolean)
+      .join(' ')
+    : '';
+  const failureDetail = firstFailure?.error
+    ? `；${firstFailureLabel ? `${firstFailureLabel}: ` : ''}${firstFailure.error}`
+    : '';
+  const action = status === 'succeeded' ? '完成' : '失败';
+  return {
+    status,
+    message: `订阅节点更新${action}：目标 ${summary.target_count}，成功 ${summary.success_count}，失败 ${summary.failure_count}，跳过 ${summary.skipped_count}${failureDetail}`,
+    detail: {
+      stage: 'subscription_node_refresh',
+      ...summary,
+    },
+  };
+}
+
+function sanitizeSchedulerDetail(value: string): string {
+  return value.replace(/https?:\/\/[^\s"']+/gi, '[redacted-url]').slice(0, 500);
 }
 
 function summarizeScriptFailure(error: unknown, singBoxBin: string, timeoutMs: number): string {

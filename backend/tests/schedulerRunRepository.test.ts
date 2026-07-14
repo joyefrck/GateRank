@@ -16,7 +16,7 @@ test('SchedulerRunRepository.ensureSchema creates scheduler runs table', async (
   await repository.ensureSchema();
 
   assert.ok(queries.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS admin_scheduler_runs')));
-  assert.ok(queries.some((sql) => sql.includes('MODIFY COLUMN task_key') && sql.includes('stability_resample_guard')));
+  assert.ok(queries.some((sql) => sql.includes('MODIFY COLUMN task_key') && sql.includes('subscription_node_refresh')));
 });
 
 test('SchedulerRunRepository.listByQuery maps rows and parses detail json', async () => {

@@ -719,6 +719,59 @@ proxies:
         self.assertEqual(saved_snapshots[0]["source"], "test-performance")
         self.assertEqual(saved_snapshots[0]["nodes"][0]["raw_uri"], "trojan://secret@hk.example.com:443#HK-1")
 
+    def test_capture_subscription_nodes_main_skips_missing_links_and_continues_after_failure(self) -> None:
+        from scripts import capture_subscription_nodes
+
+        config = self.make_config()
+        config.all_airports = True
+        airports = [
+            {"id": 1, "name": "No Link", "subscription_url": ""},
+            {"id": 2, "name": "Broken", "subscription_url": "https://broken.example/sub"},
+            {"id": 3, "name": "Good", "subscription_url": "https://good.example/sub"},
+        ]
+        with (
+            patch.object(capture_subscription_nodes, "build_config", return_value=config),
+            patch.object(capture_subscription_nodes, "resolve_airports", return_value=airports),
+            patch.object(
+                capture_subscription_nodes,
+                "shanghai_now_iso",
+                return_value="2026-07-14T01:00:00+08:00",
+            ),
+            patch.object(
+                capture_subscription_nodes,
+                "capture_for_airport",
+                side_effect=[
+                    RuntimeError("subscription_fetch_or_parse_failed"),
+                    {"airport_id": 3, "snapshot_id": 9},
+                ],
+            ) as capture_mock,
+            patch("builtins.print") as print_mock,
+        ):
+            exit_code = capture_subscription_nodes.main()
+
+        payload = json.loads(print_mock.call_args.args[0])
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(capture_mock.call_count, 2)
+        self.assertEqual(payload["airport_count"], 3)
+        self.assertEqual(payload["target_count"], 2)
+        self.assertEqual(payload["success_count"], 1)
+        self.assertEqual(payload["failure_count"], 1)
+        self.assertEqual(payload["skipped_count"], 1)
+        self.assertEqual(
+            payload["skipped"],
+            [{"airport_id": 1, "airport_name": "No Link", "reason": "missing_subscription_url"}],
+        )
+
+    def test_capture_subscription_nodes_single_airport_without_link_still_fails(self) -> None:
+        from scripts.capture_subscription_nodes import capture_for_airport
+
+        with self.assertRaisesRegex(RuntimeError, "^missing_subscription_url$"):
+            capture_for_airport(
+                self.make_config(),
+                {"id": 1, "name": "No Link", "subscription_url": ""},
+                "2026-07-14T01:00:00+08:00",
+            )
+
     def test_fetch_parsed_subscription_prefers_clashmeta_and_keeps_anytls(self) -> None:
         from scripts.capture_subscription_nodes import fetch_parsed_subscription
 

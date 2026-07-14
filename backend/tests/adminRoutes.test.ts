@@ -908,10 +908,11 @@ test('GET /scheduler/tasks returns task list', async () => {
     const response = await fetch(`http://127.0.0.1:${port}/scheduler/tasks`);
     assert.equal(response.status, 200);
     const data = (await response.json()) as { items: Array<{ task_key: string }> };
-    assert.equal(data.items.length, 6);
+    assert.equal(data.items.length, 7);
     assert.equal(data.items[0]?.task_key, 'stability');
-    assert.equal(data.items[4]?.task_key, 'billing_listing_sync');
-    assert.equal(data.items[5]?.task_key, 'stability_resample_guard');
+    assert.equal(data.items[1]?.task_key, 'subscription_node_refresh');
+    assert.equal(data.items[5]?.task_key, 'billing_listing_sync');
+    assert.equal(data.items[6]?.task_key, 'stability_resample_guard');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -1091,6 +1092,16 @@ test('PATCH /scheduler/tasks/:taskKey validates schedule_time', async () => {
     assert.equal(response.status, 400);
     const data = (await response.json()) as { message: string };
     assert.match(data.message, /schedule_time/);
+
+    const refreshResponse = await fetch(`http://127.0.0.1:${port}/scheduler/tasks/subscription_node_refresh`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ schedule_time: '01:00' }),
+    });
+    assert.equal(refreshResponse.status, 200);
+    const refreshTask = (await refreshResponse.json()) as { task_key: string; schedule_time: string };
+    assert.equal(refreshTask.task_key, 'subscription_node_refresh');
+    assert.equal(refreshTask.schedule_time, '01:00');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -7115,6 +7126,22 @@ function stubSchedulerService(): any {
         updated_at: '2026-03-30T00:00:00+08:00',
         description: '稳定性描述',
         next_run_at: '2026-03-31T00:00:00+08:00',
+        is_running: false,
+        latest_run: null,
+      },
+      {
+        task_key: 'subscription_node_refresh',
+        name: '订阅节点更新',
+        enabled: true,
+        schedule_time: '01:00',
+        timezone: 'Asia/Shanghai',
+        last_restarted_at: null,
+        last_restarted_by: null,
+        updated_by: 'system',
+        created_at: '2026-03-30T00:00:00+08:00',
+        updated_at: '2026-03-30T00:00:00+08:00',
+        description: '订阅节点更新描述',
+        next_run_at: '2026-03-31T01:00:00+08:00',
         is_running: false,
         latest_run: null,
       },

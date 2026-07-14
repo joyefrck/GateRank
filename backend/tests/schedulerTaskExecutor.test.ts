@@ -238,6 +238,81 @@ test('SchedulerTaskExecutor.runPerformanceCollection summarizes script timeout e
   });
 });
 
+test('SchedulerTaskExecutor.runTask refreshes subscription node snapshots with scheduler environment', async () => {
+  let capturedScriptPath = '';
+  let capturedEnv: NodeJS.ProcessEnv | null = null;
+  const executor = createSchedulerTaskExecutor({
+    execFileAsync: async (_file: string, args: readonly string[], options: ExecOptions) => {
+      capturedScriptPath = String(args[0]);
+      capturedEnv = options.env;
+      return {
+        stdout: JSON.stringify({
+          airport_count: 4,
+          target_count: 3,
+          success_count: 3,
+          failure_count: 0,
+          skipped_count: 1,
+          results: [],
+          failures: [],
+          skipped: [],
+        }),
+        stderr: '',
+      };
+    },
+  });
+
+  const result = await executor.runTask('subscription_node_refresh', '2026-07-14');
+
+  assert.match(capturedScriptPath, /capture_subscription_nodes\.py$/);
+  assert.ok(capturedEnv);
+  const env = capturedEnv as NodeJS.ProcessEnv;
+  assert.equal(env.ALL_AIRPORTS, '1');
+  assert.equal(env.SOURCE, 'scheduler-subscription-node-refresh');
+  assert.equal(result.status, 'succeeded');
+  assert.equal(result.detail.stage, 'subscription_node_refresh');
+  assert.equal(result.detail.airport_count, 4);
+  assert.equal(result.detail.target_count, 3);
+  assert.equal(result.detail.success_count, 3);
+  assert.equal(result.detail.failure_count, 0);
+  assert.equal(result.detail.skipped_count, 1);
+  assert.equal(result.message, '订阅节点更新完成：目标 3，成功 3，失败 0，跳过 1');
+});
+
+test('SchedulerTaskExecutor.runTask records partial subscription refresh failure without leaking urls', async () => {
+  const secretUrl = 'https://private.example/subscription-token';
+  const executor = createSchedulerTaskExecutor({
+    execFileAsync: async () => {
+      const error = new Error(`Command failed for ${secretUrl}`) as Error & {
+        stdout: string;
+        stderr: string;
+      };
+      error.stdout = JSON.stringify({
+        airport_count: 4,
+        target_count: 3,
+        success_count: 2,
+        failure_count: 1,
+        skipped_count: 1,
+        results: [],
+        failures: [{ airport_id: 8, airport_name: 'Broken', error: 'subscription_fetch_or_parse_failed' }],
+        skipped: [],
+      });
+      error.stderr = '';
+      throw error;
+    },
+  });
+
+  const result = await executor.runTask('subscription_node_refresh', '2026-07-14');
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.detail.stage, 'subscription_node_refresh');
+  assert.equal(result.detail.target_count, 3);
+  assert.equal(result.detail.success_count, 2);
+  assert.equal(result.detail.failure_count, 1);
+  assert.equal(result.detail.skipped_count, 1);
+  assert.equal(result.message, '订阅节点更新失败：目标 3，成功 2，失败 1，跳过 1；Broken #8: subscription_fetch_or_parse_failed');
+  assert.doesNotMatch(JSON.stringify(result), /private\.example|subscription-token/);
+});
+
 test('SchedulerTaskExecutor.runTask syncs billing listing status', async () => {
   let syncedWithAmount: number | null = null;
   const executor = createSchedulerTaskExecutor({

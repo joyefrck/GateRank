@@ -68,6 +68,7 @@ export interface SchedulerTaskView extends SchedulerTask {
 
 const TASK_DESCRIPTIONS: Record<SchedulerTaskKey, string> = {
   stability: '调用 monitor_stability.py 批量采集稳定性样本，不重复触发聚合和重算。',
+  subscription_node_refresh: '批量刷新性能测试范围内的订阅链接并保存最新节点快照，供后续性能采集使用。',
   performance: '调用 monitor_performance.py 批量采集性能样本，不重复触发聚合和重算。',
   risk: '逐机场串行执行风险体检，刷新官网可用性与 SSL 检查结果。',
   aggregate_recompute: '执行全量聚合和时间衰减重算，统一刷新每日分数与榜单。',

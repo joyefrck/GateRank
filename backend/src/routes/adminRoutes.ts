@@ -2836,6 +2836,7 @@ function toSchedulerTaskKey(value: unknown): SchedulerTaskKey {
   const taskKey = String(value || '').trim();
   if (
     taskKey === 'stability'
+    || taskKey === 'subscription_node_refresh'
     || taskKey === 'performance'
     || taskKey === 'risk'
     || taskKey === 'aggregate_recompute'
@@ -2844,7 +2845,7 @@ function toSchedulerTaskKey(value: unknown): SchedulerTaskKey {
   ) {
     return taskKey;
   }
-  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|performance|risk|aggregate_recompute|billing_listing_sync|stability_resample_guard');
+  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|subscription_node_refresh|performance|risk|aggregate_recompute|billing_listing_sync|stability_resample_guard');
 }
 
 function toSchedulerRunStatus(value: unknown): SchedulerRunStatus {
