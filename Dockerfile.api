@@ -35,7 +35,7 @@ ARG PUBLIC_FRONTEND_ASSET_VERSION=
 ENV PUBLIC_FRONTEND_ASSET_VERSION=$PUBLIC_FRONTEND_ASSET_VERSION
 
 RUN sed -i 's#dl-cdn.alpinelinux.org#mirrors.aliyun.com#g' /etc/apk/repositories \
-  && apk add --no-cache curl python3 sing-box
+  && apk add --no-cache curl python3 py3-yaml sing-box
 
 RUN npm install --no-audit --no-fund --package-lock=false --omit=dev geoip-country@^5.0.504 sharp@^0.34.5 \
   && npm cache clean --force

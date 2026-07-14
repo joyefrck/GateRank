@@ -4,6 +4,7 @@ import { promisify } from 'node:util';
 import {
   augmentPathWithCommonBinaryDirs,
 } from '../utils/runtimeBinary';
+import { HttpError } from '../middleware/errorHandler';
 import { getAdminAuthConfig } from '../utils/adminAuthConfig';
 import { signAdminToken } from '../utils/token';
 import { assertHeaderSafeValue, summarizeManualJobScriptFailure } from './manualJobService';
@@ -67,9 +68,25 @@ export class SubscriptionNodeCaptureService {
       });
       return parseCaptureOutput(stdout);
     } catch (error) {
-      throw new Error(summarizeManualJobScriptFailure(error));
+      throw toSubscriptionNodeCaptureHttpError(error);
     }
   }
+}
+
+export function toSubscriptionNodeCaptureHttpError(error: unknown): HttpError {
+  const summary = redactSubscriptionUris(summarizeManualJobScriptFailure(error));
+  return new HttpError(
+    502,
+    'SUBSCRIPTION_NODE_CAPTURE_FAILED',
+    `获取订阅节点失败：${summary}`,
+  );
+}
+
+function redactSubscriptionUris(value: string): string {
+  return value.replace(
+    /\b(?:https?|ss|vmess|vless|trojan|anytls):\/\/[^\s,，;；]+/gi,
+    '[订阅地址已隐藏]',
+  );
 }
 
 function parseCaptureOutput(stdout: string): SubscriptionNodeCaptureResult {
