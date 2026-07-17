@@ -8416,11 +8416,11 @@ function AirportsPage({
                     <span className="inline-flex items-center gap-2"><Plus size={14} />继续添加官网链接</span>
                   </button>
 
-                  <FormField label="订阅链接" hint="可选。如果和官网不同，单独录入更方便运营排查。">
+                  <FormField label="订阅或单节点链接" hint="支持 HTTP(S) 订阅地址，或 VLESS、VMess、Trojan、SS、AnyTLS 单节点链接。">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
                       <input
                         className="min-w-0 flex-1 rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                        placeholder="https://example.com/subscribe"
+                        placeholder="https://example.com/subscribe 或 vless://..."
                         value={editing.subscription_url}
                         onChange={(e) => setEditing({ ...editing, subscription_url: e.target.value })}
                       />
@@ -9136,11 +9136,11 @@ function AirportEditorPage({
           >
             <span className="inline-flex items-center gap-2"><Plus size={14} />继续添加官网链接</span>
           </button>
-          <FormField label="订阅链接" hint="可选。如果和官网不同，单独录入更方便运营排查。">
+          <FormField label="订阅或单节点链接" hint="支持 HTTP(S) 订阅地址，或 VLESS、VMess、Trojan、SS、AnyTLS 单节点链接。">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start">
               <input
                 className="min-w-0 flex-1 rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
-                placeholder="https://example.com/subscribe"
+                placeholder="https://example.com/subscribe 或 vless://..."
                 value={editing.subscription_url}
                 onChange={(e) => setEditing({ ...editing, subscription_url: e.target.value })}
               />

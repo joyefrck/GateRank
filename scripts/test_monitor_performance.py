@@ -772,6 +772,39 @@ proxies:
                 "2026-07-14T01:00:00+08:00",
             )
 
+    def test_fetch_parsed_subscription_accepts_direct_vless_without_fetch(self) -> None:
+        from scripts.capture_subscription_nodes import fetch_parsed_subscription
+
+        config = self.make_config()
+        direct_uri = (
+            "vless://11111111-1111-1111-1111-111111111111@47.80.3.248:12043"
+            "?encryption=none&security=reality&flow=xtls-rprx-vision&type=tcp"
+            "&sni=dash.cloudflare.com&pbk=O7nRDHG9Gq9vJHxpHzojS92OP8liC6aCgIFeFY4GkTQ"
+            "&fp=chrome#direct-reality"
+        )
+
+        with patch(
+            "scripts.capture_subscription_nodes.fetch_subscription",
+            side_effect=AssertionError("direct node URI must not be fetched"),
+        ) as fetch_mock:
+            subscription_format, nodes, unsupported_nodes = fetch_parsed_subscription(config, direct_uri)
+
+        fetch_mock.assert_not_called()
+        self.assertEqual(subscription_format, "plain")
+        self.assertEqual(unsupported_nodes, [])
+        self.assertEqual(len(nodes), 1)
+        node = nodes[0]
+        self.assertEqual(node.node_type, "vless")
+        self.assertEqual(node.outbound["server"], "47.80.3.248")
+        self.assertEqual(node.outbound["server_port"], 12043)
+        self.assertEqual(node.outbound["flow"], "xtls-rprx-vision")
+        self.assertEqual(node.outbound["tls"]["server_name"], "dash.cloudflare.com")
+        self.assertEqual(node.outbound["tls"]["utls"]["fingerprint"], "chrome")
+        self.assertEqual(
+            node.outbound["tls"]["reality"]["public_key"],
+            "O7nRDHG9Gq9vJHxpHzojS92OP8liC6aCgIFeFY4GkTQ",
+        )
+
     def test_fetch_parsed_subscription_prefers_clashmeta_and_keeps_anytls(self) -> None:
         from scripts.capture_subscription_nodes import fetch_parsed_subscription
 

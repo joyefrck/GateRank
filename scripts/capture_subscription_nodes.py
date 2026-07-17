@@ -29,6 +29,14 @@ from scripts.monitor_performance import (
     node_to_snapshot,
 )
 
+DIRECT_NODE_URI_SCHEMES = (
+    "vless://",
+    "vmess://",
+    "trojan://",
+    "ss://",
+    "anytls://",
+)
+
 
 def main() -> int:
     try:
@@ -124,6 +132,13 @@ def fetch_parsed_subscription(
     config: Config,
     subscription_url: str,
 ) -> tuple[str, list[ParsedNode], list[dict[str, str]]]:
+    if subscription_url.lower().startswith(DIRECT_NODE_URI_SCHEMES):
+        normalized_subscription, subscription_format = normalize_subscription_text(subscription_url)
+        parsed_nodes, unsupported_nodes = parse_nodes(normalized_subscription, subscription_format)
+        if parsed_nodes:
+            return subscription_format, parsed_nodes, unsupported_nodes
+        raise RuntimeError("subscription_fetch_or_parse_failed")
+
     for user_agent in (
         CLASH_META_SUBSCRIPTION_USER_AGENT,
         DEFAULT_SUBSCRIPTION_USER_AGENT,
