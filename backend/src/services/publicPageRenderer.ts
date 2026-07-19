@@ -93,6 +93,7 @@ import {
   type ToolsDownloadPageView,
 } from '../../../shared/toolDownloads';
 import { STREAMING_SERVICES } from '../../../shared/streamingCheck';
+import { REPORT_ANCHOR_SECTIONS, buildReportRadarPoints } from '../../../shared/reportUi';
 
 interface RenderOptions {
   siteUrl: string;
@@ -134,17 +135,6 @@ const HOME_SECTION_RENDER_ORDER: Array<keyof HomePageView['sections']> = [
   'risk_alerts',
 ];
 
-const reportAnchorSections = [
-  { id: 'report-overview', label: '概览' },
-  { id: 'report-content', label: '测评摘要' },
-  { id: 'report-snapshot', label: '数据快照' },
-  { id: 'report-capabilities', label: '服务能力' },
-  { id: 'report-score', label: '评分拆解' },
-  { id: 'report-metrics', label: '核心指标' },
-  { id: 'report-trends', label: '趋势' },
-  { id: 'report-plan-telegram', label: '套餐电报' },
-  { id: 'report-conclusion', label: '结论建议' },
-];
 const PUBLIC_CORE_MONTHLY_REPORT_OG_PATH = '/og/monthly-reports.png';
 
 export function renderHomePublicPage(
@@ -838,7 +828,7 @@ function renderSnapshotCard(label: string, value: string): string {
 function renderReportFixedNav(): string {
   return `
     <nav class="report-fixed-nav" aria-label="报告页面导航">
-      ${reportAnchorSections.map((section) => `<a href="#${escapeAttribute(section.id)}">${escapeHtml(section.label)}</a>`).join('')}
+      ${REPORT_ANCHOR_SECTIONS.map((section, index) => `<a${index === 0 ? ' class="is-active" aria-current="location"' : ''} href="#${escapeAttribute(section.id)}"><span aria-hidden="true"></span>${escapeHtml(section.label)}</a>`).join('')}
     </nav>
   `;
 }
@@ -1018,22 +1008,54 @@ function formatReportRegionLabel(region: ReportView['capabilities']['regions'][n
 }
 
 function renderReportScoreCard(view: ReportView): string {
-  if (view.summary_card.score_hidden || view.summary_card.score === null) {
-    return `
-      <aside class="score-card">
+  const publicScore = view.summary_card.score;
+  const scoreContent = view.summary_card.score_hidden || publicScore === null
+    ? `
         <div class="score-title">GateRank Score</div>
-        <div class="score-number">暂不公开</div>
-        <div class="score-grade">余额不足，公开总分暂不展示</div>
-      </aside>
-    `;
-  }
+        <div class="score-number score-number-hidden">暂不公开</div>
+        <div class="score-grade score-grade-hidden">余额不足，公开总分暂不展示</div>
+      `
+    : `
+        <div class="score-title">GateRank Score</div>
+        <div class="score-number">${escapeHtml(formatMetric(publicScore))}<span>/100</span></div>
+        <div class="score-bar"><i style="width:${Math.max(0, Math.min(100, publicScore))}%"></i></div>
+        <div class="score-grade">综合评级：${escapeHtml(formatScoreGrade(publicScore))}</div>
+      `;
   return `
     <aside class="score-card">
-      <div class="score-title">GateRank Score</div>
-      <div class="score-number">${escapeHtml(formatMetric(view.summary_card.score))}<span>/100</span></div>
-      <div class="score-bar"><i style="width:${Math.max(0, Math.min(100, view.summary_card.score))}%"></i></div>
-      <div class="score-grade">综合评级：${escapeHtml(formatScoreGrade(view.summary_card.score))}</div>
+      <div class="score-summary">${scoreContent}</div>
+      ${renderReportMethodologyCard(view)}
     </aside>
+  `;
+}
+
+function renderReportMethodologyCard(view: ReportView): string {
+  const radarPoints = buildReportRadarPoints(view.score_breakdown);
+  return `
+    <div class="score-methodology">
+      <div class="score-methodology-heading">
+        <div>
+          <strong>四维评分模型</strong>
+          <small>S · P · C · R</small>
+        </div>
+        <span>每日更新</span>
+      </div>
+      <svg class="score-radar" viewBox="0 0 120 120" role="img" aria-labelledby="report-score-radar-title report-score-radar-description">
+        <title id="report-score-radar-title">本报告四维评分分布</title>
+        <desc id="report-score-radar-description">稳定性、性能、价格与风险四个维度的评分雷达图</desc>
+        <polygon points="60,12 108,60 60,108 12,60" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"></polygon>
+        <polygon points="60,36 84,60 60,84 36,60" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="2 2"></polygon>
+        <path d="M60 12V108M12 60H108" fill="none" stroke="#e2e8f0" stroke-width="1"></path>
+        <polygon points="${escapeAttribute(radarPoints)}" fill="#10b981" fill-opacity=".18" stroke="#059669" stroke-width="2.4" stroke-linejoin="round"></polygon>
+        <circle cx="60" cy="60" r="2.25" fill="#047857"></circle>
+        <text x="60" y="7" text-anchor="middle">S</text>
+        <text x="114" y="62" text-anchor="middle" dominant-baseline="middle">P</text>
+        <text x="60" y="117" text-anchor="middle">C</text>
+        <text x="6" y="62" text-anchor="middle" dominant-baseline="middle">R</text>
+      </svg>
+      <p>基于持续监测，而非单次测速</p>
+      <a class="score-methodology-link" href="${escapeAttribute(PUBLIC_SEO_PATHS.methodology)}">我们是如何测评的？<span aria-hidden="true">→</span></a>
+    </div>
   `;
 }
 
@@ -2670,9 +2692,12 @@ const styles = `
   .report-date-status { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 8px; color: #94a3b8; font-size: 12px; font-weight: 900; letter-spacing: .12em; text-transform: uppercase; }
   .report-fallback-note { color: #b45309; letter-spacing: .08em; }
   .report-fixed-nav { position: fixed; right: 8px; top: 50%; z-index: 40; display: flex; width: 80px; transform: translateY(-50%); flex-direction: column; gap: 2px; border: 1px solid #e2e8f0; border-radius: 8px; background: rgba(255,255,255,.95); padding: 6px; color: #64748b; font-size: 11px; font-weight: 900; box-shadow: 0 14px 34px rgba(15, 23, 42, .12); backdrop-filter: blur(12px); }
-  .report-fixed-nav a { border-radius: 6px; padding: 6px; text-align: center; line-height: 1.25; text-decoration: none; transition: background-color .2s ease-out, color .2s ease-out; }
+  .report-fixed-nav a { position: relative; overflow: hidden; border-radius: 6px; padding: 6px; text-align: center; line-height: 1.25; text-decoration: none; transition: background-color .2s ease-out, color .2s ease-out, box-shadow .2s ease-out; }
+  .report-fixed-nav a > span { position: absolute; top: 4px; bottom: 4px; left: 0; width: 2px; border-radius: 999px; background: #10b981; opacity: 0; transition: opacity .2s ease-out; }
   .report-fixed-nav a:hover { background: #f1f5f9; color: #020617; }
-  .report-hero { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: start; border: 1px solid #dbe4f0; border-radius: 8px; padding: 32px; background: linear-gradient(135deg, #f8fbff, #fff 54%, #eef6ff); }
+  .report-fixed-nav a.is-active { background: #ecfdf5; color: #020617; box-shadow: inset 0 0 0 1px rgba(16,185,129,.16); }
+  .report-fixed-nav a.is-active > span { opacity: 1; }
+  .report-hero { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 24px; align-items: stretch; border: 1px solid #dbe4f0; border-radius: 8px; padding: 32px; background: linear-gradient(135deg, #f8fbff, #fff 54%, #eef6ff); }
   .breadcrumb { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 18px; color: #64748b; font-size: 13px; font-weight: 700; }
   .breadcrumb a { text-decoration: none; transition: color .2s ease-out; }
   .breadcrumb a:hover { color: #020617; }
@@ -2682,13 +2707,27 @@ const styles = `
   .report-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
   .report-tags span { border: 1px solid #dbeafe; border-radius: 999px; padding: 6px 10px; background: #eff6ff; color: #1d4ed8; font-size: 12px; font-weight: 900; }
   .primary-link { display: inline-flex; margin-top: 8px; min-height: 42px; align-items: center; border-radius: 8px; background: #020617; color: #fff; padding: 0 18px; text-decoration: none; font-weight: 900; }
-  .score-card { border: 1px solid #e2e8f0; border-radius: 8px; padding: 28px; background: #fff; text-align: center; box-shadow: 0 10px 30px rgba(15, 23, 42, .06); }
+  .score-card { display: flex; height: 100%; flex-direction: column; border: 1px solid #e2e8f0; border-radius: 8px; padding: 28px; background: #fff; text-align: center; box-shadow: 0 10px 30px rgba(15, 23, 42, .06); }
   .score-title { color: #1e293b; font-size: 14px; font-weight: 900; }
   .score-number { margin-top: 12px; color: #020617; font-size: 58px; line-height: 1; font-weight: 900; }
+  .score-number-hidden { font-size: 46px; }
   .score-number span { margin-left: 6px; color: #64748b; font-size: 14px; }
   .score-bar { height: 8px; margin-top: 20px; overflow: hidden; border-radius: 999px; background: #e2e8f0; }
   .score-bar i { display: block; height: 100%; border-radius: 999px; background: #22c55e; }
   .score-grade { margin-top: 14px; color: #059669; font-size: 14px; font-weight: 900; }
+  .score-grade-hidden { color: #d97706; }
+  .score-methodology { display: flex; flex: 1; flex-direction: column; margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 20px; text-align: left; }
+  .score-methodology-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+  .score-methodology-heading strong { display: block; color: #020617; font-size: 14px; }
+  .score-methodology-heading small { display: block; margin-top: 4px; color: #94a3b8; font-size: 11px; font-weight: 900; letter-spacing: .16em; }
+  .score-methodology-heading > span { border: 1px solid #a7f3d0; border-radius: 999px; background: #ecfdf5; padding: 5px 10px; color: #047857; font-size: 10px; font-weight: 900; }
+  .score-radar { display: block; width: min(100%, 220px); height: 144px; overflow: visible; margin: 12px auto 0; filter: drop-shadow(0 10px 18px rgba(16,185,129,.1)); }
+  .score-radar text { fill: #64748b; font-size: 7px; font-weight: 900; }
+  .score-methodology > p { margin: 0; color: #64748b; font-size: 12px; font-weight: 700; line-height: 20px; text-align: center; }
+  .score-methodology-link { display: inline-flex; width: 100%; min-height: 44px; box-sizing: border-box; align-items: center; justify-content: center; gap: 8px; margin-top: 16px; border: 1px solid #a7f3d0; border-radius: 8px; background: #ecfdf5; padding: 0 16px; color: #064e3b; font-size: 14px; font-weight: 900; text-decoration: none; transition: transform .2s ease-out, background-color .2s ease-out, border-color .2s ease-out, box-shadow .2s ease-out; }
+  .score-methodology-link span { transition: transform .2s ease-out; }
+  .score-methodology-link:hover { transform: translateY(-2px); border-color: #6ee7b7; background: #fff; box-shadow: 0 12px 28px rgba(5,150,105,.12); }
+  .score-methodology-link:hover span { transform: translateX(2px); }
   .report-snapshot { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; }
   .snapshot-card, .capability-card, .score-metric, .report-section, .report-info-panel { border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; }
   .snapshot-card { min-height: 88px; padding: 18px; }
@@ -2783,6 +2822,10 @@ const styles = `
     .report-info-panel,
     .report-content-summary,
     .report-content-detail,
+    .report-fixed-nav a,
+    .report-fixed-nav a > span,
+    .score-methodology-link,
+    .score-methodology-link span,
     .capability-list p,
     .report-info-panel dl div {
       transition: none;
@@ -2794,7 +2837,9 @@ const styles = `
     .score-metric:hover,
     .report-section:hover,
     .report-info-panel:hover,
-    .report-info-panel:hover {
+    .report-info-panel:hover,
+    .score-methodology-link:hover,
+    .score-methodology-link:hover span {
       transform: none;
     }
   }

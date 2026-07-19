@@ -1049,6 +1049,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /<div class="breadcrumb"><a href="\/">首页<\/a><span>\/<\/span>星云机场<\/div>/);
     assert.doesNotMatch(okHtml, /机场专题/);
     assert.match(okHtml, /aria-label="报告页面导航"/);
+    assert.match(okHtml, /class="is-active" aria-current="location" href="#report-overview"/);
     assert.match(okHtml, /href="#report-overview"/);
     assert.match(okHtml, /href="#report-content"/);
     assert.match(okHtml, />测评摘要<\/a>/);
@@ -1064,6 +1065,11 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /机场排行/);
     assert.match(okHtml, /申请入驻/);
     assert.match(okHtml, /GateRank Score/);
+    assert.match(okHtml, /class="score-methodology"/);
+    assert.match(okHtml, /class="score-radar"/);
+    assert.match(okHtml, /<title id="report-score-radar-title">本报告四维评分分布<\/title>/);
+    assert.match(okHtml, /points="60,12\.48 107\.04,60 60,103\.2 14\.4,60"/);
+    assert.match(okHtml, /class="score-methodology-link" href="\/methodology">我们是如何测评的？/);
     assert.match(okHtml, /星云机场 测评摘要/);
     assert.doesNotMatch(okHtml, /星云机场 实际内容与 SEO 摘要/);
     assert.doesNotMatch(okHtml, /report-content-grid/);
@@ -1255,6 +1261,51 @@ test('GET /airports/:slug labels low report score as limited rating instead of h
     assert.match(html, /<span>综合评级 评级受限<\/span>/);
     assert.doesNotMatch(html, /综合评级：高风险/);
     assert.doesNotMatch(html, /<span>综合评级 高风险<\/span>/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /airports/:slug keeps methodology guidance when the public total score is hidden', async () => {
+  const hiddenScoreReportView: ReportView = {
+    ...reportView,
+    airport: {
+      ...reportView.airport,
+      id: 9,
+      slug: 'hidden-score-airport',
+      name: '隐藏总分机场',
+    },
+    summary_card: {
+      ...reportView.summary_card,
+      name: '隐藏总分机场',
+      score: null,
+      score_hidden: true,
+      score_hidden_reason: 'insufficient_balance',
+    },
+    score_breakdown: {
+      ...reportView.score_breakdown,
+      final_score: null,
+    },
+  };
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: {
+      ...createPublicViewServiceStub(),
+      getReportViewBySlug: async (slug: string): Promise<ReportView | null> => (slug === 'hidden-score-airport' ? hiddenScoreReportView : null),
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/hidden-score-airport`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+
+    assert.match(html, /class="score-number score-number-hidden">暂不公开/);
+    assert.match(html, /class="score-methodology"/);
+    assert.match(html, /class="score-radar"/);
+    assert.match(html, /href="\/methodology">我们是如何测评的？/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

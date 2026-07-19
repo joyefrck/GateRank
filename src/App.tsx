@@ -116,6 +116,12 @@ import { MonthlyReportDetailPage, MonthlyReportsPage } from './pages/monthlyRepo
 import { trackPageView } from './site/analytics';
 import { getCapabilityIcon, type CapabilityIconCategory } from '../shared/capabilityIcons';
 import {
+  REPORT_ANCHOR_SECTIONS,
+  buildReportRadarPoints,
+  resolveActiveReportAnchor,
+  type ReportAnchorId,
+} from '../shared/reportUi';
+import {
   createTrackedOutboundClickHandler,
   flushMarketingEvents,
   type MarketingPageKind,
@@ -843,18 +849,6 @@ const reportCardInteractiveClass =
   'transform-gpu transition-[transform,box-shadow,border-color,background-color] duration-200 ease-out hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-[0_18px_45px_rgba(15,23,42,0.10)] motion-reduce:transition-none motion-reduce:hover:translate-y-0';
 const reportInnerTileInteractiveClass =
   'transition-[box-shadow,border-color,background-color] duration-200 ease-out hover:border-slate-200 hover:bg-white hover:shadow-sm motion-reduce:transition-none';
-const reportAnchorSections = [
-  { id: 'report-overview', label: '概览' },
-  { id: 'report-content', label: '测评摘要' },
-  { id: 'report-snapshot', label: '数据快照' },
-  { id: 'report-capabilities', label: '服务能力' },
-  { id: 'report-score', label: '评分拆解' },
-  { id: 'report-metrics', label: '核心指标' },
-  { id: 'report-trends', label: '趋势' },
-  { id: 'report-plan-telegram', label: '套餐电报' },
-  { id: 'report-conclusion', label: '结论建议' },
-] as const;
-
 const PORTAL_TOKEN_KEY = 'gaterank_portal_token';
 const PORTAL_APPLICATION_PAYMENT_SECTION_ID = 'portal-application-payment-section';
 const APPLICATION_PAYMENT_REQUIRED_MESSAGE = '请先支付入驻费，支付完成后再充值余额。';
@@ -4449,29 +4443,83 @@ function ToolPlaceholderPage({ tool }: { tool: 'streaming-check' | 'ip-check' })
   );
 }
 
-function scrollToReportAnchor(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+const REPORT_NAV_ACTIVATION_LINE = 160;
+
+function scrollToReportAnchor(id: ReportAnchorId) {
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  document.getElementById(id)?.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
+}
+
+function useActiveReportAnchor() {
+  const [activeAnchor, setActiveAnchor] = useState<ReportAnchorId>(REPORT_ANCHOR_SECTIONS[0].id);
+
+  useEffect(() => {
+    let frameId = 0;
+
+    const updateActiveAnchor = () => {
+      frameId = 0;
+      const positions = REPORT_ANCHOR_SECTIONS.flatMap((section) => {
+        const element = document.getElementById(section.id);
+        return element ? [{ id: section.id, top: element.getBoundingClientRect().top }] : [];
+      });
+      const documentHeight = document.documentElement.scrollHeight;
+      const isAtDocumentEnd = window.scrollY + window.innerHeight >= documentHeight - 2;
+      const nextAnchor = resolveActiveReportAnchor(positions, REPORT_NAV_ACTIVATION_LINE, isAtDocumentEnd);
+      setActiveAnchor((current) => current === nextAnchor ? current : nextAnchor);
+    };
+
+    const scheduleUpdate = () => {
+      if (frameId) {
+        return;
+      }
+      frameId = window.requestAnimationFrame(updateActiveAnchor);
+    };
+
+    updateActiveAnchor();
+    window.addEventListener('scroll', scheduleUpdate, { passive: true });
+    window.addEventListener('resize', scheduleUpdate);
+    return () => {
+      window.removeEventListener('scroll', scheduleUpdate);
+      window.removeEventListener('resize', scheduleUpdate);
+      if (frameId) {
+        window.cancelAnimationFrame(frameId);
+      }
+    };
+  }, []);
+
+  return { activeAnchor, setActiveAnchor };
 }
 
 function ReportFixedNav() {
+  const { activeAnchor, setActiveAnchor } = useActiveReportAnchor();
+
   return (
     <nav
       aria-label="报告页面导航"
       className="fixed right-2 top-1/2 z-40 hidden w-20 -translate-y-1/2 flex-col gap-0.5 rounded-[8px] border border-slate-200 bg-white/95 p-1.5 text-[11px] font-black text-slate-500 shadow-[0_14px_34px_rgba(15,23,42,0.12)] backdrop-blur xl:flex"
     >
-      {reportAnchorSections.map((section) => (
-        <a
-          key={section.id}
-          href={`#${section.id}`}
-          onClick={(event) => {
-            event.preventDefault();
-            scrollToReportAnchor(section.id);
-          }}
-          className="rounded-[6px] px-1.5 py-1.5 text-center leading-tight transition hover:bg-slate-100 hover:text-slate-950"
-        >
-          {section.label}
-        </a>
-      ))}
+      {REPORT_ANCHOR_SECTIONS.map((section) => {
+        const isActive = activeAnchor === section.id;
+        return (
+          <a
+            key={section.id}
+            href={`#${section.id}`}
+            aria-current={isActive ? 'location' : undefined}
+            onClick={(event) => {
+              event.preventDefault();
+              setActiveAnchor(section.id);
+              scrollToReportAnchor(section.id);
+            }}
+            className={`relative overflow-hidden rounded-[6px] px-1.5 py-1.5 text-center leading-tight transition-[background-color,color,box-shadow] duration-200 hover:bg-slate-100 hover:text-slate-950 motion-reduce:transition-none ${isActive ? 'bg-emerald-50 text-slate-950 shadow-[inset_0_0_0_1px_rgba(16,185,129,0.16)]' : ''}`}
+          >
+            <span
+              aria-hidden="true"
+              className={`absolute inset-y-1 left-0 w-0.5 rounded-full bg-emerald-500 transition-opacity duration-200 motion-reduce:transition-none ${isActive ? 'opacity-100' : 'opacity-0'}`}
+            />
+            {section.label}
+          </a>
+        );
+      })}
     </nav>
   );
 }
@@ -4569,17 +4617,6 @@ function ReportHeroV2({ data }: { data: ReportViewResponse }) {
             访问官网
             <ExternalLink className="h-4 w-4" />
           </a>
-          <a
-            href={buildMethodologyHref()}
-            onClick={(event) => {
-              event.preventDefault();
-              navigate(buildMethodologyHref());
-            }}
-            className="inline-flex min-h-11 items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-5 text-sm font-black text-slate-700 transition hover:border-slate-400 hover:text-slate-950"
-          >
-            测评方法
-            <ArrowRight className="h-4 w-4" />
-          </a>
         </div>
       </div>
       <ReportScoreCard data={data} />
@@ -4648,31 +4685,85 @@ function ReportComparisonLinks({ data }: { data: ReportViewResponse }) {
 }
 
 function ReportScoreCard({ data }: { data: ReportViewResponse }) {
-  if (data.summary_card.score_hidden || data.summary_card.score === null) {
-    return (
-      <aside className={`rounded-[8px] border border-slate-200 bg-white p-6 text-center shadow-sm ${reportCardInteractiveClass}`}>
-        <div className="text-sm font-black text-slate-800">GateRank Score</div>
-        <div className="mt-3 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">暂不公开</div>
-        <div className="mt-4 text-sm font-black text-amber-600">余额不足，公开总分暂不展示</div>
-      </aside>
-    );
-  }
-  const score = Math.max(0, Math.min(100, data.summary_card.score));
+  const score = data.summary_card.score === null ? 0 : Math.max(0, Math.min(100, data.summary_card.score));
+  const scoreHidden = data.summary_card.score_hidden || data.summary_card.score === null;
   return (
-    <aside className={`rounded-[8px] border border-slate-200 bg-white p-6 text-center shadow-sm ${reportCardInteractiveClass}`}>
-      <div className="text-sm font-black text-slate-800">GateRank Score</div>
-      <div className="mt-3 flex items-end justify-center gap-2">
-        <span className="text-5xl font-black tracking-tight text-slate-950 md:text-6xl">{formatMetric(data.summary_card.score)}</span>
-        <span className="pb-2 text-sm font-bold text-slate-500">/100</span>
+    <aside className={`flex h-full flex-col rounded-[8px] border border-slate-200 bg-white p-6 text-center shadow-sm ${reportCardInteractiveClass}`}>
+      <div>
+        <div className="text-sm font-black text-slate-800">GateRank Score</div>
+        {scoreHidden ? (
+          <>
+            <div className="mt-3 text-4xl font-black tracking-tight text-slate-950 md:text-5xl">暂不公开</div>
+            <div className="mt-4 text-sm font-black text-amber-600">余额不足，公开总分暂不展示</div>
+          </>
+        ) : (
+          <>
+            <div className="mt-3 flex items-end justify-center gap-2">
+              <span className="text-5xl font-black tracking-tight text-slate-950 md:text-6xl">{formatMetric(data.summary_card.score)}</span>
+              <span className="pb-2 text-sm font-bold text-slate-500">/100</span>
+            </div>
+            <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
+              <div className="h-full rounded-full bg-emerald-500" style={{ width: `${score}%` }} />
+            </div>
+            <div className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-600">
+              <span>综合评级：</span>
+              <span className="font-black text-emerald-600">{getScoreGrade(data.summary_card.score)}</span>
+            </div>
+          </>
+        )}
       </div>
-      <div className="mt-5 h-2 overflow-hidden rounded-full bg-slate-100">
-        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${score}%` }} />
-      </div>
-      <div className="mt-4 flex items-center justify-center gap-2 text-sm text-slate-600">
-        <span>综合评级：</span>
-        <span className="font-black text-emerald-600">{getScoreGrade(data.summary_card.score)}</span>
-      </div>
+      <ReportMethodologyCard data={data} />
     </aside>
+  );
+}
+
+function ReportMethodologyCard({ data }: { data: ReportViewResponse }) {
+  const methodologyHref = buildMethodologyHref();
+  const radarPoints = buildReportRadarPoints(data.score_breakdown);
+  return (
+    <div className="mt-6 flex flex-1 flex-col border-t border-slate-200 pt-5 text-left">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-sm font-black text-slate-950">四维评分模型</div>
+          <div className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">S · P · C · R</div>
+        </div>
+        <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
+          每日更新
+        </span>
+      </div>
+
+      <svg
+        role="img"
+        aria-labelledby="report-score-radar-title report-score-radar-description"
+        className="mx-auto mt-3 h-36 w-full max-w-[220px] overflow-visible drop-shadow-[0_10px_18px_rgba(16,185,129,0.10)]"
+        viewBox="0 0 120 120"
+      >
+        <title id="report-score-radar-title">本报告四维评分分布</title>
+        <desc id="report-score-radar-description">稳定性、性能、价格与风险四个维度的评分雷达图</desc>
+        <polygon points="60,12 108,60 60,108 12,60" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1" />
+        <polygon points="60,36 84,60 60,84 36,60" fill="none" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="2 2" />
+        <path d="M60 12V108M12 60H108" fill="none" stroke="#e2e8f0" strokeWidth="1" />
+        <polygon points={radarPoints} fill="#10b981" fillOpacity="0.18" stroke="#059669" strokeWidth="2.4" strokeLinejoin="round" />
+        <circle cx="60" cy="60" r="2.25" fill="#047857" />
+        <text x="60" y="7" textAnchor="middle" className="fill-slate-500 text-[7px] font-black">S</text>
+        <text x="114" y="62" textAnchor="middle" dominantBaseline="middle" className="fill-slate-500 text-[7px] font-black">P</text>
+        <text x="60" y="117" textAnchor="middle" className="fill-slate-500 text-[7px] font-black">C</text>
+        <text x="6" y="62" textAnchor="middle" dominantBaseline="middle" className="fill-slate-500 text-[7px] font-black">R</text>
+      </svg>
+
+      <p className="text-center text-xs font-bold leading-5 text-slate-500">基于持续监测，而非单次测速</p>
+      <a
+        href={methodologyHref}
+        onClick={(event) => {
+          event.preventDefault();
+          navigate(methodologyHref);
+        }}
+        className="group mt-4 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-[8px] border border-emerald-200 bg-emerald-50 px-4 text-sm font-black text-emerald-900 transition-[transform,background-color,border-color,box-shadow] duration-200 hover:-translate-y-0.5 hover:border-emerald-300 hover:bg-white hover:shadow-[0_12px_28px_rgba(5,150,105,0.12)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-emerald-100 motion-reduce:transform-none motion-reduce:transition-none"
+      >
+        我们是如何测评的？
+        <ArrowRight className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-0.5 motion-reduce:transform-none motion-reduce:transition-none" />
+      </a>
+    </div>
   );
 }
 
