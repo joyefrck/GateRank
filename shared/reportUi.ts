@@ -24,6 +24,8 @@ export interface ReportRadarScores {
   r: number;
 }
 
+export type SparklineDomain = readonly [number, number];
+
 const REPORT_RADAR_CENTER = 60;
 const REPORT_RADAR_RADIUS = 48;
 
@@ -58,6 +60,25 @@ export function buildReportRadarPoints(scores: ReportRadarScores): string {
     `${REPORT_RADAR_CENTER},${formatRadarCoordinate(REPORT_RADAR_CENTER + c)}`,
     `${formatRadarCoordinate(REPORT_RADAR_CENTER - r)},${REPORT_RADAR_CENTER}`,
   ].join(' ');
+}
+
+export function buildSparklineChartPoints(
+  values: ReadonlyArray<number>,
+  domain?: SparklineDomain,
+): string[] {
+  if (values.length < 2) {
+    return [];
+  }
+
+  const min = domain?.[0] ?? Math.min(...values);
+  const max = domain?.[1] ?? Math.max(...values);
+  const range = max - min || 1;
+  return values.map((value, index) => {
+    const x = (index / (values.length - 1)) * 100;
+    const normalizedValue = Math.max(0, Math.min(1, (value - min) / range));
+    const y = 92 - normalizedValue * 76;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  });
 }
 
 function scaleRadarScore(value: number): number {

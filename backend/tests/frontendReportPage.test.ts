@@ -71,3 +71,13 @@ test('React report fixed navigation exposes scroll-aware current location state'
   assert.match(navSource, /prefers-reduced-motion: reduce/);
   assert.match(navSource, /setActiveAnchor\(section\.id\)/);
 });
+
+test('React uptime sparklines use a fixed zero to one hundred percent domain', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+
+  assert.match(source, /title="30天可用率"[^\n]+domain=\{\[0, 100\]\}/);
+  assert.match(source, /title="可用率趋势"[^\n]+domain=\{\[0, 100\]\}/);
+  assert.match(source, /buildSparklineChartPoints\(values, domain\)/);
+  assert.doesNotMatch(source, /title="延迟趋势 \(ms\)"[^\n]+domain=/);
+  assert.doesNotMatch(source, /title="下载速率趋势 \(Mbps\)"[^\n]+domain=/);
+});

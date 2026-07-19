@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   REPORT_ANCHOR_SECTIONS,
   buildReportRadarPoints,
+  buildSparklineChartPoints,
   resolveActiveReportAnchor,
 } from '../../shared/reportUi';
 
@@ -48,5 +49,19 @@ test('buildReportRadarPoints clamps scores and maps S P C R to the four axes', (
   assert.equal(
     buildReportRadarPoints({ s: -20, p: 0, c: 50, r: 100 }),
     '60,60 60,60 60,84 12,60',
+  );
+});
+
+test('buildSparklineChartPoints places a constant 100 percent series near the top', () => {
+  assert.deepEqual(
+    buildSparklineChartPoints([100, 100, 100], [0, 100]),
+    ['0.00,16.00', '50.00,16.00', '100.00,16.00'],
+  );
+});
+
+test('buildSparklineChartPoints preserves relative scaling when no fixed domain is provided', () => {
+  assert.deepEqual(
+    buildSparklineChartPoints([40, 50, 60]),
+    ['0.00,92.00', '50.00,54.00', '100.00,16.00'],
   );
 });

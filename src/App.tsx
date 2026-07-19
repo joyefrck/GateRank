@@ -118,8 +118,10 @@ import { getCapabilityIcon, type CapabilityIconCategory } from '../shared/capabi
 import {
   REPORT_ANCHOR_SECTIONS,
   buildReportRadarPoints,
+  buildSparklineChartPoints,
   resolveActiveReportAnchor,
   type ReportAnchorId,
+  type SparklineDomain,
 } from '../shared/reportUi';
 import {
   createTrackedOutboundClickHandler,
@@ -4826,7 +4828,7 @@ function ReportCoreMetrics({ data }: { data: ReportViewResponse }) {
     <section id="report-metrics" className="scroll-mt-36">
       <ReportSectionTitle title="核心监测指标" />
       <div className="mt-4 grid gap-3 md:grid-cols-4">
-        <ReportTrendMetric title="30天可用率" value={`${formatMetric(data.metrics.uptime_percent_30d)}%`} points={data.trends.uptime_30d} color="#22c55e" />
+        <ReportTrendMetric title="30天可用率" value={`${formatMetric(data.metrics.uptime_percent_30d)}%`} points={data.trends.uptime_30d} color="#22c55e" domain={[0, 100]} />
         <ReportTrendMetric title="平均延迟" value={`${formatMetric(data.metrics.median_latency_ms)} ms`} points={data.trends.latency_30d} color="#0ea5e9" />
         <ReportTrendMetric title="下载速率" value={`${formatMetric(data.metrics.median_download_mbps)} Mbps`} points={data.trends.download_30d} color="#f97316" />
         <ReportTrendMetric title="丢包率" value={`${formatMetric(data.metrics.packet_loss_percent)}%`} points={[]} color="#8b5cf6" />
@@ -4841,7 +4843,7 @@ function ReportTrendSection({ data }: { data: ReportViewResponse }) {
       <ReportSectionTitle title={buildReportTrendLabel(data)} />
       <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
         <ReportTrendCard title="评分趋势" points={data.summary_card.score_hidden ? [] : data.trends.score_30d} color="#22c55e" hidden={data.summary_card.score_hidden} />
-        <ReportTrendCard title="可用率趋势" points={data.trends.uptime_30d} color="#0ea5e9" suffix="%" />
+        <ReportTrendCard title="可用率趋势" points={data.trends.uptime_30d} color="#0ea5e9" suffix="%" domain={[0, 100]} />
         <ReportTrendCard title="延迟趋势 (ms)" points={data.trends.latency_30d} color="#64748b" suffix=" ms" />
         <ReportTrendCard title="下载速率趋势 (Mbps)" points={data.trends.download_30d} color="#f97316" suffix=" Mbps" />
       </div>
@@ -5129,18 +5131,20 @@ function ReportTrendMetric({
   value,
   points,
   color,
+  domain,
 }: {
   title: string;
   value: string;
   points: Array<{ date: string; value: number }>;
   color: string;
+  domain?: SparklineDomain;
 }) {
   return (
     <div className={`rounded-[8px] border border-slate-200 bg-white p-4 ${reportCardInteractiveClass}`}>
       <div className="text-xs font-bold text-slate-500">{title}</div>
       <div className="mt-2 text-xl font-black text-slate-950">{value}</div>
       <div className="mt-3 h-12">
-        <Sparkline points={points} color={color} />
+        <Sparkline points={points} color={color} domain={domain} />
       </div>
     </div>
   );
@@ -5152,12 +5156,14 @@ function ReportTrendCard({
   color,
   suffix = '',
   hidden = false,
+  domain,
 }: {
   title: string;
   points: Array<{ date: string; value: number }>;
   color: string;
   suffix?: string;
   hidden?: boolean;
+  domain?: SparklineDomain;
 }) {
   const latest = points[points.length - 1];
   return (
@@ -5165,7 +5171,7 @@ function ReportTrendCard({
       <div className="text-sm font-black text-slate-950">{title}</div>
       <div className="mt-1 text-xs font-bold text-slate-400">{points[0]?.date || '-'} 至 {latest?.date || '-'}</div>
       <div className="mt-4 h-24">
-        <Sparkline points={points} color={color} fill />
+        <Sparkline points={points} color={color} fill domain={domain} />
       </div>
       <div className="mt-3 text-sm font-black text-slate-700">
         最新：{hidden ? '暂不公开' : latest ? `${formatMetric(latest.value)}${suffix}` : '暂无数据'}
@@ -5184,10 +5190,12 @@ function Sparkline({
   points,
   color,
   fill = false,
+  domain,
 }: {
   points: Array<{ date: string; value: number }>;
   color: string;
   fill?: boolean;
+  domain?: SparklineDomain;
 }) {
   if (points.length < 2) {
     return (
@@ -5198,14 +5206,7 @@ function Sparkline({
   }
 
   const values = points.map((point) => point.value);
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const chartPoints = points.map((point, index) => {
-    const x = (index / (points.length - 1)) * 100;
-    const y = 92 - ((point.value - min) / range) * 76;
-    return `${x.toFixed(2)},${y.toFixed(2)}`;
-  });
+  const chartPoints = buildSparklineChartPoints(values, domain);
   const areaPoints = `0,100 ${chartPoints.join(' ')} 100,100`;
 
   return (
