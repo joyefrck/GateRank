@@ -469,6 +469,7 @@ test('GET /airports/:id/report-view returns report view payload', async () => {
             uptime_30d: [],
             latency_30d: [],
             download_30d: [],
+            packet_loss_30d: [],
           },
         }),
         getReportViewBySlug: async (slug: string) => ({
@@ -525,6 +526,7 @@ test('GET /airports/:id/report-view returns report view payload', async () => {
             uptime_30d: [],
             latency_30d: [],
             download_30d: [],
+            packet_loss_30d: [],
           },
         }),
       } as any,

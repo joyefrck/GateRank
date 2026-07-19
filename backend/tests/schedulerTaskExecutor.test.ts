@@ -12,6 +12,8 @@ type ExecOptions = {
 const PERFORMANCE_ENV_KEYS = [
   'LATENCY_ATTEMPTS',
   'LATENCY_SAMPLE_INTERVAL_SECONDS',
+  'REQUEST_LOSS_ATTEMPTS',
+  'REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS',
   'SPEED_TIMEOUT',
   'SPEED_CONNECTIONS',
   'NODE_AVAILABILITY_CHECK',
@@ -173,6 +175,8 @@ test('SchedulerTaskExecutor.runPerformanceCollection injects scheduler-safe prob
     const env = capturedEnv as NodeJS.ProcessEnv;
     assert.equal(env.LATENCY_ATTEMPTS, '3');
     assert.equal(env.LATENCY_SAMPLE_INTERVAL_SECONDS, '1');
+    assert.equal(env.REQUEST_LOSS_ATTEMPTS, '10');
+    assert.equal(env.REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS, '0.5');
     assert.equal(env.SPEED_TIMEOUT, '10');
     assert.equal(env.SPEED_CONNECTIONS, '2');
     assert.equal(env.NODE_AVAILABILITY_CHECK, 'tcp');
@@ -184,6 +188,8 @@ test('SchedulerTaskExecutor.runPerformanceCollection preserves explicitly config
   await withSchedulerEnv({
     LATENCY_ATTEMPTS: '5',
     LATENCY_SAMPLE_INTERVAL_SECONDS: '2',
+    REQUEST_LOSS_ATTEMPTS: '20',
+    REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS: '0.25',
     SPEED_TIMEOUT: '15',
     SPEED_CONNECTIONS: '3',
     NODE_AVAILABILITY_CHECK: 'proxy_http',
@@ -206,6 +212,8 @@ test('SchedulerTaskExecutor.runPerformanceCollection preserves explicitly config
     const env = capturedEnv as NodeJS.ProcessEnv;
     assert.equal(env.LATENCY_ATTEMPTS, '5');
     assert.equal(env.LATENCY_SAMPLE_INTERVAL_SECONDS, '2');
+    assert.equal(env.REQUEST_LOSS_ATTEMPTS, '20');
+    assert.equal(env.REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS, '0.25');
     assert.equal(env.SPEED_TIMEOUT, '15');
     assert.equal(env.SPEED_CONNECTIONS, '3');
     assert.equal(env.NODE_AVAILABILITY_CHECK, 'proxy_http');

@@ -214,6 +214,7 @@ export interface DailyMetrics {
   median_latency_ms: number;
   median_download_mbps: number;
   packet_loss_percent: number;
+  packet_loss_measurement?: string | null;
   available_nodes_count?: number | null;
   unavailable_nodes_count?: number | null;
   node_availability_percent?: number | null;
@@ -515,6 +516,7 @@ export interface ReportView {
     uptime_30d: Array<{ date: string; value: number }>;
     latency_30d: Array<{ date: string; value: number }>;
     download_30d: Array<{ date: string; value: number }>;
+    packet_loss_30d: Array<{ date: string; value: number }>;
   };
   capabilities: ReportCapabilities;
 }
@@ -805,6 +807,11 @@ export interface PerformanceRunNode {
   connect_latency_median_ms?: number | null;
   proxy_http_latency_samples_ms?: number[];
   proxy_http_latency_median_ms?: number | null;
+  proxy_http_request_failures?: number | null;
+  proxy_http_request_attempts?: number | null;
+  proxy_http_request_failure_percent?: number | null;
+  connect_failures?: number | null;
+  connect_attempts?: number | null;
   download_mbps?: number | null;
 }
 

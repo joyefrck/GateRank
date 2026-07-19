@@ -369,7 +369,7 @@ export function MethodologyPage() {
                 <MetricTile label="连续健康天数" value={`${exampleCase.input.healthyDaysStreak} 天`} />
                 <MetricTile label="中位延迟" value={`${exampleCase.input.medianLatencyMs} ms`} />
                 <MetricTile label="下载速率" value={`${exampleCase.input.medianDownloadMbps} Mbps`} />
-                <MetricTile label="丢包率" value={`${exampleCase.input.packetLossPercent}%`} />
+                <MetricTile label="代理请求失败率" value={`${exampleCase.input.packetLossPercent}%`} />
                 <MetricTile label="月付价格" value={`¥${exampleCase.input.priceMonth}`} />
                 <MetricTile label="历史衰减分" value={formatNumber(exampleCase.input.historicalScore)} />
               </div>

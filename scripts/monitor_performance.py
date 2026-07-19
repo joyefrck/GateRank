@@ -50,6 +50,8 @@ DEFAULT_PROXY_PORT = 7890
 DEFAULT_PROXY_STARTUP_TIMEOUT = 8
 DEFAULT_LATENCY_ATTEMPTS = 3
 DEFAULT_LATENCY_SAMPLE_INTERVAL_SECONDS = 3
+DEFAULT_REQUEST_LOSS_ATTEMPTS = 10
+DEFAULT_REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS = 0.5
 DEFAULT_SPEED_TIMEOUT = 20
 DEFAULT_SPEED_CONNECTIONS = 4
 DEFAULT_PERFORMANCE_CONCURRENCY = 4
@@ -96,6 +98,8 @@ class Config:
     trigger_aggregate: bool
     trigger_recompute: bool
     node_availability_check: str = DEFAULT_NODE_AVAILABILITY_CHECK
+    request_loss_attempts: int = DEFAULT_REQUEST_LOSS_ATTEMPTS
+    request_loss_sample_interval_seconds: float = DEFAULT_REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS
 
 
 @dataclass
@@ -117,6 +121,8 @@ class NodeProbeResult:
     failures: int
     total_attempts: int
     error_code: str | None = None
+    connect_failures: int = 0
+    connect_total_attempts: int = 0
 
 
 @dataclass
@@ -226,6 +232,21 @@ def build_config() -> Config:
         type=float,
         default=float(os.getenv("LATENCY_SAMPLE_INTERVAL_SECONDS", str(DEFAULT_LATENCY_SAMPLE_INTERVAL_SECONDS))),
     )
+    parser.add_argument(
+        "--request-loss-attempts",
+        type=int,
+        default=int(os.getenv("REQUEST_LOSS_ATTEMPTS", str(DEFAULT_REQUEST_LOSS_ATTEMPTS))),
+    )
+    parser.add_argument(
+        "--request-loss-sample-interval-seconds",
+        type=float,
+        default=float(
+            os.getenv(
+                "REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS",
+                str(DEFAULT_REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS),
+            )
+        ),
+    )
     parser.add_argument("--speed-timeout", type=int, default=int(os.getenv("SPEED_TIMEOUT", str(DEFAULT_SPEED_TIMEOUT))))
     parser.add_argument(
         "--speed-connections",
@@ -292,6 +313,8 @@ def build_config() -> Config:
         sing_box_bin=args.sing_box_bin,
         trigger_aggregate=not args.skip_aggregate,
         trigger_recompute=not args.skip_recompute,
+        request_loss_attempts=max(1, args.request_loss_attempts),
+        request_loss_sample_interval_seconds=max(0, args.request_loss_sample_interval_seconds),
     )
 
 
@@ -534,6 +557,13 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
                 "proxy_http_latency_median_ms": round(float(median(probe.proxy_latency_samples_ms)), 2)
                 if probe.proxy_latency_samples_ms
                 else None,
+                "proxy_http_request_failures": probe.failures,
+                "proxy_http_request_attempts": probe.total_attempts,
+                "proxy_http_request_failure_percent": round((probe.failures / probe.total_attempts) * 100, 2)
+                if probe.total_attempts
+                else None,
+                "connect_failures": probe.connect_failures,
+                "connect_attempts": probe.connect_total_attempts,
                 "download_mbps": round(float(probe.download_mbps), 2)
                 if probe.download_mbps is not None
                 else None,
@@ -593,6 +623,11 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             "proxy_http_median_latency_ms": round(float(median(proxy_latency_samples)), 2)
             if proxy_latency_samples
             else None,
+            "packet_loss_measurement": "proxy_http_request_failure_rate_v1",
+            "packet_loss_test_url": config.test_url_latency,
+            "packet_loss_failed_attempts": total_failures,
+            "packet_loss_total_attempts": total_attempts,
+            "packet_loss_attempts_per_node": config.request_loss_attempts,
             "speed_measurement": "multi_connection_http_download_via_local_proxy",
             "speed_test_url": config.test_url_speed,
             "speed_test_connections": config.speed_connections,
@@ -1604,8 +1639,8 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
     proc: subprocess.Popen[Any] | None = None
     try:
         proc, config_path = run_sing_box(config, node)
-        latency_samples, latency_sampled_at, failures, total_attempts = test_node_connect_latency(config, node)
-        proxy_latency_samples, _, _ = test_proxy_http_latency(config)
+        latency_samples, latency_sampled_at, connect_failures, connect_total_attempts = test_node_connect_latency(config, node)
+        proxy_latency_samples, proxy_failures, proxy_total_attempts = test_proxy_http_latency(config)
         download_mbps = test_speed(config)
         error_code = None
         if not latency_samples:
@@ -1616,9 +1651,11 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
             latency_sampled_at=latency_sampled_at,
             proxy_latency_samples_ms=proxy_latency_samples,
             download_mbps=download_mbps,
-            failures=failures,
-            total_attempts=total_attempts,
+            failures=proxy_failures,
+            total_attempts=proxy_total_attempts,
             error_code=error_code,
+            connect_failures=connect_failures,
+            connect_total_attempts=connect_total_attempts,
         )
     except Exception as exc:
         return NodeProbeResult(
@@ -1627,9 +1664,11 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
             latency_sampled_at=[],
             proxy_latency_samples_ms=[],
             download_mbps=None,
-            failures=config.latency_attempts,
-            total_attempts=config.latency_attempts,
+            failures=config.request_loss_attempts,
+            total_attempts=config.request_loss_attempts,
             error_code=str(exc),
+            connect_failures=config.latency_attempts,
+            connect_total_attempts=config.latency_attempts,
         )
     finally:
         stop_sing_box(proc, config_path)
@@ -1721,7 +1760,7 @@ def test_proxy_http_latency(config: Config) -> tuple[list[float], int, int]:
     latencies: list[float] = []
     failures = 0
     request = Request(config.test_url_latency, method="GET", headers={"User-Agent": "GateRank-Performance-Monitor/1.0"})
-    for index in range(config.latency_attempts):
+    for index in range(config.request_loss_attempts):
         started = time.perf_counter()
         try:
             with opener.open(request, timeout=config.http_timeout) as response:
@@ -1729,9 +1768,9 @@ def test_proxy_http_latency(config: Config) -> tuple[list[float], int, int]:
             latencies.append(round((time.perf_counter() - started) * 1000, 2))
         except Exception:
             failures += 1
-        if index < config.latency_attempts - 1:
-            time.sleep(config.latency_sample_interval_seconds)
-    return latencies, failures, config.latency_attempts
+        if index < config.request_loss_attempts - 1:
+            time.sleep(config.request_loss_sample_interval_seconds)
+    return latencies, failures, config.request_loss_attempts
 
 
 def test_proxy_http_once(config: Config) -> None:

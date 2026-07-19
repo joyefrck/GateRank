@@ -332,6 +332,7 @@ CREATE TABLE IF NOT EXISTS airport_metrics_daily (
   median_latency_ms DECIMAL(8,2) NOT NULL,
   median_download_mbps DECIMAL(8,2) NOT NULL,
   packet_loss_percent DECIMAL(5,2) NOT NULL,
+  packet_loss_measurement VARCHAR(64) NULL,
   available_nodes_count INT UNSIGNED NULL,
   unavailable_nodes_count INT UNSIGNED NULL,
   node_availability_percent DECIMAL(5,2) NULL,

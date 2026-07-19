@@ -13,7 +13,7 @@ GateRank 是一个「机场测评与榜单」系统。
 ### 核心流程
 
 1. 维护机场基础信息（名称、站点、价格、试用、订阅链接）
-2. 接入自动化采样（延迟/下载/可用性/丢包）并按日聚合
+2. 接入自动化采样（延迟/下载/可用性/代理请求失败率）并按日聚合
 3. 系统按统一公式计算 `S/P/C/R`
 4. 生成当日综合分与时间衰减分 `FinalScore`
 5. 生成 5 类榜单（今日推荐、最稳定、性价比、新机场、风险榜）
@@ -62,7 +62,7 @@ GateRank 是一个「机场测评与榜单」系统。
 - `airports`: 机场基础信息
 - `airport_metrics_daily`: 每日指标快照
 - `airport_probe_samples`: 自动化采样明细
-- `airport_packet_loss_samples`: 丢包采样明细
+- `airport_packet_loss_samples`: 代理请求失败率采样明细（保留旧表名兼容）
 - `airport_scores_daily`: 每日子分/总分/衰减分
 - `airport_rankings_daily`: 每日榜单结果
 - `admin_audit_logs`: 管理操作审计
@@ -441,7 +441,7 @@ NIGHTLY_PIPELINE_AIRPORT_STATUS=normal
 - `00:00` 指上海时间每日零点开始整条流水线，不代表四个模块同时并发启动。
 - 任务只会在设定时间后的一个短窗口内触发一次，避免服务白天重启后补跑整条午夜流水线。
 - “时间维度（衰减）”没有单独脚本，它包含在最后一次 `recomputeForDate` 里。
-- 管理后台“任务调度”里的性能采集会默认使用更轻量的调度参数：`LATENCY_ATTEMPTS=3`、`LATENCY_SAMPLE_INTERVAL_SECONDS=1`、`SPEED_TIMEOUT=10`、`SPEED_CONNECTIONS=2`、`NODE_AVAILABILITY_CHECK=tcp`。这些默认值只在环境变量未显式配置时生效，生产需要深度测速时可自行覆盖。
+- 管理后台“任务调度”里的性能采集会默认使用更轻量的调度参数：`LATENCY_ATTEMPTS=3`、`LATENCY_SAMPLE_INTERVAL_SECONDS=1`、`REQUEST_LOSS_ATTEMPTS=10`、`REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS=0.5`、`SPEED_TIMEOUT=10`、`SPEED_CONNECTIONS=2`、`NODE_AVAILABILITY_CHECK=tcp`。这些默认值只在环境变量未显式配置时生效，生产需要深度测速时可自行覆盖。
 
 ## 稳定性采集 Cron
 
@@ -561,6 +561,8 @@ SING_BOX_BIN=sing-box \
 - `PROXY_STARTUP_TIMEOUT`: 等待 `sing-box` 启动秒数，默认 `8`
 - `LATENCY_ATTEMPTS`: 每节点延迟探测次数，默认 `3`
 - `LATENCY_SAMPLE_INTERVAL_SECONDS`: 每节点延迟探测间隔秒数，默认 `3`；后台调度默认使用 `1`
+- `REQUEST_LOSS_ATTEMPTS`: 每个代表节点的端到端代理请求次数，默认 `10`
+- `REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS`: 代理请求失败率采样间隔秒数，默认 `0.5`
 - `NODE_AVAILABILITY_CHECK`: 节点可用性口径，`proxy_http` 或 `tcp`，默认 `proxy_http`
 - `TEST_URL_LATENCY`: 代理 HTTP 诊断 URL，默认 `https://www.google.com/generate_204`
 - `TEST_URL_SPEED`: 下载测速 URL，默认 `https://speed.cloudflare.com/__down?bytes=5000000`
@@ -574,6 +576,7 @@ SING_BOX_BIN=sing-box \
 - `median_latency_ms` 现在按“节点服务器 TCP 建连延迟”计算，用于性能评分，更接近代理客户端里的节点延迟口径。
 - `TEST_URL_LATENCY` 用于代理 HTTP 诊断耗时，也用于默认 `proxy_http` 节点可用性探测；不直接参与 `P` 评分。
 - `median_download_mbps` 现在按“多连接并发下载”计算，比之前的单连接下载更接近 Speedtest 的测速口径。
+- `packet_loss_percent` 为兼容旧 API 保留字段名；实际口径是代表节点通过本地 `sing-box` 代理访问 `TEST_URL_LATENCY` 的请求失败比例，不是 ICMP/UDP 包级丢包率。
 - 节点可用性作为风险维度参与 `R` 评分：默认口径为完整代理 HTTP 探测，不可用率越高，`node_availability_penalty` 越高，最高扣 30 分。需要回退旧口径时可设 `NODE_AVAILABILITY_CHECK=tcp`。
 
 ## 当前 MVP 边界

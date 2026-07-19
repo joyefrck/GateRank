@@ -15,6 +15,7 @@ interface DailyMetricsRow extends RowDataPacket {
   median_latency_ms: number;
   median_download_mbps: number;
   packet_loss_percent: number;
+  packet_loss_measurement: string | null;
   available_nodes_count: number | null;
   unavailable_nodes_count: number | null;
   node_availability_percent: number | null;
@@ -44,6 +45,7 @@ export class MetricsRepository {
       "ENUM('stable', 'minor_fluctuation', 'volatile') NULL AFTER is_stable_day",
     );
     await this.ensureColumn('available_nodes_count', 'INT UNSIGNED NULL AFTER packet_loss_percent');
+    await this.ensureColumn('packet_loss_measurement', 'VARCHAR(64) NULL AFTER packet_loss_percent');
     await this.ensureColumn('unavailable_nodes_count', 'INT UNSIGNED NULL AFTER available_nodes_count');
     await this.ensureColumn('node_availability_percent', 'DECIMAL(5,2) NULL AFTER unavailable_nodes_count');
     await this.ensureColumn('node_unavailability_percent', 'DECIMAL(5,2) NULL AFTER node_availability_percent');
@@ -55,10 +57,10 @@ export class MetricsRepository {
       `INSERT INTO airport_metrics_daily (
          airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
          latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps,
-         packet_loss_percent, available_nodes_count, unavailable_nodes_count, node_availability_percent,
+         packet_loss_percent, packet_loss_measurement, available_nodes_count, unavailable_nodes_count, node_availability_percent,
          node_unavailability_percent, stable_days_streak, healthy_days_streak, is_stable_day, stability_tier,
          domain_ok, ssl_days_left, recent_complaints_count, history_incidents
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          uptime_percent_30d = VALUES(uptime_percent_30d),
          uptime_percent_today = VALUES(uptime_percent_today),
@@ -70,6 +72,7 @@ export class MetricsRepository {
          median_latency_ms = VALUES(median_latency_ms),
          median_download_mbps = VALUES(median_download_mbps),
          packet_loss_percent = VALUES(packet_loss_percent),
+         packet_loss_measurement = VALUES(packet_loss_measurement),
          available_nodes_count = VALUES(available_nodes_count),
          unavailable_nodes_count = VALUES(unavailable_nodes_count),
          node_availability_percent = VALUES(node_availability_percent),
@@ -95,6 +98,7 @@ export class MetricsRepository {
         nullableNumber(input.latency_cv),
         JSON.stringify(input.download_samples_mbps || []),
         input.packet_loss_percent,
+        input.packet_loss_measurement ?? null,
         nullableNumber(input.available_nodes_count),
         nullableNumber(input.unavailable_nodes_count),
         nullableNumber(input.node_availability_percent),
@@ -114,7 +118,7 @@ export class MetricsRepository {
   async getByDate(date: string): Promise<DailyMetrics[]> {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
-              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -129,7 +133,7 @@ export class MetricsRepository {
   async getByAirportAndDate(airportId: number, date: string): Promise<DailyMetrics | null> {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
-              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -154,7 +158,7 @@ export class MetricsRepository {
     const placeholders = airportIds.map(() => '?').join(', ');
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
-              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -170,7 +174,7 @@ export class MetricsRepository {
   async getLatestByAirportBeforeDate(airportId: number, date: string): Promise<DailyMetrics | null> {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
-              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -191,7 +195,7 @@ export class MetricsRepository {
   async getTrend(airportId: number, startDate: string, endDate: string): Promise<DailyMetrics[]> {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
-              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -216,7 +220,7 @@ export class MetricsRepository {
     const placeholders = airportIds.map(() => '?').join(', ');
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
-              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent,
+              latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -329,6 +333,7 @@ function toDailyMetrics(row: DailyMetricsRow): DailyMetrics {
     median_latency_ms: Number(row.median_latency_ms),
     median_download_mbps: Number(row.median_download_mbps),
     packet_loss_percent: Number(row.packet_loss_percent),
+    packet_loss_measurement: row.packet_loss_measurement == null ? null : String(row.packet_loss_measurement),
     available_nodes_count: nullableRowNumber(row.available_nodes_count),
     unavailable_nodes_count: nullableRowNumber(row.unavailable_nodes_count),
     node_availability_percent: nullableRowNumber(row.node_availability_percent),

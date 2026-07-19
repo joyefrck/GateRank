@@ -561,6 +561,13 @@ export class PublicViewService {
         download_30d: base.metricsTrend30d
           .filter((row) => typeof row.median_download_mbps === 'number')
           .map((row) => ({ date: row.date, value: round2(row.median_download_mbps) })),
+        packet_loss_30d: base.metricsTrend30d
+          .filter(
+            (row) =>
+              row.packet_loss_measurement === 'proxy_http_request_failure_rate_v1' &&
+              typeof row.packet_loss_percent === 'number',
+          )
+          .map((row) => ({ date: row.date, value: round2(row.packet_loss_percent) })),
       },
       capabilities: buildReportCapabilities(base.airport, nodeSnapshot),
     };

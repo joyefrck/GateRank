@@ -1201,7 +1201,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(description, /稳定性/);
     assert.match(description, /下载速度/);
     assert.match(description, /延迟/);
-    assert.match(description, /丢包率/);
+    assert.match(description, /代理请求失败率/);
     assert.match(description, /近 2 天趋势/);
     assert.match(description, /跑路风险分析/);
     assert.match(description, /是否值得使用/);
@@ -1679,6 +1679,10 @@ const reportView: ReportView = {
     download_30d: [
       { date: '2026-03-22', value: 300 },
       { date: '2026-03-23', value: 320 },
+    ],
+    packet_loss_30d: [
+      { date: '2026-03-20', value: 10 },
+      { date: '2026-03-23', value: 0 },
     ],
   },
   capabilities: {

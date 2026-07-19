@@ -102,6 +102,11 @@ export class AggregationService {
     const packetLoss = performanceRun?.packet_loss_percent ?? (packetLossSamples.length
       ? median(packetLossSamples)
       : base?.packet_loss_percent ?? 100);
+    const packetLossMeasurement = performanceRun
+      ? typeof performanceRun.diagnostics.packet_loss_measurement === 'string'
+        ? performanceRun.diagnostics.packet_loss_measurement
+        : null
+      : base?.packet_loss_measurement ?? null;
     const hasCurrentDayRiskSnapshot = base?.date === date;
     const domainOk = hasCurrentDayRiskSnapshot
       ? base.domain_ok
@@ -134,6 +139,7 @@ export class AggregationService {
       median_latency_ms: medianLatency,
       median_download_mbps: medianDownload,
       packet_loss_percent: packetLoss,
+      packet_loss_measurement: packetLossMeasurement,
       available_nodes_count: performanceRun?.available_nodes_count ?? base?.available_nodes_count ?? null,
       unavailable_nodes_count: performanceRun?.unavailable_nodes_count ?? base?.unavailable_nodes_count ?? null,
       node_availability_percent:

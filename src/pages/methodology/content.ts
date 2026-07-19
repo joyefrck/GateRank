@@ -63,7 +63,7 @@ export const totalScoreParts = [
     title: '性能',
     weight: SCORE_WEIGHTS.final.p,
     percent: 30,
-    description: '使用中位延迟、下载速率和丢包率，衡量真实连接体验而非单次峰值。',
+    description: '使用中位延迟、下载速率和代理请求失败率，衡量真实连接体验而非单次峰值。',
     accentClass: 'bg-sky-500',
     softClass: 'bg-sky-50 border-sky-200 text-sky-800',
   },
@@ -113,7 +113,7 @@ export const dimensionCards = [
     bullets: [
       'LatencyScore 使用中位延迟，削弱极端样本对测速结论的污染。',
       'SpeedScore 使用中位下载速率，不把偶发峰值等同于长期性能。',
-      'LossScore 关注丢包率，让传输稳定性进入性能维度。',
+      'LossScore 关注代表节点通过本地代理访问探测 URL 时的请求失败比例，不使用 ICMP ping 结果。',
     ],
     accentClass: 'from-sky-500/12 to-white',
     borderClass: 'border-sky-200',
@@ -186,7 +186,7 @@ export const methodologyFaq = [
   },
   {
     question: '测速快就一定推荐吗？',
-    answer: '不会。性能占总分 30%，中位延迟、下载速率和丢包率只是其中一组信号；当可用率、波动或风险项明显偏弱时，最终分数仍会被拉低。',
+    answer: '不会。性能占总分 30%，中位延迟、下载速率和代理请求失败率只是一组信号；当可用率、波动或风险项明显偏弱时，最终分数仍会被拉低。',
   },
   {
     question: '首页的“波动天数”是不是等于登录失败天数？',

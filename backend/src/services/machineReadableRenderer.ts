@@ -539,7 +539,7 @@ export function renderAirportMarkdown(siteUrl: string, view: ReportView, mainRan
     `- 30 天可用率：${formatNumber(view.metrics.uptime_percent_30d)}%`,
     `- 中位延迟：${formatNumber(view.metrics.median_latency_ms)} ms`,
     `- 下载速率：${formatNumber(view.metrics.median_download_mbps)} Mbps`,
-    `- 丢包率：${formatNumber(view.metrics.packet_loss_percent)}%`,
+    `- 代理请求失败率：${formatNumber(view.metrics.packet_loss_percent)}%`,
     `- 连续健康天数：${view.metrics.healthy_days_streak}`,
     '',
     '## 结论',

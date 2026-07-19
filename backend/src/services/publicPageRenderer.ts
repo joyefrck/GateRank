@@ -895,7 +895,7 @@ function renderReportSummary(view: ReportView): string {
         ${renderInfoCard('30 天可用率', `${formatMetric(view.metrics.uptime_percent_30d)}%`)}
         ${renderInfoCard('中位延迟', `${formatMetric(view.metrics.median_latency_ms)} ms`)}
         ${renderInfoCard('下载速率', `${formatMetric(view.metrics.median_download_mbps)} Mbps`)}
-        ${renderInfoCard('丢包率', `${formatMetric(view.metrics.packet_loss_percent)}%`)}
+        ${renderInfoCard('代理请求失败率', `${formatMetric(view.metrics.packet_loss_percent)}%`)}
       </div>
     </section>
     <section id="report-trends" class="report-section report-anchor-target">
@@ -905,6 +905,7 @@ function renderReportSummary(view: ReportView): string {
         ${renderInfoCard('可用率趋势', buildTrendSummary(view.trends.uptime_30d, '%'))}
         ${renderInfoCard('延迟趋势', buildTrendSummary(view.trends.latency_30d, ' ms'))}
         ${renderInfoCard('下载趋势', buildTrendSummary(view.trends.download_30d, ' Mbps'))}
+        ${renderInfoCard('代理请求失败率趋势', buildTrendSummary(view.trends.packet_loss_30d, '%'))}
       </div>
     </section>
     <section id="report-plan-telegram" class="report-section report-anchor-target">
@@ -1252,7 +1253,7 @@ export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: Pu
           <p>最终分 = 0.4 × 稳定性 S + 0.3 × 性能 P + 0.1 × 价格 C + 0.2 × 风险 R。GateRank 用这套固定权重生成每日机场推荐，目标是让稳定性、性能、价格和信任风险在同一框架内被解释。</p>
           <div class="card-grid">
             ${renderInfoCard('稳定性 S · 40%', '综合可用率、稳健波动值 effective_latency_cv 和连续健康天数，降低偶发测速对结论的影响。')}
-            ${renderInfoCard('性能 P · 30%', '使用中位延迟、下载速率和丢包率，衡量真实连接体验而非单次峰值。')}
+            ${renderInfoCard('性能 P · 30%', '使用中位延迟、下载速率和代理请求失败率，衡量真实连接体验而非单次峰值。')}
             ${renderInfoCard('价格 C · 10%', '结合月付价格档位和速度价格比，校正低价与高价的价值差异。')}
             ${renderInfoCard('风险 R · 20%', '纳入域名、SSL、投诉与历史异常，避免高性能样本掩盖信任风险。')}
           </div>

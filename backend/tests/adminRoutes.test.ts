@@ -3190,6 +3190,10 @@ test('GET /airports/:id/dashboard marks performance metrics as cached when run i
             latency_probe_target: 'node_server',
             proxy_http_test_url: 'https://www.google.com/generate_204',
             proxy_http_median_latency_ms: 820.5,
+            packet_loss_measurement: 'proxy_http_request_failure_rate_v1',
+            packet_loss_failed_attempts: 2,
+            packet_loss_total_attempts: 10,
+            packet_loss_attempts_per_node: 10,
             speed_measurement: 'multi_connection_http_download_via_local_proxy',
             speed_test_connections: 4,
           },
@@ -3228,6 +3232,10 @@ test('GET /airports/:id/dashboard marks performance metrics as cached when run i
     assert.equal(data.performance.last_source, 'cron-performance');
     assert.equal(data.performance.latency_measurement, 'tcp_connect_to_node_server');
     assert.equal(data.performance.proxy_http_median_latency_ms, 820.5);
+    assert.equal(data.performance.packet_loss_measurement, 'proxy_http_request_failure_rate_v1');
+    assert.equal(data.performance.packet_loss_failed_attempts, 2);
+    assert.equal(data.performance.packet_loss_total_attempts, 10);
+    assert.equal(data.performance.packet_loss_attempts_per_node, 10);
     assert.equal(data.performance.speed_test_connections, 4);
     assert.equal((data.performance.tested_nodes as Array<Record<string, unknown>>)[0].download_mbps, 123.4);
   } finally {
@@ -6788,6 +6796,10 @@ function createMonthlyReportView(input: { date: string }): ReportView {
       download_30d: [
         { date: input.date.slice(0, 8) + '01', value: 110 },
         { date: input.date, value: 128 },
+      ],
+      packet_loss_30d: [
+        { date: '2026-03-20', value: 10 },
+        { date: '2026-03-23', value: 0 },
       ],
     },
     capabilities: {

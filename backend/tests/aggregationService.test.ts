@@ -197,7 +197,9 @@ test('aggregateForDate prefers latest performance run metrics over stale perform
         packet_loss_percent: 0,
         error_code: null,
         error_message: null,
-        diagnostics: {},
+        diagnostics: {
+          packet_loss_measurement: 'proxy_http_request_failure_rate_v1',
+        },
       }),
     },
   });
@@ -209,6 +211,7 @@ test('aggregateForDate prefers latest performance run metrics over stale perform
   assert.equal(written[0].median_download_mbps, 167.6);
   assert.deepEqual(written[0].download_samples_mbps, [75.59, 167.6, 208.2]);
   assert.equal(written[0].packet_loss_percent, 0);
+  assert.equal(written[0].packet_loss_measurement, 'proxy_http_request_failure_rate_v1');
 });
 
 test('aggregateForDate keeps raw latency_cv and classifies healthy jitter separately from strict stable days', async () => {

@@ -2214,19 +2214,35 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
         recent_complaints_count: 3,
         history_incidents: 1,
       }),
-      getTrend: async () => [{
-        airport_id: 1,
-        date: '2026-03-24',
-        uptime_percent_30d: 99.9,
-        median_latency_ms: 52,
-        median_download_mbps: 88,
-        packet_loss_percent: 0,
-        stable_days_streak: 30,
-        domain_ok: false,
-        ssl_days_left: 1,
-        recent_complaints_count: 3,
-        history_incidents: 1,
-      }],
+      getTrend: async () => [
+        {
+          airport_id: 1,
+          date: '2026-03-23',
+          uptime_percent_30d: 99.8,
+          median_latency_ms: 55,
+          median_download_mbps: 80,
+          packet_loss_percent: 100,
+          stable_days_streak: 29,
+          domain_ok: false,
+          ssl_days_left: 2,
+          recent_complaints_count: 3,
+          history_incidents: 1,
+        },
+        {
+          airport_id: 1,
+          date: '2026-03-24',
+          uptime_percent_30d: 99.9,
+          median_latency_ms: 52,
+          median_download_mbps: 88,
+          packet_loss_percent: 20,
+          packet_loss_measurement: 'proxy_http_request_failure_rate_v1',
+          stable_days_streak: 30,
+          domain_ok: false,
+          ssl_days_left: 1,
+          recent_complaints_count: 3,
+          history_incidents: 1,
+        },
+      ],
     },
     scoreRepository: {
       getLatestAvailableDate: async () => '2026-03-24',
@@ -2292,6 +2308,7 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
   assert.equal(result.summary_card.type, 'stable');
   assert.equal(result.summary_card.stability_tier, 'stable');
   assert.equal(result.ranking.risk_alerts_rank, null);
+  assert.deepEqual(result.trends.packet_loss_30d, [{ date: '2026-03-24', value: 20 }]);
   assert.deepEqual(
     result.capabilities.streaming.map((item) => item.label),
     ['Netflix', 'ChatGPT'],

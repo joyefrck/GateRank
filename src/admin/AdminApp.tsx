@@ -457,6 +457,11 @@ interface AirportDashboardView {
       connect_latency_median_ms?: number | null;
       proxy_http_latency_samples_ms?: number[];
       proxy_http_latency_median_ms?: number | null;
+      proxy_http_request_failures?: number | null;
+      proxy_http_request_attempts?: number | null;
+      proxy_http_request_failure_percent?: number | null;
+      connect_failures?: number | null;
+      connect_attempts?: number | null;
       download_mbps?: number | null;
     }>;
     tested_nodes_count: number | null;
@@ -467,6 +472,11 @@ interface AirportDashboardView {
     latency_probe_target: string | null;
     proxy_http_test_url: string | null;
     proxy_http_median_latency_ms: number | null;
+    packet_loss_measurement: string | null;
+    packet_loss_test_url: string | null;
+    packet_loss_failed_attempts: number | null;
+    packet_loss_total_attempts: number | null;
+    packet_loss_attempts_per_node: number | null;
     speed_measurement: string | null;
     speed_test_url: string | null;
     speed_test_connections: number | null;
@@ -10866,12 +10876,17 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <ReadField label="节点建连延迟中位数 (median_latency_ms)" value={valueOrDash(dashboard.performance.median_latency_ms)} />
               <ReadField label="代理HTTP延迟中位数（诊断）" value={valueOrDash(dashboard.performance.proxy_http_median_latency_ms)} />
               <ReadField label="代理HTTP探测URL（诊断）" value={valueOrDash(dashboard.performance.proxy_http_test_url)} />
+              <ReadField label="失败率测量口径" value={valueOrDash(dashboard.performance.packet_loss_measurement)} />
+              <ReadField label="失败率探测URL" value={valueOrDash(dashboard.performance.packet_loss_test_url)} />
+              <ReadField label="失败请求数" value={valueOrDash(dashboard.performance.packet_loss_failed_attempts)} />
+              <ReadField label="请求尝试总数" value={valueOrDash(dashboard.performance.packet_loss_total_attempts)} />
+              <ReadField label="每节点请求次数" value={valueOrDash(dashboard.performance.packet_loss_attempts_per_node)} />
               <ReadField label="下载中位数 (median_download_mbps)" value={valueOrDash(dashboard.performance.median_download_mbps)} />
-              <ReadField label="丢包率 (packet_loss_percent)" value={valueOrDash(dashboard.performance.packet_loss_percent)} />
+              <ReadField label="代理请求失败率 (packet_loss_percent)" value={valueOrDash(dashboard.performance.packet_loss_percent)} />
               <ReadField label="性能总分 (P)" value={valueOrDash(dashboard.performance.p)} />
               <ReadField label="延迟评分 (latency_score)" value={valueOrDash(dashboard.performance.latency_score)} />
               <ReadField label="下载评分 (speed_score)" value={valueOrDash(dashboard.performance.speed_score)} />
-              <ReadField label="丢包评分 (loss_score)" value={valueOrDash(dashboard.performance.loss_score)} />
+              <ReadField label="代理请求失败评分 (loss_score)" value={valueOrDash(dashboard.performance.loss_score)} />
             </div>
 
             {(dashboard.performance.tested_nodes || []).length > 0 ? (
@@ -10888,6 +10903,9 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                         <ReadField label="建连延迟中位数" value={valueOrDash(node.connect_latency_median_ms)} />
                         <ReadField label="下载速度" value={valueOrDash(node.download_mbps)} />
                         <ReadField label="代理HTTP延迟中位数" value={valueOrDash(node.proxy_http_latency_median_ms)} />
+                        <ReadField label="代理请求失败次数" value={valueOrDash(node.proxy_http_request_failures)} />
+                        <ReadField label="代理请求尝试次数" value={valueOrDash(node.proxy_http_request_attempts)} />
+                        <ReadField label="代理请求失败率" value={valueOrDash(node.proxy_http_request_failure_percent)} />
                         <ReadField label="错误码" value={valueOrDash(node.error_code)} />
                       </div>
                     </div>

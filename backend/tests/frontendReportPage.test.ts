@@ -81,3 +81,13 @@ test('React uptime sparklines use a fixed zero to one hundred percent domain', a
   assert.doesNotMatch(source, /title="延迟趋势 \(ms\)"[^\n]+domain=/);
   assert.doesNotMatch(source, /title="下载速率趋势 \(Mbps\)"[^\n]+domain=/);
 });
+
+test('React report renders proxy request failure history instead of an empty loss sparkline', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+
+  assert.match(
+    source,
+    /title="代理请求失败率"[^\n]+points=\{data\.trends\.packet_loss_30d\}/,
+  );
+  assert.doesNotMatch(source, /title="丢包率"[^\n]+points=\{\[\]\}/);
+});

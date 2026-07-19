@@ -243,7 +243,7 @@ function buildMonthlySummaryMarkdown(input: {
     '',
     '### 异常观察样本',
     '',
-    abnormalRows.length ? renderAirportTable(abnormalRows.slice(0, 8), '风险罚分', (row) => formatScore(row.score.risk_penalty), (row) => `${formatPercent(row.metrics.uptime_percent_30d)} / 丢包 ${formatPercent(row.metrics.packet_loss_percent)} / 延迟 ${formatMs(row.metrics.median_latency_ms)}`) : '本月暂无明显异常样本。',
+    abnormalRows.length ? renderAirportTable(abnormalRows.slice(0, 8), '风险罚分', (row) => formatScore(row.score.risk_penalty), (row) => `${formatPercent(row.metrics.uptime_percent_30d)} / 代理请求失败 ${formatPercent(row.metrics.packet_loss_percent)} / 延迟 ${formatMs(row.metrics.median_latency_ms)}`) : '本月暂无明显异常样本。',
     '',
     '## 九、客户端、节点与支付能力分布',
     '',
@@ -256,7 +256,7 @@ function buildMonthlySummaryMarkdown(input: {
     '## 十一、评分口径附录',
     '',
     '- 稳定性 S：综合近 30 天可用率、延迟波动、连续健康天数和稳定天数。',
-    '- 性能 P：综合下载速度中位数、延迟中位数、丢包率和节点可用性。',
+    '- 性能 P：综合下载速度中位数、延迟中位数、代理请求失败率和节点可用性。',
     '- 价格 C：以月付价格、试用、套餐形态和能力覆盖作为主要参考。',
     '- 风险 R：从域名、SSL、投诉、历史异常、状态标签和节点可用性中扣分。',
     '- 综合分：采用 GateRank 当前公开评分模型，并优先使用管理员确认后的公开总分。',
@@ -315,7 +315,7 @@ function buildNextMonthWatchItems(rows: ReportRow[], riskRows: ReportRow[], abno
     items.push(`重点复核 ${airportNames(riskRows, 5)} 的风险扣分来源，避免风险样本扩大。`);
   }
   if (abnormalRows.length > 0) {
-    items.push(`复查 ${airportNames(abnormalRows, 5)} 的低可用率、高延迟或高丢包表现。`);
+    items.push(`复查 ${airportNames(abnormalRows, 5)} 的低可用率、高延迟或高代理请求失败表现。`);
   }
   items.push('观察新入榜机场是否具备连续 30 天数据，避免单月短期表现误导推荐结论。');
   return items;

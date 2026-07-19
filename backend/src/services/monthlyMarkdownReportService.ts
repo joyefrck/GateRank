@@ -69,7 +69,7 @@ export function buildMonthlyMarkdownReport(input: MonthlyMarkdownReportInput): s
     '| --- | ---: |',
     `| 30 天可用率 | ${formatPercent(report.metrics.uptime_percent_30d)} |`,
     `| 延迟中位数 | ${formatMs(report.metrics.median_latency_ms)} |`,
-    `| 丢包率 | ${formatPercent(report.metrics.packet_loss_percent)} |`,
+    `| 代理请求失败率 | ${formatPercent(report.metrics.packet_loss_percent)} |`,
     `| 连续健康天数 | ${report.metrics.healthy_days_streak} 天 |`,
     `| 连续稳定天数 | ${report.metrics.stable_days_streak} 天 |`,
     '',
@@ -77,13 +77,13 @@ export function buildMonthlyMarkdownReport(input: MonthlyMarkdownReportInput): s
     '',
     '## 四、性能体验',
     '',
-    `性能维度主要观察节点建连延迟、下载速度与丢包率。${report.airport.name}本月下载速度中位数为 **${formatMbps(report.metrics.median_download_mbps)}**，延迟中位数为 **${formatMs(report.metrics.median_latency_ms)}**，丢包率为 **${formatPercent(report.metrics.packet_loss_percent)}**。`,
+    `性能维度主要观察节点建连延迟、下载速度与代理请求失败率。${report.airport.name}本月下载速度中位数为 **${formatMbps(report.metrics.median_download_mbps)}**，延迟中位数为 **${formatMs(report.metrics.median_latency_ms)}**，代理请求失败率为 **${formatPercent(report.metrics.packet_loss_percent)}**。`,
     '',
     '| 性能指标 | 数值 | 评价 |',
     '| --- | ---: | --- |',
     `| 下载速度中位数 | ${formatMbps(report.metrics.median_download_mbps)} | ${describeDownload(report.metrics.median_download_mbps)} |`,
     `| 延迟中位数 | ${formatMs(report.metrics.median_latency_ms)} | ${describeLatency(report.metrics.median_latency_ms)} |`,
-    `| 丢包率 | ${formatPercent(report.metrics.packet_loss_percent)} | ${describePacketLoss(report.metrics.packet_loss_percent)} |`,
+    `| 代理请求失败率 | ${formatPercent(report.metrics.packet_loss_percent)} | ${describePacketLoss(report.metrics.packet_loss_percent)} |`,
     '',
     '## 五、风险与合规观察',
     '',
@@ -112,7 +112,7 @@ export function buildMonthlyMarkdownReport(input: MonthlyMarkdownReportInput): s
     '## 八、附录：GateRank 评分口径',
     '',
     '- 稳定性 S：综合近 30 天可用率、延迟波动与连续健康/稳定天数。',
-    '- 性能 P：综合节点建连延迟、下载速度与丢包表现。',
+    '- 性能 P：综合节点建连延迟、下载速度与代理请求失败表现。',
     '- 价格 C：以月付价格为核心参考，价格越低且能力完整，价格维度越有优势。',
     '- 风险 R：从域名可用性、SSL 状态、近期投诉、历史异常与节点可用性等风险信号中扣分。',
     '- 综合分：按 GateRank 当前公开模型加权计算，并优先展示管理员人工确认后的公开总分。',
@@ -303,9 +303,9 @@ function describeLatency(value: number): string {
 }
 
 function describePacketLoss(value: number): string {
-  if (value <= 0.5) return '丢包控制优秀。';
-  if (value <= 2) return '丢包处于可接受范围。';
-  return '丢包偏高，建议排查节点稳定性。';
+  if (value <= 0.5) return '代理请求失败控制优秀。';
+  if (value <= 2) return '代理请求失败处于可接受范围。';
+  return '代理请求失败率偏高，建议排查节点稳定性。';
 }
 
 function formatRank(value: number | null): string {

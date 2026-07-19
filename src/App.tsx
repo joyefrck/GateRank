@@ -349,6 +349,7 @@ interface ReportViewResponse {
     uptime_30d: Array<{ date: string; value: number }>;
     latency_30d: Array<{ date: string; value: number }>;
     download_30d: Array<{ date: string; value: number }>;
+    packet_loss_30d: Array<{ date: string; value: number }>;
   };
   capabilities: {
     plan: {
@@ -4831,7 +4832,7 @@ function ReportCoreMetrics({ data }: { data: ReportViewResponse }) {
         <ReportTrendMetric title="30天可用率" value={`${formatMetric(data.metrics.uptime_percent_30d)}%`} points={data.trends.uptime_30d} color="#22c55e" domain={[0, 100]} />
         <ReportTrendMetric title="平均延迟" value={`${formatMetric(data.metrics.median_latency_ms)} ms`} points={data.trends.latency_30d} color="#0ea5e9" />
         <ReportTrendMetric title="下载速率" value={`${formatMetric(data.metrics.median_download_mbps)} Mbps`} points={data.trends.download_30d} color="#f97316" />
-        <ReportTrendMetric title="丢包率" value={`${formatMetric(data.metrics.packet_loss_percent)}%`} points={[]} color="#8b5cf6" />
+        <ReportTrendMetric title="代理请求失败率" value={`${formatMetric(data.metrics.packet_loss_percent)}%`} points={data.trends.packet_loss_30d} color="#8b5cf6" domain={[0, 100]} />
       </div>
     </section>
   );

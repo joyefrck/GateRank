@@ -610,6 +610,7 @@ const reportView: ReportView = {
     uptime_30d: [],
     latency_30d: [],
     download_30d: [],
+    packet_loss_30d: [],
   },
   capabilities: {
     plan: {

@@ -2235,6 +2235,11 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           proxy_http_median_latency_ms: numberOrNull(
             performanceDiagnostics.proxy_http_median_latency_ms,
           ),
+          packet_loss_measurement: stringOrNull(performanceDiagnostics.packet_loss_measurement),
+          packet_loss_test_url: stringOrNull(performanceDiagnostics.packet_loss_test_url),
+          packet_loss_failed_attempts: numberOrNull(performanceDiagnostics.packet_loss_failed_attempts),
+          packet_loss_total_attempts: numberOrNull(performanceDiagnostics.packet_loss_total_attempts),
+          packet_loss_attempts_per_node: numberOrNull(performanceDiagnostics.packet_loss_attempts_per_node),
           speed_measurement: stringOrNull(performanceDiagnostics.speed_measurement),
           speed_test_url: stringOrNull(performanceDiagnostics.speed_test_url),
           speed_test_connections: numberOrNull(performanceDiagnostics.speed_test_connections),

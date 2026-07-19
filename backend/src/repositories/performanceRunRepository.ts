@@ -210,6 +210,11 @@ function safeNodeArray(value: unknown): PerformanceRunNode[] {
         connect_latency_median_ms: nullableNumber(record.connect_latency_median_ms),
         proxy_http_latency_samples_ms: safeNumberArray(record.proxy_http_latency_samples_ms),
         proxy_http_latency_median_ms: nullableNumber(record.proxy_http_latency_median_ms),
+        proxy_http_request_failures: nullableNumber(record.proxy_http_request_failures),
+        proxy_http_request_attempts: nullableNumber(record.proxy_http_request_attempts),
+        proxy_http_request_failure_percent: nullableNumber(record.proxy_http_request_failure_percent),
+        connect_failures: nullableNumber(record.connect_failures),
+        connect_attempts: nullableNumber(record.connect_attempts),
         download_mbps: nullableNumber(record.download_mbps),
       };
     })

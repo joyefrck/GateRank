@@ -36,7 +36,7 @@ export const HOME_SEO_CONTENT_SECTIONS: PublicHomeSeoContentSection[] = [
   },
   {
     title: 'GateRank 如何评测机场 VPN？',
-    body: 'GateRank 评测机场 VPN 时，会把稳定性、性能、价格和风险拆开观察，再汇总成公开展示分数。稳定性关注 30 天可用率、连续健康天数和延迟波动；性能关注中位延迟、下载速度、丢包率与晚高峰表现；价格维度会结合月付、年付折算、试用和套餐门槛；风险维度则关注官网可访问性、SSL 状态、历史异常和投诉信号。这样做的目的不是替用户保证某个机场绝对可靠，而是让每一次机场推荐都有可追溯的指标依据。',
+    body: 'GateRank 评测机场 VPN 时，会把稳定性、性能、价格和风险拆开观察，再汇总成公开展示分数。稳定性关注 30 天可用率、连续健康天数和延迟波动；性能关注中位延迟、下载速度、代理请求失败率与晚高峰表现；价格维度会结合月付、年付折算、试用和套餐门槛；风险维度则关注官网可访问性、SSL 状态、历史异常和投诉信号。这样做的目的不是替用户保证某个机场绝对可靠，而是让每一次机场推荐都有可追溯的指标依据。',
     facts: ['稳定性、性能、价格、风险分开观察', '晚高峰与长期趋势比单次测速更重要', '广告活动不进入 GateRank Score'],
     links: [
       { label: '查看测评方法', href: '/methodology', description: '理解评分规则、测速标准和风险扣分逻辑' },
@@ -50,8 +50,8 @@ export const HOME_SEO_CONTENT_SECTIONS: PublicHomeSeoContentSection[] = [
   },
   {
     title: '机场推荐主要看哪些指标？',
-    body: '一个值得进入推荐视野的机场，通常不是某一个指标特别亮眼，而是在多个指标上没有明显短板。可用率说明服务是否经常在线，延迟和丢包影响网页、游戏和视频会议体验，下载速度影响大文件和流媒体，价格决定长期使用成本，风险记录则帮助用户避开可能失联、跑路或售后异常的服务。GateRank 首页把今日推荐、长期稳定、性价比、新入榜和风险预警拆成不同入口，是为了让用户按需求进入，而不是把所有场景压成一个单一排名。',
-    facts: ['可用率看持续在线能力', '延迟和丢包看日常体验', '风险记录决定是否需要回避'],
+    body: '一个值得进入推荐视野的机场，通常不是某一个指标特别亮眼，而是在多个指标上没有明显短板。可用率说明服务是否经常在线，延迟和代理请求失败率影响网页、游戏和视频会议体验，下载速度影响大文件和流媒体，价格决定长期使用成本，风险记录则帮助用户避开可能失联、跑路或售后异常的服务。GateRank 首页把今日推荐、长期稳定、性价比、新入榜和风险预警拆成不同入口，是为了让用户按需求进入，而不是把所有场景压成一个单一排名。',
+    facts: ['可用率看持续在线能力', '延迟和代理请求失败率看日常体验', '风险记录决定是否需要回避'],
   },
   {
     title: '不同需求推荐入口',
@@ -76,7 +76,7 @@ export const HOME_FAQ_ITEMS: PublicHomeFaqItem[] = [
   },
   {
     question: '机场推荐看价格还是稳定性？',
-    answer: '价格只能说明使用成本，不能单独代表服务质量。更合理的判断顺序是先看稳定性、可用率、延迟、丢包和风险记录，再比较价格和套餐周期。特别便宜但长期波动或风险信号明显的机场，不适合作为长期主力。',
+    answer: '价格只能说明使用成本，不能单独代表服务质量。更合理的判断顺序是先看稳定性、可用率、延迟、代理请求失败率和风险记录，再比较价格和套餐周期。特别便宜但长期波动或风险信号明显的机场，不适合作为长期主力。',
   },
   {
     question: '支持支付宝的机场安全吗？',
@@ -88,7 +88,7 @@ export const HOME_FAQ_ITEMS: PublicHomeFaqItem[] = [
   },
   {
     question: '为什么晚高峰测试很重要？',
-    answer: '很多机场在白天或低峰时段表现正常，但晚高峰更容易暴露拥塞、丢包、延迟抖动和流媒体不可用等问题。晚高峰测试能更接近日常真实使用压力，因此比单次低峰测速更适合判断机场是否能长期使用。',
+    answer: '很多机场在白天或低峰时段表现正常，但晚高峰更容易暴露拥塞、代理请求失败、延迟抖动和流媒体不可用等问题。晚高峰测试能更接近日常真实使用压力，因此比单次低峰测速更适合判断机场是否能长期使用。',
   },
 ];
 
@@ -141,6 +141,7 @@ export interface PublicReportSeoView {
     uptime_30d: Array<{ date: string; value: number }>;
     latency_30d: Array<{ date: string; value: number }>;
     download_30d: Array<{ date: string; value: number }>;
+    packet_loss_30d: Array<{ date: string; value: number }>;
   };
   capabilities: {
     plan: {
@@ -614,7 +615,7 @@ export function buildFullRankingTopicContent(filters: FullRankingFilters): Publi
       },
       {
         title: `${searchName}与 ${adjacent}对比`,
-        body: `${searchName}适合明确需要 ${baseLabel} 的用户；${adjacent}则更适合需求不同或希望分散风险的人。建议先用本页筛出候选机场，再进入具体测评报告核对稳定性、延迟、丢包、价格和风险扣分。`,
+        body: `${searchName}适合明确需要 ${baseLabel} 的用户；${adjacent}则更适合需求不同或希望分散风险的人。建议先用本页筛出候选机场，再进入具体测评报告核对稳定性、延迟、代理请求失败率、价格和风险扣分。`,
       },
     ],
     faqItems: [
@@ -809,7 +810,7 @@ function buildReportDescription(view: PublicReportSeoView, airportName: string, 
   const score = formatPublicScoreText(view);
   const trendLabel = buildReportTrendLabel(view);
 
-  return `${buildReportSearchName(airportName)}测评包含评分${score}、状态${statusLabel}、官网入口、稳定性、下载速度${formatMetric(view.metrics.median_download_mbps)} Mbps、延迟${formatMetric(view.metrics.median_latency_ms)} ms、丢包率${formatMetric(view.metrics.packet_loss_percent)}%、${trendLabel}和跑路风险分析，帮助判断是否值得使用。`;
+  return `${buildReportSearchName(airportName)}测评包含评分${score}、状态${statusLabel}、官网入口、稳定性、下载速度${formatMetric(view.metrics.median_download_mbps)} Mbps、延迟${formatMetric(view.metrics.median_latency_ms)} ms、代理请求失败率${formatMetric(view.metrics.packet_loss_percent)}%、${trendLabel}和跑路风险分析，帮助判断是否值得使用。`;
 }
 
 export function buildReportTrendLabel(view: PublicReportSeoView): string {
@@ -829,6 +830,7 @@ export function getReportObservationDays(view: PublicReportSeoView): number {
     view.trends.uptime_30d.length,
     view.trends.latency_30d.length,
     view.trends.download_30d.length,
+    view.trends.packet_loss_30d.length,
   );
 }
 
@@ -898,12 +900,12 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
     {
       question: `${airportName}支持 ChatGPT 和 AI 工具吗？`,
       answer: chatGptSupport
-        ? `${airportName} 当前能力记录包含 ChatGPT，可作为 AI 工具访问场景的候选；仍建议结合延迟 ${formatMetric(view.metrics.median_latency_ms)} ms、丢包率 ${formatMetric(view.metrics.packet_loss_percent)}% 和近期趋势判断。`
+        ? `${airportName} 当前能力记录包含 ChatGPT，可作为 AI 工具访问场景的候选；仍建议结合延迟 ${formatMetric(view.metrics.median_latency_ms)} ms、代理请求失败率 ${formatMetric(view.metrics.packet_loss_percent)}% 和近期趋势判断。`
         : `${airportName} 当前未收录 ChatGPT 支持记录，是否适合 AI 工具访问需要以官网说明和实际节点测试为准。`,
     },
     {
       question: `${airportName}速度怎么样？`,
-      answer: `${airportName} 当前中位延迟为 ${formatMetric(view.metrics.median_latency_ms)} ms，下载速率为 ${formatMetric(view.metrics.median_download_mbps)} Mbps，丢包率为 ${formatMetric(view.metrics.packet_loss_percent)}%，可结合${buildReportTrendLabel(view)}继续观察。`,
+      answer: `${airportName} 当前中位延迟为 ${formatMetric(view.metrics.median_latency_ms)} ms，下载速率为 ${formatMetric(view.metrics.median_download_mbps)} Mbps，代理请求失败率为 ${formatMetric(view.metrics.packet_loss_percent)}%，可结合${buildReportTrendLabel(view)}继续观察。`,
     },
     {
       question: `${airportName}和其他机场相比有什么优势？`,
@@ -956,12 +958,12 @@ export function buildReportContentSections(view: PublicReportSeoView): PublicRep
     },
     {
       title: '稳定性与性能',
-      body: `${airportName} 近 30 天可用率为 ${formatMetric(view.metrics.uptime_percent_30d)}%，稳定性评级为${formatStabilityTierLabel(view.metrics.stability_tier)}，健康记录 ${view.metrics.healthy_days_streak} 天。性能侧的中位延迟为 ${formatMetric(view.metrics.median_latency_ms)} ms，下载速率为 ${formatMetric(view.metrics.median_download_mbps)} Mbps，丢包率为 ${formatMetric(view.metrics.packet_loss_percent)}%。趋势上，评分${scoreDeltaText}，可用率${uptimeTrendText}，延迟${latencyTrendText}，下载${downloadTrendText}。`,
+      body: `${airportName} 近 30 天可用率为 ${formatMetric(view.metrics.uptime_percent_30d)}%，稳定性评级为${formatStabilityTierLabel(view.metrics.stability_tier)}，健康记录 ${view.metrics.healthy_days_streak} 天。性能侧的中位延迟为 ${formatMetric(view.metrics.median_latency_ms)} ms，下载速率为 ${formatMetric(view.metrics.median_download_mbps)} Mbps，代理请求失败率为 ${formatMetric(view.metrics.packet_loss_percent)}%。趋势上，评分${scoreDeltaText}，可用率${uptimeTrendText}，延迟${latencyTrendText}，下载${downloadTrendText}。`,
       facts: [
         `30 天可用率 ${formatMetric(view.metrics.uptime_percent_30d)}%`,
         `中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms`,
         `下载速率 ${formatMetric(view.metrics.median_download_mbps)} Mbps`,
-        `丢包率 ${formatMetric(view.metrics.packet_loss_percent)}%`,
+        `代理请求失败率 ${formatMetric(view.metrics.packet_loss_percent)}%`,
       ],
     },
     {
@@ -1006,7 +1008,7 @@ export function buildReportContentSections(view: PublicReportSeoView): PublicRep
     },
     {
       title: '选择前要注意什么',
-      body: `选择 ${airportName} 前，建议重点核对当前评分是否持续、${trendLabel}是否稳定、官网入口是否可访问、延迟和丢包率是否异常、投诉与历史异常是否增加，以及套餐、退款、试用、USDT、流媒体和 AI 工具支持是否符合自己的使用场景。GateRank 分数只能作为辅助决策依据，不能替代用户自己的试用和判断。`,
+      body: `选择 ${airportName} 前，建议重点核对当前评分是否持续、${trendLabel}是否稳定、官网入口是否可访问、延迟和代理请求失败率是否异常、投诉与历史异常是否增加，以及套餐、退款、试用、USDT、流媒体和 AI 工具支持是否符合自己的使用场景。GateRank 分数只能作为辅助决策依据，不能替代用户自己的试用和判断。`,
       facts: [
         `近期投诉 ${view.metrics.recent_complaints_count} 条`,
         `历史异常 ${view.metrics.history_incidents} 次`,
@@ -1199,7 +1201,7 @@ export const RANKING_TRANSPARENCY_ARTICLE: {
     {
       index: 2,
       title: '评分算法看什么',
-      body: 'GateRank 评分采用固定维度：稳定性、性能、价格、风险。稳定性重点观察可用率、连续健康天数和延迟波动；性能观察中位延迟、下载速率和丢包；价格观察月付、年付折算、试用门槛和性价比；风险观察官网可访问性、证书状态、投诉、历史异常与人工复核记录。最终展示分按既定权重生成，当前口径以测评方法页公开说明为准。单次测速、临时活动、站长主观评价或商业沟通不会单独决定排名。',
+      body: 'GateRank 评分采用固定维度：稳定性、性能、价格、风险。稳定性重点观察可用率、连续健康天数和延迟波动；性能观察中位延迟、下载速率和代理请求失败率；价格观察月付、年付折算、试用门槛和性价比；风险观察官网可访问性、证书状态、投诉、历史异常与人工复核记录。最终展示分按既定权重生成，当前口径以测评方法页公开说明为准。单次测速、临时活动、站长主观评价或商业沟通不会单独决定排名。',
     },
     {
       index: 3,
@@ -1297,7 +1299,7 @@ function buildReportFitText(view: PublicReportSeoView): string {
     ? `但当前${buildReportTrendLabel(view)}样本仍短于 30 天，长期可靠性需要继续跟踪。`
     : `同时仍需结合后续数据、官网状态和风险记录继续判断长期可靠性。`;
 
-  return `${airportName} 更适合重视稳定性、低延迟、日常网页访问、流媒体或 AI 工具访问的用户。当前公开总分${scoreText}，稳定性评级为${stableText}，中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms，下载速率 ${formatMetric(view.metrics.median_download_mbps)} Mbps，丢包率 ${formatMetric(view.metrics.packet_loss_percent)}%，客户端支持记录为 ${clientText}，解锁能力记录为 ${streamingText}。${cautionText}`;
+  return `${airportName} 更适合重视稳定性、低延迟、日常网页访问、流媒体或 AI 工具访问的用户。当前公开总分${scoreText}，稳定性评级为${stableText}，中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms，下载速率 ${formatMetric(view.metrics.median_download_mbps)} Mbps，代理请求失败率 ${formatMetric(view.metrics.packet_loss_percent)}%，客户端支持记录为 ${clientText}，解锁能力记录为 ${streamingText}。${cautionText}`;
 }
 
 function buildFullRankingFilterHref(category: 'payment' | 'streaming', key: string): string {

@@ -21,6 +21,7 @@ from scripts.monitor_performance import (
     parse_node_line,
     parse_nodes,
     performance_node_key,
+    probe_node,
     resolve_selected_nodes,
     run_for_airport,
     select_nodes,
@@ -413,8 +414,35 @@ proxies:
 
         self.assertEqual(config.latency_attempts, 3)
         self.assertEqual(config.latency_sample_interval_seconds, 3)
+        self.assertEqual(config.request_loss_attempts, 10)
+        self.assertEqual(config.request_loss_sample_interval_seconds, 0.5)
         self.assertEqual(config.performance_concurrency, 4)
         self.assertEqual(config.node_availability_check, "proxy_http")
+
+    def test_probe_node_uses_proxy_http_request_failures_for_packet_loss(self) -> None:
+        config = self.make_config()
+        node = parse_node_line("trojan://password@hk.example.com:443#HK-A")
+        assert node is not None
+
+        with (
+            patch("scripts.monitor_performance.run_sing_box", return_value=(MagicMock(), "/tmp/test.json")),
+            patch("scripts.monitor_performance.stop_sing_box"),
+            patch(
+                "scripts.monitor_performance.test_node_connect_latency",
+                return_value=([21.0, 22.0, 23.0], ["t1", "t2", "t3"], 0, 3),
+            ),
+            patch(
+                "scripts.monitor_performance.test_proxy_http_latency",
+                return_value=([180.0] * 8, 2, 10),
+            ),
+            patch("scripts.monitor_performance.test_speed", return_value=80.0),
+        ):
+            result = probe_node(config, node)
+
+        self.assertEqual(result.failures, 2)
+        self.assertEqual(result.total_attempts, 10)
+        self.assertEqual(result.connect_failures, 0)
+        self.assertEqual(result.connect_total_attempts, 3)
 
     def test_build_config_accepts_tcp_node_availability_check(self) -> None:
         env = {
