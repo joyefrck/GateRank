@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import L from 'leaflet';
+import type { Map as LeafletMap } from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 import type { IpCheckTranslations } from '../../../shared/ipCheck';
 
@@ -16,19 +19,17 @@ export function IpCheckMap({
   translations,
 }: IpCheckMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<import('leaflet').Map | null>(null);
+  const mapRef = useRef<LeafletMap | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
   useEffect(() => {
     let active = true;
 
-    const initialize = async () => {
+    const initialize = () => {
       setLoading(true);
       setError(false);
       try {
-        const L = (await import('leaflet')).default;
-        await import('leaflet/dist/leaflet.css');
         if (!active || !containerRef.current) return;
 
         mapRef.current?.remove();
@@ -68,7 +69,7 @@ export function IpCheckMap({
       }
     };
 
-    void initialize();
+    initialize();
     return () => {
       active = false;
       mapRef.current?.remove();
