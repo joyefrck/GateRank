@@ -54,7 +54,6 @@ export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
       {
         label: 'IP 检测',
         href: '/tools/ip-check',
-        badge: '即将上线',
       },
     ],
   },

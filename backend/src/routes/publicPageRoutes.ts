@@ -21,8 +21,8 @@ import {
   renderRankingTransparencyPublicPage,
   renderReportPublicPage,
   renderRiskMonitorPublicPage,
+  renderIpCheckPublicPage,
   renderStreamingCheckPublicPage,
-  renderToolPlaceholderPublicPage,
   renderToolsDownloadPublicPage,
 } from '../services/publicPageRenderer';
 import {
@@ -288,7 +288,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   router.get('/tools/ip-check', (req, res) => {
     const siteUrl = getSiteOrigin(req);
     setPublicCacheHeaders(res);
-    res.status(200).type('html').send(renderToolPlaceholderPublicPage(siteUrl, 'ip-check', frontendAssets));
+    res.status(200).type('html').send(renderIpCheckPublicPage(siteUrl, frontendAssets));
   });
 
   router.get('/api/v1/monthly-reports', async (req, res, next) => {

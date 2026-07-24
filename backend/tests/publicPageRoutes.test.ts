@@ -482,11 +482,18 @@ test('legacy tools routes redirect to /download and unfinished tool placeholders
     assert.equal(legacyDownloadResponse.status, 301);
     assert.equal(legacyDownloadResponse.headers.get('location'), '/download?platform=macos');
 
-    const placeholderResponse = await fetch(`http://127.0.0.1:${port}/tools/ip-check`);
-    assert.equal(placeholderResponse.status, 200);
-    const placeholderHtml = await placeholderResponse.text();
-    assert.match(placeholderHtml, /IP 检测工具即将上线/);
-    assert.match(placeholderHtml, /<meta name="robots" content="noindex,follow" \/>/);
+    const ipCheckResponse = await fetch(`http://127.0.0.1:${port}/tools/ip-check`);
+    assert.equal(ipCheckResponse.status, 200);
+    const ipCheckHtml = await ipCheckResponse.text();
+    assert.match(ipCheckHtml, /<h1>IP 地理位置查询<\/h1>/);
+    assert.match(ipCheckHtml, /placeholder="输入 IP 地址或域名"/);
+    assert.match(ipCheckHtml, /GateRank 不保存查询历史/);
+    assert.match(ipCheckHtml, /<meta name="robots" content="index,follow,max-image-preview:large" \/>/);
+    assert.match(ipCheckHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/tools\/ip-check" \/>/);
+    assert.match(ipCheckHtml, /\/og\/rankings-region\.png/);
+    assert.match(ipCheckHtml, /"@type":"WebApplication"/);
+    assert.match(ipCheckHtml, /"@type":"FAQPage"/);
+    assert.doesNotMatch(ipCheckHtml, /IP 检测工具即将上线|即将上线/);
 
     const streamingResponse = await fetch(`http://127.0.0.1:${port}/tools/streaming-check`);
     assert.equal(streamingResponse.status, 200);
@@ -505,6 +512,7 @@ test('legacy tools routes redirect to /download and unfinished tool placeholders
     assert.match(streamingHtml, /"@type":"WebApplication"/);
     assert.match(streamingHtml, /"@type":"FAQPage"/);
     assert.doesNotMatch(streamingHtml, /流媒体解锁检测<\/span><span class="public-top-nav-submenu-badge">即将上线/);
+    assert.doesNotMatch(streamingHtml, /IP 检测<\/span><span class="public-top-nav-submenu-badge">即将上线/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

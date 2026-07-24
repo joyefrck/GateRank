@@ -278,6 +278,7 @@ export const PUBLIC_SEO_PATHS = {
   fullRanking: '/rankings/all',
   download: '/download',
   streamingCheck: '/tools/streaming-check',
+  ipCheck: '/tools/ip-check',
   monthlyReports: '/monthly-reports',
   deals: '/deals',
   methodology: '/methodology',
@@ -433,6 +434,12 @@ export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | 
     return {
       ...PUBLIC_CORE_OG_IMAGES.rankingsUnlock,
       alt: 'GateRank 流媒体与 AI 服务检测工具分享图',
+    };
+  }
+  if (pathname === PUBLIC_SEO_PATHS.ipCheck) {
+    return {
+      ...PUBLIC_CORE_OG_IMAGES.rankingsRegion,
+      alt: 'GateRank IP 地理位置与网络信息检测工具分享图',
     };
   }
   if (pathname === PUBLIC_SEO_PATHS.monthlyReports || pathname.startsWith(`${PUBLIC_SEO_PATHS.monthlyReports}/`)) {

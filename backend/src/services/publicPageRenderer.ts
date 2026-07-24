@@ -642,40 +642,79 @@ function sanitizeToolsDownloadPageViewForPublicPayload(view: ToolsDownloadPageVi
   };
 }
 
-export function renderToolPlaceholderPublicPage(
+export function renderIpCheckPublicPage(
   siteUrl: string,
-  tool: 'streaming-check' | 'ip-check',
   frontendAssets?: PublicFrontendAssets,
 ): string {
-  const isIp = tool === 'ip-check';
-  const title = isIp ? 'IP 检测工具即将上线' : '流媒体解锁检测工具即将上线';
-  const path = isIp ? '/tools/ip-check' : '/tools/streaming-check';
-  const description = isIp
-    ? 'GateRank IP 检测工具将用于查看当前 IP、地区、网络类型和代理环境。'
-    : 'GateRank 流媒体解锁检测工具将用于检查 Netflix、Disney+、YouTube Premium 等服务的解锁状态。';
+  const path = PUBLIC_SEO_PATHS.ipCheck;
+  const title = 'IP 地理位置查询 | IP 地址、域名、ISP 与 ASN 检测';
+  const description = '免费查询当前出口 IP、IPv4、IPv6 或域名的国家地区、城市、经纬度、时区、ISP、组织与 ASN 信息。';
+  const faqItems = [
+    ['IP 检测会保存查询历史吗？', 'GateRank 不将查询目标或结果写入数据库和业务日志；商业数据供应商会按其服务政策处理请求。'],
+    ['为什么 IP 定位和实际位置不同？', 'IP 地理位置来自网络注册、路由和运营商数据，通常只能定位到国家、地区或城市，不能替代 GPS。'],
+    ['可以查询域名和 IPv6 吗？', '可以。输入合法的公网 IPv4、IPv6 或域名即可查看对应网络信息。'],
+  ];
   return renderPublicDocument({
     siteUrl,
     canonicalPath: path,
     seo: {
-      title: `${title} | GateRank 工具箱`,
+      title,
       description,
-      keywords: isIp ? 'IP检测,代理IP检测,机场VPN工具' : '流媒体解锁检测,Netflix解锁检测,机场VPN工具',
+      keywords: 'IP检测,IP地址查询,IP归属地,域名查询,IPv6查询,ISP查询,ASN查询',
     },
-    robots: 'noindex,follow',
     active: 'tools',
-    jsonLd: buildBreadcrumbJsonLd(siteUrl, [
-      ['今日推荐', '/'],
-      ['翻墙工具下载', '/download'],
-      [title, path],
-    ]),
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'WebApplication',
+          name: 'GateRank IP 地理位置查询',
+          applicationCategory: 'UtilitiesApplication',
+          operatingSystem: 'Web',
+          url: `${siteUrl}${path}`,
+          description,
+          offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
+        },
+        buildBreadcrumbJsonLd(siteUrl, [
+          ['今日推荐', '/'],
+          ['翻墙工具下载', '/download'],
+          ['IP 检测', path],
+        ]),
+        {
+          '@type': 'FAQPage',
+          mainEntity: faqItems.map(([question, answer]) => ({
+            '@type': 'Question',
+            name: question,
+            acceptedAnswer: { '@type': 'Answer', text: answer },
+          })),
+        },
+      ],
+    },
     frontendAssets,
     body: `
-      <main class="page-main">
-        <section class="hero">
-          <div class="eyebrow">Coming Soon</div>
-          <h1>${escapeHtml(title)}</h1>
-          <p>${escapeHtml(description)} 当前版本先上线翻墙工具下载页面。</p>
-          <p><a class="primary-link" href="/download">进入翻墙工具下载</a></p>
+      <main class="ip-check-ssr-shell">
+        <section class="ip-check-ssr-hero">
+          <div class="eyebrow">IP GEOLOCATION LOOKUP</div>
+          <h1>IP 地理位置查询</h1>
+          <p>${escapeHtml(description)}</p>
+          <form class="ip-check-ssr-search" aria-label="IP 查询搜索">
+            <input type="search" aria-label="输入 IP 地址或域名" placeholder="输入 IP 地址或域名" />
+            <button type="button">查询</button>
+          </form>
+        </section>
+        <section class="ip-check-ssr-result" aria-label="IP 查询结果">
+          <div>
+            <h2>地图与地理位置</h2>
+            <p>页面加载后将自动检测当前出口 IP。</p>
+          </div>
+          <div>
+            <h2>网络详细信息</h2>
+            <p>等待查询 IP、地区、ISP、时区与 ASN。</p>
+          </div>
+        </section>
+        <section class="ip-check-ssr-note">
+          <h2>隐私与数据说明</h2>
+          <p>GateRank 不保存查询历史；ip-api Pro 会处理查询目标，并可能按其服务政策保留最多 24 小时的故障排查日志。</p>
         </section>
       </main>
     `,

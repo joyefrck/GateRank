@@ -79,6 +79,7 @@ test('GET /for-ai returns an indexable HTML guide for AI applications', async ()
     assert.match(html, /\/sitemap\.xml/);
     assert.match(html, /\/rankings\/payment\/alipay/);
     assert.match(html, /\/rankings\/unlock\/chatgpt/);
+    assert.match(html, /\/tools\/ip-check/);
     assert.doesNotMatch(html, /\/rankings\/all\?payment=alipay/);
   } finally {
     await close();
