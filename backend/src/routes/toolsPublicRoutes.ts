@@ -7,7 +7,10 @@ import {
   type ToolDownloadItem,
   type ToolsDownloadPageView,
 } from '../../../shared/toolDownloads';
+import type { IpCheckRequest, IpCheckSuccessResponse } from '../../../shared/ipCheck';
+import { IpCheckServiceError, type IpCheckService } from '../services/ipGeolocationService';
 import type { ToolsDownloadService } from '../services/toolsDownloadService';
+import { normalizeIpCheckTarget } from '../utils/ipCheckTarget';
 import { setPublicCacheHeaders } from '../utils/publicCache';
 import { sendError } from '../utils/http';
 import { resolveVisitorIp, resolveVisitorNetwork } from '../utils/visitorNetwork';
@@ -20,11 +23,13 @@ import {
 
 interface ToolsPublicDeps {
   toolsDownloadService: Pick<ToolsDownloadService, 'getDownloadPageView'>;
+  ipCheckService?: IpCheckService;
 }
 
 export function createToolsPublicRoutes(deps: ToolsPublicDeps): Router {
   const router = Router();
   const streamingCheckRateLimit = createStreamingCheckRateLimit();
+  const ipCheckRateLimit = createIpCheckRateLimit();
 
   router.get('/tools/downloads', async (req, res, next) => {
     try {
@@ -72,6 +77,50 @@ export function createToolsPublicRoutes(deps: ToolsPublicDeps): Router {
     res.json(response);
   });
 
+  router.post('/tools/ip-check', ipCheckRateLimit, async (req, res) => {
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Pragma', 'no-cache');
+    const requestId = req.requestId || 'unknown';
+    const body = (req.body || {}) as IpCheckRequest;
+    let query: string;
+
+    try {
+      if (body.query === undefined) {
+        const visitorIp = resolveVisitorIp(req);
+        if (!visitorIp || visitorIp === 'unknown') {
+          sendError(res, 422, 'IP_CHECK_CLIENT_IP_REQUIRED', '无法识别当前出口 IP', requestId);
+          return;
+        }
+        query = normalizeIpCheckTarget(visitorIp);
+      } else {
+        query = normalizeIpCheckTarget(body.query);
+      }
+    } catch {
+      sendError(res, 400, 'IP_CHECK_INVALID_QUERY', '请输入有效的公网 IP 地址或域名', requestId);
+      return;
+    }
+
+    if (!deps.ipCheckService) {
+      sendError(res, 503, 'IP_CHECK_NOT_CONFIGURED', 'IP 查询服务尚未配置', requestId);
+      return;
+    }
+
+    try {
+      const result = await deps.ipCheckService.lookup(query);
+      const response: IpCheckSuccessResponse = {
+        checked_at: new Date().toISOString(),
+        result,
+      };
+      res.json(response);
+    } catch (error) {
+      if (error instanceof IpCheckServiceError) {
+        sendError(res, error.status, error.code, ipCheckErrorMessage(error.code), requestId);
+        return;
+      }
+      sendError(res, 502, 'IP_CHECK_UPSTREAM_ERROR', 'IP 查询服务暂时不可用', requestId);
+    }
+  });
+
   return router;
 }
 
@@ -92,6 +141,34 @@ function createStreamingCheckRateLimit() {
       );
     },
   });
+}
+
+function createIpCheckRateLimit() {
+  return rateLimit({
+    windowMs: Math.max(1000, Number(process.env.IP_CHECK_RATE_WINDOW_MS || 60_000)),
+    limit: Math.max(1, Number(process.env.IP_CHECK_RATE_MAX || 10)),
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => ipKeyGenerator(resolveVisitorIp(req)),
+    handler: (req, res) => {
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('Pragma', 'no-cache');
+      sendError(
+        res,
+        429,
+        'IP_CHECK_RATE_LIMITED',
+        '查询请求过于频繁，请稍后再试',
+        req.requestId || 'unknown',
+      );
+    },
+  });
+}
+
+function ipCheckErrorMessage(code: IpCheckServiceError['code']): string {
+  if (code === 'IP_CHECK_LOOKUP_FAILED') return '无法解析该 IP 地址或域名';
+  if (code === 'IP_CHECK_NOT_CONFIGURED') return 'IP 查询服务尚未配置';
+  if (code === 'IP_CHECK_UPSTREAM_TIMEOUT') return 'IP 查询服务响应超时';
+  return 'IP 查询服务暂时不可用';
 }
 
 function sanitizeToolsDownloadPageView(view: ToolsDownloadPageView): ToolsDownloadPageView {

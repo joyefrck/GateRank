@@ -66,6 +66,7 @@ import { PexelsCoverService } from './services/pexelsCoverService';
 import { NewsPublicService } from './services/newsPublicService';
 import { MonthlyReportPublicService } from './services/monthlyReportPublicService';
 import { MonthlyReportGenerationService } from './services/monthlyReportGenerationService';
+import { IpGeolocationService } from './services/ipGeolocationService';
 import { ToolsDownloadService } from './services/toolsDownloadService';
 import { PublicViewService } from './services/publicViewService';
 import { RecomputeService } from './services/recomputeService';
@@ -196,6 +197,7 @@ export async function createApp() {
   });
   await manualJobService.initialize();
   const toolsDownloadService = new ToolsDownloadService(toolDownloadRepository, systemSettingRepository);
+  const ipCheckService = new IpGeolocationService();
     const publicViewService = new PublicViewService({
       airportRepository,
       metricsRepository,
@@ -290,6 +292,7 @@ export async function createApp() {
     '/api/v1',
     createToolsPublicRoutes({
       toolsDownloadService,
+      ipCheckService,
     }),
   );
 

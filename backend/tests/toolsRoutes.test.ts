@@ -7,9 +7,132 @@ import { tmpdir } from 'node:os';
 import express from 'express';
 import { createToolsPublicRoutes } from '../src/routes/toolsPublicRoutes';
 import { createToolsAdminRoutes } from '../src/routes/toolsAdminRoutes';
+import { IpCheckServiceError } from '../src/services/ipGeolocationService';
 import { errorHandler } from '../src/middleware/errorHandler';
 import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG } from '../../shared/toolDownloads';
+import type { IpCheckResult, IpCheckSuccessResponse } from '../../shared/ipCheck';
 import type { StreamingCheckResponse } from '../../shared/streamingCheck';
+
+test('IP check resolves the Cloudflare visitor IP and keeps responses private', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/v1', createToolsPublicRoutes({
+    toolsDownloadService: { getDownloadPageView: async () => ({}) } as never,
+    ipCheckService: {
+      lookup: async (query) => createIpCheckResult(query),
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/tools/ip-check`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'cf-connecting-ip': '8.8.8.8',
+      },
+      body: '{}',
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(response.headers.get('pragma'), 'no-cache');
+    const data = await response.json() as IpCheckSuccessResponse;
+    assert.equal(data.result.ip, '8.8.8.8');
+    assert.ok(data.checked_at);
+
+    const getResponse = await fetch(`http://127.0.0.1:${port}/api/v1/tools/ip-check`);
+    assert.equal(getResponse.status, 404);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('IP check normalizes manual domains and rejects private targets', async () => {
+  const queries: string[] = [];
+  const app = express();
+  app.use(express.json());
+  app.use('/api/v1', createToolsPublicRoutes({
+    toolsDownloadService: { getDownloadPageView: async () => ({}) } as never,
+    ipCheckService: {
+      lookup: async (query) => {
+        queries.push(query);
+        return createIpCheckResult('8.8.8.8');
+      },
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const valid = await fetch(`http://127.0.0.1:${port}/api/v1/tools/ip-check`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cf-connecting-ip': '1.1.1.1' },
+      body: JSON.stringify({ query: ' Example.COM ' }),
+    });
+    assert.equal(valid.status, 200);
+    assert.deepEqual(queries, ['example.com']);
+
+    const invalid = await fetch(`http://127.0.0.1:${port}/api/v1/tools/ip-check`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cf-connecting-ip': '1.1.1.1' },
+      body: JSON.stringify({ query: '192.168.1.1' }),
+    });
+    assert.equal(invalid.status, 400);
+    assert.equal((await invalid.json() as { code: string }).code, 'IP_CHECK_INVALID_QUERY');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('IP check maps provider errors and applies a dedicated rate limit', async () => {
+  const previousMax = process.env.IP_CHECK_RATE_MAX;
+  process.env.IP_CHECK_RATE_MAX = '2';
+  const app = express();
+  app.use(express.json());
+  app.use('/api/v1', createToolsPublicRoutes({
+    toolsDownloadService: { getDownloadPageView: async () => ({}) } as never,
+    ipCheckService: {
+      lookup: async (query) => {
+        if (query === 'example.com') {
+          throw new IpCheckServiceError('IP_CHECK_LOOKUP_FAILED', 422);
+        }
+        return createIpCheckResult(query);
+      },
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const first = await fetch(`http://127.0.0.1:${port}/api/v1/tools/ip-check`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cf-connecting-ip': '1.1.1.1' },
+      body: JSON.stringify({ query: 'example.com' }),
+    });
+    assert.equal(first.status, 422);
+    assert.equal((await first.json() as { code: string }).code, 'IP_CHECK_LOOKUP_FAILED');
+
+    const second = await fetch(`http://127.0.0.1:${port}/api/v1/tools/ip-check`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cf-connecting-ip': '1.1.1.1' },
+      body: JSON.stringify({ query: '8.8.8.8' }),
+    });
+    assert.equal(second.status, 200);
+
+    const limited = await fetch(`http://127.0.0.1:${port}/api/v1/tools/ip-check`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'cf-connecting-ip': '1.1.1.1' },
+      body: JSON.stringify({ query: '8.8.4.4' }),
+    });
+    assert.equal(limited.status, 429);
+    assert.equal((await limited.json() as { code: string }).code, 'IP_CHECK_RATE_LIMITED');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+    if (previousMax === undefined) delete process.env.IP_CHECK_RATE_MAX;
+    else process.env.IP_CHECK_RATE_MAX = previousMax;
+  }
+});
 
 test('streaming check returns private visitor network assessment from Cloudflare headers', async () => {
   const app = express();
@@ -459,3 +582,21 @@ test('tools admin routes accept chunked tool file upload and complete final pack
     await rm(uploadRoot, { recursive: true, force: true });
   }
 });
+
+function createIpCheckResult(ip: string): IpCheckResult {
+  return {
+    ip,
+    country: 'United States',
+    country_code: 'US',
+    region: 'VA',
+    region_name: 'Virginia',
+    city: 'Ashburn',
+    postal_code: '20149',
+    latitude: 39.03,
+    longitude: -77.5,
+    timezone: 'America/New_York',
+    isp: 'Google LLC',
+    organization: 'Google Public DNS',
+    asn: 'AS15169 Google LLC',
+  };
+}
