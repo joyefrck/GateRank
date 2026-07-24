@@ -15,68 +15,81 @@ export class IpCheckServiceError extends Error {
 }
 
 interface IpGeolocationServiceOptions {
-  apiKey?: string;
   baseUrl?: string;
   timeoutMs?: number;
+  cacheTtlMs?: number;
+  cacheMaxEntries?: number;
   fetchImpl?: typeof fetch;
+  now?: () => number;
 }
 
-interface IpApiProResponse {
-  status?: unknown;
-  query?: unknown;
+interface IpWhoIsResponse {
+  ip?: unknown;
+  success?: unknown;
   country?: unknown;
-  countryCode?: unknown;
+  country_code?: unknown;
   region?: unknown;
-  regionName?: unknown;
+  region_code?: unknown;
   city?: unknown;
-  zip?: unknown;
-  lat?: unknown;
-  lon?: unknown;
-  timezone?: unknown;
-  isp?: unknown;
-  org?: unknown;
-  as?: unknown;
+  latitude?: unknown;
+  longitude?: unknown;
+  postal?: unknown;
+  connection?: {
+    asn?: unknown;
+    org?: unknown;
+    isp?: unknown;
+  } | null;
+  timezone?: {
+    id?: unknown;
+  } | null;
 }
 
-const IP_API_FIELDS = [
-  'status',
-  'message',
-  'country',
-  'countryCode',
-  'region',
-  'regionName',
-  'city',
-  'zip',
-  'lat',
-  'lon',
-  'timezone',
-  'isp',
-  'org',
-  'as',
-  'query',
-].join(',');
+interface CacheEntry {
+  expiresAt: number;
+  result: IpCheckResult;
+}
 
 export class IpGeolocationService implements IpCheckService {
-  private readonly apiKey: string;
   private readonly baseUrl: string;
   private readonly timeoutMs: number;
+  private readonly cacheTtlMs: number;
+  private readonly cacheMaxEntries: number;
   private readonly fetchImpl: typeof fetch;
+  private readonly now: () => number;
+  private readonly cache = new Map<string, CacheEntry>();
 
   constructor(options: IpGeolocationServiceOptions = {}) {
-    this.apiKey = options.apiKey ?? process.env.IP_API_PRO_KEY?.trim() ?? '';
-    this.baseUrl = (options.baseUrl ?? process.env.IP_API_PRO_BASE_URL?.trim() ?? 'https://pro.ip-api.com').replace(/\/+$/, '');
-    this.timeoutMs = positiveNumber(options.timeoutMs ?? process.env.IP_CHECK_UPSTREAM_TIMEOUT_MS, 5000);
+    this.baseUrl = (
+      options.baseUrl
+      ?? process.env.IP_CHECK_UPSTREAM_BASE_URL?.trim()
+      ?? 'https://ipwho.is'
+    ).replace(/\/+$/, '');
+    this.timeoutMs = positiveNumber(
+      options.timeoutMs ?? process.env.IP_CHECK_UPSTREAM_TIMEOUT_MS,
+      5000,
+    );
+    this.cacheTtlMs = positiveNumber(
+      options.cacheTtlMs ?? process.env.IP_CHECK_CACHE_TTL_MS,
+      86_400_000,
+    );
+    this.cacheMaxEntries = positiveInteger(
+      options.cacheMaxEntries ?? process.env.IP_CHECK_CACHE_MAX_ENTRIES,
+      2000,
+    );
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.now = options.now ?? Date.now;
   }
 
   async lookup(query: string): Promise<IpCheckResult> {
-    if (!this.apiKey) {
-      throw new IpCheckServiceError('IP_CHECK_NOT_CONFIGURED', 503);
+    const cached = this.cache.get(query);
+    if (cached) {
+      if (cached.expiresAt > this.now()) {
+        return { ...cached.result };
+      }
+      this.cache.delete(query);
     }
 
-    const url = new URL(`/json/${encodeURIComponent(query)}`, this.baseUrl);
-    url.searchParams.set('key', this.apiKey);
-    url.searchParams.set('fields', IP_API_FIELDS);
+    const url = new URL(`/${encodeURIComponent(query)}`, this.baseUrl);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -85,41 +98,57 @@ export class IpGeolocationService implements IpCheckService {
         headers: { Accept: 'application/json' },
         signal: controller.signal,
       });
+      if (response.status === 429) {
+        throw new IpCheckServiceError('IP_CHECK_RATE_LIMITED', 429);
+      }
       if (!response.ok) {
         throw new IpCheckServiceError('IP_CHECK_UPSTREAM_ERROR', 502);
       }
 
-      let data: IpApiProResponse;
+      let data: IpWhoIsResponse;
       try {
-        data = await response.json() as IpApiProResponse;
+        data = await response.json() as IpWhoIsResponse;
       } catch {
         throw new IpCheckServiceError('IP_CHECK_UPSTREAM_ERROR', 502);
       }
-      if (data.status !== 'success') {
+      if (data.success !== true) {
         throw new IpCheckServiceError('IP_CHECK_LOOKUP_FAILED', 422);
       }
 
-      const latitude = finiteNumber(data.lat);
-      const longitude = finiteNumber(data.lon);
-      if (latitude === null || longitude === null || !asString(data.query)) {
+      const latitude = finiteNumber(data.latitude);
+      const longitude = finiteNumber(data.longitude);
+      const ip = asString(data.ip);
+      if (latitude === null || longitude === null || !ip) {
         throw new IpCheckServiceError('IP_CHECK_UPSTREAM_ERROR', 502);
       }
 
-      return {
-        ip: asString(data.query),
+      const result: IpCheckResult = {
+        ip,
         country: asString(data.country),
-        country_code: asString(data.countryCode),
-        region: asString(data.region),
-        region_name: asString(data.regionName),
+        country_code: asString(data.country_code),
+        region: asString(data.region_code),
+        region_name: asString(data.region),
         city: asString(data.city),
-        postal_code: asString(data.zip),
+        postal_code: asString(data.postal),
         latitude,
         longitude,
-        timezone: asString(data.timezone),
-        isp: asString(data.isp),
-        organization: asString(data.org),
-        asn: asString(data.as),
+        timezone: asString(data.timezone?.id),
+        isp: asString(data.connection?.isp),
+        organization: asString(data.connection?.org),
+        asn: normalizeAsn(data.connection?.asn),
       };
+
+      while (this.cache.size >= this.cacheMaxEntries) {
+        const oldestKey = this.cache.keys().next().value;
+        if (typeof oldestKey !== 'string') break;
+        this.cache.delete(oldestKey);
+      }
+      this.cache.set(query, {
+        expiresAt: this.now() + this.cacheTtlMs,
+        result: { ...result },
+      });
+
+      return result;
     } catch (error) {
       if (error instanceof IpCheckServiceError) {
         throw error;
@@ -139,13 +168,31 @@ function positiveNumber(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
+function positiveInteger(value: unknown, fallback: number): number {
+  return Math.max(1, Math.floor(positiveNumber(value, fallback)));
+}
+
 function asString(value: unknown): string {
   return typeof value === 'string' ? value : '';
 }
 
 function finiteNumber(value: unknown): number | null {
+  if (typeof value !== 'number' && typeof value !== 'string') return null;
+  if (typeof value === 'string' && value.trim() === '') return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeAsn(value: unknown): string {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `AS${Math.trunc(value)}`;
+  }
+  if (typeof value !== 'string') return '';
+  const normalized = value.trim();
+  if (!normalized) return '';
+  if (/^AS\d+$/i.test(normalized)) return normalized.toUpperCase();
+  if (/^\d+$/.test(normalized)) return `AS${normalized}`;
+  return normalized;
 }
 
 function isAbortError(error: unknown): boolean {
