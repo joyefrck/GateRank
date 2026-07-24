@@ -36,7 +36,7 @@ import {
 const IP_CHECK_FAQ = [
   {
     question: 'IP 检测会保存查询历史吗？',
-    answer: 'GateRank 不将查询目标或结果写入数据库和业务日志；商业数据供应商会按其服务政策处理请求。',
+    answer: 'GateRank 不将查询目标或结果写入数据库和业务日志；成功结果会在 API 进程内存中临时缓存最多 24 小时，以节省免费查询额度。',
   },
   {
     question: '为什么 IP 定位和实际位置不同？',

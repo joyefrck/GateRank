@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  IP_CHECK_TRANSLATIONS,
+} from '../../shared/ipCheck';
+import {
   resolveIpCheckErrorMessage,
   resolveVisibleQuery,
   shouldUseIpifyFallback,
@@ -21,4 +24,15 @@ test('resolves localized stable error messages', () => {
   assert.match(resolveIpCheckErrorMessage('IP_CHECK_UPSTREAM_TIMEOUT', 'zh'), /超时/);
   assert.match(resolveIpCheckErrorMessage('IP_CHECK_UPSTREAM_TIMEOUT', 'en'), /timed out/i);
   assert.match(resolveIpCheckErrorMessage('UNKNOWN', 'zh'), /网络/);
+});
+
+test('discloses the free provider and in-memory result cache', () => {
+  assert.match(IP_CHECK_TRANSLATIONS.zh.dataSource, /ipwho\.is/);
+  assert.match(IP_CHECK_TRANSLATIONS.zh.privacy, /进程内存.*24 小时/);
+  assert.match(IP_CHECK_TRANSLATIONS.en.dataSource, /ipwho\.is/);
+  assert.match(IP_CHECK_TRANSLATIONS.en.privacy, /process memory.*24 hours/i);
+  assert.doesNotMatch(
+    `${IP_CHECK_TRANSLATIONS.zh.dataSource} ${IP_CHECK_TRANSLATIONS.en.dataSource}`,
+    /ip-api Pro/,
+  );
 });

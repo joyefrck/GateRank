@@ -487,7 +487,10 @@ test('legacy tools routes redirect to /download and unfinished tool placeholders
     const ipCheckHtml = await ipCheckResponse.text();
     assert.match(ipCheckHtml, /<h1>IP 地理位置查询<\/h1>/);
     assert.match(ipCheckHtml, /placeholder="输入 IP 地址或域名"/);
-    assert.match(ipCheckHtml, /GateRank 不保存查询历史/);
+    assert.match(ipCheckHtml, /GateRank 不持久保存查询历史/);
+    assert.match(ipCheckHtml, /ipwho\.is/);
+    assert.match(ipCheckHtml, /进程内存中临时缓存最多 24 小时/);
+    assert.doesNotMatch(ipCheckHtml, /ip-api Pro/);
     assert.match(ipCheckHtml, /<meta name="robots" content="index,follow,max-image-preview:large" \/>/);
     assert.match(ipCheckHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/tools\/ip-check" \/>/);
     assert.match(ipCheckHtml, /\/og\/rankings-region\.png/);

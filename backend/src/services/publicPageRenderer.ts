@@ -650,7 +650,7 @@ export function renderIpCheckPublicPage(
   const title = 'IP 地理位置查询 | IP 地址、域名、ISP 与 ASN 检测';
   const description = '免费查询当前出口 IP、IPv4、IPv6 或域名的国家地区、城市、经纬度、时区、ISP、组织与 ASN 信息。';
   const faqItems = [
-    ['IP 检测会保存查询历史吗？', 'GateRank 不将查询目标或结果写入数据库和业务日志；商业数据供应商会按其服务政策处理请求。'],
+    ['IP 检测会保存查询历史吗？', 'GateRank 不将查询目标或结果写入数据库和业务日志；成功结果会在 API 进程内存中临时缓存最多 24 小时，以节省免费查询额度。'],
     ['为什么 IP 定位和实际位置不同？', 'IP 地理位置来自网络注册、路由和运营商数据，通常只能定位到国家、地区或城市，不能替代 GPS。'],
     ['可以查询域名和 IPv6 吗？', '可以。输入合法的公网 IPv4、IPv6 或域名即可查看对应网络信息。'],
   ];
@@ -714,7 +714,7 @@ export function renderIpCheckPublicPage(
         </section>
         <section class="ip-check-ssr-note">
           <h2>隐私与数据说明</h2>
-          <p>GateRank 不保存查询历史；ip-api Pro 会处理查询目标，并可能按其服务政策保留最多 24 小时的故障排查日志。</p>
+          <p>GateRank 不持久保存查询历史；为节省免费额度，成功结果会在 API 进程内存中临时缓存最多 24 小时；ipwho.is 会根据其服务政策处理查询目标。</p>
         </section>
       </main>
     `,
