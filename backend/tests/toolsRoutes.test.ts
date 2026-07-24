@@ -48,6 +48,31 @@ test('IP check resolves the Cloudflare visitor IP and keeps responses private', 
   }
 });
 
+test('IP check asks the browser to resolve an address when the visitor IP is not public', async () => {
+  const app = express();
+  app.use(express.json());
+  app.use('/api/v1', createToolsPublicRoutes({
+    toolsDownloadService: { getDownloadPageView: async () => ({}) } as never,
+    ipCheckService: {
+      lookup: async (query) => createIpCheckResult(query),
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/tools/ip-check`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{}',
+    });
+    assert.equal(response.status, 422);
+    assert.equal((await response.json() as { code: string }).code, 'IP_CHECK_CLIENT_IP_REQUIRED');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('IP check normalizes manual domains and rejects private targets', async () => {
   const queries: string[] = [];
   const app = express();

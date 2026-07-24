@@ -96,6 +96,10 @@ export function createToolsPublicRoutes(deps: ToolsPublicDeps): Router {
         query = normalizeIpCheckTarget(body.query);
       }
     } catch {
+      if (body.query === undefined) {
+        sendError(res, 422, 'IP_CHECK_CLIENT_IP_REQUIRED', '无法识别当前出口 IP', requestId);
+        return;
+      }
       sendError(res, 400, 'IP_CHECK_INVALID_QUERY', '请输入有效的公网 IP 地址或域名', requestId);
       return;
     }
