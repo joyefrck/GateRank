@@ -234,6 +234,14 @@
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>
   <url>
+    <loc>http://localhost:3000/tools/streaming-check</loc>
+    <lastmod>2026-07-10T00:00:00+08:00</lastmod>
+  </url>
+  <url>
+    <loc>http://localhost:3000/tools/ip-check</loc>
+    <lastmod>2026-07-24T00:00:00+08:00</lastmod>
+  </url>
+  <url>
     <loc>http://localhost:3000/news/category/airport-reviews</loc>
     <lastmod>2026-05-17T00:00:00+08:00</lastmod>
   </url>

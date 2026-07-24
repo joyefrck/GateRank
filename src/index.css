@@ -5,6 +5,53 @@
   gap: 14px;
 }
 
+.gaterank-ip-marker {
+  position: relative;
+  border: 0;
+  background: transparent;
+}
+
+.gaterank-ip-marker-pulse,
+.gaterank-ip-marker-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 999px;
+  transform: translate(-50%, -50%);
+}
+
+.gaterank-ip-marker-pulse {
+  width: 44px;
+  height: 44px;
+  background: rgba(59, 130, 246, 0.28);
+  animation: gaterank-ip-marker-pulse 1.8s ease-out infinite;
+}
+
+.gaterank-ip-marker-core {
+  width: 17px;
+  height: 17px;
+  border: 3px solid #fff;
+  background: linear-gradient(135deg, #2563eb, #9333ea);
+  box-shadow: 0 7px 20px rgba(37, 99, 235, 0.55);
+}
+
+@keyframes gaterank-ip-marker-pulse {
+  0% {
+    opacity: 0.9;
+    transform: translate(-50%, -50%) scale(0.45);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gaterank-ip-marker-pulse {
+    animation: none;
+  }
+}
+
 .monthly-report-react-content h1,
 .monthly-report-react-content h2,
 .monthly-report-react-content h3 {

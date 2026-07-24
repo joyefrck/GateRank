@@ -112,6 +112,7 @@ import {
 import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import { DealsPage } from './pages/deals/DealsPage';
 import { StreamingCheckPage } from './pages/streamingCheck/StreamingCheckPage';
+import { IPCheckPage } from './pages/ipCheck/IPCheckPage';
 import { MonthlyReportDetailPage, MonthlyReportsPage } from './pages/monthlyReports/MonthlyReportsPage';
 import { trackPageView } from './site/analytics';
 import { getCapabilityIcon, type CapabilityIconCategory } from '../shared/capabilityIcons';
@@ -8937,7 +8938,7 @@ export default function App() {
     if (route.toolPlaceholder === 'streaming-check') {
       return <StreamingCheckPage />;
     }
-    return <ToolPlaceholderPage tool={route.toolPlaceholder} />;
+    return <IPCheckPage />;
   }
 
   if (route.kind === 'home') {
