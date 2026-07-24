@@ -1,4 +1,7 @@
+import { resolve4, resolve6 } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import type { IpCheckErrorCode, IpCheckResult } from '../../../shared/ipCheck';
+import { isPublicIpAddress } from '../utils/ipCheckTarget';
 
 export interface IpCheckService {
   lookup(query: string): Promise<IpCheckResult>;
@@ -21,6 +24,7 @@ interface IpGeolocationServiceOptions {
   cacheMaxEntries?: number;
   fetchImpl?: typeof fetch;
   now?: () => number;
+  resolveDomain?: (domain: string) => Promise<string[]>;
 }
 
 interface IpWhoIsResponse {
@@ -56,6 +60,7 @@ export class IpGeolocationService implements IpCheckService {
   private readonly cacheMaxEntries: number;
   private readonly fetchImpl: typeof fetch;
   private readonly now: () => number;
+  private readonly resolveDomain: (domain: string) => Promise<string[]>;
   private readonly cache = new Map<string, CacheEntry>();
 
   constructor(options: IpGeolocationServiceOptions = {}) {
@@ -78,6 +83,7 @@ export class IpGeolocationService implements IpCheckService {
     );
     this.fetchImpl = options.fetchImpl ?? fetch;
     this.now = options.now ?? Date.now;
+    this.resolveDomain = options.resolveDomain ?? resolveDomainAddresses;
   }
 
   async lookup(query: string): Promise<IpCheckResult> {
@@ -89,7 +95,21 @@ export class IpGeolocationService implements IpCheckService {
       this.cache.delete(query);
     }
 
-    const url = new URL(`/${encodeURIComponent(query)}`, this.baseUrl);
+    let upstreamQuery = query;
+    if (isIP(query) === 0) {
+      let addresses: string[];
+      try {
+        addresses = await this.resolveDomain(query);
+      } catch {
+        throw new IpCheckServiceError('IP_CHECK_LOOKUP_FAILED', 422);
+      }
+      upstreamQuery = addresses.find(isPublicIpAddress) ?? '';
+      if (!upstreamQuery) {
+        throw new IpCheckServiceError('IP_CHECK_LOOKUP_FAILED', 422);
+      }
+    }
+
+    const url = new URL(`/${encodeURIComponent(upstreamQuery)}`, this.baseUrl);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
 
@@ -197,4 +217,12 @@ function normalizeAsn(value: unknown): string {
 
 function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
+}
+
+async function resolveDomainAddresses(domain: string): Promise<string[]> {
+  const results = await Promise.allSettled([
+    resolve4(domain),
+    resolve6(domain),
+  ]);
+  return results.flatMap((result) => result.status === 'fulfilled' ? result.value : []);
 }

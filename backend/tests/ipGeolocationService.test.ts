@@ -51,8 +51,43 @@ test('normalizes a successful ipwho.is response', async () => {
   assert.equal(new URL(requestedUrl).search, '');
 });
 
+test('resolves a domain to a public IP before calling the free provider', async () => {
+  let requestedUrl = '';
+  let resolvedDomain = '';
+  const service = new IpGeolocationService({
+    resolveDomain: async (domain) => {
+      resolvedDomain = domain;
+      return ['142.250.72.14'];
+    },
+    fetchImpl: async (input) => {
+      requestedUrl = String(input);
+      return Response.json({
+        ...SUCCESS_RESPONSE,
+        ip: '142.250.72.14',
+      });
+    },
+  });
+
+  const result = await service.lookup('google.com');
+  assert.equal(resolvedDomain, 'google.com');
+  assert.equal(new URL(requestedUrl).pathname, '/142.250.72.14');
+  assert.equal(result.ip, '142.250.72.14');
+});
+
+test('rejects domains that do not resolve to a public address', async () => {
+  const service = new IpGeolocationService({
+    resolveDomain: async () => ['127.0.0.1', '10.0.0.1'],
+    fetchImpl: async () => {
+      throw new Error('provider must not be called');
+    },
+  });
+
+  await assert.rejects(service.lookup('example.com'), hasCode('IP_CHECK_LOOKUP_FAILED', 422));
+});
+
 test('maps provider lookup failures without exposing the provider body', async () => {
   const service = new IpGeolocationService({
+    resolveDomain: async () => ['93.184.216.34'],
     fetchImpl: async () => Response.json({
       success: false,
       message: 'invalid query containing secret details',
