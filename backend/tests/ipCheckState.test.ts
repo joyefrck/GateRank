@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   IP_CHECK_TRANSLATIONS,
 } from '../../shared/ipCheck';
@@ -35,4 +37,12 @@ test('discloses the free provider and in-memory result cache', () => {
     `${IP_CHECK_TRANSLATIONS.zh.dataSource} ${IP_CHECK_TRANSLATIONS.en.dataSource}`,
     /ip-api Pro/,
   );
+});
+
+test('IP check page does not include the ElephantRoute promotion', () => {
+  const pageSource = readFileSync(resolve(process.cwd(), 'src/pages/ipCheck/IPCheckPage.tsx'), 'utf8');
+  const sharedSource = readFileSync(resolve(process.cwd(), 'shared/ipCheck.ts'), 'utf8');
+
+  assert.doesNotMatch(pageSource, /VpnBanner|elphantroute\.com|vpnTitle|vpnDescription|vpnCta/);
+  assert.doesNotMatch(sharedSource, /ElephantRoute|vpnTitle|vpnDescription|vpnCta/);
 });
