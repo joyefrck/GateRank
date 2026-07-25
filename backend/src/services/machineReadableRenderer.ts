@@ -40,6 +40,7 @@ export interface PublicSummaryData {
     tool_downloads: string;
     streaming_check: string;
     ip_check: string;
+    dns_leak_test: string;
   };
   data_files: {
     summary_json: string;
@@ -149,6 +150,7 @@ export function buildSummaryData(siteUrl: string, home: HomePageView, risk: Risk
       tool_downloads: `${siteUrl}/download`,
       streaming_check: `${siteUrl}/tools/streaming-check`,
       ip_check: `${siteUrl}/tools/ip-check`,
+      dns_leak_test: `${siteUrl}/tools/dns-leak-test`,
     },
     data_files: {
       summary_json: `${siteUrl}/data/summary.json`,
@@ -377,6 +379,7 @@ export function renderDataIndexMarkdown(summary: PublicSummaryData): string {
     `- Tool downloads: ${summary.core_pages.tool_downloads}`,
     `- Streaming check: ${summary.core_pages.streaming_check}`,
     `- IP check: ${summary.core_pages.ip_check}`,
+    `- DNS leak test: ${summary.core_pages.dns_leak_test}`,
     `- Sitemap: ${summary.url.replace(/\/$/, '')}/sitemap.xml`,
     '',
     `> ${summary.disclaimer}`,
@@ -407,6 +410,7 @@ export function renderSummaryMarkdown(summary: PublicSummaryData): string {
     `- 翻墙工具下载：${summary.core_pages.tool_downloads}`,
     `- 流媒体检测：${summary.core_pages.streaming_check}`,
     `- IP 检测：${summary.core_pages.ip_check}`,
+    `- DNS 泄漏检测：${summary.core_pages.dns_leak_test}`,
     '',
     '## 公开数据',
     '',

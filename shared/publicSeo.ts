@@ -279,6 +279,7 @@ export const PUBLIC_SEO_PATHS = {
   download: '/download',
   streamingCheck: '/tools/streaming-check',
   ipCheck: '/tools/ip-check',
+  dnsLeakTest: '/tools/dns-leak-test',
   monthlyReports: '/monthly-reports',
   deals: '/deals',
   methodology: '/methodology',
@@ -440,6 +441,12 @@ export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | 
     return {
       ...PUBLIC_CORE_OG_IMAGES.rankingsRegion,
       alt: 'GateRank IP 地理位置与网络信息检测工具分享图',
+    };
+  }
+  if (pathname === PUBLIC_SEO_PATHS.dnsLeakTest) {
+    return {
+      ...PUBLIC_CORE_OG_IMAGES.rankingsRegion,
+      alt: 'GateRank DNS 泄漏与解析器检测工具分享图',
     };
   }
   if (pathname === PUBLIC_SEO_PATHS.monthlyReports || pathname.startsWith(`${PUBLIC_SEO_PATHS.monthlyReports}/`)) {

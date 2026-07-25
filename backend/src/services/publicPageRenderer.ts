@@ -803,6 +803,90 @@ export function renderStreamingCheckPublicPage(
   });
 }
 
+export function renderDnsLeakTestPublicPage(
+  siteUrl: string,
+  frontendAssets?: PublicFrontendAssets,
+): string {
+  const canonicalPath = PUBLIC_SEO_PATHS.dnsLeakTest;
+  const title = 'DNS Leak Test | DNS 泄漏、解析器与 DNSSEC 检测';
+  const description = '通过独立权威 DNS 探针检测当前网络实际使用的递归 DNS 解析器，并比较出口地区、运营商与 DNSSEC 能力信号。';
+  const faqItems = [
+    ['DNS 泄漏检测如何识别解析器？', 'GateRank 让浏览器解析本轮专属的一次性域名，并由独立权威 DNS 探针记录实际发起查询的递归解析器。'],
+    ['解析器和出口运营商不同就一定泄漏吗？', '不一定。公共 DNS 本来就可能与代理出口运营商不同，因此 GateRank 主要比较国家，并把结果表达为风险而非绝对结论。'],
+    ['网页能判断 DoH 或 DoT 吗？', '普通网页无法可靠读取浏览器或系统当前使用的 DNS 传输协议，因此 DoH 与 DoT 不输出虚假的是或否。'],
+  ];
+  return renderPublicDocument({
+    siteUrl,
+    canonicalPath,
+    seo: {
+      title,
+      description,
+      keywords: 'DNS Leak Test,DNS泄漏检测,DNS服务器检测,DNSSEC检测,代理DNS泄漏,VPN DNS检测',
+    },
+    active: 'tools',
+    jsonLd: {
+      '@context': 'https://schema.org',
+      '@graph': [
+        {
+          '@type': 'WebApplication',
+          name: 'GateRank DNS Leak Test',
+          applicationCategory: 'UtilitiesApplication',
+          operatingSystem: 'Web',
+          url: `${siteUrl}${canonicalPath}`,
+          description,
+          offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
+        },
+        buildBreadcrumbJsonLd(siteUrl, [
+          ['今日推荐', '/'],
+          ['翻墙工具下载', '/download'],
+          ['DNS 泄漏检测', canonicalPath],
+        ]),
+        {
+          '@type': 'FAQPage',
+          mainEntity: faqItems.map(([question, answer]) => ({
+            '@type': 'Question',
+            name: question,
+            acceptedAnswer: { '@type': 'Answer', text: answer },
+          })),
+        },
+      ],
+    },
+    frontendAssets,
+    body: `
+      <main class="dns-leak-test-page">
+        <section class="dns-leak-test-command">
+          <div>
+            <div class="eyebrow">Resolver path inspection</div>
+            <h1>DNS Leak Test</h1>
+            <p>触发 10 次一次性域名解析，识别实际递归 DNS，并把解析器地区与当前 HTTP 出口进行风险比较。</p>
+          </div>
+          <button type="button" class="dns-leak-test-button">开始检测</button>
+        </section>
+        <section class="dns-leak-test-network" aria-label="当前出口网络">
+          <span>当前出口网络</span>
+          <strong>点击检测后显示出口 IP 与解析器证据</strong>
+          <span>尚未检测</span>
+        </section>
+        <section class="dns-leak-test-results" aria-label="DNS 泄漏检测结果">
+          <h2>DNS 解析器证据</h2>
+          <p>开始检测后，这里会列出实际向权威探针发起查询的解析器 IP、地区、运营商与 ASN。</p>
+          ${[
+            ['泄漏风险', '待检测'],
+            ['DNS 与出口地区', '待检测'],
+            ['DNSSEC', '待检测'],
+            ['DoH', '网页无法可靠判断'],
+            ['DoT', '网页无法可靠判断'],
+          ].map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}
+        </section>
+        <section class="dns-leak-test-note">
+          <h2>如何理解结果</h2>
+          <p>国家一致仅表示本轮未发现明显地区异常；公共 DNS 的运营商可能与出口不同。DoH、DoT 和 VPN 是否正确接管 DNS 仍需结合客户端设置判断。</p>
+        </section>
+      </main>
+    `,
+  });
+}
+
 export function renderReportPublicPage(
   siteUrl: string,
   view: ReportView,
@@ -2719,6 +2803,21 @@ const styles = `
   .streaming-check-note { margin-top: 34px; max-width: 760px; }
   .streaming-check-note h2 { margin: 0; font-size: 20px; }
   .streaming-check-note p { margin: 10px 0 0; color: #737373; font-size: 14px; line-height: 1.8; }
+  .dns-leak-test-page { width: min(1120px, calc(100vw - 32px)); margin: 0 auto; padding: 48px 0 72px; color: #171717; }
+  .dns-leak-test-command { display: flex; align-items: end; justify-content: space-between; gap: 32px; border-bottom: 1px solid #e5e5e5; padding: 12px 0 32px; }
+  .dns-leak-test-command h1 { margin: 8px 0 0; font-size: clamp(44px, 7vw, 74px); line-height: .92; letter-spacing: -.055em; }
+  .dns-leak-test-command p { max-width: 720px; margin: 18px 0 0; color: #737373; font-size: 16px; line-height: 1.8; }
+  .dns-leak-test-button { min-height: 48px; flex: 0 0 auto; border: 0; border-radius: 8px; background: #e11d48; padding: 0 24px; color: #fff; font: inherit; font-size: 14px; font-weight: 900; box-shadow: 0 14px 30px rgba(225,29,72,.2); }
+  .dns-leak-test-network { display: grid; grid-template-columns: auto minmax(0,1fr) auto; gap: 18px; align-items: center; border-bottom: 1px solid #e5e5e5; padding: 24px 0; color: #737373; font-size: 13px; }
+  .dns-leak-test-network strong { color: #262626; }
+  .dns-leak-test-results { padding-top: 30px; }
+  .dns-leak-test-results h2 { margin: 0; font-size: 24px; }
+  .dns-leak-test-results > p { margin: 10px 0 18px; color: #737373; font-size: 14px; line-height: 1.7; }
+  .dns-leak-test-results > div { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #e5e5e5; padding: 18px 0; font-size: 14px; }
+  .dns-leak-test-results > div strong { text-align: right; }
+  .dns-leak-test-note { margin-top: 34px; max-width: 760px; border-top: 1px solid #e5e5e5; padding-top: 28px; }
+  .dns-leak-test-note h2 { margin: 0; font-size: 20px; }
+  .dns-leak-test-note p { margin: 10px 0 0; color: #737373; font-size: 14px; line-height: 1.8; }
   @media (max-width: 700px) {
     .streaming-check-page { width: min(100%, calc(100vw - 24px)); padding-top: 28px; }
     .streaming-check-command { align-items: stretch; flex-direction: column; gap: 22px; }
@@ -2726,6 +2825,10 @@ const styles = `
     .streaming-check-network { grid-template-columns: 1fr; gap: 5px; }
     .streaming-check-results { grid-template-columns: minmax(0,1fr); }
     .streaming-check-row.is-netflix { grid-column: auto; }
+    .dns-leak-test-page { width: min(100%, calc(100vw - 24px)); padding-top: 28px; }
+    .dns-leak-test-command { align-items: stretch; flex-direction: column; gap: 22px; }
+    .dns-leak-test-button { width: 100%; }
+    .dns-leak-test-network { grid-template-columns: 1fr; gap: 5px; }
   }
   .report-page { width: min(1180px, calc(100vw - 32px)); padding-top: 16px; gap: 28px; }
   .report-anchor-target { scroll-margin-top: 144px; }

@@ -1,0 +1,24 @@
+services:
+  gaterank-dns-probe:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.dns-probe
+    image: gaterank-dns-probe:local
+    restart: unless-stopped
+    env_file:
+      - ${DNS_PROBE_ENV_FILE:-.env}
+    ports:
+      - "53:5353/udp"
+      - "53:5353/tcp"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "3"

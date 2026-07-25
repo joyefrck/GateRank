@@ -1,0 +1,41 @@
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+
+COPY tsconfig.json ./
+COPY shared ./shared
+COPY backend ./backend
+
+RUN npx esbuild backend/src/dnsProbeServer.ts \
+  --bundle \
+  --platform=node \
+  --target=node20 \
+  --format=cjs \
+  --outfile=/app/dns-probe.cjs \
+  && npx esbuild backend/src/dnsProbeHealthcheck.ts \
+  --bundle \
+  --platform=node \
+  --target=node20 \
+  --format=cjs \
+  --outfile=/app/dns-probe-healthcheck.cjs
+
+FROM node:20-alpine
+
+WORKDIR /app
+COPY --from=builder /app/dns-probe.cjs ./dns-probe.cjs
+COPY --from=builder /app/dns-probe-healthcheck.cjs ./dns-probe-healthcheck.cjs
+
+ENV NODE_ENV=production
+ENV DNS_PROBE_ADDRESS=0.0.0.0
+ENV DNS_PROBE_PORT=5353
+
+EXPOSE 5353/udp
+EXPOSE 5353/tcp
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD ["node", "dns-probe-healthcheck.cjs"]
+
+USER node
+CMD ["node", "dns-probe.cjs"]

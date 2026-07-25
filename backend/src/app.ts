@@ -45,6 +45,7 @@ import { createPublicPageRoutes } from './routes/publicPageRoutes';
 import { createNewsPublicRoutes } from './routes/newsPublicRoutes';
 import { createToolsAdminRoutes } from './routes/toolsAdminRoutes';
 import { createToolsPublicRoutes } from './routes/toolsPublicRoutes';
+import { createDnsLeakInternalRoutes } from './routes/dnsLeakInternalRoutes';
 import { createMachineReadableRoutes } from './routes/machineReadableRoutes';
 import { createPublicRoutes } from './routes/publicRoutes';
 import { createUserTelegramBotRoutes } from './routes/userTelegramBotRoutes';
@@ -67,6 +68,7 @@ import { NewsPublicService } from './services/newsPublicService';
 import { MonthlyReportPublicService } from './services/monthlyReportPublicService';
 import { MonthlyReportGenerationService } from './services/monthlyReportGenerationService';
 import { IpGeolocationService } from './services/ipGeolocationService';
+import { DnsLeakTestService } from './services/dnsLeakTestService';
 import { ToolsDownloadService } from './services/toolsDownloadService';
 import { PublicViewService } from './services/publicViewService';
 import { RecomputeService } from './services/recomputeService';
@@ -198,6 +200,13 @@ export async function createApp() {
   await manualJobService.initialize();
   const toolsDownloadService = new ToolsDownloadService(toolDownloadRepository, systemSettingRepository);
   const ipCheckService = new IpGeolocationService();
+  const dnsLeakTestService = new DnsLeakTestService({
+    ipCheckService,
+    zone: process.env.DNS_LEAK_TEST_ZONE,
+    sessionSecret: process.env.DNS_PROBE_SESSION_SECRET,
+    callbackSecret: process.env.DNS_PROBE_CALLBACK_SECRET,
+    maxSessions: Number(process.env.DNS_LEAK_TEST_MAX_SESSIONS || 5_000),
+  });
     const publicViewService = new PublicViewService({
       airportRepository,
       metricsRepository,
@@ -293,7 +302,12 @@ export async function createApp() {
     createToolsPublicRoutes({
       toolsDownloadService,
       ipCheckService,
+      dnsLeakTestService,
     }),
+  );
+  app.use(
+    '/api/v1/internal',
+    createDnsLeakInternalRoutes(dnsLeakTestService),
   );
 
   app.use(

@@ -37,6 +37,14 @@ test('resolvePageOgImageMeta reuses the unlock OG image for streaming check', ()
 });
 
 test('resolvePageOgImageMeta returns static OG images for indexable public utility pages', () => {
+  assert.deepEqual(resolvePageOgImageMeta('/tools/dns-leak-test'), {
+    path: '/og/rankings-region.png',
+    alt: 'GateRank DNS 泄漏与解析器检测工具分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  });
+
   assert.deepEqual(resolvePageOgImageMeta('/apply'), {
     path: '/og/apply.png',
     alt: 'GateRank 申请入驻测试分享图',

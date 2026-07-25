@@ -23,6 +23,7 @@ import {
   renderRiskMonitorPublicPage,
   renderIpCheckPublicPage,
   renderStreamingCheckPublicPage,
+  renderDnsLeakTestPublicPage,
   renderToolsDownloadPublicPage,
 } from '../services/publicPageRenderer';
 import {
@@ -289,6 +290,12 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     const siteUrl = getSiteOrigin(req);
     setPublicCacheHeaders(res);
     res.status(200).type('html').send(renderIpCheckPublicPage(siteUrl, frontendAssets));
+  });
+
+  router.get('/tools/dns-leak-test', (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    setPublicCacheHeaders(res);
+    res.status(200).type('html').send(renderDnsLeakTestPublicPage(siteUrl, frontendAssets));
   });
 
   router.get('/api/v1/monthly-reports', async (req, res, next) => {

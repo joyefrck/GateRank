@@ -46,6 +46,7 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
     '/tools/download',
     '/tools/streaming-check',
     '/tools/ip-check',
+    '/tools/dns-leak-test',
   ]) {
     const block = getLocationBlock(config, `= ${route}`);
     assert.match(block, /proxy_pass\s+http:\/\/gaterank-api:8787/);

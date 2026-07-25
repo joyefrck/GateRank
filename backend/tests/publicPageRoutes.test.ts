@@ -516,6 +516,19 @@ test('legacy tools routes redirect to /download and unfinished tool placeholders
     assert.match(streamingHtml, /"@type":"FAQPage"/);
     assert.doesNotMatch(streamingHtml, /流媒体解锁检测<\/span><span class="public-top-nav-submenu-badge">即将上线/);
     assert.doesNotMatch(streamingHtml, /IP 检测<\/span><span class="public-top-nav-submenu-badge">即将上线/);
+
+    const dnsLeakResponse = await fetch(`http://127.0.0.1:${port}/tools/dns-leak-test`);
+    assert.equal(dnsLeakResponse.status, 200);
+    const dnsLeakHtml = await dnsLeakResponse.text();
+    assert.match(dnsLeakHtml, /<h1>DNS Leak Test<\/h1>/);
+    assert.match(dnsLeakHtml, /DNS 解析器证据/);
+    assert.match(dnsLeakHtml, /DoH/);
+    assert.match(dnsLeakHtml, /网页无法可靠判断/);
+    assert.match(dnsLeakHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/tools\/dns-leak-test" \/>/);
+    assert.match(dnsLeakHtml, /GateRank DNS 泄漏与解析器检测工具分享图/);
+    assert.match(dnsLeakHtml, /"@type":"WebApplication"/);
+    assert.match(dnsLeakHtml, /"@type":"FAQPage"/);
+    assert.doesNotMatch(dnsLeakHtml, /即将上线/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

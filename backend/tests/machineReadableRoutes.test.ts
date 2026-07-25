@@ -80,6 +80,7 @@ test('GET /for-ai returns an indexable HTML guide for AI applications', async ()
     assert.match(html, /\/rankings\/payment\/alipay/);
     assert.match(html, /\/rankings\/unlock\/chatgpt/);
     assert.match(html, /\/tools\/ip-check/);
+    assert.match(html, /\/tools\/dns-leak-test/);
     assert.doesNotMatch(html, /\/rankings\/all\?payment=alipay/);
   } finally {
     await close();

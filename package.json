@@ -15,12 +15,15 @@
     "server:dev": "tsx watch backend/src/server.ts",
     "server:start": "tsx backend/src/server.ts",
     "server:typecheck": "tsc -p backend/tsconfig.json --noEmit",
+    "dns-probe:start": "tsx backend/src/dnsProbeServer.ts",
+    "dns-probe:healthcheck": "tsx backend/src/dnsProbeHealthcheck.ts",
     "test:backend": "tsx --test backend/tests/**/*.test.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",
     "@types/geoip-country": "^5.0.0",
     "@vitejs/plugin-react": "^5.0.4",
+    "dns2": "^3.0.0",
     "dotenv": "^17.2.3",
     "express": "^4.21.2",
     "express-rate-limit": "^8.5.2",

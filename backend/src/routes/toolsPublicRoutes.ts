@@ -8,6 +8,11 @@ import {
   type ToolsDownloadPageView,
 } from '../../../shared/toolDownloads';
 import type { IpCheckRequest, IpCheckSuccessResponse } from '../../../shared/ipCheck';
+import type { DnsLeakTestResultRequest } from '../../../shared/dnsLeakTest';
+import {
+  DnsLeakTestServiceError,
+  type DnsLeakTestService,
+} from '../services/dnsLeakTestService';
 import { IpCheckServiceError, type IpCheckService } from '../services/ipGeolocationService';
 import type { ToolsDownloadService } from '../services/toolsDownloadService';
 import { normalizeIpCheckTarget } from '../utils/ipCheckTarget';
@@ -24,12 +29,15 @@ import {
 interface ToolsPublicDeps {
   toolsDownloadService: Pick<ToolsDownloadService, 'getDownloadPageView'>;
   ipCheckService?: IpCheckService;
+  dnsLeakTestService?: DnsLeakTestService;
 }
 
 export function createToolsPublicRoutes(deps: ToolsPublicDeps): Router {
   const router = Router();
   const streamingCheckRateLimit = createStreamingCheckRateLimit();
   const ipCheckRateLimit = createIpCheckRateLimit();
+  const dnsLeakStartRateLimit = createDnsLeakStartRateLimit();
+  const dnsLeakResultRateLimit = createDnsLeakResultRateLimit();
 
   router.get('/tools/downloads', async (req, res, next) => {
     try {
@@ -125,6 +133,36 @@ export function createToolsPublicRoutes(deps: ToolsPublicDeps): Router {
     }
   });
 
+  router.post('/tools/dns-leak-test/start', dnsLeakStartRateLimit, async (req, res) => {
+    setPrivateNoStoreHeaders(res);
+    if (!deps.dnsLeakTestService) {
+      sendError(res, 503, 'DNS_LEAK_TEST_NOT_CONFIGURED', 'DNS 泄漏检测尚未配置', req.requestId || 'unknown');
+      return;
+    }
+    try {
+      res.json(await deps.dnsLeakTestService.createSession(resolveVisitorIp(req)));
+    } catch (error) {
+      sendDnsLeakServiceError(res, req.requestId || 'unknown', error);
+    }
+  });
+
+  router.post('/tools/dns-leak-test/result', dnsLeakResultRateLimit, async (req, res) => {
+    setPrivateNoStoreHeaders(res);
+    if (!deps.dnsLeakTestService) {
+      sendError(res, 503, 'DNS_LEAK_TEST_NOT_CONFIGURED', 'DNS 泄漏检测尚未配置', req.requestId || 'unknown');
+      return;
+    }
+    const body = (req.body || {}) as DnsLeakTestResultRequest;
+    try {
+      res.json(await deps.dnsLeakTestService.getResult(
+        String(body.session_id || ''),
+        resolveVisitorIp(req),
+      ));
+    } catch (error) {
+      sendDnsLeakServiceError(res, req.requestId || 'unknown', error);
+    }
+  });
+
   return router;
 }
 
@@ -168,11 +206,78 @@ function createIpCheckRateLimit() {
   });
 }
 
+function createDnsLeakStartRateLimit() {
+  return rateLimit({
+    windowMs: Math.max(1000, Number(process.env.DNS_LEAK_TEST_RATE_WINDOW_MS || 60_000)),
+    limit: Math.max(1, Number(process.env.DNS_LEAK_TEST_RATE_MAX || 5)),
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => ipKeyGenerator(resolveVisitorIp(req)),
+    handler: (req, res) => {
+      setPrivateNoStoreHeaders(res);
+      sendError(
+        res,
+        429,
+        'DNS_LEAK_TEST_RATE_LIMITED',
+        '检测请求过于频繁，请稍后再试',
+        req.requestId || 'unknown',
+      );
+    },
+  });
+}
+
+function createDnsLeakResultRateLimit() {
+  return rateLimit({
+    windowMs: 60_000,
+    limit: Math.max(10, Number(process.env.DNS_LEAK_TEST_RESULT_RATE_MAX || 60)),
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => ipKeyGenerator(resolveVisitorIp(req)),
+    handler: (req, res) => {
+      setPrivateNoStoreHeaders(res);
+      sendError(
+        res,
+        429,
+        'DNS_LEAK_TEST_RATE_LIMITED',
+        '结果查询过于频繁，请稍后再试',
+        req.requestId || 'unknown',
+      );
+    },
+  });
+}
+
 function ipCheckErrorMessage(code: IpCheckServiceError['code']): string {
   if (code === 'IP_CHECK_LOOKUP_FAILED') return '无法解析该 IP 地址或域名';
   if (code === 'IP_CHECK_NOT_CONFIGURED') return 'IP 查询服务尚未配置';
   if (code === 'IP_CHECK_UPSTREAM_TIMEOUT') return 'IP 查询服务响应超时';
   return 'IP 查询服务暂时不可用';
+}
+
+function sendDnsLeakServiceError(
+  res: Parameters<typeof sendError>[0],
+  requestId: string,
+  error: unknown,
+): void {
+  if (error instanceof DnsLeakTestServiceError) {
+    sendError(
+      res,
+      error.status,
+      error.code,
+      error.code === 'DNS_LEAK_TEST_CLIENT_IP_REQUIRED'
+        ? '无法识别当前出口 IP'
+        : error.code === 'DNS_LEAK_TEST_SESSION_NOT_FOUND'
+          ? 'DNS 检测会话不存在或已过期'
+          : 'DNS 泄漏检测尚未配置',
+      requestId,
+    );
+    return;
+  }
+  sendError(res, 500, 'DNS_LEAK_TEST_INTERNAL_ERROR', 'DNS 泄漏检测暂时不可用', requestId);
+}
+
+function setPrivateNoStoreHeaders(res: Parameters<typeof sendError>[0]): void {
+  res.setHeader('Cache-Control', 'private, no-store');
+  res.setHeader('Pragma', 'no-cache');
 }
 
 function sanitizeToolsDownloadPageView(view: ToolsDownloadPageView): ToolsDownloadPageView {

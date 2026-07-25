@@ -55,6 +55,10 @@ export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
         label: 'IP 检测',
         href: '/tools/ip-check',
       },
+      {
+        label: 'DNS 泄漏检测',
+        href: '/tools/dns-leak-test',
+      },
     ],
   },
   {
