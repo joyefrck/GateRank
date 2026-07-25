@@ -18,7 +18,7 @@ import { DEALS_CONTENT_SECTIONS, DEALS_FAQ_ITEMS, buildDealsSeo, buildDealsStruc
 import type { AirportDealView } from '../../../shared/airportAds';
 import { ListPageHero } from '../../components/ListPageHero';
 import { buildAbsoluteUrl, buildDealsHref, navigate, PageFrame, usePageSeo } from '../../site/publicSite';
-import { createTrackedOutboundClickHandler, trackMarketingPageView } from '../../site/marketing';
+import { createTrackedOutboundClickHandler } from '../../site/marketing';
 import { readDealsInitialData, shouldFetchDealsData, type DealsResponse } from './dealsInitialData';
 
 export function DealsPage() {
@@ -29,10 +29,6 @@ export function DealsPage() {
   const [copiedCode, setCopiedCode] = useState('');
 
   const seo = useMemo(() => buildDealsSeo({ activeDeals: data?.total ?? 0 }), [data?.total]);
-
-  useEffect(() => {
-    trackMarketingPageView('deals', buildDealsHref());
-  }, []);
 
   useEffect(() => {
     if (!shouldFetchDealsData(initialData)) {

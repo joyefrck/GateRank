@@ -1,4 +1,6 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import test from 'node:test';
 import {
   MARKETING_PAGE_KINDS,
@@ -71,4 +73,13 @@ test('every registered page kind has a human-readable label', () => {
     assert.notEqual(getMarketingPageKindLabel(pageKind), '');
     assert.notEqual(getMarketingPageKindLabel(pageKind), pageKind);
   }
+});
+
+test('DealsPage leaves page-view tracking to the global route effect', () => {
+  const dealsPageSource = readFileSync(
+    resolve(process.cwd(), 'src/pages/deals/DealsPage.tsx'),
+    'utf8',
+  );
+
+  assert.doesNotMatch(dealsPageSource, /\btrackMarketingPageView\b/);
 });
