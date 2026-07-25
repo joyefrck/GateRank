@@ -522,6 +522,9 @@ test('legacy tools routes redirect to /download and unfinished tool placeholders
     const dnsLeakHtml = await dnsLeakResponse.text();
     assert.match(dnsLeakHtml, /<h1>DNS Leak Test<\/h1>/);
     assert.match(dnsLeakHtml, /DNS 解析器证据/);
+    assert.match(dnsLeakHtml, /每一行代表一个实际访问 GateRank 权威探针/);
+    assert.match(dnsLeakHtml, /AS 编号/);
+    assert.match(dnsLeakHtml, /不能据此判断 DoH 或 DoT/);
     assert.match(dnsLeakHtml, /DoH/);
     assert.match(dnsLeakHtml, /网页无法可靠判断/);
     assert.match(dnsLeakHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/tools\/dns-leak-test" \/>/);

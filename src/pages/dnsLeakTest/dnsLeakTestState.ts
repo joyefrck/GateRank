@@ -1,9 +1,27 @@
 import type {
+  DnsLeakResolverInfo,
   DnsLeakTestResultResponse,
   DnsLeakVerdict,
   DnsLeakCountryConsistency,
   DnssecSignal,
 } from '../../../shared/dnsLeakTest';
+import {
+  compareDnsLeakResolvers,
+  normalizeCountryCode,
+  sortDnsQueryTypes,
+} from '../../../shared/dnsLeakTest';
+
+const zhRegionNames = new Intl.DisplayNames(['zh-Hans'], { type: 'region' });
+
+export interface DnsResolverEvidenceRow {
+  ip: string;
+  location: string;
+  network: string;
+  asn: string;
+  asnValue: string;
+  observation: string;
+  queryTypes: string[];
+}
 
 export function dnsLeakVerdictLabel(value: DnsLeakVerdict): string {
   if (value === 'no_obvious_leak') return '未发现明显异常';
@@ -32,20 +50,63 @@ export function resolveDnsLeakErrorMessage(code: string): string {
   return 'DNS 泄漏检测暂时不可用，请稍后重试。';
 }
 
+export function formatDnsCountryName(countryCode: string, fallback: string): string {
+  const code = normalizeCountryCode(countryCode);
+  const localized = code ? zhRegionNames.of(code) : '';
+  return localized && localized !== code
+    ? localized
+    : String(fallback || '').trim() || '地区未知';
+}
+
+export function formatDnsAsnLabel(asn: string): string {
+  const value = String(asn || '').trim().toUpperCase();
+  return value ? `自治系统编号 ${value}` : '自治系统编号未知';
+}
+
+export function formatDnsQueryTypeLabel(queryType: string): string {
+  const value = String(queryType || '').trim().toUpperCase();
+  if (value === 'A') return 'A · IPv4 地址查询';
+  if (value === 'AAAA') return 'AAAA · IPv6 地址查询';
+  if (value === 'HTTPS') return 'HTTPS · HTTPS 服务参数查询';
+  return `${value || '未知类型'} · 其他 DNS 查询`;
+}
+
+export function buildDnsResolverEvidenceRows(
+  resolvers: ReadonlyArray<DnsLeakResolverInfo>,
+  totalProbes: number,
+): DnsResolverEvidenceRow[] {
+  return [...resolvers]
+    .sort(compareDnsLeakResolvers)
+    .map((resolver) => {
+      const queryTypes = sortDnsQueryTypes(resolver.query_types);
+      return {
+        ip: resolver.ip,
+        location: formatDnsCountryName(resolver.country_code, resolver.country),
+        network: resolver.organization || resolver.isp || '所属网络未知',
+        asn: formatDnsAsnLabel(resolver.asn),
+        asnValue: String(resolver.asn || '').trim().toUpperCase() || '未知',
+        observation: `命中 ${resolver.observation_count}/${totalProbes} 个测试域名`,
+        queryTypes: (queryTypes.length > 0 ? queryTypes : ['']).map(formatDnsQueryTypeLabel),
+      };
+    });
+}
+
 export function formatDnsLeakTestCopy(result: DnsLeakTestResultResponse): string {
-  const resolvers = result.resolvers.length > 0
-    ? result.resolvers.map((resolver, index) => [
-      `${index + 1}. ${resolver.ip}`,
-      resolver.country || resolver.country_code || '未知地区',
-      resolver.organization || resolver.isp || '未知运营商',
-      resolver.asn || '未知 ASN',
-    ].join(' · ')).join('\n')
+  const resolverRows = buildDnsResolverEvidenceRows(
+    result.resolvers,
+    result.total_probes,
+  );
+  const resolvers = resolverRows.length > 0
+    ? resolverRows.map((row, index) => [
+      `${index + 1}. ${row.ip} · ${row.location} · ${row.network} · ${row.asn}`,
+      `   ${row.observation} · ${row.queryTypes.join('；')}`,
+    ].join('\n')).join('\n')
     : '未发现解析器';
 
   return [
     'GateRank DNS Leak Test',
     `检测时间：${result.checked_at}`,
-    `当前出口：${result.network.ip || '未知'} · ${result.network.country || result.network.country_code || '未知地区'} · ${result.network.organization || result.network.isp || '未知运营商'}`,
+    `当前出口：${result.network.ip || '未知'} · ${formatDnsCountryName(result.network.country_code, result.network.country)} · ${result.network.organization || result.network.isp || '所属网络未知'}`,
     `泄漏风险：${dnsLeakVerdictLabel(result.verdict)}`,
     `DNS 与出口地区：${countryConsistencyLabel(result.country_consistency)}`,
     `DNSSEC：${dnssecSignalLabel(result.dnssec_signal)}`,

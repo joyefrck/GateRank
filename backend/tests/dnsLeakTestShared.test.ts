@@ -2,7 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assessDnsLeak,
+  compareDnsLeakResolvers,
   deriveDnssecSignal,
+  sortDnsQueryTypes,
   type DnsLeakResolverInfo,
 } from '../../shared/dnsLeakTest';
 import {
@@ -67,6 +69,26 @@ test('DNSSEC signal reflects authoritative DO observations without overclaiming 
   assert.equal(deriveDnssecSignal([]), 'unknown');
   assert.equal(deriveDnssecSignal([{ dnssec_ok: false }]), 'not_observed');
   assert.equal(deriveDnssecSignal([{ dnssec_ok: false }, { dnssec_ok: true }]), 'observed');
+});
+
+test('DNS resolver evidence sorts by probe hits and then by IP', () => {
+  const values = [
+    { ip: '8.8.8.8', observation_count: 2 },
+    { ip: '1.1.1.1', observation_count: 5 },
+    { ip: '9.9.9.9', observation_count: 2 },
+  ];
+
+  assert.deepEqual(
+    [...values].sort(compareDnsLeakResolvers).map((value) => value.ip),
+    ['1.1.1.1', '8.8.8.8', '9.9.9.9'],
+  );
+});
+
+test('DNS query types use semantic order and remove duplicates', () => {
+  assert.deepEqual(
+    sortDnsQueryTypes(['HTTPS', 'AAAA', 'TXT', 'A', 'AAAA', 'MX']),
+    ['A', 'AAAA', 'HTTPS', 'MX', 'TXT'],
+  );
 });
 
 function resolver(countryCode: string): DnsLeakResolverInfo {

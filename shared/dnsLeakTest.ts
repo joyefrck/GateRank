@@ -64,6 +64,32 @@ export interface DnsLeakAssessment {
   country_consistency: DnsLeakCountryConsistency;
 }
 
+const DNS_QUERY_TYPE_PRIORITY: Readonly<Record<string, number>> = {
+  A: 0,
+  AAAA: 1,
+  HTTPS: 2,
+};
+
+export function sortDnsQueryTypes(values: ReadonlyArray<string>): string[] {
+  return [...new Set(
+    values
+      .map((value) => String(value || '').trim().toUpperCase())
+      .filter(Boolean),
+  )].sort((left, right) => (
+    (DNS_QUERY_TYPE_PRIORITY[left] ?? Number.MAX_SAFE_INTEGER)
+    - (DNS_QUERY_TYPE_PRIORITY[right] ?? Number.MAX_SAFE_INTEGER)
+    || left.localeCompare(right)
+  ));
+}
+
+export function compareDnsLeakResolvers(
+  left: Pick<DnsLeakResolverInfo, 'ip' | 'observation_count'>,
+  right: Pick<DnsLeakResolverInfo, 'ip' | 'observation_count'>,
+): number {
+  return right.observation_count - left.observation_count
+    || left.ip.localeCompare(right.ip);
+}
+
 export function assessDnsLeak(
   networkCountryCode: string,
   resolvers: ReadonlyArray<Pick<DnsLeakResolverInfo, 'country_code'>>,

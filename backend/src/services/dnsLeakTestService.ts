@@ -5,7 +5,9 @@ import {
   DNS_LEAK_TEST_SESSION_TTL_MS,
   DNS_LEAK_TEST_TOTAL_PROBES,
   assessDnsLeak,
+  compareDnsLeakResolvers,
   deriveDnssecSignal,
+  sortDnsQueryTypes,
   type DnsLeakNetworkInfo,
   type DnsLeakObservation,
   type DnsLeakResolverInfo,
@@ -163,11 +165,11 @@ export class DnsLeakTestService {
       return {
         ...network,
         dnssec_ok: items.some((item) => item.dnssec_ok),
-        query_types: [...new Set(items.map((item) => item.query_type))].sort(),
+        query_types: sortDnsQueryTypes(items.map((item) => item.query_type)),
         observation_count: new Set(items.map((item) => item.probe_index)).size,
       } satisfies DnsLeakResolverInfo;
     }));
-    resolvers.sort((left, right) => left.ip.localeCompare(right.ip));
+    resolvers.sort(compareDnsLeakResolvers);
 
     const network = await session.networkPromise;
     const assessment = assessDnsLeak(network.country_code, resolvers);

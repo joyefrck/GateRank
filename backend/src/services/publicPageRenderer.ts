@@ -869,14 +869,22 @@ export function renderDnsLeakTestPublicPage(
         </section>
         <section class="dns-leak-test-results" aria-label="DNS 泄漏检测结果">
           <h2>DNS 解析器证据</h2>
-          <p>开始检测后，这里会列出实际向权威探针发起查询的解析器 IP、地区、运营商与 ASN。</p>
+          <div class="dns-leak-test-explainer">
+            <p>每一行代表一个实际访问 GateRank 权威探针的递归 DNS 服务器 IP。同一家公共 DNS 可能使用多个服务器 IP，因此相同运营商的多行记录不一定是重复或异常。</p>
+            <ul>
+              <li><strong>AS 编号：</strong>IP 所属互联网网络的自治系统编号，不是风险等级。</li>
+              <li><strong>命中测试域名：</strong>该解析器处理了本轮 10 个测试域名中的几个。</li>
+              <li><strong>A / AAAA / HTTPS：</strong>IPv4、IPv6 和 HTTPS 服务参数查询，不能据此判断 DoH 或 DoT。</li>
+            </ul>
+          </div>
+          <p>开始检测后，这里会按命中测试域名数量从多到少列出解析器；数量相同时按 IP 排序。</p>
           ${[
             ['泄漏风险', '待检测'],
             ['DNS 与出口地区', '待检测'],
             ['DNSSEC', '待检测'],
             ['DoH', '网页无法可靠判断'],
             ['DoT', '网页无法可靠判断'],
-          ].map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}
+          ].map(([label, value]) => `<div class="dns-leak-test-analysis-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join('')}
         </section>
         <section class="dns-leak-test-note">
           <h2>如何理解结果</h2>
@@ -2813,8 +2821,12 @@ const styles = `
   .dns-leak-test-results { padding-top: 30px; }
   .dns-leak-test-results h2 { margin: 0; font-size: 24px; }
   .dns-leak-test-results > p { margin: 10px 0 18px; color: #737373; font-size: 14px; line-height: 1.7; }
-  .dns-leak-test-results > div { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #e5e5e5; padding: 18px 0; font-size: 14px; }
-  .dns-leak-test-results > div strong { text-align: right; }
+  .dns-leak-test-explainer { margin-top: 16px; border-top: 1px solid #e5e5e5; border-bottom: 1px solid #e5e5e5; padding: 16px 0; color: #737373; font-size: 13px; line-height: 1.7; }
+  .dns-leak-test-explainer p { margin: 0; }
+  .dns-leak-test-explainer ul { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px 24px; margin: 12px 0 0; padding: 0; list-style: none; }
+  .dns-leak-test-explainer strong { color: #404040; }
+  .dns-leak-test-analysis-row { display: flex; align-items: center; justify-content: space-between; gap: 18px; border-bottom: 1px solid #e5e5e5; padding: 18px 0; font-size: 14px; }
+  .dns-leak-test-analysis-row strong { text-align: right; }
   .dns-leak-test-note { margin-top: 34px; max-width: 760px; border-top: 1px solid #e5e5e5; padding-top: 28px; }
   .dns-leak-test-note h2 { margin: 0; font-size: 20px; }
   .dns-leak-test-note p { margin: 10px 0 0; color: #737373; font-size: 14px; line-height: 1.8; }
@@ -2829,6 +2841,7 @@ const styles = `
     .dns-leak-test-command { align-items: stretch; flex-direction: column; gap: 22px; }
     .dns-leak-test-button { width: 100%; }
     .dns-leak-test-network { grid-template-columns: 1fr; gap: 5px; }
+    .dns-leak-test-explainer ul { grid-template-columns: minmax(0,1fr); }
   }
   .report-page { width: min(1180px, calc(100vw - 32px)); padding-top: 16px; gap: 28px; }
   .report-anchor-target { scroll-margin-top: 144px; }

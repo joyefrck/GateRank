@@ -13,7 +13,6 @@ import {
   Play,
   RotateCw,
   Route,
-  Server,
   ShieldCheck,
 } from 'lucide-react';
 import type {
@@ -22,9 +21,12 @@ import type {
 } from '../../../shared/dnsLeakTest';
 import { buildAbsoluteUrl, PageFrame, usePageSeo } from '../../site/publicSite';
 import {
+  buildDnsResolverEvidenceRows,
   countryConsistencyLabel,
   dnsLeakVerdictLabel,
   dnssecSignalLabel,
+  formatDnsAsnLabel,
+  formatDnsCountryName,
   formatDnsLeakTestCopy,
   resolveDnsLeakErrorMessage,
 } from './dnsLeakTestState';
@@ -146,6 +148,9 @@ export function DNSLeakTestPage() {
   };
 
   const errorMessage = errorCode ? resolveDnsLeakErrorMessage(errorCode) : '';
+  const resolverRows = result
+    ? buildDnsResolverEvidenceRows(result.resolvers, result.total_probes)
+    : [];
 
   return (
     <PageFrame active="tools">
@@ -190,7 +195,11 @@ export function DNSLeakTestPage() {
               </p>
               {result ? (
                 <p className="mt-1 truncate text-xs text-neutral-500">
-                  {[result.network.country || result.network.country_code, result.network.organization || result.network.isp, result.network.asn].filter(Boolean).join(' · ') || '地理与网络信息未知'}
+                  {[
+                    formatDnsCountryName(result.network.country_code, result.network.country),
+                    result.network.organization || result.network.isp || '所属网络未知',
+                    formatDnsAsnLabel(result.network.asn),
+                  ].join(' · ')}
                 </p>
               ) : null}
             </div>
@@ -215,7 +224,7 @@ export function DNSLeakTestPage() {
         ) : null}
 
         <section className="mt-8" aria-label="DNS 解析器检测结果">
-          <div className="flex flex-col gap-3 border-b border-neutral-200 pb-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-3 pb-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <div className="text-[11px] font-black uppercase tracking-[0.18em] text-rose-600">Observed resolvers</div>
               <h2 className="mt-2 text-2xl font-black tracking-tight">DNS 解析器证据</h2>
@@ -232,30 +241,119 @@ export function DNSLeakTestPage() {
             ) : null}
           </div>
 
-          {result?.resolvers.length ? (
-            <div className="divide-y divide-neutral-200">
-              {result.resolvers.map((resolver, index) => (
-                <article
-                  key={resolver.ip}
-                  className="grid min-w-0 animate-[dns-resolver-in_.3s_ease-out_both] gap-4 py-5 motion-reduce:animate-none md:grid-cols-[48px_minmax(0,1fr)_minmax(180px,.7fr)_auto] md:items-center"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-neutral-100 text-neutral-700">
-                    <Server size={19} />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate font-mono text-sm font-black text-neutral-950">{resolver.ip}</p>
-                    <p className="mt-1 truncate text-xs text-neutral-500">{resolver.country || resolver.country_code || '未知地区'}</p>
-                  </div>
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-black text-neutral-800">{resolver.organization || resolver.isp || '未知运营商'}</p>
-                    <p className="mt-1 truncate text-xs text-neutral-500">{resolver.asn || '未知 ASN'}</p>
-                  </div>
-                  <div className="text-xs font-black text-neutral-500">
-                    {resolver.observation_count} 次观察 · {resolver.query_types.join(', ')}
-                  </div>
-                </article>
-              ))}
+          <div className="border-y border-neutral-200 py-4 text-xs leading-6 text-neutral-500">
+            <p>
+              每一行代表一个实际访问 GateRank 权威探针的递归 DNS 服务器 IP。同一家公共 DNS 可能使用多个服务器 IP，因此相同运营商的多行记录不一定是重复或异常。
+            </p>
+            <div className="mt-3 grid gap-x-8 gap-y-1 sm:grid-cols-2 lg:grid-cols-3">
+              <p><strong className="text-neutral-700">AS 编号：</strong>IP 所属互联网网络的自治系统编号，不是风险等级。</p>
+              <p><strong className="text-neutral-700">命中测试域名：</strong>该解析器处理了本轮 10 个测试域名中的几个。</p>
+              <p><strong className="text-neutral-700">A / AAAA / HTTPS：</strong>IPv4、IPv6 和 HTTPS 服务参数查询，不能据此判断 DoH 或 DoT。</p>
+            </div>
+            {result ? (
+              <p className="mt-3 font-bold text-neutral-700">
+                本轮观察到 {resolverRows.length} 个不同解析器来源 IP，不代表 {resolverRows.length} 家 DNS 服务商。按本轮命中测试域名数量从多到少排列；数量相同时按 IP 排序。
+              </p>
+            ) : null}
+          </div>
+
+          {resolverRows.length > 0 ? (
+            <div className="mt-4">
+              {result?.status === 'running' ? (
+                <p className="mb-3 text-xs font-bold text-amber-700" role="status">
+                  检测仍在进行，以下是权威探针当前已收到的部分证据。
+                </p>
+              ) : null}
+
+              <table className="hidden w-full table-fixed border-collapse md:table">
+                <thead className="bg-neutral-50 text-left text-[11px] font-black uppercase tracking-[0.12em] text-neutral-500">
+                  <tr>
+                    <th scope="col" className="w-[24%] px-4 py-3">解析器 IP</th>
+                    <th scope="col" className="w-[18%] px-4 py-3">位置</th>
+                    <th scope="col" className="w-[27%] px-4 py-3">所属网络</th>
+                    <th scope="col" className="w-[31%] px-4 py-3 text-right">查询证据</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-200">
+                  {resolverRows.map((row, index) => (
+                    <tr
+                      key={row.ip}
+                      className="animate-[dns-resolver-in_.3s_ease-out_both] align-top motion-reduce:animate-none"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <td className="px-4 py-5">
+                        <span className="break-all font-mono text-sm font-black text-neutral-950">{row.ip}</span>
+                      </td>
+                      <td className="px-4 py-5">
+                        <span className="text-sm font-black text-neutral-800">{row.location}</span>
+                        <span className="mt-1 block text-xs leading-5 text-neutral-500">
+                          IP 数据库估算的网络注册地区
+                        </span>
+                      </td>
+                      <td className="px-4 py-5">
+                        <span className="break-words text-sm font-black text-neutral-800">{row.network}</span>
+                        <span className="mt-1 block text-xs leading-5 text-neutral-500">{row.asn}</span>
+                      </td>
+                      <td className="px-4 py-5 text-right">
+                        <strong className="text-xs text-neutral-700">{row.observation}</strong>
+                        <div className="mt-2 flex flex-wrap justify-end gap-1.5">
+                          {row.queryTypes.map((queryType) => (
+                            <span
+                              key={queryType}
+                              className="rounded-md bg-neutral-100 px-2 py-1 text-[11px] font-bold text-neutral-600"
+                            >
+                              {queryType}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              <div className="md:hidden">
+                {resolverRows.map((row, index) => (
+                  <article
+                    key={row.ip}
+                    className="animate-[dns-resolver-in_.3s_ease-out_both] border-b border-neutral-200 py-5 motion-reduce:animate-none"
+                    style={{ animationDelay: `${index * 50}ms` }}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <p className="min-w-0 break-all font-mono text-sm font-black text-neutral-950">
+                        {row.ip}
+                      </p>
+                      <strong className="shrink-0 text-right text-xs leading-5 text-neutral-700">
+                        {row.observation}
+                      </strong>
+                    </div>
+                    <dl className="mt-4 grid grid-cols-[88px_minmax(0,1fr)] gap-x-3 gap-y-3 text-sm">
+                      <dt className="text-xs font-bold text-neutral-400">位置</dt>
+                      <dd className="min-w-0 text-neutral-700">
+                        {row.location}
+                        <span className="mt-1 block text-xs leading-5 text-neutral-400">
+                          IP 数据库估算的网络注册地区
+                        </span>
+                      </dd>
+                      <dt className="text-xs font-bold text-neutral-400">所属网络</dt>
+                      <dd className="min-w-0 break-words text-neutral-700">{row.network}</dd>
+                      <dt className="text-xs font-bold text-neutral-400">自治系统编号</dt>
+                      <dd className="min-w-0 break-words text-neutral-700">{row.asnValue}</dd>
+                      <dt className="text-xs font-bold text-neutral-400">查询类型</dt>
+                      <dd className="flex min-w-0 flex-wrap gap-1.5">
+                        {row.queryTypes.map((queryType) => (
+                          <span
+                            key={queryType}
+                            className="rounded-md bg-neutral-100 px-2 py-1 text-[11px] font-bold text-neutral-600"
+                          >
+                            {queryType}
+                          </span>
+                        ))}
+                      </dd>
+                    </dl>
+                  </article>
+                ))}
+              </div>
             </div>
           ) : (
             <div className="flex min-h-36 items-center justify-center border-b border-neutral-200 text-center text-sm leading-7 text-neutral-400">

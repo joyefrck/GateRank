@@ -29,12 +29,16 @@ test('creates ten signed probe hosts and completes with deduplicated resolver ev
   record(service, observation('event-one', 0, '8.8.8.8', true), now);
   record(service, observation('event-two', 0, '8.8.8.8', false), now);
   record(service, observation('event-three', 1, '1.1.1.1', false), now);
+  record(service, observation('event-four', 2, '8.8.8.8', false, 'HTTPS'), now);
+  record(service, observation('event-five', 3, '8.8.8.8', false, 'AAAA'), now);
 
   let result = await service.getResult(SESSION_ID, '203.0.113.10');
   assert.equal(result.status, 'running');
-  assert.equal(result.observed_probe_count, 2);
+  assert.equal(result.observed_probe_count, 4);
   assert.equal(result.resolvers.length, 2);
-  assert.equal(result.resolvers.find((resolver) => resolver.ip === '8.8.8.8')?.observation_count, 1);
+  assert.deepEqual(result.resolvers.map((resolver) => resolver.ip), ['8.8.8.8', '1.1.1.1']);
+  assert.deepEqual(result.resolvers[0]?.query_types, ['A', 'AAAA', 'HTTPS']);
+  assert.equal(result.resolvers[0]?.observation_count, 3);
   assert.equal(result.dnssec_signal, 'observed');
   assert.equal(result.verdict, 'possible_leak');
   assert.equal(result.country_consistency, 'mismatched');
@@ -133,13 +137,14 @@ function observation(
   probeIndex: number,
   resolverIp: string,
   dnssecOk: boolean,
+  queryType = 'A',
 ): DnsLeakObservation {
   return {
     event_id: eventId,
     session_id: SESSION_ID,
     probe_index: probeIndex,
     resolver_ip: resolverIp,
-    query_type: 'A',
+    query_type: queryType,
     dnssec_ok: dnssecOk,
     observed_at: new Date(NOW).toISOString(),
   };
