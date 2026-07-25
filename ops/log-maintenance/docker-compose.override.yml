@@ -1,0 +1,15 @@
+# Managed by GateRank log maintenance
+services:
+  gaterank-web:
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"
+
+  gaterank-api:
+    logging:
+      driver: json-file
+      options:
+        max-size: "100m"
+        max-file: "3"

@@ -404,6 +404,50 @@ curl -sS --connect-timeout 10 https://gate-rank.com/sitemap.xml | grep '/airport
 - 启动失败时先看 `docker logs --tail 100 gaterank-web` 和 `docker logs --tail 100 gaterank-api`
 - 不要把 1Panel 账号、密码或其他敏感信息写入仓库
 
+## 生产日志定时维护
+
+GateRank 提供独立于应用进程的宿主机日志维护功能：
+
+- 1Panel OpenResty 的 GateRank `access.log`、`error.log` 每小时检查一次，达到 `100MB` 时轮转，保留 `14` 份并压缩旧日志
+- `gaterank-web`、`gaterank-api` 使用 Docker 原生 `json-file` 轮转，每个容器单文件 `100MB`，保留 `3` 份
+- 磁盘使用率在轮转后仍达到 `80%` 时任务失败并写入 systemd journal
+- 不自动清理 MySQL binlog、上传文件、Docker 镜像、构建缓存或其他业务日志
+
+首次安装或更新维护策略时，先在生产服务器的 GateRank 仓库目录执行只读预检：
+
+```bash
+sudo bash scripts/gaterank-log-maintenance.sh install --dry-run
+```
+
+确认预检通过后正式安装：
+
+```bash
+sudo bash scripts/gaterank-log-maintenance.sh install
+```
+
+正式安装会备份被替换的配置，迁移旧的 GateRank logrotate 规则，校验 Compose，并定向重建 `gaterank-web`、`gaterank-api` 使 Docker 原生轮转参数生效。健康检查失败时会恢复原 Compose override 并重建回滚。
+
+常用检查命令：
+
+```bash
+sudo /usr/local/sbin/gaterank-log-maintenance check
+sudo /usr/local/sbin/gaterank-log-maintenance run
+systemctl status gaterank-log-maintenance.timer
+journalctl -u gaterank-log-maintenance.service --since today
+```
+
+卸载只删除带 GateRank 管理标记的配置，保留状态和历史备份，也不会隐式重启容器：
+
+```bash
+sudo /usr/local/sbin/gaterank-log-maintenance uninstall
+```
+
+本地隔离测试：
+
+```bash
+npm run test:ops
+```
+
 ## 午夜自动维护
 
 后端支持一个按上海时间串行执行的午夜维护流水线，用来覆盖管理后台里的四个模块：

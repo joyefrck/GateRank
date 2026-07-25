@@ -1,0 +1,12 @@
+# Managed by GateRank log maintenance
+[Unit]
+Description=Run GateRank log maintenance hourly
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+RandomizedDelaySec=5m
+Unit=gaterank-log-maintenance.service
+
+[Install]
+WantedBy=timers.target
