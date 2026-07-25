@@ -41,6 +41,10 @@ export interface MarketingEventInsertRecord {
   session_hash: string;
 }
 
+export interface MarketingPageViewRepository {
+  insertMany(records: MarketingEventInsertRecord[]): Promise<void>;
+}
+
 export interface MarketingEventPayload {
   occurred_at?: string;
   event_type: MarketingEventType;
@@ -179,6 +183,30 @@ export function buildServerPageViewRecord(
     visitor_hash: identity.visitor_hash,
     session_hash: identity.session_hash,
   };
+}
+
+export function trackServerMarketingPageView(
+  repository: MarketingPageViewRepository | undefined,
+  req: Request,
+  input: {
+    page_kind: MarketingPageKind;
+    page_path: string;
+  },
+): void {
+  if (!repository) {
+    return;
+  }
+
+  void repository
+    .insertMany([buildServerPageViewRecord(req, input)])
+    .catch((error) => {
+      console.error('[marketing] failed to record server-side page view', {
+        pagePath: input.page_path,
+        pageKind: input.page_kind,
+        requestId: req.requestId || 'unknown',
+        error,
+      });
+    });
 }
 
 export function toIsoOrNull(value: unknown): string | null {

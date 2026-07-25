@@ -455,6 +455,7 @@ export async function createApp() {
       publicViewService,
       airportAdCampaignRepository,
       monthlyReportPublicService,
+      marketingRepository: marketingEventRepository,
     }),
   );
 

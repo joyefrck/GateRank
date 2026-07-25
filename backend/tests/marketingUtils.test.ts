@@ -5,7 +5,27 @@ import {
   resolveMarketingAttribution,
   resolveMarketingCountry,
   resolveMarketingSource,
+  trackServerMarketingPageView,
+  type MarketingEventInsertRecord,
 } from '../src/utils/marketing';
+
+test('trackServerMarketingPageView records one normalized server page view', async () => {
+  const records: MarketingEventInsertRecord[] = [];
+  trackServerMarketingPageView(
+    { insertMany: async (items) => { records.push(...items); } },
+    stubRequest({
+      headers: { 'user-agent': 'coverage-test/1.0' },
+      ip: '127.0.0.1',
+    }),
+    { page_kind: 'for_ai', page_path: '/for-ai' },
+  );
+
+  await new Promise((resolve) => setImmediate(resolve));
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0]?.page_kind, 'for_ai');
+  assert.equal(records[0]?.page_path, '/for-ai');
+});
 
 test('resolveMarketingSource prioritizes utm source over external referrer host', () => {
   const result = resolveMarketingSource({

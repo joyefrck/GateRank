@@ -28,6 +28,10 @@ import {
   type PublicFrontendAssets,
 } from '../services/frontendAssets';
 import type { MonthlyReportPublicService } from '../services/monthlyReportPublicService';
+import {
+  trackServerMarketingPageView,
+  type MarketingPageViewRepository,
+} from '../utils/marketing';
 
 interface MachineReadableDeps {
   publicViewService: {
@@ -41,6 +45,7 @@ interface MachineReadableDeps {
   };
   monthlyReportPublicService?: MonthlyReportPublicService;
   frontendAssets?: PublicFrontendAssets;
+  marketingRepository?: MarketingPageViewRepository;
 }
 
 const MACHINE_READABLE_PAGE_SIZE = 100;
@@ -161,8 +166,13 @@ export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
     try {
       const siteUrl = getSiteOrigin(req);
       const summary = await getSummary(deps, siteUrl);
+      const html = renderForAiPublicPage(siteUrl, summary, frontendAssets);
       setPublicCacheHeaders(res);
-      res.status(200).type('html').send(renderForAiPublicPage(siteUrl, summary, frontendAssets));
+      trackServerMarketingPageView(deps.marketingRepository, req, {
+        page_kind: 'for_ai',
+        page_path: '/for-ai',
+      });
+      res.status(200).type('html').send(html);
     } catch (error) {
       console.error('[machine-readable] failed to render for-ai page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send('GateRank for AI 页面暂时无法生成');

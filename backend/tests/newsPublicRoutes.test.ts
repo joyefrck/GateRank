@@ -5,6 +5,58 @@ import express from 'express';
 import { createNewsPublicRoutes } from '../src/routes/newsPublicRoutes';
 import { errorHandler } from '../src/middleware/errorHandler';
 import { renderNewsArticlePage } from '../src/services/newsPageRenderer';
+import type { MarketingEventInsertRecord } from '../src/utils/marketing';
+
+test('News and publish docs HTML record once while markdown and News errors record none', async () => {
+  const records: MarketingEventInsertRecord[] = [];
+  const app = express();
+  app.use(createNewsPublicRoutes({
+    newsPublicService: {
+      getListView: async () => ({
+        page: 1,
+        page_size: 12,
+        total: 0,
+        total_pages: 1,
+        featured: null,
+        items: [],
+      }),
+      getArticleViewBySlug: async (slug: string) => {
+        if (slug === 'error') {
+          throw new Error('news unavailable');
+        }
+        return null;
+      },
+      getPreviewArticleView: async () => null,
+      getSitemapItems: async () => [],
+    } as never,
+    marketingRepository: {
+      insertMany: async (items) => { records.push(...items); },
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    assert.equal((await fetch(`http://127.0.0.1:${port}/news`)).status, 200);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/publish-token-docs`)).status, 200);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/publish-token-docs.md`)).status, 200);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/news/missing`)).status, 404);
+    assert.equal((await fetch(`http://127.0.0.1:${port}/news/error`)).status, 500);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(
+      records.map(({ page_kind, page_path }) => ({ page_kind, page_path })),
+      [
+        { page_kind: 'news', page_path: '/news' },
+        { page_kind: 'publish_token_docs', page_path: '/publish-token-docs' },
+      ],
+    );
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(
+      (error) => (error ? reject(error) : resolve()),
+    ));
+  }
+});
 
 test('GET /api/v1/news returns public news list payload', async () => {
   const app = express();

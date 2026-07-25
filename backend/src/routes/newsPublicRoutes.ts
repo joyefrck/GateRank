@@ -5,7 +5,10 @@ import { renderNewsArticlePage, renderNewsIndexPage, renderNewsTopicPage } from 
 import { renderPublishTokenDocsPage, renderPublishTokenDocsRawMarkdown } from '../services/publishTokenDocsPageRenderer';
 import type { NewsPublicService } from '../services/newsPublicService';
 import type { MonthlyReportPublicService } from '../services/monthlyReportPublicService';
-import { buildServerPageViewRecord } from '../utils/marketing';
+import {
+  trackServerMarketingPageView,
+  type MarketingPageViewRepository,
+} from '../utils/marketing';
 import { setPublicCacheHeaders } from '../utils/publicCache';
 import { getDateInTimezone } from '../utils/time';
 import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from '../../../shared/publishTokenDocs';
@@ -21,9 +24,7 @@ interface NewsPublicDeps {
     }>;
   };
   monthlyReportPublicService?: MonthlyReportPublicService;
-  marketingRepository?: {
-    insertMany(records: ReturnType<typeof buildServerPageViewRecord>[]): Promise<void>;
-  };
+  marketingRepository?: MarketingPageViewRepository;
 }
 
 export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
@@ -81,12 +82,16 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       const page = toPositiveInt(req.query.page, 1);
       const q = optionalString(req.query.q);
       const view = await deps.newsPublicService.getListView(page, 12, { q });
-      trackMarketingPageView(deps, req, '/news', 'news');
+      const html = renderNewsIndexPage({ siteUrl: getSiteUrl(req), listView: view });
+      trackServerMarketingPageView(deps.marketingRepository, req, {
+        page_kind: 'news',
+        page_path: '/news',
+      });
       res
         .status(200)
         .type('html')
         .set(setHtmlCacheHeaders())
-        .send(renderNewsIndexPage({ siteUrl: getSiteUrl(req), listView: view }));
+        .send(html);
     } catch (error) {
       renderHtmlError(res, 500, 'News 页面加载失败');
     }
@@ -104,12 +109,16 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
         renderHtmlError(res, 404, '分类不存在或尚未发布');
         return;
       }
-      trackMarketingPageView(deps, req, req.path, 'news');
+      const html = renderNewsIndexPage({ siteUrl: getSiteUrl(req), listView: view });
+      trackServerMarketingPageView(deps.marketingRepository, req, {
+        page_kind: 'news',
+        page_path: req.path,
+      });
       res
         .status(200)
         .type('html')
         .set(setHtmlCacheHeaders())
-        .send(renderNewsIndexPage({ siteUrl: getSiteUrl(req), listView: view }));
+        .send(html);
     } catch {
       renderHtmlError(res, 500, '分类页面加载失败');
     }
@@ -126,12 +135,16 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
         renderHtmlError(res, 404, '专题不存在或尚未发布');
         return;
       }
-      trackMarketingPageView(deps, req, req.path, 'news');
+      const html = renderNewsTopicPage({ siteUrl: getSiteUrl(req), topicView: view });
+      trackServerMarketingPageView(deps.marketingRepository, req, {
+        page_kind: 'news',
+        page_path: req.path,
+      });
       res
         .status(200)
         .type('html')
         .set(setHtmlCacheHeaders())
-        .send(renderNewsTopicPage({ siteUrl: getSiteUrl(req), topicView: view }));
+        .send(html);
     } catch {
       renderHtmlError(res, 500, '专题页面加载失败');
     }
@@ -144,12 +157,16 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
         renderHtmlError(res, 404, '文章不存在或尚未发布');
         return;
       }
-      trackMarketingPageView(deps, req, req.path, 'news');
+      const html = renderNewsArticlePage({ siteUrl: getSiteUrl(req), article });
+      trackServerMarketingPageView(deps.marketingRepository, req, {
+        page_kind: 'news',
+        page_path: req.path,
+      });
       res
         .status(200)
         .type('html')
         .set(setHtmlCacheHeaders())
-        .send(renderNewsArticlePage({ siteUrl: getSiteUrl(req), article }));
+        .send(html);
     } catch {
       renderHtmlError(res, 500, '文章加载失败');
     }
@@ -157,11 +174,15 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
 
   router.get('/publish-token-docs', (req, res) => {
     try {
-      trackMarketingPageView(deps, req, '/publish-token-docs', 'publish_token_docs');
+      const html = renderPublishTokenDocsPage(getSiteUrl(req));
+      trackServerMarketingPageView(deps.marketingRepository, req, {
+        page_kind: 'publish_token_docs',
+        page_path: '/publish-token-docs',
+      });
       res
         .status(200)
         .type('html')
-        .send(renderPublishTokenDocsPage(getSiteUrl(req)));
+        .send(html);
     } catch {
       renderHtmlError(res, 500, '发布令牌文档加载失败');
     }
@@ -380,26 +401,4 @@ function escapeXml(value: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
-}
-
-function trackMarketingPageView(
-  deps: NewsPublicDeps,
-  req: Request,
-  pagePath: string,
-  pageKind: 'news' | 'publish_token_docs',
-): void {
-  if (!deps.marketingRepository) {
-    return;
-  }
-
-  void deps.marketingRepository
-    .insertMany([buildServerPageViewRecord(req, { page_kind: pageKind, page_path: pagePath })])
-    .catch((error) => {
-      console.error('[marketing] failed to record server-side page view', {
-        pagePath,
-        pageKind,
-        requestId: req.requestId || 'unknown',
-        error,
-      });
-    });
 }

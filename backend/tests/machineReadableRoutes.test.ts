@@ -5,6 +5,7 @@ import express from 'express';
 import { createMachineReadableRoutes } from '../src/routes/machineReadableRoutes';
 import type { FullRankingView, HomePageView, MonthlyReport, ReportView, RiskMonitorView } from '../src/types/domain';
 import type { AirportDealView } from '../../shared/airportAds';
+import type { MarketingEventInsertRecord } from '../src/utils/marketing';
 
 test('GET /llms.txt and /llms-full.txt return plain text AI entrypoints', async () => {
   const { baseUrl, close } = await startMachineReadableServer();
@@ -82,6 +83,54 @@ test('GET /for-ai returns an indexable HTML guide for AI applications', async ()
     assert.match(html, /\/tools\/ip-check/);
     assert.match(html, /\/tools\/dns-leak-test/);
     assert.doesNotMatch(html, /\/rankings\/all\?payment=alipay/);
+  } finally {
+    await close();
+  }
+});
+
+test('GET /for-ai records one page view while machine-readable routes record none', async () => {
+  const records: MarketingEventInsertRecord[] = [];
+  const marketingRepository = {
+    insertMany: async (items: MarketingEventInsertRecord[]) => {
+      records.push(...items);
+    },
+  };
+  const { baseUrl, close } = await startMachineReadableServer({ marketingRepository });
+  try {
+    assert.equal((await fetch(`${baseUrl}/for-ai`)).status, 200);
+    assert.equal((await fetch(`${baseUrl}/llms.txt`)).status, 200);
+    assert.equal((await fetch(`${baseUrl}/data/summary.json`)).status, 200);
+    await new Promise((resolve) => setImmediate(resolve));
+
+    assert.deepEqual(
+      records.map(({ page_kind, page_path }) => ({ page_kind, page_path })),
+      [{ page_kind: 'for_ai', page_path: '/for-ai' }],
+    );
+  } finally {
+    await close();
+  }
+});
+
+test('GET /for-ai error response records no page view', async () => {
+  const records: MarketingEventInsertRecord[] = [];
+  const publicViewService = {
+    ...createPublicViewServiceStub(),
+    getHomePageView: async (): Promise<HomePageView> => {
+      throw new Error('summary unavailable');
+    },
+  };
+  const { baseUrl, close } = await startMachineReadableServer({
+    publicViewService,
+    marketingRepository: {
+      insertMany: async (items: MarketingEventInsertRecord[]) => {
+        records.push(...items);
+      },
+    },
+  });
+  try {
+    assert.equal((await fetch(`${baseUrl}/for-ai`)).status, 500);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(records, []);
   } finally {
     await close();
   }
@@ -341,9 +390,15 @@ test('mounted machine-readable routes do not fall through to app 404 fallback', 
   }
 });
 
-async function startMachineReadableServer() {
+async function startMachineReadableServer(
+  overrides: Record<string, unknown> = {},
+) {
   const app = express();
-  app.use(createMachineReadableRoutes(createMachineReadableDeps()));
+  const defaultDeps = createMachineReadableDeps() as unknown as Record<string, unknown>;
+  app.use(createMachineReadableRoutes({
+    ...defaultDeps,
+    ...overrides,
+  } as never));
   const server = app.listen(0);
   const port = (server.address() as AddressInfo).port;
   return {
