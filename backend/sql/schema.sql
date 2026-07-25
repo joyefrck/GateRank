@@ -532,7 +532,7 @@ CREATE TABLE IF NOT EXISTS marketing_events (
   event_date DATE NOT NULL,
   event_type ENUM('page_view', 'airport_impression', 'outbound_click') NOT NULL,
   page_path VARCHAR(1024) NOT NULL,
-  page_kind ENUM('home', 'full_ranking', 'risk_monitor', 'report', 'deals', 'methodology', 'news', 'apply', 'publish_token_docs') NOT NULL,
+  page_kind VARCHAR(64) NOT NULL,
   referrer_path VARCHAR(1024) NULL,
   external_referrer_host VARCHAR(255) NULL,
   source_type VARCHAR(64) NOT NULL DEFAULT 'direct_or_unknown',

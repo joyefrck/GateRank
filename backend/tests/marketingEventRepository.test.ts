@@ -17,6 +17,59 @@ test('MarketingEventRepository.ensureSchema creates marketing_events table', asy
   assert.ok(queries.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS marketing_events')));
 });
 
+test('MarketingEventRepository migrates legacy page kind ENUM to VARCHAR once', async () => {
+  const queries: string[] = [];
+  const repository = new MarketingEventRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      queries.push(sql);
+      if (sql.includes('SHOW COLUMNS FROM marketing_events LIKE ?')) {
+        const field = String(params?.[0] || '');
+        return [[{
+          Field: field,
+          Type: field === 'page_kind'
+            ? "enum('home','full_ranking','risk_monitor')"
+            : 'varchar(255)',
+        }]];
+      }
+      if (sql.includes('SHOW INDEX')) return [[{ Key_name: 'existing' }]];
+      return [[]];
+    },
+    execute: async () => [{}],
+  } as never);
+
+  await repository.ensureSchema();
+
+  assert.equal(
+    queries.filter((sql) => (
+      /ALTER TABLE marketing_events\s+MODIFY COLUMN page_kind VARCHAR\(64\) NOT NULL/i
+        .test(sql)
+    )).length,
+    1,
+  );
+});
+
+test('MarketingEventRepository leaves an existing VARCHAR page kind unchanged', async () => {
+  const queries: string[] = [];
+  const repository = new MarketingEventRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      queries.push(sql);
+      if (sql.includes('SHOW COLUMNS FROM marketing_events LIKE ?')) {
+        return [[{ Field: String(params?.[0] || ''), Type: 'varchar(64)' }]];
+      }
+      if (sql.includes('SHOW INDEX')) return [[{ Key_name: 'existing' }]];
+      return [[]];
+    },
+    execute: async () => [{}],
+  } as never);
+
+  await repository.ensureSchema();
+
+  assert.equal(
+    queries.some((sql) => /MODIFY COLUMN page_kind/i.test(sql)),
+    false,
+  );
+});
+
 test('MarketingEventRepository.getOverview uses requested granularity and computes ctr', async () => {
   const queryCalls: Array<{ sql: string; params?: unknown[] }> = [];
   const repository = new MarketingEventRepository({

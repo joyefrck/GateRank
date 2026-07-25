@@ -5,6 +5,7 @@ import express from 'express';
 import { errorHandler } from '../src/middleware/errorHandler';
 import { createPublicRoutes } from '../src/routes/publicRoutes';
 import type { MarketingEventInsertRecord } from '../src/utils/marketing';
+import { MARKETING_PAGE_KINDS } from '../../shared/marketingAnalytics';
 
 test('GET /application-config returns public application fee from marketing settings', async () => {
   const app = express();
@@ -148,6 +149,59 @@ test('POST /marketing/events stores validated marketing events', async () => {
     assert.equal(insertedRecords[0]?.session_hash.length, 64);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /marketing/events accepts every registered public page kind', async () => {
+  const insertedRecords: MarketingEventInsertRecord[] = [];
+  const app = express();
+  app.use(express.json());
+  app.use(createPublicRoutes({
+    airportRepository: { getById: async () => null },
+    airportApplicationRepository: { create: async () => 1 },
+    metricsRepository: { getByAirportAndDate: async () => null },
+    scoreRepository: {
+      getByAirportAndDate: async () => null,
+      getTrend: async () => [],
+    },
+    rankingRepository: { getRanking: async () => [] },
+    publicViewService: {
+      getHomePageView: async () => ({}),
+      getFullRankingView: async () => ({}),
+      getRiskMonitorView: async () => ({}),
+      getReportView: async () => null,
+    } as never,
+    marketingRepository: {
+      insertMany: async (records) => { insertedRecords.push(...records); },
+    },
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/marketing/events`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'user-agent': 'coverage-test/1.0' },
+      body: JSON.stringify({
+        events: MARKETING_PAGE_KINDS.map((pageKind) => ({
+          event_type: 'page_view',
+          page_kind: pageKind,
+          page_path: `/coverage/${pageKind}`,
+          client_session_id: 'coverage-session',
+        })),
+      }),
+    });
+
+    assert.equal(response.status, 201);
+    assert.deepEqual(
+      insertedRecords.map((record) => record.page_kind),
+      MARKETING_PAGE_KINDS,
+    );
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(
+      (error) => (error ? reject(error) : resolve()),
+    ));
   }
 });
 

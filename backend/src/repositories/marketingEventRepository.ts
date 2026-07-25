@@ -90,6 +90,7 @@ interface AirportNameRow extends RowDataPacket {
 
 interface ColumnInfoRow extends RowDataPacket {
   Field: string;
+  Type: string;
 }
 
 interface IndexInfoRow extends RowDataPacket {
@@ -107,7 +108,7 @@ export class MarketingEventRepository {
         event_date DATE NOT NULL,
         event_type ENUM('page_view', 'airport_impression', 'outbound_click') NOT NULL,
         page_path VARCHAR(1024) NOT NULL,
-        page_kind ENUM('home', 'full_ranking', 'risk_monitor', 'report', 'deals', 'methodology', 'news', 'apply', 'publish_token_docs') NOT NULL,
+        page_kind VARCHAR(64) NOT NULL,
         referrer_path VARCHAR(1024) NULL,
         external_referrer_host VARCHAR(255) NULL,
         source_type VARCHAR(64) NOT NULL DEFAULT 'direct_or_unknown',
@@ -136,6 +137,7 @@ export class MarketingEventRepository {
         INDEX idx_marketing_events_country_code_date (country_code, event_date)
       )
     `);
+    await this.ensurePageKindColumnType();
     await this.ensureColumnExists('external_referrer_host', 'ALTER TABLE marketing_events ADD COLUMN external_referrer_host VARCHAR(255) NULL AFTER referrer_path');
     await this.ensureColumnExists('source_type', 'ALTER TABLE marketing_events ADD COLUMN source_type VARCHAR(64) NOT NULL DEFAULT \'direct_or_unknown\' AFTER external_referrer_host');
     await this.ensureColumnExists('source_label', 'ALTER TABLE marketing_events ADD COLUMN source_label VARCHAR(255) NOT NULL DEFAULT \'Direct / Unknown\' AFTER source_type');
@@ -148,7 +150,6 @@ export class MarketingEventRepository {
     await this.ensureColumnExists('country_name', 'ALTER TABLE marketing_events ADD COLUMN country_name VARCHAR(128) NOT NULL DEFAULT \'Unknown\' AFTER country_code');
     await this.pool.query(`
       ALTER TABLE marketing_events
-        MODIFY COLUMN page_kind ENUM('home', 'full_ranking', 'risk_monitor', 'report', 'deals', 'methodology', 'news', 'apply', 'publish_token_docs') NOT NULL,
         MODIFY COLUMN placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'deal_card', 'news_article') NULL
     `);
     await this.ensureIndexExists('idx_marketing_events_source_label_date', 'CREATE INDEX idx_marketing_events_source_label_date ON marketing_events (source_label(191), event_date)');
@@ -553,6 +554,20 @@ export class MarketingEventRepository {
         outbound_clicks: Number(row.outbound_clicks || 0),
       })),
     };
+  }
+
+  private async ensurePageKindColumnType(): Promise<void> {
+    const [rows] = await this.pool.query<ColumnInfoRow[]>(
+      'SHOW COLUMNS FROM marketing_events LIKE ?',
+      ['page_kind'],
+    );
+    const currentType = String(rows[0]?.Type || '').trim().toLowerCase();
+    if (currentType !== 'varchar(64)') {
+      await this.pool.query(`
+        ALTER TABLE marketing_events
+        MODIFY COLUMN page_kind VARCHAR(64) NOT NULL
+      `);
+    }
   }
 
   private async ensureColumnExists(columnName: string, alterSql: string): Promise<void> {

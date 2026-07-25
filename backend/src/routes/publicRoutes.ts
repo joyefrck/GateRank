@@ -21,6 +21,7 @@ import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { AirportApplicationReviewStatus, AirportStatus } from '../types/domain';
 import { parseFullRankingFilters, type FullRankingFilters } from '../../../shared/fullRankingFilters';
 import type { AirportDealView } from '../../../shared/airportAds';
+import { isMarketingPageKind } from '../../../shared/marketingAnalytics';
 
 interface PublicDeps {
   airportRepository: {
@@ -112,17 +113,6 @@ interface PublicDeps {
 }
 
 const MARKETING_EVENT_TYPES: MarketingEventType[] = ['page_view', 'airport_impression', 'outbound_click'];
-const MARKETING_PAGE_KINDS: MarketingPageKind[] = [
-  'home',
-  'full_ranking',
-  'risk_monitor',
-  'report',
-  'deals',
-  'methodology',
-  'news',
-  'apply',
-  'publish_token_docs',
-];
 const MARKETING_PLACEMENTS: MarketingPlacement[] = [
   'home_card',
   'full_ranking_item',
@@ -552,8 +542,8 @@ function validateMarketingEventPayload(
     throw new HttpError(400, 'BAD_REQUEST', `events[${index}].event_type is invalid`);
   }
 
-  const pageKind = String(payload.page_kind || '') as MarketingPageKind;
-  if (!MARKETING_PAGE_KINDS.includes(pageKind)) {
+  const pageKind = String(payload.page_kind || '');
+  if (!isMarketingPageKind(pageKind)) {
     throw new HttpError(400, 'BAD_REQUEST', `events[${index}].page_kind is invalid`);
   }
 
