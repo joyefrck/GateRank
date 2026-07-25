@@ -6722,7 +6722,7 @@ function createMonthlyReportView(input: { date: string }): ReportView {
     resolved_from_fallback: false,
     fallback_notice: null,
     tool_download_cta: {
-      href: '/download',
+      href: '/tools/download',
       title: '翻墙工具客户端下载',
       description: '常用客户端集中下载。',
       platforms: ['Android', 'macOS', 'Windows', 'Linux'],

@@ -1989,7 +1989,7 @@ function ToolsDownloadAdminPage() {
               <p className="mt-1 text-sm text-neutral-500">先上传安装包，系统自动补齐能识别的字段；URL 和图标放在高级设置里。</p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <a className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-bold text-neutral-700 hover:border-cyan-300 hover:text-cyan-800" href="/download" target="_blank" rel="noreferrer">
+              <a className="inline-flex items-center gap-2 rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-bold text-neutral-700 hover:border-cyan-300 hover:text-cyan-800" href="/tools/download" target="_blank" rel="noreferrer">
                 <Eye className="h-4 w-4" />
                 查看前台
               </a>

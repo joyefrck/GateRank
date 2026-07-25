@@ -81,7 +81,7 @@ export interface ToolDownloadCtaCopyOptions {
 }
 
 export const HOME_TOOL_DOWNLOAD_CTA_COPY = {
-  href: '/download',
+  href: '/tools/download',
   title: '翻墙工具客户端下载',
   description: 'Android、macOS、Windows、Linux 常用客户端集中下载，覆盖 v2rayN、Karing、Clash Meta 等订阅工具。',
   platforms: ['Android', 'macOS', 'Windows', 'Linux'],

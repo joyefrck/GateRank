@@ -1,0 +1,107 @@
+<h2>DNS 解析器列表，哪种表达最清楚？</h2>
+<p class="subtitle">三种方案都采用“观察次数从多到少，相同次数按 IP 排序”，并把专业术语翻译成中文。</p>
+
+<div class="cards">
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px;background:#fff">
+      <div style="display:flex;justify-content:space-between;gap:16px;align-items:end;border-bottom:1px solid #e5e7eb;padding-bottom:14px">
+        <div>
+          <div style="color:#e11d48;font-size:10px;font-weight:800;letter-spacing:.16em">检测到的 DNS 服务器</div>
+          <div style="font-size:20px;font-weight:850;margin-top:5px">DNS 解析器证据</div>
+          <div style="color:#737373;font-size:11px;margin-top:6px">按本轮观察次数从多到少排列</div>
+        </div>
+        <div style="font-size:11px;color:#525252">共 32 个</div>
+      </div>
+      <div style="display:grid;grid-template-columns:minmax(170px,1.2fr) minmax(150px,1fr) minmax(210px,1.35fr);gap:18px;align-items:center;padding:16px 0;border-bottom:1px solid #eee">
+        <div>
+          <div style="font-family:monospace;font-size:15px;font-weight:800">172.253.236.147</div>
+          <div style="font-size:12px;color:#525252;margin-top:5px">日本 · 东京附近</div>
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:750">Google LLC</div>
+          <div style="font-size:11px;color:#737373;margin-top:5px">网络编号 AS15169</div>
+        </div>
+        <div>
+          <div style="font-size:12px;font-weight:750">观察到 3 个测试域名</div>
+          <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:7px">
+            <span style="padding:3px 7px;border-radius:5px;background:#f5f5f5;font-size:10px">IPv4 查询</span>
+            <span style="padding:3px 7px;border-radius:5px;background:#f5f5f5;font-size:10px">IPv6 查询</span>
+            <span style="padding:3px 7px;border-radius:5px;background:#f5f5f5;font-size:10px">HTTPS 服务查询</span>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:11px;line-height:1.65;color:#666;padding-top:12px">
+        <b style="color:#333">怎么看？</b> 一个公共 DNS 服务可能使用多个服务器 IP；AS 编号代表该 IP 所属网络，不是地址或风险等级。
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A · 行内中文解释（推荐）</h3>
+      <p>最关键的信息直接可见，技术缩写收进浅色标签；扫描快，桌面和手机都容易保持层级。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px;background:#fff">
+      <div style="font-size:20px;font-weight:850">DNS 解析器证据</div>
+      <div style="margin-top:12px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1.2fr .8fr 1fr .8fr;background:#fafafa;padding:10px 12px;font-size:10px;font-weight:800;color:#737373">
+          <span>解析器 IP</span><span>位置</span><span>所属网络</span><span>查询证据</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1.2fr .8fr 1fr .8fr;padding:13px 12px;font-size:11px;align-items:center">
+          <b style="font-family:monospace">172.253.236.147</b><span>日本</span><span>Google · AS15169</span><span>3 次 · 3 类</span>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:10px 12px;background:#fafafa;border-left:3px solid #e11d48;font-size:11px;line-height:1.6">
+        <b>术语：</b>A = IPv4，AAAA = IPv6，HTTPS = HTTPS 服务参数查询。
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B · 标准数据表</h3>
+      <p>字段边界最明确，适合技术报告；但 32 行时视觉密度高，手机上需要改成横向滚动或重排。</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:18px;background:#fff">
+      <div style="font-size:20px;font-weight:850">DNS 解析器证据</div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding:14px 0;border-bottom:1px solid #e5e7eb">
+        <div>
+          <div style="font-family:monospace;font-weight:800">172.253.236.147</div>
+          <div style="font-size:11px;color:#737373;margin-top:5px">日本 · Google LLC</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:11px;font-weight:750">观察到 3 次</div>
+          <div style="font-size:10px;color:#e11d48;margin-top:5px">展开技术详情⌄</div>
+        </div>
+      </div>
+      <div style="margin-top:12px;padding:12px;background:#fafafa;border-radius:7px;font-size:11px;line-height:1.75">
+        <div><b>所属网络：</b>Google 自治网络（AS15169）</div>
+        <div><b>查询类型：</b>IPv4、IPv6、HTTPS 服务发现</div>
+        <div><b>含义：</b>同一个解析器处理了本轮 3 个测试域名。</div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>C · 摘要行 + 展开详情</h3>
+      <p>默认最简洁，专业字段按需展开；但大量解析器逐个展开会增加操作成本，也不利于横向比较。</p>
+    </div>
+  </div>
+</div>
+
+<div class="pros-cons">
+  <div class="pros">
+    <h4>我的建议：A</h4>
+    <ul>
+      <li>不隐藏关键证据，同时不让缩写抢夺视觉焦点</li>
+      <li>每列职责清楚：IP 与位置、网络归属、观察证据</li>
+      <li>可以自然增加顶部“怎么看”说明和术语图例</li>
+    </ul>
+  </div>
+  <div class="cons">
+    <h4>共同原则</h4>
+    <ul>
+      <li>“次数”改为“观察到几个测试域名”，避免误解为测速次数</li>
+      <li>AS15169 显示为“网络编号 AS15169”，并解释 AS 是自治系统</li>
+      <li>国家优先中文化；无法确定城市时不伪造精确位置</li>
+    </ul>
+  </div>
+</div>

@@ -11,6 +11,7 @@ export const MARKETING_PAGE_KIND_LABELS = {
   monthly_reports: '月报中心',
   monthly_report: '月报详情',
   ranking_transparency: '排名独立性声明',
+  tools_index: '工具中心',
   tools_download: '工具下载',
   streaming_check: '流媒体检测',
   ip_check: 'IP 检测',

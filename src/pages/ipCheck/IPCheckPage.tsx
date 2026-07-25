@@ -22,6 +22,8 @@ import {
   type IpCheckResult,
   type IpCheckSuccessResponse,
 } from '../../../shared/ipCheck';
+import { withPublicBrandTitle } from '../../../shared/publicBrand';
+import { getPublicToolDefinition, PUBLIC_TOOLS_INDEX_PATH } from '../../../shared/publicTools';
 import { buildAbsoluteUrl, PageFrame, usePageSeo } from '../../site/publicSite';
 import { IpCheckMap } from './IpCheckMap';
 import {
@@ -44,6 +46,7 @@ const IP_CHECK_FAQ = [
     answer: '可以。输入合法的公网 IPv4、IPv6 或域名即可查看对应网络信息。',
   },
 ] as const;
+const IP_CHECK_TOOL = getPublicToolDefinition('ip_check');
 
 class IpCheckRequestError extends Error {
   constructor(public readonly code: string) {
@@ -63,10 +66,10 @@ export function IPCheckPage() {
   const translations = IP_CHECK_TRANSLATIONS[language];
 
   usePageSeo({
-    title: 'IP 地理位置查询 | IP 地址、域名、ISP 与 ASN 检测',
-    description: '免费查询当前出口 IP、IPv4、IPv6 或域名的国家地区、城市、经纬度、时区、ISP、组织与 ASN 信息。',
-    keywords: 'IP检测,IP地址查询,IP归属地,域名查询,IPv6查询,ISP查询,ASN查询',
-    canonicalPath: '/tools/ip-check',
+    title: withPublicBrandTitle(IP_CHECK_TOOL.seo.title),
+    description: IP_CHECK_TOOL.seo.description,
+    keywords: IP_CHECK_TOOL.seo.keywords,
+    canonicalPath: IP_CHECK_TOOL.href,
     structuredData: {
       '@context': 'https://schema.org',
       '@graph': [
@@ -75,15 +78,15 @@ export function IPCheckPage() {
           name: 'GateRank IP 地理位置查询',
           applicationCategory: 'UtilitiesApplication',
           operatingSystem: 'Web',
-          url: buildAbsoluteUrl('/tools/ip-check'),
+          url: buildAbsoluteUrl(IP_CHECK_TOOL.href),
           offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
         },
         {
           '@type': 'BreadcrumbList',
           itemListElement: [
             { '@type': 'ListItem', position: 1, name: '今日推荐', item: buildAbsoluteUrl('/') },
-            { '@type': 'ListItem', position: 2, name: '翻墙工具下载', item: buildAbsoluteUrl('/download') },
-            { '@type': 'ListItem', position: 3, name: 'IP 检测', item: buildAbsoluteUrl('/tools/ip-check') },
+            { '@type': 'ListItem', position: 2, name: '工具', item: buildAbsoluteUrl(PUBLIC_TOOLS_INDEX_PATH) },
+            { '@type': 'ListItem', position: 3, name: 'IP 检测', item: buildAbsoluteUrl(IP_CHECK_TOOL.href) },
           ],
         },
         {

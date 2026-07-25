@@ -24,6 +24,7 @@ import {
   renderIpCheckPublicPage,
   renderStreamingCheckPublicPage,
   renderDnsLeakTestPublicPage,
+  renderToolsIndexPublicPage,
   renderToolsDownloadPublicPage,
 } from '../services/publicPageRenderer';
 import {
@@ -195,15 +196,26 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     }
   });
 
-  const redirectToDownload = (req: { url: string }, res: { redirect: (status: number, url: string) => void }) => {
+  const redirectToToolsDownload = (req: { url: string }, res: { redirect: (status: number, url: string) => void }) => {
     const queryIndex = req.url.indexOf('?');
     const query = queryIndex >= 0 ? req.url.slice(queryIndex) : '';
-    res.redirect(301, `/download${query}`);
+    res.redirect(301, `/tools/download${query}`);
   };
 
-  router.get('/tools', redirectToDownload);
-  router.get('/tools/', redirectToDownload);
-  router.get('/tools/download', redirectToDownload);
+  router.get('/download', redirectToToolsDownload);
+  router.get('/download/', redirectToToolsDownload);
+
+  router.get('/tools', (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    setPublicCacheHeaders(res);
+    res.status(200).type('html').send(renderToolsIndexPublicPage(siteUrl, frontendAssets));
+  });
+
+  router.get('/tools/', (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    setPublicCacheHeaders(res);
+    res.status(200).type('html').send(renderToolsIndexPublicPage(siteUrl, frontendAssets));
+  });
 
   router.get('/download/file/:slug', async (req, res, next) => {
     try {
@@ -246,7 +258,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     }
   });
 
-  router.get('/download', async (req, res) => {
+  router.get('/tools/download', async (req, res) => {
     const siteUrl = getSiteOrigin(req);
     try {
       const service = requireToolsDownloadService(deps);
@@ -263,7 +275,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     }
   });
 
-  router.get('/download/', async (req, res) => {
+  router.get('/tools/download/', async (req, res) => {
     const siteUrl = getSiteOrigin(req);
     try {
       const service = requireToolsDownloadService(deps);

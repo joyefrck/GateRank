@@ -21,6 +21,8 @@ import {
   type StreamingRegionAssessment,
   type StreamingServiceKey,
 } from '../../../shared/streamingCheck';
+import { withPublicBrandTitle } from '../../../shared/publicBrand';
+import { getPublicToolDefinition, PUBLIC_TOOLS_INDEX_PATH } from '../../../shared/publicTools';
 import { buildAbsoluteUrl, PageFrame, usePageSeo } from '../../site/publicSite';
 
 type ReachabilityMap = Record<StreamingServiceKey, StreamingReachability>;
@@ -28,6 +30,7 @@ type ReachabilityMap = Record<StreamingServiceKey, StreamingReachability>;
 const INITIAL_REACHABILITY = Object.fromEntries(
   STREAMING_SERVICES.map((service) => [service.key, 'pending']),
 ) as ReachabilityMap;
+const STREAMING_TOOL = getPublicToolDefinition('streaming_check');
 
 const STREAMING_CHECK_FAQ = [
   {
@@ -53,10 +56,10 @@ export function StreamingCheckPage() {
   const [apiError, setApiError] = useState('');
 
   usePageSeo({
-    title: '流媒体解锁检测 | ChatGPT、Netflix、Claude、TikTok、Disney+、HBO Max',
-    description: '根据当前出口地区检测 ChatGPT、Netflix、Claude、TikTok、Disney+ 和 HBO Max 的官方覆盖情况，并以基础资源连通结果辅助判断。',
-    keywords: '流媒体解锁检测,Netflix解锁检测,ChatGPT检测,Claude检测,TikTok检测,Disney+检测,HBO Max检测',
-    canonicalPath: '/tools/streaming-check',
+    title: withPublicBrandTitle(STREAMING_TOOL.seo.title),
+    description: STREAMING_TOOL.seo.description,
+    keywords: STREAMING_TOOL.seo.keywords,
+    canonicalPath: STREAMING_TOOL.href,
     structuredData: {
       '@context': 'https://schema.org',
       '@graph': [
@@ -65,15 +68,15 @@ export function StreamingCheckPage() {
           name: 'GateRank 流媒体解锁检测',
           applicationCategory: 'UtilitiesApplication',
           operatingSystem: 'Web',
-          url: buildAbsoluteUrl('/tools/streaming-check'),
+          url: buildAbsoluteUrl(STREAMING_TOOL.href),
           offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
         },
         {
           '@type': 'BreadcrumbList',
           itemListElement: [
             { '@type': 'ListItem', position: 1, name: '今日推荐', item: buildAbsoluteUrl('/') },
-            { '@type': 'ListItem', position: 2, name: '翻墙工具下载', item: buildAbsoluteUrl('/download') },
-            { '@type': 'ListItem', position: 3, name: '流媒体解锁检测', item: buildAbsoluteUrl('/tools/streaming-check') },
+            { '@type': 'ListItem', position: 2, name: '工具', item: buildAbsoluteUrl(PUBLIC_TOOLS_INDEX_PATH) },
+            { '@type': 'ListItem', position: 3, name: '流媒体解锁检测', item: buildAbsoluteUrl(STREAMING_TOOL.href) },
           ],
         },
         {

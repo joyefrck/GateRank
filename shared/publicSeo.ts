@@ -276,7 +276,8 @@ export interface PublicMonthlyReportSeoView {
 export const PUBLIC_SEO_PATHS = {
   home: '/',
   fullRanking: '/rankings/all',
-  download: '/download',
+  tools: '/tools',
+  download: '/tools/download',
   streamingCheck: '/tools/streaming-check',
   ipCheck: '/tools/ip-check',
   dnsLeakTest: '/tools/dns-leak-test',
@@ -316,9 +317,37 @@ export const PUBLIC_CORE_OG_IMAGES = {
     height: 630,
     type: 'image/png',
   },
+  tools: {
+    path: '/og/tools.png',
+    alt: 'GateRank 网络检测与科学上网工具箱分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
   download: {
     path: '/og/download.png',
     alt: 'GateRank 翻墙工具下载页分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  streamingCheck: {
+    path: '/og/tools-streaming-check.png',
+    alt: 'GateRank 流媒体解锁检测工具分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  ipCheck: {
+    path: '/og/tools-ip-check.png',
+    alt: 'GateRank IP 地理位置查询工具分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  },
+  dnsLeakTest: {
+    path: '/og/tools-dns-leak-test.png',
+    alt: 'GateRank DNS 泄漏检测工具分享图',
     width: 1200,
     height: 630,
     type: 'image/png',
@@ -430,25 +459,11 @@ export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | 
   if (pathname === PUBLIC_SEO_PATHS.fullRanking) return PUBLIC_CORE_OG_IMAGES.fullRanking;
   const fullRankingFilterOgImage = buildFullRankingFilterOgImage(pathname);
   if (fullRankingFilterOgImage) return fullRankingFilterOgImage;
+  if (pathname === PUBLIC_SEO_PATHS.tools) return PUBLIC_CORE_OG_IMAGES.tools;
   if (pathname === PUBLIC_SEO_PATHS.download) return PUBLIC_CORE_OG_IMAGES.download;
-  if (pathname === PUBLIC_SEO_PATHS.streamingCheck) {
-    return {
-      ...PUBLIC_CORE_OG_IMAGES.rankingsUnlock,
-      alt: 'GateRank 流媒体与 AI 服务检测工具分享图',
-    };
-  }
-  if (pathname === PUBLIC_SEO_PATHS.ipCheck) {
-    return {
-      ...PUBLIC_CORE_OG_IMAGES.rankingsRegion,
-      alt: 'GateRank IP 地理位置与网络信息检测工具分享图',
-    };
-  }
-  if (pathname === PUBLIC_SEO_PATHS.dnsLeakTest) {
-    return {
-      ...PUBLIC_CORE_OG_IMAGES.rankingsRegion,
-      alt: 'GateRank DNS 泄漏与解析器检测工具分享图',
-    };
-  }
+  if (pathname === PUBLIC_SEO_PATHS.streamingCheck) return PUBLIC_CORE_OG_IMAGES.streamingCheck;
+  if (pathname === PUBLIC_SEO_PATHS.ipCheck) return PUBLIC_CORE_OG_IMAGES.ipCheck;
+  if (pathname === PUBLIC_SEO_PATHS.dnsLeakTest) return PUBLIC_CORE_OG_IMAGES.dnsLeakTest;
   if (pathname === PUBLIC_SEO_PATHS.monthlyReports || pathname.startsWith(`${PUBLIC_SEO_PATHS.monthlyReports}/`)) {
     return PUBLIC_CORE_OG_IMAGES.monthlyReports;
   }

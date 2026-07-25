@@ -1,3 +1,8 @@
+import {
+  PUBLIC_TOOL_DEFINITIONS,
+  PUBLIC_TOOLS_INDEX_PATH,
+} from './publicTools';
+
 export type PublicNavigationKind = 'home' | 'full_ranking' | 'monthly_reports' | 'deals' | 'risk_monitor' | 'tools' | 'methodology' | 'news';
 
 export interface PublicNavigationItem {
@@ -42,24 +47,8 @@ export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
   {
     kind: 'tools',
     label: '工具',
-    children: [
-      {
-        label: '翻墙工具下载',
-        href: '/download',
-      },
-      {
-        label: '流媒体解锁检测',
-        href: '/tools/streaming-check',
-      },
-      {
-        label: 'IP 检测',
-        href: '/tools/ip-check',
-      },
-      {
-        label: 'DNS 泄漏检测',
-        href: '/tools/dns-leak-test',
-      },
-    ],
+    href: PUBLIC_TOOLS_INDEX_PATH,
+    children: PUBLIC_TOOL_DEFINITIONS.map(({ label, href }) => ({ label, href })),
   },
   {
     kind: 'news',

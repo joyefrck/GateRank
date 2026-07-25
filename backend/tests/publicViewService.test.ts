@@ -114,7 +114,7 @@ test('PublicViewService.getHomePageView builds prioritized tool download CTA fro
 
   const result = await service.getHomePageView('2026-03-25');
 
-  assert.equal(result.tool_download_cta.href, '/download');
+  assert.equal(result.tool_download_cta.href, '/tools/download');
   assert.equal(result.tool_download_cta.title, '翻墙工具客户端下载');
   assert.deepEqual(result.tool_download_cta.items.map((item) => item.slug), [
     'v2rayn-android',
@@ -293,7 +293,7 @@ test('PublicViewService.getFullRankingView falls back to latest score date', asy
   assert.equal(result.date, '2026-03-24');
   assert.equal(result.page, 2);
   assert.equal(result.page_size, 20);
-  assert.equal(result.tool_download_cta.href, '/download');
+  assert.equal(result.tool_download_cta.href, '/tools/download');
   assert.equal(result.tool_download_cta.title, '翻墙工具客户端下载');
   assert.deepEqual(result.tool_download_cta.items, []);
   assert.deepEqual(requestedDates, ['2026-03-24:2:20']);
@@ -2302,7 +2302,7 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
 
   const result = await service.getReportView(1, '2026-03-24');
   assert.ok(result);
-  assert.equal(result.tool_download_cta.href, '/download');
+  assert.equal(result.tool_download_cta.href, '/tools/download');
   assert.equal(result.tool_download_cta.title, '翻墙工具客户端下载');
   assert.deepEqual(result.tool_download_cta.items, []);
   assert.equal(result.summary_card.type, 'stable');

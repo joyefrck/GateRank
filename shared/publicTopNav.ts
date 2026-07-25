@@ -284,7 +284,7 @@ function renderTopNavItem(item: PublicNavigationItem, active: PublicNavigationKi
   const label = `${escapeHtml(item.label)}${item.badge ? `<span class="public-top-nav-badge">${escapeHtml(item.badge)}</span>` : ''}`;
   const clientNavAttribute = item.kind === 'news' ? '' : ' data-client-nav="true"';
   const link = item.href
-    ? `<a class="${classes.join(' ')}" href="${escapeAttribute(item.href)}"${clientNavAttribute}>${label}</a>`
+    ? `<a class="${classes.join(' ')}" href="${escapeAttribute(item.href)}"${item.children?.length ? ' aria-haspopup="true"' : ''}${clientNavAttribute}>${label}</a>`
     : `<button class="${classes.concat('public-top-nav-trigger').join(' ')}" type="button" aria-haspopup="true">${label}</button>`;
   if (!item.children || item.children.length === 0) {
     return link;

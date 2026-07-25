@@ -1,6 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { resolvePageOgImageMeta } from '../../src/site/publicSite';
+import { withPublicBrandTitle } from '../../shared/publicBrand';
+
+test('withPublicBrandTitle appends and normalizes the public brand suffix', () => {
+  assert.equal(withPublicBrandTitle('IP 检测'), 'IP 检测 | 机场榜GateRank');
+  assert.equal(withPublicBrandTitle('IP 检测 | GateRank'), 'IP 检测 | 机场榜GateRank');
+  assert.equal(withPublicBrandTitle('IP 检测 | 机场榜GateRank'), 'IP 检测 | 机场榜GateRank');
+});
 
 test('resolvePageOgImageMeta returns the monthly reports default OG image', () => {
   const meta = resolvePageOgImageMeta('/monthly-reports');
@@ -15,7 +22,7 @@ test('resolvePageOgImageMeta returns the monthly reports default OG image', () =
 });
 
 test('resolvePageOgImageMeta returns the download page OG image', () => {
-  const meta = resolvePageOgImageMeta('/download');
+  const meta = resolvePageOgImageMeta('/tools/download');
 
   assert.deepEqual(meta, {
     path: '/og/download.png',
@@ -26,10 +33,34 @@ test('resolvePageOgImageMeta returns the download page OG image', () => {
   });
 });
 
-test('resolvePageOgImageMeta reuses the unlock OG image for streaming check', () => {
+test('resolvePageOgImageMeta returns dedicated tool OG images', () => {
+  assert.deepEqual(resolvePageOgImageMeta('/tools'), {
+    path: '/og/tools.png',
+    alt: 'GateRank 网络检测与科学上网工具箱分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  });
+
   assert.deepEqual(resolvePageOgImageMeta('/tools/streaming-check'), {
-    path: '/og/rankings-unlock.png',
-    alt: 'GateRank 流媒体与 AI 服务检测工具分享图',
+    path: '/og/tools-streaming-check.png',
+    alt: 'GateRank 流媒体解锁检测工具分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  });
+
+  assert.deepEqual(resolvePageOgImageMeta('/tools/ip-check'), {
+    path: '/og/tools-ip-check.png',
+    alt: 'GateRank IP 地理位置查询工具分享图',
+    width: 1200,
+    height: 630,
+    type: 'image/png',
+  });
+
+  assert.deepEqual(resolvePageOgImageMeta('/tools/dns-leak-test'), {
+    path: '/og/tools-dns-leak-test.png',
+    alt: 'GateRank DNS 泄漏检测工具分享图',
     width: 1200,
     height: 630,
     type: 'image/png',
@@ -37,14 +68,6 @@ test('resolvePageOgImageMeta reuses the unlock OG image for streaming check', ()
 });
 
 test('resolvePageOgImageMeta returns static OG images for indexable public utility pages', () => {
-  assert.deepEqual(resolvePageOgImageMeta('/tools/dns-leak-test'), {
-    path: '/og/rankings-region.png',
-    alt: 'GateRank DNS 泄漏与解析器检测工具分享图',
-    width: 1200,
-    height: 630,
-    type: 'image/png',
-  });
-
   assert.deepEqual(resolvePageOgImageMeta('/apply'), {
     path: '/og/apply.png',
     alt: 'GateRank 申请入驻测试分享图',

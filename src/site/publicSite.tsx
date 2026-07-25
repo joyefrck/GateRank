@@ -99,11 +99,11 @@ export function buildNewsHref(): string {
 }
 
 export function buildToolsHref(): string {
-  return '/download';
+  return '/tools';
 }
 
 export function buildToolsDownloadHref(platform?: string): string {
-  return `/download${buildQuery({ platform })}`;
+  return `/tools/download${buildQuery({ platform })}`;
 }
 
 function ensureMetaTag(selector: string, create: () => HTMLMetaElement): HTMLMetaElement {

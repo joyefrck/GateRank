@@ -19,6 +19,8 @@ import type {
   DnsLeakTestResultResponse,
   DnsLeakTestStartResponse,
 } from '../../../shared/dnsLeakTest';
+import { withPublicBrandTitle } from '../../../shared/publicBrand';
+import { getPublicToolDefinition, PUBLIC_TOOLS_INDEX_PATH } from '../../../shared/publicTools';
 import { buildAbsoluteUrl, PageFrame, usePageSeo } from '../../site/publicSite';
 import {
   buildDnsResolverEvidenceRows,
@@ -45,6 +47,7 @@ const DNS_LEAK_FAQ = [
     answer: '普通网页无法可靠读取浏览器或系统当前使用的 DNS 传输协议，因此 DoH 与 DoT 只展示检测能力边界，不输出虚假的是或否。',
   },
 ] as const;
+const DNS_LEAK_TOOL = getPublicToolDefinition('dns_leak_test');
 
 class DnsLeakRequestError extends Error {
   constructor(public readonly code: string) {
@@ -62,10 +65,10 @@ export function DNSLeakTestPage() {
   const runIdRef = useRef(0);
 
   usePageSeo({
-    title: 'DNS Leak Test | DNS 泄漏、解析器与 DNSSEC 检测',
-    description: '通过独立权威 DNS 探针检测当前网络实际使用的递归 DNS 解析器，并比较出口地区、运营商与 DNSSEC 能力信号。',
-    keywords: 'DNS Leak Test,DNS泄漏检测,DNS服务器检测,DNSSEC检测,代理DNS泄漏,VPN DNS检测',
-    canonicalPath: '/tools/dns-leak-test',
+    title: withPublicBrandTitle(DNS_LEAK_TOOL.seo.title),
+    description: DNS_LEAK_TOOL.seo.description,
+    keywords: DNS_LEAK_TOOL.seo.keywords,
+    canonicalPath: DNS_LEAK_TOOL.href,
     structuredData: {
       '@context': 'https://schema.org',
       '@graph': [
@@ -74,15 +77,15 @@ export function DNSLeakTestPage() {
           name: 'GateRank DNS Leak Test',
           applicationCategory: 'UtilitiesApplication',
           operatingSystem: 'Web',
-          url: buildAbsoluteUrl('/tools/dns-leak-test'),
+          url: buildAbsoluteUrl(DNS_LEAK_TOOL.href),
           offers: { '@type': 'Offer', price: '0', priceCurrency: 'CNY' },
         },
         {
           '@type': 'BreadcrumbList',
           itemListElement: [
             { '@type': 'ListItem', position: 1, name: '今日推荐', item: buildAbsoluteUrl('/') },
-            { '@type': 'ListItem', position: 2, name: '翻墙工具下载', item: buildAbsoluteUrl('/download') },
-            { '@type': 'ListItem', position: 3, name: 'DNS 泄漏检测', item: buildAbsoluteUrl('/tools/dns-leak-test') },
+            { '@type': 'ListItem', position: 2, name: '工具', item: buildAbsoluteUrl(PUBLIC_TOOLS_INDEX_PATH) },
+            { '@type': 'ListItem', position: 3, name: 'DNS 泄漏检测', item: buildAbsoluteUrl(DNS_LEAK_TOOL.href) },
           ],
         },
         {

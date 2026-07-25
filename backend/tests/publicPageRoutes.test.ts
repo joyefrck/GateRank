@@ -59,7 +59,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.match(html, /<strong class="hero-highlight">行业首创，每日更新<\/strong>/);
         assert.match(html, /基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单/);
         assert.match(html, /class="home-tool-download-cta"/);
-        assert.match(html, /href="\/download"/);
+        assert.match(html, /href="\/tools\/download"/);
         assert.match(html, /翻墙工具客户端下载/);
         assert.match(html, /Android、macOS、Windows、Linux 常用客户端集中下载/);
         assert.match(html, /src="\/uploads\/tools\/icons\/v2rayn\.webp"/);
@@ -150,6 +150,10 @@ test('core public SEO pages expose dedicated 1200x630 OG images', async () => {
     const checks = [
       ['/', '/og/home-2026-airport-ranking.png', '机场榜 GateRank 全球科学上网机场评测与排名平台分享图'],
       ['/rankings/all', '/og/rankings-all.png', 'GateRank 全量机场排行榜分享图'],
+      ['/tools', '/og/tools.png', 'GateRank 网络检测与科学上网工具箱分享图'],
+      ['/tools/streaming-check', '/og/tools-streaming-check.png', 'GateRank 流媒体解锁检测工具分享图'],
+      ['/tools/ip-check', '/og/tools-ip-check.png', 'GateRank IP 地理位置查询工具分享图'],
+      ['/tools/dns-leak-test', '/og/tools-dns-leak-test.png', 'GateRank DNS 泄漏检测工具分享图'],
       ['/monthly-reports', '/og/monthly-reports.png', 'GateRank 机场 VPN 月度报告分享图'],
       ['/deals', '/og/deals-coupons.png', 'GateRank 机场优惠码大全分享图'],
       ['/risk-monitor', '/og/risk-monitor.png', 'GateRank 跑路机场监测分享图'],
@@ -228,7 +232,7 @@ test('GET /deals returns crawlable advertising deal HTML', async () => {
   }
 });
 
-test('GET /download returns crawlable SEO download page HTML', async () => {
+test('GET /tools/download returns crawlable branded SEO download page HTML', async () => {
   const app = express();
   app.use(createPublicPageRoutes({
     publicViewService: createPublicViewServiceStub(),
@@ -275,19 +279,19 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
   try {
     const port = (server.address() as AddressInfo).port;
     const baseUrl = `http://127.0.0.1:${port}`;
-    const response = await fetch(`${baseUrl}/download`, { headers: { host: `127.0.0.1:${port}` } });
+    const response = await fetch(`${baseUrl}/tools/download`, { headers: { host: `127.0.0.1:${port}` } });
     assert.equal(response.status, 200);
     const html = await response.text();
     assert.match(html, /<h1>翻墙工具下载：科学上网客户端与机场订阅工具<\/h1>/);
-    assert.match(html, /<title>翻墙工具下载 \| Clash Verge Rev、v2rayN、Shadowrocket 客户端<\/title>/);
+    assert.match(html, /<title>翻墙工具下载 \| Clash Verge Rev、v2rayN、Shadowrocket 客户端 \| 机场榜GateRank<\/title>/);
     assert.match(html, /<meta name="keywords" content="翻墙工具下载,科学上网客户端下载,Clash Verge Rev,v2rayN,Shadowrocket,Stash,sing-box,Hiddify" \/>/);
-    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/download"/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/tools\/download"/);
     assert.match(html, /<meta property="og:image" content="http:\/\/127\.0\.0\.1:\d+\/og\/download\.png" \/>/);
     assert.match(html, /<meta property="og:image:alt" content="GateRank 翻墙工具下载页分享图" \/>/);
-    assert.match(html, /<button class="public-top-nav-link is-active public-top-nav-trigger" type="button" aria-haspopup="true">工具<\/button>/);
+    assert.match(html, /<a class="public-top-nav-link is-active" href="\/tools" aria-haspopup="true" data-client-nav="true">工具<\/a>/);
     assert.match(html, /\.public-top-nav-submenu \{[\s\S]*?min-width: 260px;/);
     assert.match(html, /\.public-top-nav-submenu-link > span:first-child \{[\s\S]*?white-space: nowrap;/);
-    assert.doesNotMatch(html, /href="\/tools"[^/]/);
+    assert.match(html, /href="\/tools\/download"/);
     assert.match(html, /Windows 翻墙工具下载/);
     assert.match(html, /macOS 翻墙工具下载/);
     assert.match(html, /iOS 翻墙工具下载/);
@@ -310,7 +314,6 @@ test('GET /download returns crawlable SEO download page HTML', async () => {
     assert.doesNotMatch(html, /热门客户端推荐/);
     assert.doesNotMatch(html, /class="tool-platform-row"/);
     assert.doesNotMatch(html, /href="\/download\?platform=windows"/);
-    assert.doesNotMatch(html, /href="\/tools\/download"/);
     assert.match(html, /Clash Verge Rev/);
     assert.match(html, /v2rayN/);
     assert.match(html, /Shadowrocket/);
@@ -408,7 +411,7 @@ test('GET /download/file/:slug uses controlled download headers and rejects obvi
   }
 });
 
-test('GET /download platform filter is noindex and canonicalizes to base page', async () => {
+test('GET /tools/download platform filter is noindex and canonicalizes to base page', async () => {
   const app = express();
   app.use(createPublicPageRoutes({
     publicViewService: createPublicViewServiceStub(),
@@ -435,11 +438,11 @@ test('GET /download platform filter is noindex and canonicalizes to base page', 
   const server = app.listen(0);
   try {
     const port = (server.address() as AddressInfo).port;
-    const response = await fetch(`http://127.0.0.1:${port}/download?platform=macos`);
+    const response = await fetch(`http://127.0.0.1:${port}/tools/download?platform=macos`);
     assert.equal(response.status, 200);
     const html = await response.text();
     assert.match(html, /<meta name="robots" content="noindex,follow" \/>/);
-    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/download"/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/tools\/download"/);
     assert.match(html, /macOS 翻墙工具下载/);
     assert.doesNotMatch(html, /Windows 翻墙工具下载/);
   } finally {
@@ -447,7 +450,7 @@ test('GET /download platform filter is noindex and canonicalizes to base page', 
   }
 });
 
-test('legacy tools routes redirect to /download and unfinished tool placeholders are noindex', async () => {
+test('GET /tools renders the tool index and legacy /download redirects with query parameters', async () => {
   const app = express();
   app.use(createPublicPageRoutes({
     publicViewService: createPublicViewServiceStub(),
@@ -475,12 +478,21 @@ test('legacy tools routes redirect to /download and unfinished tool placeholders
   try {
     const port = (server.address() as AddressInfo).port;
     const indexResponse = await fetch(`http://127.0.0.1:${port}/tools`, { redirect: 'manual' });
-    assert.equal(indexResponse.status, 301);
-    assert.equal(indexResponse.headers.get('location'), '/download');
+    assert.equal(indexResponse.status, 200);
+    const indexHtml = await indexResponse.text();
+    assert.match(indexHtml, /<title>网络检测与科学上网工具箱 \| 机场榜GateRank<\/title>/);
+    assert.match(indexHtml, /<h1>网络检测与科学上网工具箱<\/h1>/);
+    assert.match(indexHtml, /href="\/tools\/download"/);
+    assert.match(indexHtml, /href="\/tools\/streaming-check"/);
+    assert.match(indexHtml, /href="\/tools\/ip-check"/);
+    assert.match(indexHtml, /href="\/tools\/dns-leak-test"/);
+    assert.match(indexHtml, /\/og\/tools\.png/);
+    assert.match(indexHtml, /"@type":"CollectionPage"/);
+    assert.match(indexHtml, /"@type":"ItemList"/);
 
-    const legacyDownloadResponse = await fetch(`http://127.0.0.1:${port}/tools/download?platform=macos`, { redirect: 'manual' });
+    const legacyDownloadResponse = await fetch(`http://127.0.0.1:${port}/download?platform=macos`, { redirect: 'manual' });
     assert.equal(legacyDownloadResponse.status, 301);
-    assert.equal(legacyDownloadResponse.headers.get('location'), '/download?platform=macos');
+    assert.equal(legacyDownloadResponse.headers.get('location'), '/tools/download?platform=macos');
 
     const ipCheckResponse = await fetch(`http://127.0.0.1:${port}/tools/ip-check`);
     assert.equal(ipCheckResponse.status, 200);
@@ -493,7 +505,8 @@ test('legacy tools routes redirect to /download and unfinished tool placeholders
     assert.doesNotMatch(ipCheckHtml, /ip-api Pro/);
     assert.match(ipCheckHtml, /<meta name="robots" content="index,follow,max-image-preview:large" \/>/);
     assert.match(ipCheckHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/tools\/ip-check" \/>/);
-    assert.match(ipCheckHtml, /\/og\/rankings-region\.png/);
+    assert.match(ipCheckHtml, /<title>IP 地理位置查询 \| IP 地址、域名、ISP 与 ASN 检测 \| 机场榜GateRank<\/title>/);
+    assert.match(ipCheckHtml, /\/og\/tools-ip-check\.png/);
     assert.match(ipCheckHtml, /"@type":"WebApplication"/);
     assert.match(ipCheckHtml, /"@type":"FAQPage"/);
     assert.doesNotMatch(ipCheckHtml, /IP 检测工具即将上线|即将上线/);
@@ -511,7 +524,8 @@ test('legacy tools routes redirect to /download and unfinished tool placeholders
     }
     assert.match(streamingHtml, /<meta name="robots" content="index,follow,max-image-preview:large" \/>/);
     assert.match(streamingHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/tools\/streaming-check" \/>/);
-    assert.match(streamingHtml, /\/og\/rankings-unlock\.png/);
+    assert.match(streamingHtml, /<title>流媒体解锁检测 \| ChatGPT、Netflix、Claude、TikTok、Disney\+、HBO Max \| 机场榜GateRank<\/title>/);
+    assert.match(streamingHtml, /\/og\/tools-streaming-check\.png/);
     assert.match(streamingHtml, /"@type":"WebApplication"/);
     assert.match(streamingHtml, /"@type":"FAQPage"/);
     assert.doesNotMatch(streamingHtml, /流媒体解锁检测<\/span><span class="public-top-nav-submenu-badge">即将上线/);
@@ -528,7 +542,8 @@ test('legacy tools routes redirect to /download and unfinished tool placeholders
     assert.match(dnsLeakHtml, /DoH/);
     assert.match(dnsLeakHtml, /网页无法可靠判断/);
     assert.match(dnsLeakHtml, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/tools\/dns-leak-test" \/>/);
-    assert.match(dnsLeakHtml, /GateRank DNS 泄漏与解析器检测工具分享图/);
+    assert.match(dnsLeakHtml, /<title>DNS Leak Test \| DNS 泄漏、解析器与 DNSSEC 检测 \| 机场榜GateRank<\/title>/);
+    assert.match(dnsLeakHtml, /GateRank DNS 泄漏检测工具分享图/);
     assert.match(dnsLeakHtml, /"@type":"WebApplication"/);
     assert.match(dnsLeakHtml, /"@type":"FAQPage"/);
     assert.doesNotMatch(dnsLeakHtml, /即将上线/);
@@ -1512,7 +1527,7 @@ const homeView: HomePageView = {
     realtime_tests: 345,
   },
   tool_download_cta: {
-    href: '/download',
+    href: '/tools/download',
     title: '翻墙工具客户端下载',
     description: 'Android、macOS、Windows、Linux 常用客户端集中下载，覆盖 v2rayN、Karing、Clash Meta 等订阅工具。',
     platforms: ['Android', 'macOS', 'Windows', 'Linux'],
@@ -1581,7 +1596,7 @@ const fullRankingView: FullRankingView = {
   total: 1,
   total_pages: 1,
   tool_download_cta: {
-    href: '/download',
+    href: '/tools/download',
     title: '翻墙工具客户端下载',
     description: '常用客户端集中下载。',
     platforms: ['Android', 'macOS', 'Windows', 'Linux'],
@@ -1632,7 +1647,7 @@ const reportView: ReportView = {
   resolved_from_fallback: false,
   fallback_notice: null,
   tool_download_cta: {
-    href: '/download',
+    href: '/tools/download',
     title: '翻墙工具客户端下载',
     description: '常用客户端集中下载。',
     platforms: ['Android', 'macOS', 'Windows', 'Linux'],

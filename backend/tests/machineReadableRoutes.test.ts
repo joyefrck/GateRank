@@ -503,7 +503,7 @@ const homeView: HomePageView = {
     realtime_tests: 345,
   },
   tool_download_cta: {
-    href: '/download',
+    href: '/tools/download',
     title: '翻墙工具客户端下载',
     description: 'Android、macOS、Windows、Linux 常用客户端集中下载，覆盖 v2rayN、Karing、Clash Meta 等订阅工具。',
     platforms: ['Android', 'macOS', 'Windows', 'Linux'],
@@ -526,7 +526,7 @@ const fullRankingView: FullRankingView = {
   total: 1,
   total_pages: 1,
   tool_download_cta: {
-    href: '/download',
+    href: '/tools/download',
     title: '翻墙工具客户端下载',
     description: '常用客户端集中下载。',
     platforms: ['Android', 'macOS', 'Windows', 'Linux'],
@@ -603,7 +603,7 @@ const reportView: ReportView = {
   resolved_from_fallback: false,
   fallback_notice: null,
   tool_download_cta: {
-    href: '/download',
+    href: '/tools/download',
     title: '翻墙工具客户端下载',
     description: '常用客户端集中下载。',
     platforms: ['Android', 'macOS', 'Windows', 'Linux'],

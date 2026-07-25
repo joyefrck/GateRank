@@ -114,6 +114,7 @@ import { DealsPage } from './pages/deals/DealsPage';
 import { StreamingCheckPage } from './pages/streamingCheck/StreamingCheckPage';
 import { IPCheckPage } from './pages/ipCheck/IPCheckPage';
 import { DNSLeakTestPage } from './pages/dnsLeakTest/DNSLeakTestPage';
+import { ToolsIndexPage } from './pages/tools/ToolsIndexPage';
 import { MonthlyReportDetailPage, MonthlyReportsPage } from './pages/monthlyReports/MonthlyReportsPage';
 import { trackPageView } from './site/analytics';
 import { getCapabilityIcon, type CapabilityIconCategory } from '../shared/capabilityIcons';
@@ -137,7 +138,10 @@ import {
   toMarketingPageKind,
   type AppRouteKind,
 } from './site/marketingRoutes';
-import { PUBLIC_SITE_BRAND_NAME } from '../shared/publicBrand';
+import {
+  PUBLIC_SITE_BRAND_NAME,
+  withPublicBrandTitle,
+} from '../shared/publicBrand';
 import {
   AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD,
   AIRPORT_AD_MONTHLY_PRICE,
@@ -1518,9 +1522,8 @@ function parseRoute(): RouteState {
   }
 
   if (toolsMatch) {
-    canonicalizeCurrentPublicListUrl(buildToolsDownloadHref());
     return {
-      kind: 'tools_download',
+      kind: 'tools_index',
     };
   }
 
@@ -4266,17 +4269,28 @@ function ToolsDownloadPage({ platform }: { platform?: ToolDownloadPlatform }) {
 
   const config = view?.config;
   usePageSeo({
-    title: config?.seo_title || '翻墙工具下载 | GateRank',
+    title: withPublicBrandTitle(config?.seo_title || '翻墙工具下载'),
     description: config?.seo_description || 'GateRank 翻墙工具下载页。',
     keywords: config?.seo_keywords || '翻墙工具下载,科学上网客户端',
     canonicalPath: buildToolsDownloadHref(),
     robots: platform ? 'noindex,follow' : undefined,
-    structuredData: {
-      '@context': 'https://schema.org',
-      '@type': 'CollectionPage',
-      name: config?.seo_title || '翻墙工具下载',
-      url: buildAbsoluteUrl(buildToolsDownloadHref()),
-    },
+    structuredData: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'CollectionPage',
+        name: withPublicBrandTitle(config?.seo_title || '翻墙工具下载'),
+        url: buildAbsoluteUrl(buildToolsDownloadHref()),
+      },
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: '今日推荐', item: buildAbsoluteUrl('/') },
+          { '@type': 'ListItem', position: 2, name: '工具', item: buildAbsoluteUrl('/tools') },
+          { '@type': 'ListItem', position: 3, name: '翻墙工具下载', item: buildAbsoluteUrl(buildToolsDownloadHref()) },
+        ],
+      },
+    ],
   });
 
   const platformGroups = useMemo(() => buildToolDownloadGroups(view, platform), [view, platform]);
@@ -8923,6 +8937,7 @@ export default function App() {
     return <ToolsDownloadPage platform={route.platform} />;
   }
 
+  if (route.kind === 'tools_index') return <ToolsIndexPage />;
   if (route.kind === 'streaming_check') return <StreamingCheckPage />;
   if (route.kind === 'ip_check') return <IPCheckPage />;
   if (route.kind === 'dns_leak_test') return <DNSLeakTestPage />;

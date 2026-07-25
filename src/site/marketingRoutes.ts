@@ -13,6 +13,7 @@ export type AppRouteKind =
   | 'methodology'
   | 'ranking_transparency'
   | 'publish_token_docs'
+  | 'tools_index'
   | 'tools_download'
   | 'streaming_check'
   | 'ip_check'
@@ -32,6 +33,7 @@ export const MARKETING_PAGE_KIND_BY_ROUTE = {
   methodology: 'methodology',
   ranking_transparency: 'ranking_transparency',
   publish_token_docs: 'publish_token_docs',
+  tools_index: 'tools_index',
   tools_download: 'tools_download',
   streaming_check: 'streaming_check',
   ip_check: 'ip_check',

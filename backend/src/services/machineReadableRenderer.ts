@@ -37,6 +37,7 @@ export interface PublicSummaryData {
     news: string;
     deals: string;
     monthly_reports: string;
+    tools: string;
     tool_downloads: string;
     streaming_check: string;
     ip_check: string;
@@ -147,7 +148,8 @@ export function buildSummaryData(siteUrl: string, home: HomePageView, risk: Risk
       news: `${siteUrl}/news`,
       deals: `${siteUrl}/deals`,
       monthly_reports: `${siteUrl}/monthly-reports`,
-      tool_downloads: `${siteUrl}/download`,
+      tools: `${siteUrl}/tools`,
+      tool_downloads: `${siteUrl}/tools/download`,
       streaming_check: `${siteUrl}/tools/streaming-check`,
       ip_check: `${siteUrl}/tools/ip-check`,
       dns_leak_test: `${siteUrl}/tools/dns-leak-test`,
@@ -376,6 +378,7 @@ export function renderDataIndexMarkdown(summary: PublicSummaryData): string {
     `- Risk monitoring: ${summary.core_pages.risk_monitor}`,
     `- Monthly reports: ${summary.core_pages.monthly_reports}`,
     `- Deals and coupons: ${summary.core_pages.deals}`,
+    `- Tools index: ${summary.core_pages.tools}`,
     `- Tool downloads: ${summary.core_pages.tool_downloads}`,
     `- Streaming check: ${summary.core_pages.streaming_check}`,
     `- IP check: ${summary.core_pages.ip_check}`,
@@ -407,6 +410,7 @@ export function renderSummaryMarkdown(summary: PublicSummaryData): string {
     `- 月度报告：${summary.core_pages.monthly_reports}`,
     `- 优惠活动：${summary.core_pages.deals}`,
     `- News：${summary.core_pages.news}`,
+    `- 工具中心：${summary.core_pages.tools}`,
     `- 翻墙工具下载：${summary.core_pages.tool_downloads}`,
     `- 流媒体检测：${summary.core_pages.streaming_check}`,
     `- IP 检测：${summary.core_pages.ip_check}`,
