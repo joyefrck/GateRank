@@ -5,7 +5,6 @@ import {
   Check,
   Clock3,
   Copy,
-  ExternalLink,
   Globe2,
   Hash,
   Languages,
@@ -14,8 +13,6 @@ import {
   Navigation,
   RotateCw,
   Search,
-  Shield,
-  Zap,
 } from 'lucide-react';
 
 import {
@@ -250,8 +247,6 @@ export function IPCheckPage() {
             ) : null}
           </section>
 
-          <VpnBanner translations={translations} />
-
           <section className="mx-auto mt-8 max-w-5xl rounded-xl border border-white/10 bg-white/5 p-5 text-xs leading-6 text-slate-400 backdrop-blur">
             <p>{translations.dataSource}</p>
             <p className="mt-2">{translations.privacy}</p>
@@ -384,30 +379,6 @@ function InfoCard({
         {copied === copyValue ? <Check className="text-emerald-300" size={15} /> : <Copy size={15} />}
       </button>
     </article>
-  );
-}
-
-function VpnBanner({ translations }: { translations: (typeof IP_CHECK_TRANSLATIONS)[IpCheckLanguage] }) {
-  return (
-    <a
-      href="https://www.elphantroute.com/"
-      target="_blank"
-      rel="nofollow sponsored noopener noreferrer"
-      className="group mx-auto mt-8 flex max-w-5xl flex-col items-center justify-between gap-5 overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-r from-blue-600/20 via-purple-600/20 to-pink-600/20 p-6 text-center backdrop-blur transition hover:-translate-y-0.5 hover:border-white/25 hover:shadow-2xl hover:shadow-purple-500/15 md:flex-row md:p-8 md:text-left"
-    >
-      <span>
-        <span className="flex items-center justify-center gap-2 text-xl font-black md:justify-start">
-          <Shield className="text-blue-300" size={24} />
-          {translations.vpnTitle}
-        </span>
-        <span className="mt-2 block text-sm leading-7 text-slate-300">{translations.vpnDescription}</span>
-      </span>
-      <span className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 px-5 py-3 text-sm font-black shadow-lg shadow-blue-500/25">
-        <Zap size={16} />
-        {translations.vpnCta}
-        <ExternalLink size={15} />
-      </span>
-    </a>
   );
 }
 

@@ -67,9 +67,6 @@ export const IP_CHECK_TRANSLATIONS = {
     retry: '重试',
     dataSource: 'IP 数据由 ipwho.is 提供，地图由 OpenStreetMap 与 CARTO 提供。',
     privacy: 'GateRank 不持久保存查询历史；为节省免费额度，成功结果会在 API 进程内存中临时缓存最多 24 小时；ipwho.is 会根据其服务政策处理查询目标。',
-    vpnTitle: '想要更换 IP 位置？试试 ElephantRoute VPN',
-    vpnDescription: '全球节点 · 高速稳定 · 保护隐私 · 畅享全球内容',
-    vpnCta: '立即体验',
     errors: {
       invalid: '请输入有效的公网 IPv4、IPv6 地址或域名。',
       clientIpRequired: '暂时无法从当前连接识别出口 IP，正在尝试浏览器检测。',
@@ -107,9 +104,6 @@ export const IP_CHECK_TRANSLATIONS = {
     retry: 'Retry',
     dataSource: 'IP data is provided by ipwho.is. Map data is provided by OpenStreetMap and CARTO.',
     privacy: 'GateRank does not persist lookup history. To conserve the free quota, successful results are temporarily cached in API process memory for up to 24 hours. ipwho.is processes lookup targets under its own service policies.',
-    vpnTitle: 'Want to change your IP location? Try ElephantRoute VPN',
-    vpnDescription: 'Global servers · Fast and stable · Privacy protection · Worldwide access',
-    vpnCta: 'Get started',
     errors: {
       invalid: 'Enter a valid public IPv4 address, IPv6 address, or domain.',
       clientIpRequired: 'The current public IP could not be detected from this connection. Trying browser detection.',
