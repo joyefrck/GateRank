@@ -1,5 +1,8 @@
 import type { FullRankingFilters } from '../../../shared/fullRankingFilters';
+import type { MarketingPageKind } from '../../../shared/marketingAnalytics';
 import type { HomeToolDownloadCta } from '../../../shared/toolDownloads';
+
+export type { MarketingPageKind } from '../../../shared/marketingAnalytics';
 
 export type AirportStatus = 'normal' | 'risk' | 'down';
 export type AirportStreamingSupport =
@@ -533,16 +536,6 @@ export type MarketingSourceType =
   | 'wechat'
   | 'direct_or_unknown'
   | 'other_referral';
-export type MarketingPageKind =
-  | 'home'
-  | 'full_ranking'
-  | 'risk_monitor'
-  | 'report'
-  | 'deals'
-  | 'methodology'
-  | 'news'
-  | 'apply'
-  | 'publish_token_docs';
 export type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header' | 'deal_card' | 'news_article';
 export type MarketingTargetKind = 'website' | 'subscription_url';
 

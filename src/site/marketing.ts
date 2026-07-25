@@ -1,15 +1,7 @@
 import { useEffect, type RefObject } from 'react';
+import type { MarketingPageKind } from '../../shared/marketingAnalytics';
 
-export type MarketingPageKind =
-  | 'home'
-  | 'full_ranking'
-  | 'risk_monitor'
-  | 'report'
-  | 'deals'
-  | 'methodology'
-  | 'news'
-  | 'apply'
-  | 'publish_token_docs';
+export type { MarketingPageKind } from '../../shared/marketingAnalytics';
 
 export type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header' | 'deal_card' | 'news_article';
 export type MarketingTargetKind = 'website' | 'subscription_url';

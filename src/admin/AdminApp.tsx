@@ -34,6 +34,10 @@ import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
 import { MonthlyReportEditorPage, MonthlyReportListPage } from './monthlyReports/MonthlyReportPages';
 import { buildPublishTokenDocsHref } from '../site/publicSite';
+import {
+  getMarketingPageKindLabel,
+  type MarketingPageKind,
+} from '../../shared/marketingAnalytics';
 import { manualTotalScoreInputValue } from './scoreInput';
 import {
   buildSubscriptionNodeViewRows,
@@ -734,7 +738,6 @@ type MarketingRangePreset = 'day' | 'week' | 'month' | 'custom';
 type MarketingAirportSortBy = 'ctr' | 'clicks' | 'impressions' | 'last_clicked_at';
 type MarketingSortOrder = 'asc' | 'desc';
 type MarketingSourceType = 'google' | 'baidu' | 'x' | 'bing' | 'reddit' | 'telegram' | 'wechat' | 'direct_or_unknown' | 'other_referral';
-type MarketingPageKind = 'home' | 'full_ranking' | 'risk_monitor' | 'report' | 'methodology' | 'news' | 'apply' | 'publish_token_docs';
 type MarketingPlacement = 'home_card' | 'full_ranking_item' | 'risk_monitor_item' | 'report_header' | 'deal_card' | 'news_article';
 type MarketingTargetKind = 'website' | 'subscription_url';
 
@@ -3806,7 +3809,7 @@ function MarketingPage() {
                 )}
                 {pageItems.map((item) => (
                   <tr key={`${item.page_kind}-${item.page_path}`} className="border-t border-neutral-200">
-                    <td className="px-4 py-3">{formatMarketingPageKind(item.page_kind)}</td>
+                    <td className="px-4 py-3">{getMarketingPageKindLabel(item.page_kind)}</td>
                     <td className="px-4 py-3 font-mono text-xs text-neutral-700">{item.page_path}</td>
                     <td className="px-4 py-3">{formatCountValue(item.page_views)}</td>
                     <td className="px-4 py-3">{formatCountValue(item.unique_visitors)}</td>
@@ -12305,17 +12308,6 @@ function formatMarketingPeriodLabel(
     }
   }
   return value;
-}
-
-function formatMarketingPageKind(value: MarketingPageKind): string {
-  if (value === 'home') return '首页';
-  if (value === 'full_ranking') return '全量榜单';
-  if (value === 'risk_monitor') return '风险监测';
-  if (value === 'report') return '机场报告';
-  if (value === 'methodology') return '测评方法';
-  if (value === 'news') return 'News';
-  if (value === 'apply') return '申请页';
-  return '发布文档';
 }
 
 function formatMarketingPlacement(value: MarketingPlacement | null): string {

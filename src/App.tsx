@@ -133,6 +133,10 @@ import {
   trackMarketingPageView,
   useMarketingImpression,
 } from './site/marketing';
+import {
+  toMarketingPageKind,
+  type AppRouteKind,
+} from './site/marketingRoutes';
 import { PUBLIC_SITE_BRAND_NAME } from '../shared/publicBrand';
 import {
   AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD,
@@ -428,11 +432,10 @@ interface CardProps {
 }
 
 interface RouteState {
-  kind: 'home' | 'report' | 'apply' | 'portal' | 'full_ranking' | 'monthly_reports' | 'monthly_report' | 'deals' | 'risk_monitor' | 'methodology' | 'ranking_transparency' | 'publish_token_docs' | 'tools_download' | 'tool_placeholder' | 'not_found';
+  kind: AppRouteKind;
   airportId?: number;
   airportSlug?: string;
   monthlyReportSlug?: string;
-  toolPlaceholder?: 'streaming-check' | 'ip-check' | 'dns-leak-test';
   date?: string;
   page?: number;
   filters?: FullRankingFilters;
@@ -1407,7 +1410,9 @@ function parseRoute(): RouteState {
   const toolsMatch = path.match(/^\/tools\/?$/);
   const toolsDownloadMatch = path.match(/^\/tools\/download\/?$/);
   const downloadMatch = path.match(/^\/download\/?$/);
-  const toolPlaceholderMatch = path.match(/^\/tools\/(streaming-check|ip-check|dns-leak-test)\/?$/);
+  const streamingCheckMatch = path.match(/^\/tools\/streaming-check\/?$/);
+  const ipCheckMatch = path.match(/^\/tools\/ip-check\/?$/);
+  const dnsLeakTestMatch = path.match(/^\/tools\/dns-leak-test\/?$/);
   const params = new URLSearchParams(window.location.search);
 
   if (path === buildMethodologyHref() || path === `${buildMethodologyHref()}/`) {
@@ -1536,12 +1541,9 @@ function parseRoute(): RouteState {
     };
   }
 
-  if (toolPlaceholderMatch) {
-    return {
-      kind: 'tool_placeholder',
-      toolPlaceholder: toolPlaceholderMatch[1] as 'streaming-check' | 'ip-check' | 'dns-leak-test',
-    };
-  }
+  if (streamingCheckMatch) return { kind: 'streaming_check' };
+  if (ipCheckMatch) return { kind: 'ip_check' };
+  if (dnsLeakTestMatch) return { kind: 'dns_leak_test' };
 
   if (riskMonitorMatch) {
     const page = Number(params.get('page') || '1');
@@ -1588,20 +1590,6 @@ function formatMetric(value: number): string {
 
 function buildReportHref(airportId: number, date?: string): string {
   return `/reports/${airportId}${buildQuery({ date })}`;
-}
-
-function toMarketingPageKind(routeKind: RouteState['kind']): MarketingPageKind | null {
-  if (routeKind === 'home') return 'home';
-  if (routeKind === 'report') return 'report';
-  if (routeKind === 'apply') return 'apply';
-  if (routeKind === 'full_ranking') return 'full_ranking';
-  if (routeKind === 'monthly_reports' || routeKind === 'monthly_report') return null;
-  if (routeKind === 'deals') return 'deals';
-  if (routeKind === 'risk_monitor') return 'risk_monitor';
-  if (routeKind === 'methodology') return 'methodology';
-  if (routeKind === 'ranking_transparency') return null;
-  if (routeKind === 'publish_token_docs') return 'publish_token_docs';
-  return null;
 }
 
 function buildPageWindow(currentPage: number, totalPages: number): number[] {
@@ -8935,15 +8923,9 @@ export default function App() {
     return <ToolsDownloadPage platform={route.platform} />;
   }
 
-  if (route.kind === 'tool_placeholder' && route.toolPlaceholder) {
-    if (route.toolPlaceholder === 'streaming-check') {
-      return <StreamingCheckPage />;
-    }
-    if (route.toolPlaceholder === 'dns-leak-test') {
-      return <DNSLeakTestPage />;
-    }
-    return <IPCheckPage />;
-  }
+  if (route.kind === 'streaming_check') return <StreamingCheckPage />;
+  if (route.kind === 'ip_check') return <IPCheckPage />;
+  if (route.kind === 'dns_leak_test') return <DNSLeakTestPage />;
 
   if (route.kind === 'home') {
     return <HomePage date={route.date} />;
