@@ -143,6 +143,7 @@ interface ToolDownloadItem {
   sort_order: number;
   status: ToolDownloadStatus;
   published_at: string | null;
+  content_updated_at: string | null;
   created_at: string;
   updated_at: string;
 }

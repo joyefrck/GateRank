@@ -3061,6 +3061,7 @@ function createToolDownloadItem(slug: string, name: string, iconUrl: string, sor
     sort_order: sortOrder,
     status: 'published',
     published_at: '2026-07-08 10:00:00',
+    content_updated_at: null,
     created_at: '2026-07-08 09:00:00',
     updated_at: '2026-07-08 10:00:00',
   };

@@ -45,6 +45,7 @@ export interface ToolDownloadItem {
   sort_order: number;
   status: ToolDownloadStatus;
   published_at: string | null;
+  content_updated_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -194,7 +195,7 @@ export const DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG: ToolsDownloadPageConfig = {
   ],
 };
 
-export const DEFAULT_HOT_TOOL_DOWNLOADS: Omit<ToolDownloadItem, 'id' | 'created_at' | 'updated_at' | 'published_at' | 'status' | 'download_count'>[] = [
+export const DEFAULT_HOT_TOOL_DOWNLOADS: Omit<ToolDownloadItem, 'id' | 'created_at' | 'updated_at' | 'published_at' | 'content_updated_at' | 'status' | 'download_count'>[] = [
   {
     slug: 'clash-verge-rev',
     name: 'Clash Verge Rev',
@@ -336,10 +337,10 @@ export function buildToolDownloadPlatformHeading(platform: ToolDownloadPlatform)
 }
 
 export function buildToolDownloadTrustMeta(
-  item: Pick<ToolDownloadItem, 'version' | 'published_at' | 'updated_at'>,
+  item: Pick<ToolDownloadItem, 'version' | 'published_at' | 'content_updated_at' | 'updated_at'>,
 ): string {
   const versionLabel = item.version.trim() || '以官方发布页为准';
-  const dateLabel = formatToolDownloadDate(item.updated_at || item.published_at);
+  const dateLabel = formatToolDownloadDate(item.content_updated_at || item.published_at);
   return `版本：${versionLabel} · 发布：${dateLabel}`;
 }
 

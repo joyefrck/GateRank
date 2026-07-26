@@ -27,6 +27,7 @@ interface ToolDownloadRow extends RowDataPacket {
   sort_order: number;
   status: ToolDownloadStatus;
   published_at: string | null;
+  content_updated_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -48,6 +49,7 @@ export interface ToolDownloadInput {
   sort_order?: number;
   status?: ToolDownloadStatus;
   published_at?: string | null;
+  content_updated_at?: string | null;
 }
 
 export type UpdateToolDownloadInput = Partial<ToolDownloadInput>;
@@ -84,6 +86,7 @@ export class ToolDownloadRepository {
         sort_order INT NOT NULL DEFAULT 0,
         status ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft',
         published_at DATETIME NULL,
+        content_updated_at DATETIME NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         PRIMARY KEY (id),
@@ -109,6 +112,7 @@ export class ToolDownloadRepository {
     await this.ensureColumn('sort_order', 'INT NOT NULL DEFAULT 0 AFTER is_hot');
     await this.ensureColumn('status', "ENUM('draft', 'published', 'archived') NOT NULL DEFAULT 'draft' AFTER sort_order");
     await this.ensureColumn('published_at', 'DATETIME NULL AFTER status');
+    await this.ensureColumn('content_updated_at', 'DATETIME NULL AFTER published_at');
     await this.ensureIndex('uk_tool_download_items_slug', 'CREATE UNIQUE INDEX uk_tool_download_items_slug ON tool_download_items (slug)');
     await this.ensureIndex('idx_tool_download_items_status_sort', 'CREATE INDEX idx_tool_download_items_status_sort ON tool_download_items (status, sort_order, id)');
     await this.ensureIndex('idx_tool_download_items_hot_sort', 'CREATE INDEX idx_tool_download_items_hot_sort ON tool_download_items (is_hot, status, sort_order, id)');
@@ -206,6 +210,7 @@ export class ToolDownloadRepository {
     push('sort_order', input.sort_order);
     push('status', input.status);
     push('published_at', input.published_at);
+    push('content_updated_at', input.content_updated_at);
 
     if (updates.length === 0) {
       return true;
@@ -285,6 +290,7 @@ function selectSql(): string {
     id, slug, name, summary, description, platforms_json, platform_versions_json, icon_url, local_file_url,
     official_url, primary_action, version, file_size_label, download_count, is_hot, sort_order, status,
     DATE_FORMAT(published_at, '%Y-%m-%d %H:%i:%s') AS published_at,
+    DATE_FORMAT(content_updated_at, '%Y-%m-%d %H:%i:%s') AS content_updated_at,
     DATE_FORMAT(created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
     DATE_FORMAT(updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
     FROM tool_download_items`;
@@ -310,6 +316,7 @@ function toToolDownloadItem(row: ToolDownloadRow): ToolDownloadItem {
     sort_order: Number(row.sort_order || 0),
     status: row.status,
     published_at: row.published_at || null,
+    content_updated_at: row.content_updated_at || null,
     created_at: row.created_at,
     updated_at: row.updated_at,
   };

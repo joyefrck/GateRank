@@ -66,6 +66,7 @@ function createDownloadService(input: Partial<ToolDownloadItem> = {}) {
     sort_order: 1,
     status: 'published',
     published_at: '2026-07-08 09:00:00',
+    content_updated_at: null,
     created_at: '2026-07-08 09:00:00',
     updated_at: '2026-07-09 09:00:00',
     ...input,
@@ -158,3 +159,53 @@ test('ToolsDownloadService falls back to the stored filename when upload metadat
     await rm(uploadRoot, { recursive: true, force: true });
   }
 });
+
+test('ToolsDownloadService stamps admin content edits independently from generic row updates', async () => {
+  let capturedUpdate: Record<string, unknown> | undefined;
+  const existing = createDownloadServiceItem();
+  const repository = {
+    getById: async () => existing,
+    update: async (_id: number, input: Record<string, unknown>) => {
+      capturedUpdate = input;
+      return true;
+    },
+  };
+  const service = new ToolsDownloadService(
+    repository as never,
+    { getByKey: async () => null } as never,
+  );
+
+  await service.updateDownload(1, { version: '2.5.2' });
+
+  assert.equal(capturedUpdate?.version, '2.5.2');
+  assert.match(
+    String(capturedUpdate?.content_updated_at),
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/,
+  );
+});
+
+function createDownloadServiceItem(): ToolDownloadItem {
+  return {
+    id: 1,
+    slug: 'clash-verge-macos',
+    name: 'Clash Verge',
+    summary: 'macOS 客户端',
+    description: 'macOS 客户端',
+    platforms: ['macos'],
+    platform_versions: { macos: 'macOS 12+' },
+    icon_url: '',
+    local_file_url: '',
+    official_url: '',
+    primary_action: 'local',
+    version: '2.5.1',
+    file_size_label: '62.7 MB',
+    download_count: 21,
+    is_hot: false,
+    sort_order: 1,
+    status: 'published',
+    published_at: '2026-07-08 18:29:01',
+    content_updated_at: null,
+    created_at: '2026-07-08 18:28:58',
+    updated_at: '2026-07-25 00:12:29',
+  };
+}

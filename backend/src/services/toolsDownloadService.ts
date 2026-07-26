@@ -98,6 +98,7 @@ export class ToolsDownloadService {
       throw new HttpError(404, 'TOOL_DOWNLOAD_NOT_FOUND', '工具下载项不存在');
     }
     const input = parseToolDownloadPayload(payload, false);
+    input.content_updated_at = formatSqlDateTimeInTimezone(new Date());
     const updated = await this.toolDownloadRepository.update(id, input);
     if (!updated) {
       throw new HttpError(404, 'TOOL_DOWNLOAD_NOT_FOUND', '工具下载项不存在');
@@ -274,6 +275,7 @@ function getDefaultPublishedItems(platform: ToolDownloadPlatform | null): ToolDo
       download_count: 0,
       status: 'published',
       published_at: now,
+      content_updated_at: null,
       created_at: now,
       updated_at: now,
     }));
