@@ -19,3 +19,13 @@ test('software list renders a dedicated software version column', () => {
   assert.match(softwareListSource, /\{item\.version \|\| '—'\}/);
   assert.match(softwareListSource, /colSpan=\{6\}/);
 });
+
+test('tool package upload keeps a persistent filename confirmation and refreshes inferred metadata', () => {
+  assert.match(adminSource, /local_file_name: string;/);
+  assert.match(adminSource, /data-testid="tool-file-upload-success"/);
+  assert.match(adminSource, /安装包上传成功/);
+  assert.match(adminSource, /local_file_name: data\.original_name \|\| file\.name/);
+  assert.match(adminSource, /version: inferred\.version \|\| current\.version/);
+  assert.match(adminSource, /file_size_label: data\.file_size_label \|\| current\.file_size_label/);
+  assert.match(adminSource, /\{form\.local_file_name\}/);
+});

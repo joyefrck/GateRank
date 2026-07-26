@@ -193,6 +193,42 @@ export async function readToolUploadOriginalName(filename: string): Promise<stri
   return safeOriginalName || storedFilename;
 }
 
+export async function deleteToolUploadFile(publicUrl: string): Promise<boolean> {
+  let pathname: string;
+  try {
+    pathname = new URL(publicUrl, 'http://gaterank.local').pathname;
+  } catch {
+    return false;
+  }
+
+  const prefix = '/uploads/tools/files/';
+  if (!pathname.startsWith(prefix)) {
+    return false;
+  }
+
+  let filename: string;
+  try {
+    filename = decodeURIComponent(pathname.slice(prefix.length));
+  } catch {
+    return false;
+  }
+  if (!filename || filename.includes('/') || filename.includes('\\') || path.basename(filename) !== filename) {
+    return false;
+  }
+
+  const dir = getToolUploadDir('files');
+  const filePath = path.resolve(dir, filename);
+  if (path.dirname(filePath) !== dir) {
+    return false;
+  }
+
+  await Promise.all([
+    rm(filePath, { force: true }),
+    rm(`${filePath}.meta.json`, { force: true }),
+  ]);
+  return true;
+}
+
 export async function listRecentToolUploads(
   kind: ToolUploadKind,
   input: { limit?: number; sinceSeconds?: number } = {},

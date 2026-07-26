@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -184,7 +184,152 @@ test('ToolsDownloadService stamps admin content edits independently from generic
   );
 });
 
-function createDownloadServiceItem(): ToolDownloadItem {
+test('ToolsDownloadService deletes an unreferenced old package after replacement is saved', async () => {
+  const uploadRoot = await mkdtemp(path.join(os.tmpdir(), 'gaterank-tool-replace-'));
+  const previousUploadRoot = process.env.NEWS_UPLOAD_ROOT_DIR;
+  process.env.NEWS_UPLOAD_ROOT_DIR = uploadRoot;
+  try {
+    const oldFilename = '1783493370824-old-package.dmg';
+    const oldUrl = `/uploads/tools/files/${oldFilename}`;
+    const newUrl = '/uploads/tools/files/1783493370825-new-package.dmg';
+    const fileDir = path.join(uploadRoot, 'tools', 'files');
+    const oldPath = path.join(fileDir, oldFilename);
+    const oldMetadataPath = `${oldPath}.meta.json`;
+    await mkdir(fileDir, { recursive: true });
+    await writeFile(oldPath, 'old-package');
+    await writeFile(oldMetadataPath, '{}');
+
+    let item = createDownloadServiceItem({ local_file_url: oldUrl });
+    const repository = {
+      getById: async () => item,
+      update: async (_id: number, input: Record<string, unknown>) => {
+        item = { ...item, local_file_url: String(input.local_file_url || '') };
+        return true;
+      },
+      countByLocalFileUrl: async () => 0,
+    };
+    const service = new ToolsDownloadService(
+      repository as never,
+      { getByKey: async () => null } as never,
+    );
+
+    await service.updateDownload(1, { local_file_url: newUrl });
+
+    await assert.rejects(access(oldPath));
+    await assert.rejects(access(oldMetadataPath));
+  } finally {
+    if (previousUploadRoot === undefined) delete process.env.NEWS_UPLOAD_ROOT_DIR;
+    else process.env.NEWS_UPLOAD_ROOT_DIR = previousUploadRoot;
+    await rm(uploadRoot, { recursive: true, force: true });
+  }
+});
+
+test('ToolsDownloadService preserves an old package that is still referenced', async () => {
+  const uploadRoot = await mkdtemp(path.join(os.tmpdir(), 'gaterank-tool-shared-'));
+  const previousUploadRoot = process.env.NEWS_UPLOAD_ROOT_DIR;
+  process.env.NEWS_UPLOAD_ROOT_DIR = uploadRoot;
+  try {
+    const oldFilename = '1783493370824-shared-package.dmg';
+    const oldUrl = `/uploads/tools/files/${oldFilename}`;
+    const fileDir = path.join(uploadRoot, 'tools', 'files');
+    const oldPath = path.join(fileDir, oldFilename);
+    await mkdir(fileDir, { recursive: true });
+    await writeFile(oldPath, 'shared-package');
+
+    let item = createDownloadServiceItem({ local_file_url: oldUrl });
+    const repository = {
+      getById: async () => item,
+      update: async (_id: number, input: Record<string, unknown>) => {
+        item = { ...item, local_file_url: String(input.local_file_url || '') };
+        return true;
+      },
+      countByLocalFileUrl: async () => 1,
+    };
+    const service = new ToolsDownloadService(
+      repository as never,
+      { getByKey: async () => null } as never,
+    );
+
+    await service.updateDownload(1, {
+      local_file_url: '/uploads/tools/files/1783493370825-new-package.dmg',
+    });
+
+    await access(oldPath);
+  } finally {
+    if (previousUploadRoot === undefined) delete process.env.NEWS_UPLOAD_ROOT_DIR;
+    else process.env.NEWS_UPLOAD_ROOT_DIR = previousUploadRoot;
+    await rm(uploadRoot, { recursive: true, force: true });
+  }
+});
+
+test('ToolsDownloadService never deletes the old package when replacement save fails', async () => {
+  const uploadRoot = await mkdtemp(path.join(os.tmpdir(), 'gaterank-tool-failed-replace-'));
+  const previousUploadRoot = process.env.NEWS_UPLOAD_ROOT_DIR;
+  process.env.NEWS_UPLOAD_ROOT_DIR = uploadRoot;
+  try {
+    const oldFilename = '1783493370824-kept-package.dmg';
+    const oldUrl = `/uploads/tools/files/${oldFilename}`;
+    const fileDir = path.join(uploadRoot, 'tools', 'files');
+    const oldPath = path.join(fileDir, oldFilename);
+    await mkdir(fileDir, { recursive: true });
+    await writeFile(oldPath, 'kept-package');
+
+    const item = createDownloadServiceItem({ local_file_url: oldUrl });
+    const service = new ToolsDownloadService(
+      {
+        getById: async () => item,
+        update: async () => false,
+        countByLocalFileUrl: async () => 0,
+      } as never,
+      { getByKey: async () => null } as never,
+    );
+
+    await assert.rejects(() => service.updateDownload(1, {
+      local_file_url: '/uploads/tools/files/1783493370825-new-package.dmg',
+    }));
+
+    await access(oldPath);
+  } finally {
+    if (previousUploadRoot === undefined) delete process.env.NEWS_UPLOAD_ROOT_DIR;
+    else process.env.NEWS_UPLOAD_ROOT_DIR = previousUploadRoot;
+    await rm(uploadRoot, { recursive: true, force: true });
+  }
+});
+
+test('ToolsDownloadService enriches admin items with the original package filename', async () => {
+  const uploadRoot = await mkdtemp(path.join(os.tmpdir(), 'gaterank-tool-admin-name-'));
+  const previousUploadRoot = process.env.NEWS_UPLOAD_ROOT_DIR;
+  process.env.NEWS_UPLOAD_ROOT_DIR = uploadRoot;
+  try {
+    const filename = '1783493370824-storage-id.dmg';
+    const fileDir = path.join(uploadRoot, 'tools', 'files');
+    await mkdir(fileDir, { recursive: true });
+    await writeFile(path.join(fileDir, filename), 'fixture');
+    await writeToolUploadMetadata('files', filename, {
+      original_name: 'Clash.Verge_2.5.2_x64.dmg',
+      size: 7,
+    });
+    const item = createDownloadServiceItem({
+      local_file_url: `/uploads/tools/files/${filename}`,
+    });
+    const service = new ToolsDownloadService(
+      {
+        listByQuery: async () => ({ items: [item], total: 1 }),
+      } as never,
+      { getByKey: async () => null } as never,
+    );
+
+    const result = await service.listAdminDownloads();
+
+    assert.equal(result.items[0].local_file_name, 'Clash.Verge_2.5.2_x64.dmg');
+  } finally {
+    if (previousUploadRoot === undefined) delete process.env.NEWS_UPLOAD_ROOT_DIR;
+    else process.env.NEWS_UPLOAD_ROOT_DIR = previousUploadRoot;
+    await rm(uploadRoot, { recursive: true, force: true });
+  }
+});
+
+function createDownloadServiceItem(input: Partial<ToolDownloadItem> = {}): ToolDownloadItem {
   return {
     id: 1,
     slug: 'clash-verge-macos',
@@ -207,5 +352,6 @@ function createDownloadServiceItem(): ToolDownloadItem {
     content_updated_at: null,
     created_at: '2026-07-08 18:28:58',
     updated_at: '2026-07-25 00:12:29',
+    ...input,
   };
 }

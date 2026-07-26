@@ -232,6 +232,14 @@ export class ToolDownloadRepository {
     return result.affectedRows > 0;
   }
 
+  async countByLocalFileUrl(localFileUrl: string): Promise<number> {
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      'SELECT COUNT(*) AS total FROM tool_download_items WHERE local_file_url = ?',
+      [localFileUrl],
+    );
+    return Number(rows[0]?.total || 0);
+  }
+
   private async ensureColumn(columnName: string, definition: string): Promise<void> {
     const [rows] = await this.pool.query<RowDataPacket[]>(
       `SELECT 1

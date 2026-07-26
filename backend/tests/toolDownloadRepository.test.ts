@@ -98,6 +98,23 @@ test('ToolDownloadRepository.incrementDownloadCount increments every successful 
   assert.deepEqual(calls[0].params, [7]);
 });
 
+test('ToolDownloadRepository.countByLocalFileUrl counts remaining package references', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const pool = {
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [[{ total: 2 }], []];
+    },
+  };
+
+  const repository = new ToolDownloadRepository(pool as never);
+  const count = await repository.countByLocalFileUrl('/uploads/tools/files/shared.dmg');
+
+  assert.equal(count, 2);
+  assert.match(calls[0].sql, /WHERE local_file_url = \?/);
+  assert.deepEqual(calls[0].params, ['/uploads/tools/files/shared.dmg']);
+});
+
 test('ToolDownloadRepository.create persists per-platform version labels', async () => {
   const calls: Array<{ sql: string; params?: unknown[] }> = [];
   const pool = {

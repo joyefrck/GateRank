@@ -134,6 +134,7 @@ interface ToolDownloadItem {
   platform_versions: ToolDownloadPlatformVersions;
   icon_url: string;
   local_file_url: string;
+  local_file_name?: string;
   official_url: string;
   primary_action: ToolDownloadPrimaryAction;
   version: string;
@@ -2014,6 +2015,21 @@ function ToolsDownloadAdminPage() {
               <span className="mt-4 text-lg font-black text-cyan-950">{uploading === 'file' ? '安装包上传中...' : fileDragActive ? '松开即可上传' : '第一步：上传安装包'}</span>
               <span className="mt-2 max-w-xs text-sm leading-6 text-cyan-800">点击选择或直接拖入安装包。支持 exe、msi、dmg、pkg、apk、ipa、deb、rpm、AppImage、zip、tar.gz。</span>
               {fileUploadProgress && <ToolUploadProgressBar progress={fileUploadProgress} />}
+              {form.local_file_url && form.local_file_name && !fileUploadProgress && (
+                <div
+                  data-testid="tool-file-upload-success"
+                  className="mt-5 w-full max-w-md rounded-2xl border border-emerald-200 bg-white/90 p-4 text-left shadow-sm"
+                >
+                  <div className="flex items-center gap-2 text-sm font-black text-emerald-800">
+                    <CheckCircle2 className="h-5 w-5 shrink-0" />
+                    安装包上传成功
+                  </div>
+                  <div className="mt-2 break-all text-sm font-bold text-neutral-900">{form.local_file_name}</div>
+                  <div className="mt-1 text-xs font-medium text-neutral-500">
+                    大小：{form.file_size_label || '待识别'} · 版本：{form.version || '待确认'}
+                  </div>
+                </div>
+              )}
               <input className="hidden" type="file" disabled={uploading === 'file'} onChange={(event) => {
                 const file = event.currentTarget.files?.[0];
                 event.currentTarget.value = '';
@@ -2231,6 +2247,7 @@ interface ToolDownloadFormState {
   platform_versions: ToolDownloadPlatformVersions;
   icon_url: string;
   local_file_url: string;
+  local_file_name: string;
   official_url: string;
   primary_action: ToolDownloadPrimaryAction;
   version: string;
@@ -2300,6 +2317,7 @@ function createDefaultToolDownloadForm(): ToolDownloadFormState {
     platform_versions: {},
     icon_url: '',
     local_file_url: '',
+    local_file_name: '',
     official_url: '',
     primary_action: 'official',
     version: '',
@@ -2320,6 +2338,7 @@ function toToolDownloadForm(item: ToolDownloadItem): ToolDownloadFormState {
     platform_versions: item.platform_versions || {},
     icon_url: item.icon_url,
     local_file_url: item.local_file_url,
+    local_file_name: item.local_file_name || getToolFileNameFromUrl(item.local_file_url),
     official_url: item.official_url,
     primary_action: item.primary_action,
     version: item.version,
@@ -2393,7 +2412,7 @@ function ensureToolPlatformVersion(versions: ToolDownloadPlatformVersions, platf
 function applyToolFileUploadInference(
   current: ToolDownloadFormState,
   file: { name: string },
-  data: { url: string; file_size_label?: string },
+  data: { url: string; original_name?: string; file_size_label?: string },
 ): ToolDownloadFormState {
   const inferred = inferToolFile(file.name);
   const nextPlatform = inferred.platforms[0] || current.platforms[0] || 'windows';
@@ -2417,11 +2436,21 @@ function applyToolFileUploadInference(
     platforms: nextPlatforms,
     platform_versions: nextVersions,
     local_file_url: data.url,
+    local_file_name: data.original_name || file.name,
     official_url: current.official_url.trim() || inferred.officialUrl,
     primary_action: 'local',
-    version: current.version.trim() || inferred.version,
+    version: inferred.version || current.version,
     file_size_label: data.file_size_label || current.file_size_label,
   };
+}
+
+function getToolFileNameFromUrl(publicUrl: string): string {
+  if (!publicUrl) return '';
+  try {
+    return decodeURIComponent(new URL(publicUrl, window.location.origin).pathname.split('/').pop() || '');
+  } catch {
+    return '';
+  }
 }
 
 interface InferredToolFile {

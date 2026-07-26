@@ -35,6 +35,7 @@ export interface ToolDownloadItem {
   platform_versions: ToolDownloadPlatformVersions;
   icon_url: string;
   local_file_url: string;
+  local_file_name?: string;
   official_url: string;
   primary_action: ToolDownloadPrimaryAction;
   version: string;

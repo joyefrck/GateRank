@@ -9,7 +9,7 @@ import type {
 } from '../repositories/toolDownloadRepository';
 import type { SystemSettingRepository } from '../repositories/systemSettingRepository';
 import { getNewsUploadRootDir } from '../utils/newsStorage';
-import { readToolUploadOriginalName } from '../utils/toolUpload';
+import { deleteToolUploadFile, readToolUploadOriginalName } from '../utils/toolUpload';
 import { formatSqlDateTimeInTimezone } from '../utils/time';
 import {
   DEFAULT_HOT_TOOL_DOWNLOADS,
@@ -79,7 +79,12 @@ export class ToolsDownloadService {
     const page = Math.max(1, query.page || 1);
     const pageSize = Math.min(100, Math.max(1, query.pageSize || 20));
     const result = await this.toolDownloadRepository.listByQuery({ ...query, page, pageSize });
-    return { page, page_size: pageSize, total: result.total, items: result.items };
+    return {
+      page,
+      page_size: pageSize,
+      total: result.total,
+      items: await Promise.all(result.items.map((item) => enrichAdminDownloadItem(item))),
+    };
   }
 
   async createDownload(payload: Record<string, unknown>): Promise<ToolDownloadItem> {
@@ -89,7 +94,7 @@ export class ToolsDownloadService {
     if (!item) {
       throw new HttpError(404, 'TOOL_DOWNLOAD_NOT_FOUND', '工具下载项不存在');
     }
-    return item;
+    return enrichAdminDownloadItem(item);
   }
 
   async updateDownload(id: number, payload: Record<string, unknown>): Promise<ToolDownloadItem> {
@@ -107,7 +112,25 @@ export class ToolsDownloadService {
     if (!item) {
       throw new HttpError(404, 'TOOL_DOWNLOAD_NOT_FOUND', '工具下载项不存在');
     }
-    return item;
+    if (
+      input.local_file_url !== undefined
+      && current.local_file_url
+      && current.local_file_url !== item.local_file_url
+    ) {
+      try {
+        const remainingReferences = await this.toolDownloadRepository.countByLocalFileUrl(current.local_file_url);
+        if (remainingReferences === 0) {
+          await deleteToolUploadFile(current.local_file_url);
+        }
+      } catch (error) {
+        console.error('[tools-download] failed to remove replaced package', {
+          itemId: id,
+          oldFileUrl: current.local_file_url,
+          error,
+        });
+      }
+    }
+    return enrichAdminDownloadItem(item);
   }
 
   async updateDownloadStatus(id: number, status: Extract<ToolDownloadStatus, 'published' | 'archived'>): Promise<ToolDownloadItem> {
@@ -123,7 +146,7 @@ export class ToolsDownloadService {
     if (!item) {
       throw new HttpError(404, 'TOOL_DOWNLOAD_NOT_FOUND', '工具下载项不存在');
     }
-    return item;
+    return enrichAdminDownloadItem(item);
   }
 
   async getDownloadFileTarget(slug: string, platform: ToolDownloadPlatform): Promise<ToolDownloadFileTarget> {
@@ -178,6 +201,34 @@ export class ToolsDownloadService {
     const record = await this.systemSettingRepository.getByKey(TOOLS_DOWNLOAD_PAGE_SETTING_KEY);
     return normalizePageConfig(record?.value_json || DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG);
   }
+}
+
+async function enrichAdminDownloadItem(item: ToolDownloadItem): Promise<ToolDownloadItem> {
+  const storedFilename = getManagedToolUploadFilename(item.local_file_url);
+  if (!storedFilename) {
+    return item;
+  }
+  return {
+    ...item,
+    local_file_name: await readToolUploadOriginalName(storedFilename),
+  };
+}
+
+function getManagedToolUploadFilename(publicUrl: string): string {
+  if (!publicUrl) {
+    return '';
+  }
+  let pathname: string;
+  try {
+    pathname = new URL(publicUrl, 'http://gaterank.local').pathname;
+  } catch {
+    return '';
+  }
+  if (!pathname.startsWith(TOOL_FILE_UPLOAD_URL_PREFIX)) {
+    return '';
+  }
+  const filename = path.basename(pathname);
+  return filename && pathname === `${TOOL_FILE_UPLOAD_URL_PREFIX}${filename}` ? filename : '';
 }
 
 function resolveToolDownloadFilePath(publicUrl: string): string {
