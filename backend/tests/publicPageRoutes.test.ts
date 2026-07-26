@@ -307,6 +307,12 @@ test('GET /tools/download returns crawlable branded SEO download page HTML', asy
     assert.match(html, /class="tool-card is-hot"/);
     assert.match(html, /class="tool-hot-badge" data-tool-hot-badge>热门<\/span>/);
     assert.match(html, /\.tool-hot-badge \{ position: absolute;/);
+    assert.match(html, /class="muted tool-trust-meta"/);
+    assert.match(html, /\.tool-card-head > div \{ min-width: 0; flex: 1; \}/);
+    assert.match(html, /\.tool-card\.is-hot \.tool-card-head h3 \{ padding-right: 68px; \}/);
+    assert.match(html, /\.tool-trust-meta \{ line-height: 1\.5; overflow-wrap: anywhere; \}/);
+    assert.match(html, /@media \(min-width: 640px\) \{\s*\.tool-trust-meta \{ white-space: nowrap; \}/);
+    assert.doesNotMatch(html, /\.tool-card\.is-hot \.tool-card-head \{ padding-right: 68px; \}/);
     assert.match(html, /\.tool-download-primary:not\(\.is-disabled\):hover,/);
     assert.match(html, /\.tool-official-link:hover,/);
     assert.doesNotMatch(html, /Download Center/);

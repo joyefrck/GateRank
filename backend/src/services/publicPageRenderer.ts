@@ -1903,7 +1903,7 @@ function renderToolDownloadCard(item: ToolDownloadItem, platform: ToolDownloadPl
         ${item.icon_url ? `<img src="${escapeAttribute(item.icon_url)}" alt="${escapeAttribute(item.name)} 图标" loading="lazy" />` : `<span class="${iconClass}">${escapeHtml(item.name.slice(0, 1).toUpperCase())}</span>`}
         <div>
           <h3>${escapeHtml(item.name)}</h3>
-          <p class="muted">${escapeHtml(buildToolDownloadTrustMeta(item))}</p>
+          <p class="muted tool-trust-meta">${escapeHtml(buildToolDownloadTrustMeta(item))}</p>
         </div>
       </div>
       <p>${escapeHtml(item.description || item.summary)}</p>
@@ -2878,7 +2878,8 @@ const styles = `
   .tools-download-page .card-grid { grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
   .tool-card { position: relative; display: flex; min-width: 0; min-height: 100%; flex-direction: column; border: 1px solid #dbeafe; border-radius: 8px; padding: 20px; background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%); color: #0f172a; box-shadow: 0 16px 40px rgba(15,23,42,.06); }
   .tool-card-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
-  .tool-card.is-hot .tool-card-head { padding-right: 68px; }
+  .tool-card-head > div { min-width: 0; flex: 1; }
+  .tool-card.is-hot .tool-card-head h3 { padding-right: 68px; }
   .tool-hot-badge { position: absolute; top: 16px; right: 16px; display: inline-flex; min-height: 24px; align-items: center; justify-content: center; border-radius: 999px; padding: 0 10px; background: linear-gradient(135deg, #f97316, #e11d48); color: #fff; font-size: 12px; font-weight: 900; box-shadow: 0 10px 24px rgba(225,29,72,.18); }
   .tool-card-head img,
   .tool-icon-fallback { width: 50px; min-width: 50px; max-width: 50px; height: 50px; min-height: 50px; max-height: 50px; aspect-ratio: 1 / 1; border-radius: 8px; object-fit: cover; flex: 0 0 50px; overflow: hidden; }
@@ -2890,6 +2891,7 @@ const styles = `
   .tool-card h3 { margin-bottom: 4px; color: #0f172a; }
   .tool-card p { margin: 0; color: #475569; }
   .tool-card > p { margin-top: 12px; }
+  .tool-trust-meta { line-height: 1.5; overflow-wrap: anywhere; }
   .tool-version-line { margin-top: 14px; border-top: 1px solid #e2e8f0; padding-top: 12px; font-weight: 800; }
   .tool-action-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; margin-top: auto; padding-top: 18px; }
   .tool-download-primary,
@@ -2903,6 +2905,9 @@ const styles = `
   .tool-official-link:focus-visible { transform: translateY(-2px); border-color: #bae6fd; background: #ecfeff; color: #0e7490; box-shadow: 0 12px 24px rgba(15,23,42,.08); }
   .tool-download-primary:focus-visible,
   .tool-official-link:focus-visible { outline: 0; box-shadow: 0 0 0 4px rgba(207,250,254,.9), 0 18px 34px rgba(8,145,178,.18); }
+  @media (min-width: 640px) {
+    .tool-trust-meta { white-space: nowrap; }
+  }
   @media (max-width: 1024px) {
     .tools-download-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }

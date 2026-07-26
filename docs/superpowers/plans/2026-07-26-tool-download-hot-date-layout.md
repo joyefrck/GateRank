@@ -51,7 +51,7 @@ assert.match(html, /class="muted tool-trust-meta"/);
 assert.match(html, /\.tool-card-head > div \{ min-width: 0; flex: 1; \}/);
 assert.match(html, /\.tool-card\.is-hot \.tool-card-head h3 \{ padding-right: 68px; \}/);
 assert.match(html, /\.tool-trust-meta \{ line-height: 1\.5; overflow-wrap: anywhere; \}/);
-assert.match(html, /@media \(min-width: 641px\) \{\s*\.tool-trust-meta \{ white-space: nowrap; \}/);
+assert.match(html, /@media \(min-width: 640px\) \{\s*\.tool-trust-meta \{ white-space: nowrap; \}/);
 assert.doesNotMatch(html, /\.tool-card\.is-hot \.tool-card-head \{ padding-right: 68px; \}/);
 ```
 
@@ -118,7 +118,7 @@ Expected: FAIL，指出 React 仍在整个头部使用 `pr-16` 和元信息 `tru
 .tool-card-head > div { min-width: 0; flex: 1; }
 .tool-card.is-hot .tool-card-head h3 { padding-right: 68px; }
 .tool-trust-meta { line-height: 1.5; overflow-wrap: anywhere; }
-@media (min-width: 641px) {
+@media (min-width: 640px) {
   .tool-trust-meta { white-space: nowrap; }
 }
 ```

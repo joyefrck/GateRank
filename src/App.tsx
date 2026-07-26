@@ -4389,11 +4389,11 @@ function ToolDownloadCard({ item, platform }: { item: ToolDownloadItem; platform
           热门
         </span>
       ) : null}
-      <div className={`flex items-center gap-3 ${item.is_hot ? 'pr-16' : ''}`}>
+      <div className="flex items-center gap-3">
         {item.icon_url ? <img className="h-12 max-h-12 min-h-12 w-12 min-w-12 max-w-12 shrink-0 rounded-[8px] object-cover" src={item.icon_url} alt={`${item.name} 图标`} /> : <div className={`flex h-12 max-h-12 min-h-12 w-12 min-w-12 max-w-12 shrink-0 items-center justify-center rounded-[8px] text-lg font-black text-white ${iconTone}`}>{item.name.slice(0, 1).toUpperCase()}</div>}
-        <div className="min-w-0">
-          <h3 className="truncate text-lg font-black text-slate-950">{item.name}</h3>
-          <p className="truncate text-sm text-slate-500">{buildToolDownloadTrustMeta(item)}</p>
+        <div className="min-w-0 flex-1">
+          <h3 className={`truncate text-lg font-black text-slate-950 ${item.is_hot ? 'pr-16' : ''}`}>{item.name}</h3>
+          <p className="whitespace-normal break-words text-sm leading-5 text-slate-500 sm:whitespace-nowrap">{buildToolDownloadTrustMeta(item)}</p>
         </div>
       </div>
       <p className="mt-4 text-sm leading-7 text-slate-600">{item.description || item.summary}</p>
