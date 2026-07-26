@@ -87,7 +87,6 @@ import {
 } from '../../../shared/fullRankingFilters';
 import {
   buildToolControlledDownloadUrl,
-  buildToolDownloadFilename,
   buildToolDownloadPlatformHeading,
   buildToolDownloadTrustMeta,
   buildToolPublicLocalFileMarker,
@@ -1910,7 +1909,7 @@ function renderToolDownloadCard(item: ToolDownloadItem, platform: ToolDownloadPl
       <p>${escapeHtml(item.description || item.summary)}</p>
       <p class="muted tool-version-line">支持版本：${escapeHtml(supportVersion)}${item.file_size_label ? ` · 大小：${escapeHtml(item.file_size_label)}` : ''}</p>
       <div class="tool-action-row">
-        ${hasLocalFile ? `<a class="tool-download-primary" href="${escapeAttribute(buildToolControlledDownloadUrl(item, platform))}" download="${escapeAttribute(buildToolDownloadFilename(item, platform))}">立即下载</a>` : '<span class="tool-download-primary is-disabled">本地下载待上传</span>'}
+        ${hasLocalFile ? `<a class="tool-download-primary" href="${escapeAttribute(buildToolControlledDownloadUrl(item, platform))}">立即下载</a>` : '<span class="tool-download-primary is-disabled">本地下载待上传</span>'}
         ${item.official_url ? `<a class="tool-official-link" href="${escapeAttribute(item.official_url)}" target="_blank" rel="nofollow noreferrer noopener">官方页面</a>` : ''}
       </div>
     </article>

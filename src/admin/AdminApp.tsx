@@ -2148,7 +2148,16 @@ function ToolsDownloadAdminPage() {
         </div>
         <div className="mt-4 overflow-x-auto rounded-2xl border border-neutral-200">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-neutral-50 text-xs text-neutral-500"><tr><th className="px-4 py-3">软件</th><th className="px-4 py-3">平台与版本</th><th className="px-4 py-3">下载</th><th className="px-4 py-3">状态</th><th className="px-4 py-3">操作</th></tr></thead>
+            <thead className="bg-neutral-50 text-xs text-neutral-500">
+              <tr>
+                <th className="px-4 py-3">软件</th>
+                <th className="px-4 py-3">平台与系统版本</th>
+                <th className="px-4 py-3">软件版本</th>
+                <th className="px-4 py-3">下载</th>
+                <th className="px-4 py-3">状态</th>
+                <th className="px-4 py-3">操作</th>
+              </tr>
+            </thead>
             <tbody>
               {items.map((item) => (
                 <tr key={item.id} className="border-t border-neutral-100 align-top">
@@ -2158,6 +2167,7 @@ function ToolsDownloadAdminPage() {
                     {item.is_hot && <div className="mt-2 inline-flex rounded-full bg-cyan-50 px-2 py-1 text-[11px] font-black text-cyan-700">同系统优先</div>}
                   </td>
                   <td className="px-4 py-3 text-neutral-700">{formatToolPlatformVersions(item)}</td>
+                  <td className="px-4 py-3 font-bold text-neutral-700">{item.version || '—'}</td>
                   <td className="px-4 py-3">
                     <div className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-black ${item.local_file_url ? 'bg-emerald-50 text-emerald-700' : 'bg-orange-50 text-orange-700'}`}>
                       <FileDown className="h-3.5 w-3.5" />
@@ -2181,7 +2191,7 @@ function ToolsDownloadAdminPage() {
                   </td>
                 </tr>
               ))}
-              {!loading && items.length === 0 && <tr><td className="px-3 py-6 text-center text-neutral-500" colSpan={5}>暂无软件</td></tr>}
+              {!loading && items.length === 0 && <tr><td className="px-3 py-6 text-center text-neutral-500" colSpan={6}>暂无软件</td></tr>}
             </tbody>
           </table>
         </div>

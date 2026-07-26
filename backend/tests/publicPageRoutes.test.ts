@@ -299,8 +299,8 @@ test('GET /tools/download returns crawlable branded SEO download page HTML', asy
     assert.match(html, /Linux 翻墙工具下载/);
     assert.match(html, /支持版本：macOS 12\+/);
     assert.match(html, /支持版本：Windows 10\/11/);
-    assert.match(html, /href="\/download\/file\/clash-verge-rev\?platform=macos"/);
-    assert.match(html, /download="Clash-Verge-Rev-macOS-2\.5\.1\.dmg"/);
+    assert.match(html, /<a class="tool-download-primary" href="\/download\/file\/clash-verge-rev\?platform=macos">立即下载<\/a>/);
+    assert.doesNotMatch(html, /href="\/download\/file\/clash-verge-rev\?platform=macos" download=/);
     assert.doesNotMatch(html, /\/uploads\/tools\/files\/1783493370824-8654d0d0-9b6f-49ce-bcbf-ddd79a05bbc9\.dmg/);
     assert.match(html, /\.tools-download-card-grid \{ display: grid; grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);/);
     assert.doesNotMatch(html, /\.tools-download-card-grid \{ display: grid; grid-template-columns: repeat\(auto-fit/);
@@ -364,7 +364,7 @@ test('GET /download/file/:slug uses controlled download headers and rejects obvi
           version: '2.5.1',
         }),
         platform,
-        downloadFilename: 'Clash-Verge-Rev-macOS-2.5.1.dmg',
+        downloadFilename: 'Clash.Verge_2.5.1_aarch64.dmg',
         absolutePath: '/tmp/gaterank-test-clash-verge-rev.dmg',
         internalRedirectPath: '/_protected_uploads/tools/files/clash-verge-rev.dmg',
       }),
@@ -386,7 +386,7 @@ test('GET /download/file/:slug uses controlled download headers and rejects obvi
     assert.equal(browserResponse.status, 200);
     assert.equal(browserResponse.headers.get('x-accel-redirect'), '/_protected_uploads/tools/files/clash-verge-rev.dmg');
     assert.match(browserResponse.headers.get('content-disposition') || '', /attachment/);
-    assert.match(browserResponse.headers.get('content-disposition') || '', /filename\*=UTF-8''Clash-Verge-Rev-macOS-2\.5\.1\.dmg/);
+    assert.match(browserResponse.headers.get('content-disposition') || '', /filename\*=UTF-8''Clash\.Verge_2\.5\.1_aarch64\.dmg/);
     assert.equal(recordedDownloads, 1);
 
     const repeatResponse = await fetch(`http://127.0.0.1:${port}/download/file/clash-verge-rev?platform=macos`, {

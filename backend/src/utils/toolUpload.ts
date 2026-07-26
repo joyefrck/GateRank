@@ -185,6 +185,14 @@ export async function writeToolUploadMetadata(
   );
 }
 
+export async function readToolUploadOriginalName(filename: string): Promise<string> {
+  const storedFilename = path.basename(filename);
+  const metadata = await readToolUploadMetadata(getToolUploadDir('files'), storedFilename);
+  const originalName = typeof metadata.original_name === 'string' ? metadata.original_name : '';
+  const safeOriginalName = path.basename(originalName.replace(/\\/g, '/'));
+  return safeOriginalName || storedFilename;
+}
+
 export async function listRecentToolUploads(
   kind: ToolUploadKind,
   input: { limit?: number; sinceSeconds?: number } = {},

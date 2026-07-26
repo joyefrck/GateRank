@@ -162,8 +162,10 @@ git commit -m "fix: show tool download update dates"
 - Modify: `backend/src/utils/toolUpload.ts:172-188`
 - Modify: `backend/src/services/toolsDownloadService.ts:1-170`
 - Modify: `backend/src/services/publicPageRenderer.ts:80-95,1888-1920`
+- Modify: `src/App.tsx:90-110,4376-4410`
 - Modify: `shared/toolDownloads.ts:346-354,371-379`
 - Modify: `backend/tests/publicPageRoutes.test.ts:350-395`
+- Create: `backend/tests/toolDownloadsUi.test.ts`
 
 - [ ] **Step 1: 增加下载服务的原始名称与回退测试**
 
@@ -262,7 +264,7 @@ return {
 
 - [ ] **Step 5: 删除前台和共享层的二次命名**
 
-在 `renderToolDownloadCard` 中把：
+在服务端 `renderToolDownloadCard` 和客户端 `ToolDownloadCard` 中分别把：
 
 ```ts
 <a class="tool-download-primary" href="..." download="...">立即下载</a>
@@ -274,7 +276,7 @@ return {
 <a class="tool-download-primary" href="${escapeAttribute(buildToolControlledDownloadUrl(item, platform))}">立即下载</a>
 ```
 
-同时从 `backend/src/services/publicPageRenderer.ts` 删除 `buildToolDownloadFilename` 导入，并从 `shared/toolDownloads.ts` 删除 `buildToolDownloadFilename` 与只供它使用的 `sanitizeDownloadFilenamePart`。
+同时从 `backend/src/services/publicPageRenderer.ts` 和 `src/App.tsx` 删除 `buildToolDownloadFilename` 导入，并从 `shared/toolDownloads.ts` 删除 `buildToolDownloadFilename` 与只供它使用的 `sanitizeDownloadFilenamePart`。增加客户端源码约束测试，保证 React 接管页面后也不会重新指定下载文件名。
 
 - [ ] **Step 6: 更新受控下载路由测试**
 
@@ -312,8 +314,10 @@ git add \
   backend/src/utils/toolUpload.ts \
   backend/src/services/toolsDownloadService.ts \
   backend/src/services/publicPageRenderer.ts \
+  src/App.tsx \
   shared/toolDownloads.ts \
-  backend/tests/publicPageRoutes.test.ts
+  backend/tests/publicPageRoutes.test.ts \
+  backend/tests/toolDownloadsUi.test.ts
 git commit -m "fix: preserve uploaded tool filenames"
 ```
 
@@ -331,6 +335,7 @@ npx tsx --test \
   backend/tests/toolsAdminDownloadsUi.test.ts \
   backend/tests/toolDownloadsShared.test.ts \
   backend/tests/toolsDownloadService.test.ts \
+  backend/tests/toolDownloadsUi.test.ts \
   backend/tests/publicPageRoutes.test.ts
 ```
 
@@ -363,4 +368,3 @@ git status --short
 ```
 
 Expected: `git diff --check` 无输出；状态中只包含本计划涉及的预期文件或生成资源。
-

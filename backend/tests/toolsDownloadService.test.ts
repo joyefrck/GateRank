@@ -1,8 +1,16 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
-import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, type ToolsDownloadPageConfig } from '../../shared/toolDownloads';
+import {
+  DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
+  type ToolDownloadItem,
+  type ToolsDownloadPageConfig,
+} from '../../shared/toolDownloads';
 import { ToolsDownloadService } from '../src/services/toolsDownloadService';
+import { writeToolUploadMetadata } from '../src/utils/toolUpload';
 
 const OLD_DEFAULT_FAQ_ITEMS = [
   {
@@ -38,6 +46,40 @@ function createService(storedConfig?: Partial<ToolsDownloadPageConfig>) {
   );
 }
 
+function createDownloadService(input: Partial<ToolDownloadItem> = {}) {
+  const item: ToolDownloadItem = {
+    id: 1,
+    slug: 'clash-verge-macos',
+    name: 'Clash Verge',
+    summary: 'macOS 客户端',
+    description: 'macOS 客户端',
+    platforms: ['macos'],
+    platform_versions: { macos: 'macOS 12+' },
+    icon_url: '',
+    local_file_url: '',
+    official_url: '',
+    primary_action: 'local',
+    version: '2.5.2',
+    file_size_label: '44.8 MB',
+    download_count: 0,
+    is_hot: true,
+    sort_order: 1,
+    status: 'published',
+    published_at: '2026-07-08 09:00:00',
+    created_at: '2026-07-08 09:00:00',
+    updated_at: '2026-07-09 09:00:00',
+    ...input,
+  };
+  return new ToolsDownloadService(
+    {
+      getBySlug: async () => item,
+    } as never,
+    {
+      getByKey: async () => null,
+    } as never,
+  );
+}
+
 test('ToolsDownloadService uses expanded default FAQ when page config is missing', async () => {
   const view = await createService().getDownloadPageView();
 
@@ -65,4 +107,54 @@ test('ToolsDownloadService preserves custom configured FAQ items', async () => {
   }).getDownloadPageView();
 
   assert.deepEqual(view.config.faq_items, customFaq);
+});
+
+test('ToolsDownloadService preserves the original uploaded filename', async () => {
+  const uploadRoot = await mkdtemp(path.join(os.tmpdir(), 'gaterank-tool-download-'));
+  const previousUploadRoot = process.env.NEWS_UPLOAD_ROOT_DIR;
+  process.env.NEWS_UPLOAD_ROOT_DIR = uploadRoot;
+  try {
+    const filename = '1783493370824-storage-id.dmg';
+    const fileDir = path.join(uploadRoot, 'tools', 'files');
+    await mkdir(fileDir, { recursive: true });
+    await writeFile(path.join(fileDir, filename), 'fixture');
+    await writeToolUploadMetadata('files', filename, {
+      original_name: 'Clash.Verge_2.5.1_aarch64.dmg',
+      size: 7,
+    });
+
+    const service = createDownloadService({
+      local_file_url: `/uploads/tools/files/${filename}`,
+    });
+    const target = await service.getDownloadFileTarget('clash-verge-macos', 'macos');
+
+    assert.equal(target.downloadFilename, 'Clash.Verge_2.5.1_aarch64.dmg');
+  } finally {
+    if (previousUploadRoot === undefined) delete process.env.NEWS_UPLOAD_ROOT_DIR;
+    else process.env.NEWS_UPLOAD_ROOT_DIR = previousUploadRoot;
+    await rm(uploadRoot, { recursive: true, force: true });
+  }
+});
+
+test('ToolsDownloadService falls back to the stored filename when upload metadata is absent', async () => {
+  const uploadRoot = await mkdtemp(path.join(os.tmpdir(), 'gaterank-tool-download-'));
+  const previousUploadRoot = process.env.NEWS_UPLOAD_ROOT_DIR;
+  process.env.NEWS_UPLOAD_ROOT_DIR = uploadRoot;
+  try {
+    const filename = 'legacy-storage-name.dmg';
+    const fileDir = path.join(uploadRoot, 'tools', 'files');
+    await mkdir(fileDir, { recursive: true });
+    await writeFile(path.join(fileDir, filename), 'fixture');
+
+    const service = createDownloadService({
+      local_file_url: `/uploads/tools/files/${filename}`,
+    });
+    const target = await service.getDownloadFileTarget('clash-verge-macos', 'macos');
+
+    assert.equal(target.downloadFilename, filename);
+  } finally {
+    if (previousUploadRoot === undefined) delete process.env.NEWS_UPLOAD_ROOT_DIR;
+    else process.env.NEWS_UPLOAD_ROOT_DIR = previousUploadRoot;
+    await rm(uploadRoot, { recursive: true, force: true });
+  }
 });

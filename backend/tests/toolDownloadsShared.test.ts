@@ -34,14 +34,25 @@ test('tool download platform headings use SEO-friendly platform H2 text', () => 
   assert.equal(buildToolDownloadPlatformHeading('linux'), 'Linux 翻墙工具下载');
 });
 
-test('tool download trust meta shows version and published date', () => {
+test('tool download trust meta shows version and latest updated date', () => {
   assert.equal(
     buildToolDownloadTrustMeta({
       version: 'v2.3.4',
       published_at: '2026-07-08 09:30:00',
       updated_at: '2026-07-09 10:00:00',
     }),
-    '版本：v2.3.4 · 发布：2026-07-08',
+    '版本：v2.3.4 · 发布：2026-07-09',
+  );
+});
+
+test('tool download trust meta falls back to published date when updated date is absent', () => {
+  assert.equal(
+    buildToolDownloadTrustMeta({
+      version: '1.0.0',
+      published_at: '2026-07-08 09:30:00',
+      updated_at: '',
+    }),
+    '版本：1.0.0 · 发布：2026-07-08',
   );
 });
 

@@ -339,18 +339,8 @@ export function buildToolDownloadTrustMeta(
   item: Pick<ToolDownloadItem, 'version' | 'published_at' | 'updated_at'>,
 ): string {
   const versionLabel = item.version.trim() || '以官方发布页为准';
-  const dateLabel = formatToolDownloadDate(item.published_at || item.updated_at);
+  const dateLabel = formatToolDownloadDate(item.updated_at || item.published_at);
   return `版本：${versionLabel} · 发布：${dateLabel}`;
-}
-
-export function buildToolDownloadFilename(item: ToolDownloadItem, platform: ToolDownloadPlatform): string {
-  const platformLabel = getToolDownloadPlatformLabel(platform);
-  const versionLabel = item.version || item.platform_versions?.[platform] || 'latest';
-  const stem = [item.name, platformLabel, versionLabel]
-    .map(sanitizeDownloadFilenamePart)
-    .filter(Boolean)
-    .join('-') || sanitizeDownloadFilenamePart(`${item.slug}-${platform}`) || 'download';
-  return `${stem}${item.file_extension || getToolDownloadFileExtension(item.local_file_url)}`;
 }
 
 export function buildToolControlledDownloadUrl(item: Pick<ToolDownloadItem, 'slug'>, platform: ToolDownloadPlatform): string {
@@ -364,15 +354,6 @@ export function buildToolPublicLocalFileMarker(item: Pick<ToolDownloadItem, 'loc
 
 export function getToolDownloadFileExtension(url: string): string {
   return getDownloadFileExtension(url);
-}
-
-function sanitizeDownloadFilenamePart(value: string): string {
-  return value
-    .trim()
-    .replace(/[\\/:*?"<>|]+/g, ' ')
-    .replace(/\s+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^[.-]+|[.-]+$/g, '');
 }
 
 function formatToolDownloadDate(value: string | null): string {

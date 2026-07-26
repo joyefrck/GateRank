@@ -9,9 +9,9 @@ import type {
 } from '../repositories/toolDownloadRepository';
 import type { SystemSettingRepository } from '../repositories/systemSettingRepository';
 import { getNewsUploadRootDir } from '../utils/newsStorage';
+import { readToolUploadOriginalName } from '../utils/toolUpload';
 import { formatSqlDateTimeInTimezone } from '../utils/time';
 import {
-  buildToolDownloadFilename,
   DEFAULT_HOT_TOOL_DOWNLOADS,
   DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
   isToolDownloadPlatform,
@@ -157,10 +157,13 @@ export class ToolsDownloadService {
       throw error;
     }
 
+    const storedFilename = path.basename(absolutePath);
+    const downloadFilename = await readToolUploadOriginalName(storedFilename);
+
     return {
       item,
       platform,
-      downloadFilename: buildToolDownloadFilename(item, platform),
+      downloadFilename,
       absolutePath,
       internalRedirectPath: buildInternalRedirectPath(item.local_file_url),
     };
