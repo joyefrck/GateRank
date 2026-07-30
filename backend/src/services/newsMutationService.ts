@@ -122,9 +122,11 @@ export class NewsMutationService {
     }
 
     if (payload.topic_ids !== undefined) {
-      result.topic_ids = parsePositiveIntList(payload.topic_ids);
+      result.topic_ids = requireSingleTopicIds(parsePositiveIntList(payload.topic_ids));
     } else if (payload.topic_slugs !== undefined) {
-      result.topic_ids = await this.deps.newsRepository.resolveTopicIds(parseStringList(payload.topic_slugs));
+      result.topic_ids = requireSingleTopicIds(
+        await this.deps.newsRepository.resolveTopicIds(parseStringList(payload.topic_slugs)),
+      );
     }
 
     if (payload.is_featured !== undefined) {
@@ -241,6 +243,13 @@ export function parsePositiveIntList(value: unknown): number[] {
   }
   return Array.from(new Set(value.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0)))
     .map((item) => Math.floor(item));
+}
+
+function requireSingleTopicIds(topicIds: number[]): number[] {
+  if (topicIds.length > 1) {
+    throw new HttpError(400, 'BAD_REQUEST', '每篇文章最多只能选择一个专题');
+  }
+  return topicIds;
 }
 
 export function parseStringList(value: unknown): string[] {

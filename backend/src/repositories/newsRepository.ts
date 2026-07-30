@@ -249,6 +249,12 @@ export class NewsRepository {
       'idx_news_articles_recommended',
       'CREATE INDEX idx_news_articles_recommended ON news_articles (status, is_recommended, recommend_weight, published_at DESC)',
     );
+    await this.normalizeArticleTopicsForSingleTopic();
+    await this.ensureIndex(
+      'news_article_topics',
+      'uk_news_article_topics_article',
+      'CREATE UNIQUE INDEX uk_news_article_topics_article ON news_article_topics (article_id)',
+    );
     await this.ensureDefaultTaxonomy();
   }
 
@@ -735,7 +741,15 @@ export class NewsRepository {
 
     if (input.topic_ids !== undefined) {
       await this.syncArticleTopics(id, input.topic_ids);
-      changed = true;
+      if (updates.length === 0) {
+        const [result] = await this.pool.execute<ResultSetHeader>(
+          'UPDATE news_articles SET updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+          [id],
+        );
+        changed = result.affectedRows > 0;
+      } else {
+        changed = true;
+      }
     }
 
     return changed;
@@ -864,6 +878,28 @@ export class NewsRepository {
       ...article,
       topics: topicsByArticle.get(article.id) || [],
     }));
+  }
+
+  private async normalizeArticleTopicsForSingleTopic(): Promise<void> {
+    await this.pool.execute(`
+      DELETE candidate
+        FROM news_article_topics candidate
+        INNER JOIN news_topics candidate_topic ON candidate_topic.id = candidate.topic_id
+        INNER JOIN news_article_topics preferred
+                ON preferred.article_id = candidate.article_id
+               AND preferred.topic_id <> candidate.topic_id
+        INNER JOIN news_topics preferred_topic ON preferred_topic.id = preferred.topic_id
+       WHERE preferred_topic.is_active > candidate_topic.is_active
+          OR (
+            preferred_topic.is_active = candidate_topic.is_active
+            AND preferred_topic.sort_order < candidate_topic.sort_order
+          )
+          OR (
+            preferred_topic.is_active = candidate_topic.is_active
+            AND preferred_topic.sort_order = candidate_topic.sort_order
+            AND preferred_topic.id < candidate_topic.id
+          )
+    `);
   }
 
   private async ensureColumn(tableName: string, columnName: string, definition: string): Promise<void> {

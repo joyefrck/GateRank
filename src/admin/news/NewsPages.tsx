@@ -9,6 +9,7 @@ import {
   ImageUp,
   Link2,
   Newspaper,
+  Pencil,
   Plus,
   Save,
   Search,
@@ -239,6 +240,7 @@ const emptyTopicForm: TopicFormState = {
 export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
   const [items, setItems] = useState<NewsListResponse['items']>([]);
   const [categories, setCategories] = useState<NewsTaxonomyItem[]>([]);
+  const [topics, setTopics] = useState<NewsTaxonomyItem[]>([]);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [keyword, setKeyword] = useState('');
@@ -247,13 +249,24 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [editingTopicId, setEditingTopicId] = useState<number | null>(null);
+  const [savingTopicId, setSavingTopicId] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [activePanel, setActivePanel] = useState<'articles' | 'topics'>('articles');
 
   useEffect(() => {
-    void apiFetch<{ items: NewsTaxonomyItem[] }>('/api/v1/admin/news/categories')
-      .then((response) => setCategories(response.items))
-      .catch(() => setCategories([]));
+    void Promise.all([
+      apiFetch<{ items: NewsTaxonomyItem[] }>('/api/v1/admin/news/categories'),
+      apiFetch<{ items: NewsTaxonomyItem[] }>('/api/v1/admin/news/topics'),
+    ])
+      .then(([categoryResponse, topicResponse]) => {
+        setCategories(categoryResponse.items);
+        setTopics(topicResponse.items);
+      })
+      .catch(() => {
+        setCategories([]);
+        setTopics([]);
+      });
   }, []);
 
   useEffect(() => {
@@ -324,6 +337,40 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
       setError(err instanceof Error ? err.message : '文章删除失败');
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function quickUpdateTopic(
+    item: NewsListResponse['items'][number],
+    topicId: number | null,
+  ): Promise<void> {
+    const currentTopicId = item.topics[0]?.id ?? null;
+    if (topicId === currentTopicId) {
+      setEditingTopicId(null);
+      return;
+    }
+
+    setSavingTopicId(item.id);
+    setError('');
+    try {
+      const article = await apiFetch<NewsArticle>(`/api/v1/admin/news/${item.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          slug: item.slug,
+          topic_ids: topicId ? [topicId] : [],
+        }),
+      });
+      setItems((current) => current.map((currentItem) => (
+        currentItem.id === item.id
+          ? { ...currentItem, topics: article.topics, updated_at: article.updated_at }
+          : currentItem
+      )));
+      setEditingTopicId(null);
+    } catch (err: unknown) {
+      setEditingTopicId(item.id);
+      setError(err instanceof Error ? err.message : '专题更新失败');
+    } finally {
+      setSavingTopicId(null);
     }
   }
 
@@ -413,24 +460,25 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
       {error ? <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div> : null}
 
       <div className="overflow-hidden rounded-2xl border border-neutral-200">
-        <table className="w-full min-w-[960px] table-fixed text-sm">
+        <table className="w-full min-w-[1120px] table-fixed text-sm">
           <thead className="bg-neutral-50 text-left text-xs uppercase tracking-[0.18em] text-neutral-500">
             <tr>
               <th className="px-4 py-3 font-semibold">文章</th>
               <th className="px-4 py-3 font-semibold">状态</th>
               <th className="px-4 py-3 font-semibold">发布时间</th>
               <th className="px-4 py-3 font-semibold">更新时间</th>
+              <th className="px-4 py-3 font-semibold">专题</th>
               <th className="px-4 py-3 font-semibold text-right">操作</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-neutral-100 bg-white">
             {loading ? (
               <tr>
-                <td className="px-4 py-10 text-center text-neutral-400" colSpan={5}>加载中...</td>
+                <td className="px-4 py-10 text-center text-neutral-400" colSpan={6}>加载中...</td>
               </tr>
             ) : items.length === 0 ? (
               <tr>
-                <td className="px-4 py-10 text-center text-neutral-400" colSpan={5}>暂无文章</td>
+                <td className="px-4 py-10 text-center text-neutral-400" colSpan={6}>暂无文章</td>
               </tr>
             ) : (
               items.map((item) => (
@@ -456,6 +504,60 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
                   </td>
                   <td className="px-4 py-4 text-neutral-600">{formatDateTime(item.published_at)}</td>
                   <td className="px-4 py-4 text-neutral-600">{formatDateTime(item.updated_at)}</td>
+                  <td className="px-4 py-4">
+                    {editingTopicId === item.id ? (
+                      <div className="space-y-1.5">
+                        <select
+                          autoFocus
+                          className="w-full rounded-lg border border-neutral-300 bg-white px-2.5 py-1.5 text-xs outline-none focus:border-neutral-500 disabled:cursor-wait disabled:opacity-60"
+                          value={item.topics[0]?.id ?? ''}
+                          disabled={savingTopicId === item.id}
+                          onBlur={() => {
+                            if (savingTopicId !== item.id) {
+                              setEditingTopicId(null);
+                            }
+                          }}
+                          onChange={(event) => {
+                            const value = event.target.value;
+                            void quickUpdateTopic(item, value ? Number(value) : null);
+                          }}
+                          onKeyDown={(event) => {
+                            if (event.key === 'Escape') {
+                              setEditingTopicId(null);
+                            }
+                          }}
+                        >
+                          <option value="">无专题</option>
+                          {topics.map((topic) => (
+                            <option key={topic.id} value={topic.id}>{topic.name}</option>
+                          ))}
+                        </select>
+                        {savingTopicId === item.id ? (
+                          <div className="text-xs text-neutral-400">保存中...</div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5">
+                        {item.topics[0] ? (
+                          <span className="truncate rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-600" title={item.topics[0].name}>
+                            {item.topics[0].name}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-neutral-400">未设置</span>
+                        )}
+                        <button
+                          type="button"
+                          className="inline-flex shrink-0 items-center justify-center rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-40"
+                          onClick={() => setEditingTopicId(item.id)}
+                          disabled={savingTopicId !== null}
+                          aria-label={`编辑「${item.title || '未命名文章'}」的专题`}
+                          title="快速编辑专题"
+                        >
+                          <Pencil size={13} />
+                        </button>
+                      </div>
+                    )}
+                  </td>
                   <td className="px-4 py-4 text-right">
                     <div className="flex justify-end gap-2">
                       <button
@@ -1660,34 +1762,22 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
                     <option key={item.id} value={item.id}>{item.name}</option>
                   ))}
                 </select>
-                <div className="flex flex-wrap gap-2">
-                  {topics.map((item) => {
-                    const checked = form.topic_ids.includes(item.id);
-                    return (
-                      <label
-                        key={item.id}
-                        className={`inline-flex cursor-pointer items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium ${
-                          checked ? 'border-neutral-900 bg-neutral-900 text-white' : 'border-neutral-200 bg-white text-neutral-600'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          className="hidden"
-                          checked={checked}
-                          onChange={(event) => {
-                            setForm((current) => ({
-                              ...current,
-                              topic_ids: event.target.checked
-                                ? Array.from(new Set([...current.topic_ids, item.id]))
-                                : current.topic_ids.filter((id) => id !== item.id),
-                            }));
-                          }}
-                        />
-                        {item.name}
-                      </label>
-                    );
-                  })}
-                </div>
+                <select
+                  className="w-full rounded-xl border border-neutral-200 px-3 py-2.5 text-sm outline-none focus:border-neutral-400"
+                  value={form.topic_ids[0] ?? ''}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setForm((current) => ({
+                      ...current,
+                      topic_ids: value ? [Number(value)] : [],
+                    }));
+                  }}
+                >
+                  <option value="">无专题</option>
+                  {topics.map((item) => (
+                    <option key={item.id} value={item.id}>{item.name}</option>
+                  ))}
+                </select>
               </div>
             </Field>
 

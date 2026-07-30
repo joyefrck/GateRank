@@ -1302,6 +1302,85 @@ test('news admin routes reject invalid topic color and pinned article ids', asyn
   }
 });
 
+test('news admin routes reject more than one article topic', async () => {
+  let updateCalled = false;
+  const article = {
+    id: 1,
+    title: '现有文章',
+    slug: 'existing-article',
+    excerpt: '摘要',
+    cover_image_url: '',
+    content_markdown: '正文',
+    content_html: '<p>正文</p>',
+    category_id: null,
+    is_featured: false,
+    is_recommended: false,
+    recommend_weight: 0,
+    status: 'draft' as const,
+    published_at: null,
+    view_count: 0,
+    created_at: '2026-07-30 10:00:00',
+    updated_at: '2026-07-30 10:00:00',
+    category: null,
+    topics: [],
+  };
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    req.requestId = 'test-request-id';
+    next();
+  });
+  app.use(
+    '/api/v1/admin',
+    createNewsAdminRoutes({
+      auditRepository: { log: async () => undefined } as never,
+      newsRepository: {
+        listByQuery: async () => ({ items: [], total: 0 }),
+        getById: async () => article,
+        update: async () => {
+          updateCalled = true;
+          return true;
+        },
+        resolveCategoryId: async () => null,
+        resolveTopicIds: async () => [],
+      } as never,
+      newsContentService: {
+        render: (markdown: string) => ({
+          html: markdown,
+          headings: [],
+          reading_minutes: 1,
+          plain_text: markdown,
+        }),
+      } as never,
+      newsPublicService: {
+        getPreviewArticleView: async () => null,
+      } as never,
+      pexelsCoverService: createPexelsServiceStub(),
+      newsCoverImageService: createNewsCoverImageServiceStub(),
+    }),
+  );
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/admin/news/1`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        slug: 'existing-article',
+        topic_ids: [3, 7],
+      }),
+    });
+    assert.equal(response.status, 400);
+    const body = await response.json() as { message: string };
+    assert.equal(body.message, '每篇文章最多只能选择一个专题');
+    assert.equal(updateCalled, false);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 function createPexelsServiceStub(overrides: {
   searchCoverCandidates?: (query: string, page: number, perPage: number) => Promise<unknown>;
   importCoverImage?: (input: { id: number; download_url: string }, maxBytes: number) => Promise<{ url: string }>;

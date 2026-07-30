@@ -62,8 +62,47 @@ test('NewsRepository.ensureSchema creates news_articles table and missing column
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE news_topics ADD COLUMN faq_json JSON NULL')),
   );
+  assert.ok(
+    calls.some((call) => (
+      call.sql.includes('DELETE candidate')
+      && call.sql.includes('preferred_topic.is_active > candidate_topic.is_active')
+    )),
+  );
+  assert.ok(
+    calls.some((call) => (
+      call.sql.includes('CREATE UNIQUE INDEX uk_news_article_topics_article')
+      && call.sql.includes('news_article_topics (article_id)')
+    )),
+  );
   const topicSeedCalls = calls.filter((call) => call.sql.includes('INSERT INTO news_topics'));
   assert.ok(topicSeedCalls.every((call) => call.sql.includes('INSERT IGNORE INTO news_topics')));
+});
+
+test('NewsRepository.update touches article timestamp for topic-only changes', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new NewsRepository({
+    query: async () => [[]],
+    execute: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  } as never);
+
+  const changed = await repository.update(42, { topic_ids: [7] });
+
+  assert.equal(changed, true);
+  assert.ok(
+    calls.some((call) => (
+      call.sql.includes('DELETE FROM news_article_topics WHERE article_id = ?')
+      && JSON.stringify(call.params) === JSON.stringify([42])
+    )),
+  );
+  assert.ok(
+    calls.some((call) => (
+      call.sql.includes('UPDATE news_articles SET updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      && JSON.stringify(call.params) === JSON.stringify([42])
+    )),
+  );
 });
 
 test('NewsRepository.incrementViewCount increments article view count by id', async () => {
