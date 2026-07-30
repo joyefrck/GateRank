@@ -34,6 +34,12 @@ import {
   normalizeNewsArticleLinkUrl,
   serializeNewsArticleLink,
 } from '../../../shared/newsArticleLink';
+import {
+  buildNewsListPath,
+  buildNewsListSearch,
+  readNewsListQuery,
+  type NewsListStatusFilter,
+} from './newsListNavigation';
 
 const COVER_SEARCH_PER_PAGE = 12;
 
@@ -169,8 +175,10 @@ interface NewsEditorPageProps {
 }
 
 interface NewsListPageProps {
-  onCreate: () => void;
-  onEdit: (id: number) => void;
+  routeSearch: string;
+  onUpdateListUrl: (path: string, mode: 'push' | 'replace') => void;
+  onCreate: (listSearch: string) => void;
+  onEdit: (id: number, listSearch: string) => void;
 }
 
 interface NewsFormState {
@@ -237,15 +245,17 @@ const emptyTopicForm: TopicFormState = {
   pinned_article_ids_text: '',
 };
 
-export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
+export function NewsListPage({
+  routeSearch,
+  onUpdateListUrl,
+  onCreate,
+  onEdit,
+}: NewsListPageProps) {
   const [items, setItems] = useState<NewsListResponse['items']>([]);
   const [categories, setCategories] = useState<NewsTaxonomyItem[]>([]);
   const [topics, setTopics] = useState<NewsTaxonomyItem[]>([]);
-  const [page, setPage] = useState(1);
+  const [categoriesLoaded, setCategoriesLoaded] = useState(false);
   const [total, setTotal] = useState(0);
-  const [keyword, setKeyword] = useState('');
-  const [status, setStatus] = useState<'all' | NewsArticle['status']>('all');
-  const [category, setCategory] = useState('all');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [deletingId, setDeletingId] = useState<number | null>(null);
@@ -253,6 +263,8 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
   const [savingTopicId, setSavingTopicId] = useState<number | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [activePanel, setActivePanel] = useState<'articles' | 'topics'>('articles');
+  const listQuery = useMemo(() => readNewsListQuery(routeSearch), [routeSearch]);
+  const { page, keyword, status, category } = listQuery;
 
   useEffect(() => {
     void Promise.all([
@@ -262,12 +274,26 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
       .then(([categoryResponse, topicResponse]) => {
         setCategories(categoryResponse.items);
         setTopics(topicResponse.items);
+        setCategoriesLoaded(true);
       })
       .catch(() => {
         setCategories([]);
         setTopics([]);
       });
   }, []);
+
+  useEffect(() => {
+    if (
+      !categoriesLoaded
+      || category === 'all'
+      || categories.some((item) => item.slug === category)
+    ) {
+      return;
+    }
+
+    const nextQuery = { ...listQuery, category: 'all', page: 1 };
+    onUpdateListUrl(buildNewsListPath(nextQuery), 'replace');
+  }, [categories, categoriesLoaded, category, listQuery, onUpdateListUrl]);
 
   useEffect(() => {
     let active = true;
@@ -291,6 +317,13 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
         if (!active) {
           return;
         }
+        const lastPage = Math.max(1, Math.ceil(response.total / 12));
+        if (page > lastPage) {
+          setTotal(response.total);
+          const nextQuery = { ...listQuery, page: lastPage };
+          onUpdateListUrl(buildNewsListPath(nextQuery), 'replace');
+          return;
+        }
         setItems(response.items);
         setTotal(response.total);
       })
@@ -309,7 +342,7 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
     return () => {
       active = false;
     };
-  }, [category, keyword, page, status, reloadKey]);
+  }, [category, keyword, listQuery, onUpdateListUrl, page, reloadKey, status]);
 
   const totalPages = Math.max(1, Math.ceil(total / 12));
 
@@ -329,7 +362,8 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
         method: 'POST',
       });
       if (items.length === 1 && page > 1) {
-        setPage((value) => Math.max(1, value - 1));
+        const nextQuery = { ...listQuery, page: Math.max(1, page - 1) };
+        onUpdateListUrl(buildNewsListPath(nextQuery), 'replace');
       } else {
         setReloadKey((value) => value + 1);
       }
@@ -387,7 +421,7 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
         {activePanel === 'articles' ? (
           <button
             className="inline-flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white"
-            onClick={onCreate}
+            onClick={() => onCreate(buildNewsListSearch(listQuery))}
           >
             <Plus size={16} />
             新建文章
@@ -424,8 +458,8 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
             placeholder="搜索标题或 slug"
             value={keyword}
             onChange={(event) => {
-              setPage(1);
-              setKeyword(event.target.value);
+              const nextQuery = { ...listQuery, keyword: event.target.value, page: 1 };
+              onUpdateListUrl(buildNewsListPath(nextQuery), 'replace');
             }}
           />
         </label>
@@ -433,8 +467,12 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
           className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm outline-none"
           value={status}
           onChange={(event) => {
-            setPage(1);
-            setStatus(event.target.value as 'all' | NewsArticle['status']);
+            const nextQuery = {
+              ...listQuery,
+              status: event.target.value as NewsListStatusFilter,
+              page: 1,
+            };
+            onUpdateListUrl(buildNewsListPath(nextQuery), 'push');
           }}
         >
           <option value="all">全部状态</option>
@@ -446,8 +484,8 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
           className="rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm outline-none"
           value={category}
           onChange={(event) => {
-            setPage(1);
-            setCategory(event.target.value);
+            const nextQuery = { ...listQuery, category: event.target.value, page: 1 };
+            onUpdateListUrl(buildNewsListPath(nextQuery), 'push');
           }}
         >
           <option value="all">全部分类</option>
@@ -487,7 +525,7 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
                     <div className="min-w-0">
                       <button
                         className="line-clamp-2 text-left text-base leading-7 font-bold tracking-tight text-neutral-900 hover:text-neutral-700"
-                        onClick={() => onEdit(item.id)}
+                        onClick={() => onEdit(item.id, buildNewsListSearch(listQuery))}
                         title={item.title || '未命名文章'}
                       >
                         {item.title || '未命名文章'}
@@ -562,7 +600,7 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
                     <div className="flex justify-end gap-2">
                       <button
                         className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-medium hover:bg-neutral-50"
-                        onClick={() => onEdit(item.id)}
+                        onClick={() => onEdit(item.id, buildNewsListSearch(listQuery))}
                       >
                         编辑
                       </button>
@@ -590,7 +628,10 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
         <div className="flex items-center gap-2">
           <button
             className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm disabled:opacity-40"
-            onClick={() => setPage((value) => Math.max(1, value - 1))}
+            onClick={() => {
+              const nextQuery = { ...listQuery, page: Math.max(1, page - 1) };
+              onUpdateListUrl(buildNewsListPath(nextQuery), 'push');
+            }}
             disabled={page <= 1}
           >
             上一页
@@ -600,7 +641,10 @@ export function NewsListPage({ onCreate, onEdit }: NewsListPageProps) {
           </div>
           <button
             className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm disabled:opacity-40"
-            onClick={() => setPage((value) => Math.min(totalPages, value + 1))}
+            onClick={() => {
+              const nextQuery = { ...listQuery, page: Math.min(totalPages, page + 1) };
+              onUpdateListUrl(buildNewsListPath(nextQuery), 'push');
+            }}
             disabled={page >= totalPages}
           >
             下一页

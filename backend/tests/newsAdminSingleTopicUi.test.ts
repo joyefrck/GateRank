@@ -26,7 +26,9 @@ test('news list shows topic after updated time and keeps the full editor action'
   assert.ok(listHeaderSource.indexOf('专题') < listHeaderSource.indexOf('操作'));
   assert.ok(listSource.includes('未设置'));
   assert.ok(listSource.includes('<Pencil'));
-  assert.ok(listSource.includes('onClick={() => onEdit(item.id)}'));
+  assert.ok(listSource.includes(
+    'onClick={() => onEdit(item.id, buildNewsListSearch(listQuery))}',
+  ));
 });
 
 test('news list quick topic editor saves one optional topic through the article patch route', () => {

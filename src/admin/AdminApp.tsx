@@ -1588,12 +1588,14 @@ export default function AdminApp() {
     }
   }, [path]);
 
-  const navigate = (to: string) => {
-    window.history.pushState({}, '', to);
+  const updateLocation = (to: string, mode: 'push' | 'replace') => {
+    window.history[mode === 'replace' ? 'replaceState' : 'pushState']({}, '', to);
     setPath(window.location.pathname);
     setSearch(window.location.search);
     setMobileNavOpen(false);
   };
+  const navigate = (to: string) => updateLocation(to, 'push');
+  const replaceNavigate = (to: string) => updateLocation(to, 'replace');
 
   const currentAirportListPath = () => buildAirportListPath(readAirportListQuery(window.location.search));
 
@@ -1698,7 +1700,16 @@ export default function AdminApp() {
             />
           )}
           {path === '/admin/applications' && <ApplicationsPage onOpenAirports={() => navigate('/admin/airports')} />}
-          {path === '/admin/news' && <NewsListPage onCreate={() => navigate('/admin/news/new')} onEdit={(id) => navigate(`/admin/news/${id}`)} />}
+          {path === '/admin/news' && (
+            <NewsListPage
+              routeSearch={search}
+              onUpdateListUrl={(to, mode) => (
+                mode === 'replace' ? replaceNavigate(to) : navigate(to)
+              )}
+              onCreate={(listSearch) => navigate(`/admin/news/new${listSearch}`)}
+              onEdit={(id, listSearch) => navigate(`/admin/news/${id}${listSearch}`)}
+            />
+          )}
           {(path === '/admin/monthly-reports' || path === '/admin/monthly-reports/new') && (
             <MonthlyReportListPage
               onCreate={(id) => navigate(`/admin/monthly-reports/${id}`)}
@@ -1710,8 +1721,8 @@ export default function AdminApp() {
           {(path === '/admin/news/new' || path.match(/^\/admin\/news\/\d+$/)) && (
             <NewsEditorPage
               articleId={path === '/admin/news/new' ? undefined : Number(path.split('/')[3])}
-              onBack={() => navigate('/admin/news')}
-              onNavigateToArticle={(id) => navigate(`/admin/news/${id}`)}
+              onBack={() => navigate(`/admin/news${search}`)}
+              onNavigateToArticle={(id) => navigate(`/admin/news/${id}${search}`)}
             />
           )}
           {path.match(/^\/admin\/monthly-reports\/\d+$/) && (
