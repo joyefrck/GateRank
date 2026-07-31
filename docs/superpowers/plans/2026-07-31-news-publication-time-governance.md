@@ -1,6 +1,6 @@
 # News Publication Time Governance Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Preserve every News article's first publication time, keep modification time independent from views, align all public time surfaces, remove same-page article duplication, and provide a guarded historical repair tool.
 
@@ -30,7 +30,7 @@
 - Modify: `backend/src/services/newsMutationService.ts`
 - Modify: `backend/src/repositories/newsRepository.ts`
 
-- [ ] **Step 1: Write failing publication-time service tests**
+- [x] **Step 1: Write failing publication-time service tests**
 
 Create `backend/tests/newsMutationService.test.ts` with a mutable repository stub and these three cases:
 
@@ -109,7 +109,7 @@ test('restoring an archived article preserves first publication time', async () 
 });
 ```
 
-- [ ] **Step 2: Strengthen the view-count repository expectation**
+- [x] **Step 2: Strengthen the view-count repository expectation**
 
 Change the existing `NewsRepository.incrementViewCount` assertion to require an explicit timestamp no-op:
 
@@ -123,7 +123,7 @@ assert.deepEqual(calls, [{
 }]);
 ```
 
-- [ ] **Step 3: Run the focused tests and verify the red state**
+- [x] **Step 3: Run the focused tests and verify the red state**
 
 Run:
 
@@ -133,7 +133,7 @@ npx tsx --test backend/tests/newsMutationService.test.ts backend/tests/newsRepos
 
 Expected: the two preservation tests fail because `publish()` overwrites the timestamp, and the repository test fails because the view update does not preserve `updated_at` explicitly.
 
-- [ ] **Step 4: Implement the minimal write-contract changes**
+- [x] **Step 4: Implement the minimal write-contract changes**
 
 Extend the current article shape and preserve its existing publication time:
 
@@ -169,7 +169,7 @@ const [result] = await this.pool.execute<ResultSetHeader>(
 );
 ```
 
-- [ ] **Step 5: Run the focused tests and commit**
+- [x] **Step 5: Run the focused tests and commit**
 
 Run:
 
@@ -192,7 +192,7 @@ git commit -m "fix: preserve news publication timestamps"
 - Create: `backend/tests/newsAdminPublicationTimeUi.test.ts`
 - Modify: `src/admin/news/NewsPages.tsx`
 
-- [ ] **Step 1: Write the failing source-level UI contract**
+- [x] **Step 1: Write the failing source-level UI contract**
 
 Create `backend/tests/newsAdminPublicationTimeUi.test.ts`:
 
@@ -216,7 +216,7 @@ test('published articles save updates without exposing the publish action again'
 });
 ```
 
-- [ ] **Step 2: Run the new test and verify it fails**
+- [x] **Step 2: Run the new test and verify it fails**
 
 Run:
 
@@ -226,7 +226,7 @@ npx tsx --test backend/tests/newsAdminPublicationTimeUi.test.ts
 
 Expected: FAIL because both buttons and notices currently use unconditional draft/publish labels.
 
-- [ ] **Step 3: Implement state-aware labels and actions**
+- [x] **Step 3: Implement state-aware labels and actions**
 
 Keep `saveDraft()` as the PATCH implementation but make its notice state-aware:
 
@@ -256,7 +256,7 @@ Do not render the publish action for an already published article:
 ) : null}
 ```
 
-- [ ] **Step 4: Run focused admin UI tests and commit**
+- [x] **Step 4: Run focused admin UI tests and commit**
 
 Run:
 
@@ -281,7 +281,7 @@ git commit -m "fix: clarify news editor publication actions"
 - Modify: `backend/src/routes/newsPublicRoutes.ts`
 - Modify: `backend/tests/newsPublicRoutes.test.ts`
 
-- [ ] **Step 1: Add failing public-route assertions**
+- [x] **Step 1: Add failing public-route assertions**
 
 In the article SEO test, give the stub distinct times:
 
@@ -304,7 +304,7 @@ updated_at: '2026-04-03 12:45:00',
 assert.match(xml, /<lastmod>2026-04-03T12:45:00\+08:00<\/lastmod>/);
 ```
 
-- [ ] **Step 2: Run the focused public-route cases and verify they fail**
+- [x] **Step 2: Run the focused public-route cases and verify they fail**
 
 Run:
 
@@ -314,7 +314,7 @@ npx tsx --test --test-name-pattern="seo metadata|includes published news urls" b
 
 Expected: `dateModified` still equals `datePublished`, and Sitemap still uses `published_at`.
 
-- [ ] **Step 3: Carry `updated_at` through the public view model**
+- [x] **Step 3: Carry `updated_at` through the public view model**
 
 Add the field to `PublicNewsCardView`:
 
@@ -334,7 +334,7 @@ published_at: article.published_at,
 updated_at: article.updated_at,
 ```
 
-- [ ] **Step 4: Correct JSON-LD and Sitemap field selection**
+- [x] **Step 4: Correct JSON-LD and Sitemap field selection**
 
 In `renderNewsArticlePage()`:
 
@@ -352,7 +352,7 @@ if (lastmod) {
 }
 ```
 
-- [ ] **Step 5: Run all News public-route tests and commit**
+- [x] **Step 5: Run all News public-route tests and commit**
 
 Run:
 
@@ -375,7 +375,7 @@ git commit -m "fix: align public news modification dates"
 - Create: `backend/tests/newsPublicService.test.ts`
 - Modify: `backend/src/services/newsPublicService.ts`
 
-- [ ] **Step 1: Write a failing service-level de-duplication test**
+- [x] **Step 1: Write a failing service-level de-duplication test**
 
 Create a test whose repository returns the same article in featured, list, recommended, risk, and guide candidates:
 
@@ -441,7 +441,7 @@ test('NewsPublicService assigns each visible article to only one module', async 
 
 Define `makeArticle(id)` in the same test with every `NewsArticle` field, including distinct `published_at`, `created_at`, and `updated_at`, so no `as unknown` payload gaps hide contract errors.
 
-- [ ] **Step 2: Run the service test and verify it fails**
+- [x] **Step 2: Run the service test and verify it fails**
 
 Run:
 
@@ -451,7 +451,7 @@ npx tsx --test backend/tests/newsPublicService.test.ts
 
 Expected: FAIL because recommended/risk/guide arrays repeat featured and list article IDs, and the main list loses one item when featured is removed after pagination.
 
-- [ ] **Step 3: Query and allocate cards in deterministic priority order**
+- [x] **Step 3: Query and allocate cards in deterministic priority order**
 
 Always resolve the featured candidate before the paginated list. If no article is explicitly featured, resolve the latest matching article through a one-item page as the existing fallback. Exclude that candidate from the main list query on every page and restore the public total:
 
@@ -526,7 +526,7 @@ const recommended = takeUniqueCards(
 );
 ```
 
-- [ ] **Step 4: Run service and public route tests and commit**
+- [x] **Step 4: Run service and public route tests and commit**
 
 Run:
 
@@ -551,7 +551,7 @@ git commit -m "fix: deduplicate public news modules"
 - Create: `backend/tests/newsPublicationTimeRepairService.test.ts`
 - Modify: `package.json`
 
-- [ ] **Step 1: Write failing validation and transaction tests**
+- [x] **Step 1: Write failing validation and transaction tests**
 
 Define the mapping contract and isolated database harness in the test:
 
@@ -671,7 +671,7 @@ test('rollback restores backup values only when current values match the mapping
 });
 ```
 
-- [ ] **Step 2: Run the repair-service test and verify it fails**
+- [x] **Step 2: Run the repair-service test and verify it fails**
 
 Run:
 
@@ -681,7 +681,7 @@ npx tsx --test backend/tests/newsPublicationTimeRepairService.test.ts
 
 Expected: FAIL because the repair service and mapping contract do not exist.
 
-- [ ] **Step 3: Implement strict mapping validation and dry-run**
+- [x] **Step 3: Implement strict mapping validation and dry-run**
 
 Create these public types and reject every invalid entry before opening a transaction:
 
@@ -718,7 +718,7 @@ Validation must require positive unique IDs, SQL datetime strings, non-future re
 
 `dryRun()` must select the exact mapped IDs, compare current values with both expected values, and return conflicts without mutating data.
 
-- [ ] **Step 4: Implement transactional apply and backup**
+- [x] **Step 4: Implement transactional apply and backup**
 
 Validate the run ID with `/^\d{8}T\d{6}$/`. Because MySQL DDL implicitly commits, create and populate the backup table before opening the update transaction:
 
@@ -767,7 +767,7 @@ if (result.affectedRows !== 1) {
 
 Any missing backup row or optimistic-guard mismatch rolls back the complete restoration.
 
-- [ ] **Step 5: Add a dry-run-default CLI**
+- [x] **Step 5: Add a dry-run-default CLI**
 
 Register this package script:
 
@@ -777,7 +777,7 @@ Register this package script:
 
 The CLI must require `--mapping=/absolute/path.json`; omit `--apply` for dry-run. Apply additionally requires a 14-character Shanghai timestamp passed through `--run-id`, matching `^\d{8}T\d{6}$`. Rollback requires `--rollback`, the original apply run ID, and the same mapping file. Apply and rollback print the backup table name. The CLI must load environment variables through `dotenv/config`, obtain `getDbPool()`, print only IDs/timestamps/sources, never database credentials, and close the pool in `finally`.
 
-- [ ] **Step 6: Run focused tests, typecheck, and commit**
+- [x] **Step 6: Run focused tests, typecheck, and commit**
 
 Run:
 
@@ -802,7 +802,7 @@ git commit -m "feat: add guarded news timestamp repair tool"
 - Modify: `dist/assets/index.js`
 - Modify: `docs/superpowers/plans/2026-07-31-news-publication-time-governance.md` only to check completed boxes during execution
 
-- [ ] **Step 1: Run all focused News tests**
+- [x] **Step 1: Run all focused News tests**
 
 Run:
 
@@ -820,7 +820,7 @@ npx tsx --test \
 
 Expected: all focused tests pass with zero failures.
 
-- [ ] **Step 2: Run full static and backend verification**
+- [x] **Step 2: Run full static and backend verification**
 
 Run:
 
@@ -834,7 +834,7 @@ git diff --check
 
 Expected: frontend and backend typechecks pass, the complete backend suite reports zero failures, production build succeeds, and `git diff --check` prints nothing. The existing Vite large-chunk warning is non-blocking unless a new error accompanies it.
 
-- [ ] **Step 3: Verify the built local application in Chrome**
+- [x] **Step 3: Verify the built local application in Chrome**
 
 Start the API in one terminal:
 
@@ -859,7 +859,7 @@ Open `http://127.0.0.1:3010/admin/news` and `http://127.0.0.1:3010/news` in Chro
 
 Expected: all six checks pass in the hydrated UI and SSR source.
 
-- [ ] **Step 4: Commit generated assets and plan progress**
+- [x] **Step 4: Commit generated assets and plan progress**
 
 Review the generated diff before committing; include only expected News/admin bundle changes:
 
