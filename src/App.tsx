@@ -114,6 +114,7 @@ import { StreamingCheckPage } from './pages/streamingCheck/StreamingCheckPage';
 import { IPCheckPage } from './pages/ipCheck/IPCheckPage';
 import { DNSLeakTestPage } from './pages/dnsLeakTest/DNSLeakTestPage';
 import { ToolsIndexPage } from './pages/tools/ToolsIndexPage';
+import { HomePageV3 } from './pages/home/HomePageV3';
 import { MonthlyReportDetailPage, MonthlyReportsPage } from './pages/monthlyReports/MonthlyReportsPage';
 import { trackPageView } from './site/analytics';
 import { getCapabilityIcon, type CapabilityIconCategory } from '../shared/capabilityIcons';
@@ -145,9 +146,12 @@ import {
   AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD,
   AIRPORT_AD_MONTHLY_PRICE,
   type AirportDealView,
+  type AirportHomeAdSlot,
   type PortalAirportAdCampaignView,
+  type PortalAirportAdStatsView,
   type PortalAirportAdStatus,
 } from '../shared/airportAds';
+import { getCampaignMonthlyPrice, getRenewalEndsAt } from './portal/adCampaignUi';
 
 const LazyPublishTokenDocsPage = lazy(async () => {
   const module = await import('./pages/publishTokenDocs/PublishTokenDocsPage');
@@ -776,6 +780,8 @@ interface PortalViewResponse {
 
 interface PortalAdCampaignFormState {
   months: number;
+  is_homepage: boolean;
+  home_slot: AirportHomeAdSlot | null;
   coupon_code: string;
   discount_title: string;
   discount_description: string;
@@ -799,6 +805,8 @@ const PORTAL_BILLING_PAGE_SIZE = 20;
 function createPortalAdCampaignForm(campaign?: AirportDealView | null, months = 1): PortalAdCampaignFormState {
   return {
     months,
+    is_homepage: Boolean(campaign?.is_homepage || campaign?.home_slot),
+    home_slot: campaign?.home_slot || null,
     coupon_code: campaign?.coupon_code || '',
     discount_title: campaign?.discount_title || '',
     discount_description: campaign?.discount_description || '',
@@ -809,6 +817,17 @@ function createPortalAdCampaignForm(campaign?: AirportDealView | null, months = 
       ? ''
       : String(campaign.discount_percent),
   };
+}
+
+function getPortalAdCampaignMonthlyPrice(
+  adStatus: PortalAirportAdStatus,
+  form: Pick<PortalAdCampaignFormState, 'is_homepage' | 'home_slot'>,
+): number {
+  const ordinaryPrice = adStatus.monthly_price || AIRPORT_AD_MONTHLY_PRICE;
+  if (!form.is_homepage || form.home_slot === null) {
+    return ordinaryPrice;
+  }
+  return adStatus.home_slot_monthly_prices?.[form.home_slot] || ordinaryPrice;
 }
 
 interface PortalLoginResponse {
@@ -2683,24 +2702,25 @@ function PortalAdCampaignModal({
   }
 
   const isEdit = mode === 'edit';
-  const monthlyPrice = adStatus.monthly_price || AIRPORT_AD_MONTHLY_PRICE;
+  const monthlyPrice = getPortalAdCampaignMonthlyPrice(adStatus, form);
   const chargeAmount = monthlyPrice * form.months;
   const balanceAfter = walletBalance - chargeAmount;
   const lowBalanceThreshold = adStatus.low_balance_warning_threshold || AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD;
   const hasNegativeBalanceAfterCharge = chargeAmount > 0 && balanceAfter < 0;
-  const monthOptions = isEdit ? [0, ...adStatus.allowed_months] : adStatus.allowed_months;
+  const monthOptions = adStatus.allowed_months;
   const canSubmit = Boolean(
     form.coupon_code.trim()
       && form.discount_title.trim()
       && form.discount_description.trim()
       && form.applicable_plan.trim()
+      && (isEdit || !form.is_homepage || form.home_slot !== null)
       && !hasNegativeBalanceAfterCharge
       && !submitting,
   );
   const submitText = submitting
     ? '提交中'
     : isEdit
-      ? form.months > 0 ? '保存并续投' : '保存修改'
+      ? '保存修改'
       : '确认扣费并上架';
 
   return (
@@ -2713,7 +2733,7 @@ function PortalAdCampaignModal({
               {isEdit ? '修改投放' : '新建投放'}
             </h3>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              {isEdit ? '默认只保存文案，不扣费；选择延时时长后才会按月扣费。' : '填写活动素材并选择投放月份，扣费成功后立即上架。'}
+              {isEdit ? '这里只修改广告文案，不扣费；需要延长展示期请使用列表中的“延期”。' : '填写活动素材并选择投放月份，扣费成功后立即上架。'}
             </p>
           </div>
           <button
@@ -2728,33 +2748,124 @@ function PortalAdCampaignModal({
 
         <form onSubmit={onSubmit} className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <PortalInfoCard eyebrow="Price" title="固定月费" value={`¥${formatMetric(monthlyPrice)} / 月`} tone="blue" />
-            <PortalInfoCard eyebrow={isEdit ? 'Extend' : 'Months'} title={isEdit ? '延时时长' : '本次投放'} value={form.months === 0 ? '不要延时' : `${form.months} 个月`} tone="green" />
+            <PortalInfoCard
+              eyebrow="Price"
+              title={form.is_homepage && form.home_slot ? `首页 ${form.home_slot} 号位月费` : '普通优惠活动月费'}
+              value={`¥${formatMetric(monthlyPrice)} / 月`}
+              tone="blue"
+            />
+            <PortalInfoCard eyebrow={isEdit ? 'Edit' : 'Months'} title={isEdit ? '编辑模式' : '本次投放'} value={isEdit ? '只修改文案' : `${form.months} 个月`} tone="green" />
             <PortalInfoCard eyebrow="Balance" title="扣费后余额" value={`¥${formatMetric(balanceAfter)}`} tone={hasNegativeBalanceAfterCharge ? 'red' : chargeAmount > 0 && balanceAfter < lowBalanceThreshold ? 'amber' : 'green'} />
           </div>
 
           <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[1.2fr_0.8fr]">
             <div className="space-y-4 rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
               <div>
-                <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">{isEdit ? '延时时长' : '投放时长'}</label>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {monthOptions.map((months) => (
-                    <button
-                      key={months}
-                      type="button"
-                      className={`rounded-full px-4 py-2 text-sm font-black ${form.months === months ? 'bg-slate-950 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
-                      onClick={() => onFormChange((current) => ({ ...current, months }))}
-                    >
-                      {months === 0 ? '不要延时' : `${months}个月`}
-                    </button>
-                  ))}
-                </div>
+                <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">投放位置</label>
+                {isEdit ? (
+                  <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-black text-slate-700">
+                    {form.is_homepage && form.home_slot ? `首页 ${form.home_slot} 号位` : '普通优惠活动'}
+                    <span className="ml-2 text-xs font-medium text-slate-500">投放期间不可切换位置</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <button
+                        type="button"
+                        className={`rounded-2xl border px-4 py-3 text-left text-sm font-black transition ${
+                          !form.is_homepage
+                            ? 'border-slate-950 bg-slate-950 text-white'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'
+                        }`}
+                        onClick={() => onFormChange((current) => ({
+                          ...current,
+                          is_homepage: false,
+                          home_slot: null,
+                        }))}
+                      >
+                        普通优惠活动
+                        <span className={`mt-1 block text-xs font-medium ${!form.is_homepage ? 'text-slate-300' : 'text-slate-500'}`}>
+                          ¥{formatMetric(adStatus.monthly_price || AIRPORT_AD_MONTHLY_PRICE)} / 月
+                        </span>
+                      </button>
+                      <button
+                        type="button"
+                        className={`rounded-2xl border px-4 py-3 text-left text-sm font-black transition ${
+                          form.is_homepage
+                            ? 'border-cyan-700 bg-cyan-50 text-cyan-900'
+                            : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400'
+                        }`}
+                        onClick={() => onFormChange((current) => ({
+                          ...current,
+                          is_homepage: true,
+                          home_slot: current.home_slot,
+                        }))}
+                      >
+                        投放首页
+                        <span className="mt-1 block text-xs font-medium text-slate-500">选择后按首页位置价格计费</span>
+                      </button>
+                    </div>
+                    {form.is_homepage ? (
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        {([1, 2, 3, 4] as AirportHomeAdSlot[]).map((slot) => {
+                          const available = adStatus.home_slot_availability?.[slot] ?? true;
+                          const price = adStatus.home_slot_monthly_prices?.[slot]
+                            || adStatus.monthly_price
+                            || AIRPORT_AD_MONTHLY_PRICE;
+                          return (
+                            <button
+                              key={slot}
+                              type="button"
+                              disabled={!available}
+                              className={`rounded-2xl border px-3 py-3 text-left transition ${
+                                form.home_slot === slot
+                                  ? 'border-cyan-700 bg-cyan-700 text-white'
+                                  : available
+                                    ? 'border-slate-200 bg-white text-slate-700 hover:border-cyan-400'
+                                    : 'cursor-not-allowed border-slate-200 bg-slate-100 text-slate-400'
+                              }`}
+                              onClick={() => onFormChange((current) => ({ ...current, home_slot: slot }))}
+                            >
+                              <span className="block text-sm font-black">{slot} 号位</span>
+                              <span className={`mt-1 block text-xs font-medium ${form.home_slot === slot ? 'text-cyan-100' : ''}`}>
+                                {available ? `¥${formatMetric(price)} / 月` : '投放中'}
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : null}
+                  </>
+                )}
               </div>
+
+              {!isEdit ? (
+                <div>
+                  <label className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">投放时长</label>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {monthOptions.map((months) => (
+                      <button
+                        key={months}
+                        type="button"
+                        className={`rounded-full px-4 py-2 text-sm font-black ${form.months === months ? 'bg-slate-950 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}
+                        onClick={() => onFormChange((current) => ({ ...current, months }))}
+                      >
+                        {months}个月
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
 
               <PortalAdField label="优惠码">
                 <input value={form.coupon_code} onChange={(event) => onFormChange((current) => ({ ...current, coupon_code: event.target.value }))} className={portalInputClass} maxLength={64} placeholder="例如 NEW220" required />
               </PortalAdField>
-              <PortalAdField label="活动标题">
+              <PortalAdField
+                label="活动标题"
+                labelSuffix={form.is_homepage ? (
+                  <span className="text-xs font-medium tracking-normal text-cyan-700">显示在首页广告描述中。</span>
+                ) : null}
+              >
                 <input value={form.discount_title} onChange={(event) => onFormChange((current) => ({ ...current, discount_title: event.target.value }))} className={portalInputClass} maxLength={128} placeholder="例如 新用户首单 8 折" required />
               </PortalAdField>
               <PortalAdField label="折扣说明">
@@ -2817,6 +2928,172 @@ function PortalAdCampaignModal({
       </div>
     </div>
   );
+}
+
+function PortalAdStatsModal({
+  campaign,
+  stats,
+  loading,
+  error,
+  onClose,
+  onRetry,
+  onPageChange,
+}: {
+  campaign: PortalAirportAdCampaignView;
+  stats: PortalAirportAdStatsView | null;
+  loading: boolean;
+  error: string;
+  onClose: () => void;
+  onRetry: () => void;
+  onPageChange: (page: number) => void;
+}) {
+  const totalPages = stats?.pagination.total_pages || 0;
+  const currentPage = stats?.pagination.page || 1;
+  const firstVisiblePage = Math.max(1, Math.min(currentPage - 2, Math.max(1, totalPages - 4)));
+  const visiblePages = Array.from(
+    { length: Math.min(5, totalPages) },
+    (_, index) => firstVisiblePage + index,
+  );
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+      <section role="dialog" aria-modal="true" aria-labelledby="portal-ad-stats-title" className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)]">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700">
+              {campaign.home_slot ? `首页 ${campaign.home_slot} 号位` : '普通优惠活动'} · {campaign.coupon_code}
+            </div>
+            <h3 id="portal-ad-stats-title" className="mt-2 text-2xl font-black tracking-tight text-slate-950">每日访问统计</h3>
+            <p className="mt-2 text-sm text-slate-500">
+              {stats?.tracking_started_on ? `精确统计始于 ${stats.tracking_started_on}` : '上线前历史无法精确归属到本条广告'}
+            </p>
+          </div>
+          <button type="button" className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:text-slate-900" onClick={onClose} aria-label="关闭">
+            <X size={16} />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6">
+          {error ? (
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-5 py-5 text-sm text-rose-700">
+              <div className="font-bold">{error}</div>
+              <button type="button" className="mt-3 rounded-full bg-rose-700 px-4 py-2 text-xs font-black text-white" onClick={onRetry}>重新加载</button>
+            </div>
+          ) : !stats && loading ? (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-6 py-12 text-center text-sm text-slate-500">正在加载访问统计...</div>
+          ) : stats ? (
+            <>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <PortalInfoCard eyebrow="Impressions" title="累计曝光" value={formatMetric(stats.summary.impressions)} tone="blue" />
+                <PortalInfoCard eyebrow="Clicks" title="累计点击" value={formatMetric(stats.summary.clicks)} tone="green" />
+                <PortalInfoCard eyebrow="CTR" title="总体点击率" value={formatAdCtr(stats.summary.ctr)} tone="green" />
+              </div>
+              {stats.tracking_started_on === null ? (
+                <div className="mt-5 rounded-2xl border border-dashed border-slate-300 bg-slate-50 px-6 py-12 text-center text-sm text-slate-500">暂无精确访问数据</div>
+              ) : (
+                <div className="relative mt-5 overflow-hidden rounded-2xl border border-slate-200">
+                  {loading ? <div className="absolute inset-0 z-10 grid place-items-center bg-white/75 text-sm font-bold text-slate-600">正在加载本页...</div> : null}
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[620px] text-left text-sm">
+                      <thead className="bg-slate-50 text-xs font-black uppercase tracking-[0.12em] text-slate-500">
+                        <tr><th className="px-4 py-3">日期</th><th className="px-4 py-3">曝光</th><th className="px-4 py-3">点击</th><th className="px-4 py-3">点击率</th></tr>
+                      </thead>
+                      <tbody>
+                        {stats.daily.map((item) => (
+                          <tr key={item.date} className="border-t border-slate-100">
+                            <td className="px-4 py-3 font-medium text-slate-700">{item.date}</td>
+                            <td className="px-4 py-3 font-black text-sky-700">{formatMetric(item.impressions)}</td>
+                            <td className="px-4 py-3 font-black text-emerald-700">{formatMetric(item.clicks)}</td>
+                            <td className="px-4 py-3 font-black text-slate-700">{formatAdCtr(item.ctr)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+              {totalPages > 0 ? (
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                  <span className="text-sm text-slate-500">共 {stats.pagination.total} 天 · 每页 {stats.pagination.page_size} 条</span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button type="button" disabled={loading || currentPage <= 1} onClick={() => onPageChange(currentPage - 1)} className="rounded-full border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 disabled:opacity-40">上一页</button>
+                    {visiblePages.map((page) => (
+                      <button key={page} type="button" disabled={loading} onClick={() => onPageChange(page)} className={`h-9 min-w-9 rounded-full px-3 text-xs font-black ${page === currentPage ? 'bg-slate-950 text-white' : 'border border-slate-200 text-slate-600'}`}>{page}</button>
+                    ))}
+                    <button type="button" disabled={loading || currentPage >= totalPages} onClick={() => onPageChange(currentPage + 1)} className="rounded-full border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 disabled:opacity-40">下一页</button>
+                  </div>
+                </div>
+              ) : null}
+            </>
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function PortalAdRenewModal({
+  campaign,
+  adStatus,
+  walletBalance,
+  months,
+  submitting,
+  error,
+  onMonthsChange,
+  onClose,
+  onSubmit,
+}: {
+  campaign: PortalAirportAdCampaignView;
+  adStatus: PortalAirportAdStatus;
+  walletBalance: number;
+  months: number;
+  submitting: boolean;
+  error: string;
+  onMonthsChange: (months: number) => void;
+  onClose: () => void;
+  onSubmit: () => void;
+}) {
+  const monthlyPrice = getCampaignMonthlyPrice(adStatus, campaign);
+  const chargeAmount = monthlyPrice * months;
+  const balanceAfter = walletBalance - chargeAmount;
+  const renewalEndsAt = getRenewalEndsAt(campaign, months);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+      <section role="dialog" aria-modal="true" aria-labelledby="portal-ad-renew-title" className="w-full max-w-xl overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)]">
+        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-6 py-5">
+          <div><div className="text-xs font-black uppercase tracking-[0.24em] text-cyan-700">Ad Renewal</div><h3 id="portal-ad-renew-title" className="mt-2 text-2xl font-black text-slate-950">延期投放</h3></div>
+          <button type="button" disabled={submitting} className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 disabled:opacity-40" onClick={onClose} aria-label="关闭"><X size={16} /></button>
+        </div>
+        <div className="space-y-5 px-6 py-6">
+          <div className="rounded-2xl bg-slate-50 px-5 py-4 text-sm leading-7 text-slate-600">
+            <div className="flex justify-between gap-4"><span>投放位置</span><strong className="text-slate-900">{campaign.home_slot ? `首页 ${campaign.home_slot} 号位` : '普通优惠活动'}</strong></div>
+            <div className="flex justify-between gap-4"><span>当前状态</span><strong className={campaign.status === 'expired' ? 'text-amber-700' : 'text-emerald-700'}>{campaign.status_label}</strong></div>
+            <div className="flex justify-between gap-4"><span>{campaign.status === 'expired' ? '重新开始' : '当前结束'}</span><strong className="text-right text-slate-900">{campaign.status === 'expired' ? '付款成功后立即投放' : formatDateTimeLabel(campaign.ends_at)}</strong></div>
+            <div className="flex justify-between gap-4"><span>当前月价</span><strong className="text-slate-900">¥{formatMetric(monthlyPrice)} / 月</strong></div>
+          </div>
+          <div>
+            <div className="text-xs font-black uppercase tracking-[0.18em] text-slate-500">延期时长</div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {adStatus.allowed_months.map((option) => (
+                <button key={option} type="button" disabled={submitting} onClick={() => onMonthsChange(option)} className={`rounded-full px-4 py-2 text-sm font-black ${option === months ? 'bg-slate-950 text-white' : 'border border-slate-200 bg-white text-slate-600'}`}>{option} 个月</button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-y-3 border-t border-slate-200 pt-5 text-sm">
+            <span className="text-slate-500">延期后结束</span><strong className="text-right text-slate-900">{formatDateTimeLabel(renewalEndsAt.toISOString())}</strong>
+            <span className="text-slate-500">本次扣费</span><strong className="text-right text-xl text-slate-950">¥{formatMetric(chargeAmount)}</strong>
+            <span className="text-slate-500">扣费后余额</span><strong className={`text-right ${balanceAfter < 0 ? 'text-rose-700' : 'text-slate-900'}`}>¥{formatMetric(balanceAfter)}</strong>
+          </div>
+          {error ? <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-700">{error}</div> : null}
+          <button type="button" disabled={submitting || balanceAfter < 0} onClick={onSubmit} className="inline-flex h-12 w-full items-center justify-center rounded-2xl bg-slate-950 px-5 text-sm font-black text-white disabled:cursor-not-allowed disabled:bg-slate-300">{submitting ? '延期处理中...' : '确认延期并扣费'}</button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function formatAdCtr(value: number | null): string {
+  return value === null ? '—' : `${(value * 100).toFixed(2)}%`;
 }
 
 const portalInputClass = 'w-full rounded-[20px] border border-slate-200 bg-white/95 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-cyan-600 focus:ring-4 focus:ring-cyan-100';
@@ -3015,7 +3292,7 @@ function RankingTransparencySectionBody({ section }: { section: (typeof RANKING_
   );
 }
 
-function HomePage({ date }: { date?: string }) {
+function LegacyHomePage({ date }: { date?: string }) {
   const initialData = useMemo(
     () => getInitialPublicData<HomePageResponse>(
       'home',
@@ -5737,6 +6014,14 @@ function PortalPage() {
   const [refreshingAdCampaignStatus, setRefreshingAdCampaignStatus] = useState(false);
   const [submittingAdCampaign, setSubmittingAdCampaign] = useState(false);
   const [cancelingAdCampaignId, setCancelingAdCampaignId] = useState<number | null>(null);
+  const [statsAdCampaign, setStatsAdCampaign] = useState<PortalAirportAdCampaignView | null>(null);
+  const [adCampaignStats, setAdCampaignStats] = useState<PortalAirportAdStatsView | null>(null);
+  const [loadingAdCampaignStats, setLoadingAdCampaignStats] = useState(false);
+  const [adCampaignStatsError, setAdCampaignStatsError] = useState('');
+  const [renewingAdCampaign, setRenewingAdCampaign] = useState<PortalAirportAdCampaignView | null>(null);
+  const [renewMonths, setRenewMonths] = useState(1);
+  const [submittingAdRenewal, setSubmittingAdRenewal] = useState(false);
+  const [adRenewalError, setAdRenewalError] = useState('');
   const [applicationEmailCode, setApplicationEmailCode] = useState('');
   const [sendingApplicationEmailCode, setSendingApplicationEmailCode] = useState(false);
   const [applicationEmailCodeStatus, setApplicationEmailCodeStatus] = useState('');
@@ -5894,6 +6179,14 @@ function PortalPage() {
     setEditingAdCampaign(null);
     setSubmittingAdCampaign(false);
     setCancelingAdCampaignId(null);
+    setStatsAdCampaign(null);
+    setAdCampaignStats(null);
+    setLoadingAdCampaignStats(false);
+    setAdCampaignStatsError('');
+    setRenewingAdCampaign(null);
+    setRenewMonths(1);
+    setSubmittingAdRenewal(false);
+    setAdRenewalError('');
     setPortalTab('overview');
     setLoading(false);
     setLoginPassword('');
@@ -6600,11 +6893,6 @@ function PortalPage() {
     if (!latestAdStatus) {
       return;
     }
-    if (latestAdStatus.remaining_slots <= 0) {
-      setError('当前 6 个广告位已满，空位释放后可继续投放');
-      setSuccess('');
-      return;
-    }
     setAdCampaignForm(createPortalAdCampaignForm(null, 1));
     setEditingAdCampaign(null);
     setAdCampaignModalMode('create');
@@ -6634,6 +6922,95 @@ function PortalPage() {
     setAdCampaignForm(createPortalAdCampaignForm());
   };
 
+  const loadAdCampaignStats = async (campaign: PortalAirportAdCampaignView, page: number) => {
+    setLoadingAdCampaignStats(true);
+    setAdCampaignStatsError('');
+    try {
+      const data = await portalApiRequest<PortalAirportAdStatsView>(
+        `/api/v1/portal/ad-campaign/${encodeURIComponent(String(campaign.campaign_id))}/stats?page=${page}`,
+      );
+      setAdCampaignStats(data);
+    } catch (err) {
+      setAdCampaignStatsError(err instanceof Error ? err.message : '访问统计加载失败');
+    } finally {
+      setLoadingAdCampaignStats(false);
+    }
+  };
+
+  const openAdCampaignStats = (campaign: PortalAirportAdCampaignView) => {
+    setStatsAdCampaign(campaign);
+    setAdCampaignStats(null);
+    setAdCampaignStatsError('');
+    void loadAdCampaignStats(campaign, 1);
+  };
+
+  const closeAdCampaignStats = () => {
+    setStatsAdCampaign(null);
+    setAdCampaignStats(null);
+    setAdCampaignStatsError('');
+  };
+
+  const openAdCampaignRenewal = async (campaign: PortalAirportAdCampaignView) => {
+    const latestStatus = await refreshAdCampaignStatus();
+    if (!latestStatus) return;
+    const latestCampaign = latestStatus.campaigns.find((item) => item.campaign_id === campaign.campaign_id);
+    if (!latestCampaign || latestCampaign.status === 'canceled') {
+      setError('该广告已下架，不能延期投放');
+      return;
+    }
+    setRenewingAdCampaign(latestCampaign);
+    setRenewMonths(latestStatus.allowed_months[0] || 1);
+    setAdRenewalError('');
+    setError('');
+    setSuccess('');
+  };
+
+  const closeAdCampaignRenewal = () => {
+    if (submittingAdRenewal) return;
+    setRenewingAdCampaign(null);
+    setRenewMonths(1);
+    setAdRenewalError('');
+  };
+
+  const submitAdCampaignRenewal = async () => {
+    if (!view || !renewingAdCampaign) return;
+    const monthlyPrice = getCampaignMonthlyPrice(view.ad_status, renewingAdCampaign);
+    const chargeAmount = monthlyPrice * renewMonths;
+    const balanceAfter = view.wallet.balance - chargeAmount;
+    if (balanceAfter < 0) {
+      setAdRenewalError('余额不足，请先充值后再延期');
+      return;
+    }
+    const lowBalanceThreshold = view.ad_status.low_balance_warning_threshold || AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD;
+    if (balanceAfter < lowBalanceThreshold && !window.confirm('延期后余额较低，可能影响机场评分展示。请确认！')) {
+      return;
+    }
+
+    setSubmittingAdRenewal(true);
+    setAdRenewalError('');
+    try {
+      const data = await portalApiRequest<{
+        campaign: AirportDealView;
+        ad_status: PortalAirportAdStatus;
+        wallet: PortalWalletView | null;
+      }>(
+        `/api/v1/portal/ad-campaign/${encodeURIComponent(String(renewingAdCampaign.campaign_id))}/renew`,
+        { method: 'POST', body: JSON.stringify({ months: renewMonths }) },
+      );
+      setView((current) => current
+        ? { ...current, wallet: data.wallet || current.wallet, ad_status: data.ad_status }
+        : current);
+      setRenewingAdCampaign(null);
+      setRenewMonths(1);
+      setSuccess('广告投放已延期。');
+      await loadPortalBillingData({ transactions: 1 });
+    } catch (err) {
+      setAdRenewalError(err instanceof Error ? err.message : '延期投放失败');
+    } finally {
+      setSubmittingAdRenewal(false);
+    }
+  };
+
   const submitAdCampaign = async (event?: React.FormEvent) => {
     event?.preventDefault();
     if (!view) return;
@@ -6658,13 +7035,23 @@ function PortalPage() {
       setSuccess('');
       return;
     }
-    if (!isEdit && view.ad_status.remaining_slots <= 0) {
-      setError('当前 6 个广告位已满，空位释放后可继续投放');
+    if (!isEdit && adCampaignForm.is_homepage && adCampaignForm.home_slot === null) {
+      setError('请选择首页 1–4 号位');
+      setSuccess('');
+      return;
+    }
+    if (
+      !isEdit
+      && adCampaignForm.is_homepage
+      && adCampaignForm.home_slot !== null
+      && view.ad_status.home_slot_availability?.[adCampaignForm.home_slot] === false
+    ) {
+      setError(`首页 ${adCampaignForm.home_slot} 号位正在投放中，请选择其他位置`);
       setSuccess('');
       return;
     }
 
-    const chargeAmount = (view.ad_status.monthly_price || AIRPORT_AD_MONTHLY_PRICE) * adCampaignForm.months;
+    const chargeAmount = getPortalAdCampaignMonthlyPrice(view.ad_status, adCampaignForm) * adCampaignForm.months;
     const balanceAfter = view.wallet.balance - chargeAmount;
     const warningThreshold = view.ad_status.low_balance_warning_threshold || AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD;
     if (chargeAmount > 0 && balanceAfter < 0) {
@@ -6695,6 +7082,10 @@ function PortalPage() {
         method: isEdit ? 'PATCH' : 'POST',
         body: JSON.stringify({
           ...(isEdit ? { extend_months: adCampaignForm.months } : { months: adCampaignForm.months }),
+          ...(!isEdit ? {
+            is_homepage: adCampaignForm.is_homepage,
+            home_slot: adCampaignForm.is_homepage ? adCampaignForm.home_slot : null,
+          } : {}),
           coupon_code: adCampaignForm.coupon_code,
           discount_title: adCampaignForm.discount_title,
           discount_description: adCampaignForm.discount_description,
@@ -6716,7 +7107,7 @@ function PortalPage() {
       setAdCampaignModalMode('closed');
       setEditingAdCampaign(null);
       setSuccess(isEdit
-        ? adCampaignForm.months > 0 ? '广告投放已更新并续期。' : '广告投放文案已保存。'
+        ? '广告投放文案已保存。'
         : '广告投放已扣费并上架。');
       await loadPortalBillingData({ transactions: 1 });
     } catch (err) {
@@ -7455,18 +7846,13 @@ function PortalPage() {
   const renderAdCampaignSection = (portalView: PortalViewResponse) => {
     const adStatus = portalView.ad_status;
     const campaigns = adStatus.campaigns || [];
-    const soldOut = adStatus.remaining_slots <= 0;
-    const canCreateCampaign = !soldOut;
 
     return (
       <PortalSectionCard
         title="广告投放"
-        description="活动优惠专区总共 6 个广告位，先到先得。购买成功后立即上架，优惠信息不影响 GateRank Score。"
+        description="购买成功后立即上架，优惠信息不影响 GateRank Score。首页广告位按位置独立计费。"
         aside={(
           <div className="flex flex-wrap items-center gap-3">
-            <div className="rounded-full border border-blue-100 bg-blue-50 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-blue-700">
-              剩余 {adStatus.remaining_slots} / {adStatus.slot_limit}
-            </div>
             <button
               type="button"
               disabled={refreshingAdCampaignStatus}
@@ -7478,20 +7864,26 @@ function PortalPage() {
           </div>
         )}
       >
-        {soldOut && (
-          <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-            当前 6 个广告位已满，空位释放后可继续投放。
-          </div>
-        )}
-
         <PortalDataTable
           title="已投放广告"
           emptyText="暂无已投放广告"
-          headers={['优惠码', '展示期', '累计投放', '状态', '操作']}
+          headers={['优惠码', '投放位置', '展示期', '累计投放', '访问统计', '状态', '操作']}
           rows={campaigns.map((campaign) => [
             <span className="font-black text-blue-700">{campaign.coupon_code}</span>,
+            <span className={`rounded-full px-3 py-1 text-xs font-black ${
+              campaign.home_slot ? 'bg-cyan-50 text-cyan-800' : 'bg-slate-100 text-slate-600'
+            }`}>
+              {campaign.home_slot ? `首页 ${campaign.home_slot} 号位` : '普通优惠活动'}
+            </span>,
             <span>{formatDateTimeLabel(campaign.starts_at)} 至 {formatDateTimeLabel(campaign.ends_at)}</span>,
             <span>{campaign.purchased_months} 个月 / ¥{formatMetric(campaign.billed_amount)}</span>,
+            <button
+              type="button"
+              onClick={() => openAdCampaignStats(campaign)}
+              className="whitespace-nowrap rounded-full border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-black text-sky-700 hover:bg-sky-100"
+            >
+              查看统计
+            </button>,
             <span className={`rounded-full px-3 py-1 text-xs font-black ${getAdCampaignStatusBadgeClass(campaign.status)}`}>
               {campaign.status_label}
             </span>,
@@ -7507,6 +7899,14 @@ function PortalPage() {
                 </button>
                 <button
                   type="button"
+                  disabled={refreshingAdCampaignStatus}
+                  onClick={() => void openAdCampaignRenewal(campaign)}
+                  className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-50"
+                >
+                  延期
+                </button>
+                <button
+                  type="button"
                   disabled={cancelingAdCampaignId === campaign.campaign_id}
                   onClick={() => void cancelAdCampaign(campaign)}
                   className="rounded-full border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-black text-rose-700 hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-50"
@@ -7514,9 +7914,18 @@ function PortalPage() {
                   {cancelingAdCampaignId === campaign.campaign_id ? '下架中' : '下架'}
                 </button>
               </div>
+            ) : campaign.status === 'expired' ? (
+              <button
+                type="button"
+                disabled={refreshingAdCampaignStatus}
+                onClick={() => void openAdCampaignRenewal(campaign)}
+                className="rounded-full bg-slate-950 px-3 py-1.5 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-50"
+              >
+                延期
+              </button>
             ) : (
               <span className="text-xs font-black text-slate-400">
-                {campaign.status === 'canceled' ? '已下架' : '已到期'}
+                已下架
               </span>
             ),
           ])}
@@ -8282,6 +8691,30 @@ function PortalPage() {
           onSubmit={(event) => void submitAdCampaign(event)}
         />
       )}
+      {statsAdCampaign && (
+        <PortalAdStatsModal
+          campaign={statsAdCampaign}
+          stats={adCampaignStats}
+          loading={loadingAdCampaignStats}
+          error={adCampaignStatsError}
+          onClose={closeAdCampaignStats}
+          onRetry={() => void loadAdCampaignStats(statsAdCampaign, adCampaignStats?.pagination.page || 1)}
+          onPageChange={(page) => void loadAdCampaignStats(statsAdCampaign, page)}
+        />
+      )}
+      {view && renewingAdCampaign && (
+        <PortalAdRenewModal
+          campaign={renewingAdCampaign}
+          adStatus={view.ad_status}
+          walletBalance={view.wallet.balance}
+          months={renewMonths}
+          submitting={submittingAdRenewal}
+          error={adRenewalError}
+          onMonthsChange={setRenewMonths}
+          onClose={closeAdCampaignRenewal}
+          onSubmit={() => void submitAdCampaignRenewal()}
+        />
+      )}
       <PortalPasswordRequiredModal
         open={isPasswordRequiredModalOpen}
         onClose={() => setIsPasswordRequiredModalOpen(false)}
@@ -8300,10 +8733,21 @@ function ReadonlyCredentialField({ label, value }: { label: string; value: strin
   );
 }
 
-function PortalAdField({ label, children }: { label: string; children: React.ReactNode }) {
+function PortalAdField({
+  label,
+  labelSuffix,
+  children,
+}: {
+  label: string;
+  labelSuffix?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <label className="block space-y-2">
-      <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">{label}</span>
+      <span className="flex items-baseline gap-2">
+        <span className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">{label}</span>
+        {labelSuffix}
+      </span>
       {children}
     </label>
   );
@@ -8942,7 +9386,7 @@ export default function App() {
   if (route.kind === 'dns_leak_test') return <DNSLeakTestPage />;
 
   if (route.kind === 'home') {
-    return <HomePage date={route.date} />;
+    return <HomePageV3 date={route.date} />;
   }
 
   return <NotFoundPage />;

@@ -2,11 +2,24 @@ import { PUBLIC_SITE_BRAND_NAME } from './publicBrand';
 import { PUBLIC_NAVIGATION_ITEMS, type PublicNavigationKind, type PublicNavigationItem } from './publicNavigation';
 
 export const PUBLIC_TOP_NAV_STYLES = `
+  html:has(.public-top-nav-mobile[open]) {
+    overflow: hidden;
+  }
+  .public-top-nav-root {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+  }
+  .public-top-nav-root > .public-top-nav {
+    position: relative;
+    top: auto;
+    z-index: auto;
+  }
   .public-top-nav {
     position: sticky;
     top: 0;
-    z-index: 50;
-    background: rgba(255,255,255,0.8);
+    z-index: 40;
+    background: rgba(255,255,255,0.95);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid rgb(245,245,245);
     font-family: Inter, ui-sans-serif, system-ui, sans-serif;
@@ -15,7 +28,7 @@ export const PUBLIC_TOP_NAV_STYLES = `
   }
   .public-top-nav-inner {
     width: min(1280px, 100%);
-    height: 72px;
+    height: 64px;
     margin: 0 auto;
     padding: 0 16px;
     display: flex;
@@ -27,7 +40,7 @@ export const PUBLIC_TOP_NAV_STYLES = `
   .public-top-nav-start {
     display: flex;
     align-items: center;
-    gap: 40px;
+    gap: 22px;
     min-width: 0;
   }
   .public-top-nav-brand {
@@ -40,13 +53,13 @@ export const PUBLIC_TOP_NAV_STYLES = `
   .public-top-nav-brand-mark {
     width: 36px;
     height: 36px;
-    border-radius: 8px;
-    background: rgb(23,23,23);
+    border-radius: 12px;
+    background: rgb(0,0,0);
     color: #ffffff;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
   }
   .public-top-nav-brand-mark svg {
     width: 20px;
@@ -54,33 +67,35 @@ export const PUBLIC_TOP_NAV_STYLES = `
     display: block;
   }
   .public-top-nav-brand-title {
-    font-size: 18px;
+    font-size: 19px;
     font-weight: 700;
-    line-height: 18px;
-    letter-spacing: -0.9px;
+    line-height: 20px;
+    letter-spacing: -0.45px;
+    white-space: nowrap;
   }
   .public-top-nav-links {
     display: none;
     align-items: center;
-    gap: 12px;
-    font-size: 13px;
-    font-weight: 700;
-    line-height: 19.5px;
-    letter-spacing: 2.34px;
+    gap: 4px;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: 0;
   }
   .public-top-nav-link {
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     border: 0;
-    padding: 8px 16px;
+    padding: 6px 16px;
     border-radius: 999px;
     background: transparent;
     color: rgb(115,115,115);
     font: inherit;
     letter-spacing: inherit;
     text-decoration: none;
+    white-space: nowrap;
     transition: color 180ms ease, background 180ms ease, box-shadow 180ms ease;
   }
   .public-top-nav-trigger {
@@ -92,17 +107,17 @@ export const PUBLIC_TOP_NAV_STYLES = `
   }
   .public-top-nav-link.is-active {
     background: rgb(255,241,242);
-    color: rgb(225,29,72);
-    box-shadow: inset 0 0 0 1px rgb(255,228,230), 0 1px 2px rgba(17,17,17,0.04);
+    color: rgb(244,63,94);
+    box-shadow: inset 0 0 0 1px rgba(254,205,211,0.6), 0 1px 2px rgba(17,17,17,0.04);
   }
   .public-top-nav-badge {
-    border-radius: 6px;
+    border-radius: 4px;
     background: rgb(244,63,94);
-    padding: 4px 8px;
+    padding: 4px 5px;
     font-size: 10px;
-    font-weight: 900;
+    font-weight: 700;
     line-height: 10px;
-    letter-spacing: 1.8px;
+    letter-spacing: 0.8px;
     color: #ffffff;
   }
   .public-top-nav-item {
@@ -167,46 +182,151 @@ export const PUBLIC_TOP_NAV_STYLES = `
   .public-top-nav-actions {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 12px;
+  }
+  .public-top-nav-mobile {
+    position: relative;
+  }
+  .public-top-nav-mobile > summary {
+    width: 44px;
+    height: 44px;
+    border: 1px solid rgb(229,229,229);
+    border-radius: 10px;
+    background: #ffffff;
+    color: rgb(38,38,38);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    list-style: none;
+  }
+  .public-top-nav-mobile > summary::-webkit-details-marker {
+    display: none;
+  }
+  .public-top-nav-mobile > summary:hover,
+  .public-top-nav-mobile > summary:focus-visible {
+    border-color: rgb(163,163,163);
+    outline: none;
+  }
+  .public-top-nav-mobile-menu-icon,
+  .public-top-nav-mobile-close-icon {
+    width: 20px;
+    height: 20px;
+  }
+  .public-top-nav-mobile-close-icon {
+    display: none;
+  }
+  .public-top-nav-mobile[open] .public-top-nav-mobile-menu-icon {
+    display: none;
+  }
+  .public-top-nav-mobile[open] .public-top-nav-mobile-close-icon {
+    display: block;
+  }
+  .public-top-nav-mobile-panel {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    top: 78px;
+    max-height: calc(100dvh - 94px);
+    overflow-y: auto;
+    border: 1px solid rgb(229,229,229);
+    border-radius: 18px;
+    background: rgba(255,255,255,0.98);
+    padding: 10px;
+    box-shadow: 0 24px 64px rgba(15,23,42,0.18);
+  }
+  .public-top-nav-mobile-list {
+    display: grid;
+    gap: 4px;
+  }
+  .public-top-nav-mobile-link {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    min-height: 44px;
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: rgb(64,64,64);
+    font-size: 14px;
+    font-weight: 800;
+    text-decoration: none;
+  }
+  .public-top-nav-mobile-link:hover,
+  .public-top-nav-mobile-link:focus-visible,
+  .public-top-nav-mobile-link.is-active {
+    background: rgb(255,241,242);
+    color: rgb(225,29,72);
+    outline: none;
+  }
+  .public-top-nav-mobile-group {
+    border-top: 1px solid rgb(245,245,245);
+    padding-top: 4px;
+  }
+  .public-top-nav-mobile-child {
+    min-height: 40px;
+    padding-left: 28px;
+    color: rgb(82,82,82);
+    font-size: 12px;
+  }
+  .public-top-nav-mobile-apply {
+    margin-top: 8px;
+    background: rgb(23,23,23);
+    color: #ffffff;
   }
   .public-top-nav-login,
   .public-top-nav-apply {
-    min-height: 44px;
-    border-radius: 8px;
+    min-height: 38px;
+    border-radius: 12px;
     display: inline-flex;
     align-items: center;
-    font-size: 11px;
-    font-weight: 900;
-    line-height: 16.5px;
-    letter-spacing: 1.76px;
-    text-transform: uppercase;
+    font-size: 14px;
+    font-weight: 500;
+    line-height: 20px;
+    letter-spacing: 0;
     text-decoration: none;
     white-space: nowrap;
-    transition: color 180ms ease, background 180ms ease, border-color 180ms ease;
+    cursor: pointer;
+    transform-origin: center;
+    transition: color 180ms ease, background 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
   }
   .public-top-nav-login {
-    gap: 8px;
-    border: 1px solid rgb(229,229,229);
-    background: #ffffff;
+    gap: 6px;
+    border: 1px solid rgb(243,244,246);
+    background: rgba(249,250,251,0.5);
     color: rgb(64,64,64);
     padding: 10px 16px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
   }
   .public-top-nav-login:hover {
-    border-color: rgb(23,23,23);
-    color: rgb(23,23,23);
+    border-color: rgb(229,231,235);
+    background: rgb(243,244,246);
+    color: rgb(0,0,0);
+    transform: scale(1.02);
   }
   .public-top-nav-apply {
-    gap: 8px;
-    background: rgb(23,23,23);
+    gap: 6px;
+    background: rgb(0,0,0);
     color: #ffffff;
     -webkit-text-fill-color: #ffffff;
     forced-color-adjust: none;
     color-scheme: light;
     padding: 10px 16px;
-    box-shadow: 0 16px 34px rgba(17,17,17,0.20);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
   }
   .public-top-nav-apply:hover {
     background: rgb(38,38,38);
+    transform: translateY(-0.5px) scale(1.02);
+    box-shadow: 0 4px 10px rgba(0,0,0,0.16);
+  }
+  .public-top-nav-login:active,
+  .public-top-nav-apply:active {
+    transform: scale(0.98);
+  }
+  .public-top-nav-login:focus-visible,
+  .public-top-nav-apply:focus-visible {
+    outline: 2px solid rgb(23,23,23);
+    outline-offset: 2px;
   }
   .public-top-nav-apply svg {
     width: 14px;
@@ -216,34 +336,74 @@ export const PUBLIC_TOP_NAV_STYLES = `
   .public-top-nav-apply-short {
     display: none;
   }
-  @media (min-width: 768px) {
-    .public-top-nav-login,
-    .public-top-nav-apply {
-      font-size: 12px;
-      line-height: 18px;
-      letter-spacing: 1.92px;
-    }
-    .public-top-nav-apply {
-      gap: 12px;
-      padding-left: 20px;
-      padding-right: 20px;
+  @media (min-width: 640px) {
+    .public-top-nav-inner {
+      padding-left: 24px;
+      padding-right: 24px;
     }
   }
   @media (min-width: 1024px) {
-    .public-top-nav-links {
-      display: flex;
+    .public-top-nav-inner {
+      padding-left: 32px;
+      padding-right: 32px;
     }
   }
-  @media (max-width: 639px) {
+  @media (min-width: 1240px) {
     .public-top-nav-apply {
       padding-left: 16px;
       padding-right: 16px;
     }
-    .public-top-nav-apply-long {
+    .public-top-nav-links {
+      display: flex;
+    }
+    .public-top-nav-mobile {
       display: none;
     }
-    .public-top-nav-apply-short {
-      display: inline;
+  }
+  @media (max-width: 639px) {
+    .public-top-nav-inner {
+      height: 64px;
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+    .public-top-nav-brand {
+      gap: 8px;
+    }
+    .public-top-nav-brand-mark {
+      width: 34px;
+      height: 34px;
+    }
+    .public-top-nav-brand-title {
+      width: 70px;
+      white-space: normal;
+      line-height: 18px;
+    }
+    .public-top-nav-login {
+      min-height: 48px;
+      padding: 8px 10px;
+    }
+    .public-top-nav-apply {
+      display: inline-flex;
+      width: 92px;
+      min-height: 48px;
+      justify-content: center;
+      padding: 6px 10px;
+      white-space: normal;
+      text-align: center;
+      line-height: 17px;
+    }
+    .public-top-nav-mobile {
+      display: none;
+    }
+    .public-top-nav-mobile-panel {
+      top: 70px;
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .public-top-nav-link,
+    .public-top-nav-login,
+    .public-top-nav-apply {
+      transition: none;
     }
   }
 `;
@@ -264,12 +424,24 @@ export function renderPublicTopNav(active: PublicNavigationKind | null): string 
           </div>
         </div>
         <div class="public-top-nav-actions">
-          <a class="public-top-nav-login" href="/portal" target="_blank" rel="noreferrer">登录</a>
-          <a class="public-top-nav-apply" href="/apply" target="_blank" rel="noreferrer">
+          <a class="public-top-nav-login" href="/portal" data-client-nav="true">${renderLoginIcon()}登录</a>
+          <a class="public-top-nav-apply" href="/apply" data-client-nav="true">
             <span class="public-top-nav-apply-long">申请入驻测试</span>
             <span class="public-top-nav-apply-short">申请</span>
             ${renderExternalLinkIcon()}
           </a>
+          <details class="public-top-nav-mobile" data-public-mobile-drawer="true">
+            <summary aria-label="打开主导航" aria-haspopup="true">
+              <span class="public-top-nav-mobile-menu-icon" aria-hidden="true">${renderMenuIcon()}</span>
+              <span class="public-top-nav-mobile-close-icon" aria-hidden="true">${renderCloseIcon()}</span>
+            </summary>
+            <div class="public-top-nav-mobile-panel">
+              <div class="public-top-nav-mobile-list">
+                ${PUBLIC_NAVIGATION_ITEMS.map((item) => renderMobileNavItem(item, active)).join('')}
+                <a class="public-top-nav-mobile-link public-top-nav-mobile-apply" href="/apply" data-client-nav="true">申请入驻测试 ${renderExternalLinkIcon()}</a>
+              </div>
+            </div>
+          </details>
         </div>
       </div>
     </nav>
@@ -292,10 +464,51 @@ function renderTopNavItem(item: PublicNavigationItem, active: PublicNavigationKi
   return `<span class="public-top-nav-item">${link}<span class="public-top-nav-submenu">${item.children.map((child) => `<a class="public-top-nav-submenu-link" href="${escapeAttribute(child.href)}" data-client-nav="true"><span>${escapeHtml(child.label)}</span>${child.badge ? `<span class="public-top-nav-submenu-badge">${escapeHtml(child.badge)}</span>` : ''}</a>`).join('')}</span></span>`;
 }
 
+function renderMobileNavItem(item: PublicNavigationItem, active: PublicNavigationKind | null): string {
+  const activeClass = item.kind === active ? ' is-active' : '';
+  const clientNavAttribute = item.kind === 'news' ? '' : ' data-client-nav="true"';
+  const mainLink = item.href
+    ? `<a class="public-top-nav-mobile-link${activeClass}" href="${escapeAttribute(item.href)}"${clientNavAttribute}><span>${escapeHtml(item.label)}</span>${item.badge ? `<span class="public-top-nav-badge">${escapeHtml(item.badge)}</span>` : ''}</a>`
+    : `<span class="public-top-nav-mobile-link"><span>${escapeHtml(item.label)}</span>${item.badge ? `<span class="public-top-nav-badge">${escapeHtml(item.badge)}</span>` : ''}</span>`;
+  if (!item.children?.length) {
+    return mainLink;
+  }
+  return `<div class="public-top-nav-mobile-group">${mainLink}${item.children.map((child) => `<a class="public-top-nav-mobile-link public-top-nav-mobile-child" href="${escapeAttribute(child.href)}" data-client-nav="true"><span>${escapeHtml(child.label)}</span>${child.badge ? `<span class="public-top-nav-submenu-badge">${escapeHtml(child.badge)}</span>` : ''}</a>`).join('')}</div>`;
+}
+
 function renderZapIcon(): string {
   return `
-    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M13 2 6 13h5l-1 9 8-12h-5l0-8Z"></path>
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">
+      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8Z"></path>
+    </svg>
+  `;
+}
+
+function renderLoginIcon(): string {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:16px;height:16px">
+      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
+      <path d="m10 17 5-5-5-5"></path>
+      <path d="M15 12H3"></path>
+    </svg>
+  `;
+}
+
+function renderMenuIcon(): string {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="M4 7h16"></path>
+      <path d="M4 12h16"></path>
+      <path d="M4 17h16"></path>
+    </svg>
+  `;
+}
+
+function renderCloseIcon(): string {
+  return `
+    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <path d="m6 6 12 12"></path>
+      <path d="m18 6-12 12"></path>
     </svg>
   `;
 }

@@ -81,6 +81,12 @@ import {
 import { buildPortalLoginUrl, getSiteOrigin } from '../utils/siteUrl';
 import { buildPerformanceNodeKey, buildPerformanceNodeMatchIdentity } from '../utils/performanceNodeKey';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
+import type {
+  AdminAirportAdPlacementFilter,
+  AdminAirportAdStatsListView,
+  AdminAirportAdStatsView,
+  AdminAirportAdStatusFilter,
+} from '../../../shared/airportAds';
 
 interface AdminDeps {
   airportRepository: {
@@ -229,6 +235,15 @@ interface AdminDeps {
     } | null>;
     updatePassword?(id: number, passwordHash: string, mustChangePassword: boolean): Promise<boolean>;
   };
+  airportAdCampaignRepository?: {
+    listAdminStats(input: {
+      page: number;
+      keyword?: string;
+      status: AdminAirportAdStatusFilter;
+      placement: AdminAirportAdPlacementFilter;
+    }): Promise<AdminAirportAdStatsListView>;
+    getAdminStats(input: { campaign_id: number; page: number }): Promise<AdminAirportAdStatsView>;
+  };
   probeSampleRepository: {
     insertProbeSample(input: ProbeSampleInput): Promise<number>;
     insertPacketLossSample(input: ProbeSampleInput): Promise<number>;
@@ -340,6 +355,7 @@ interface AdminDeps {
       application_fee_amount: number;
       click_charge_amount: number;
       airport_ad_monthly_price?: number;
+      home_ad_slot_monthly_prices?: Record<1 | 2 | 3 | 4, number>;
       recharge_amounts?: number[];
       admin_telegram_username?: string | null;
       home_section_limits?: HomeSectionLimits;
@@ -624,6 +640,36 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
       }
       res.json(detail);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/marketing/ad-campaigns', async (req, res, next) => {
+    try {
+      const page = req.query.page === undefined ? 1 : toPositiveIntOrThrow(req.query.page, 'page');
+      const keyword = optionalString(req.query.q) || undefined;
+      const status = parseAdminAirportAdStatus(req.query.status);
+      const placement = parseAdminAirportAdPlacement(req.query.placement);
+      res.json(await getAirportAdCampaignRepository(deps).listAdminStats({
+        page,
+        keyword,
+        status,
+        placement,
+      }));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/marketing/ad-campaigns/:campaignId/stats', async (req, res, next) => {
+    try {
+      const campaignId = toPositiveIntOrThrow(req.params.campaignId, 'campaignId');
+      const page = req.query.page === undefined ? 1 : toPositiveIntOrThrow(req.query.page, 'page');
+      res.json(await getAirportAdCampaignRepository(deps).getAdminStats({
+        campaign_id: campaignId,
+        page,
+      }));
     } catch (error) {
       next(error);
     }
@@ -2603,6 +2649,31 @@ function getMarketingRepository(deps: AdminDeps): NonNullable<AdminDeps['marketi
   return deps.marketingRepository;
 }
 
+function getAirportAdCampaignRepository(
+  deps: AdminDeps,
+): NonNullable<AdminDeps['airportAdCampaignRepository']> {
+  if (!deps.airportAdCampaignRepository) {
+    throw new Error('airportAdCampaignRepository is not configured');
+  }
+  return deps.airportAdCampaignRepository;
+}
+
+function parseAdminAirportAdStatus(value: unknown): AdminAirportAdStatusFilter {
+  const status = value === undefined || value === '' ? 'all' : String(value);
+  if (!['all', 'active', 'expired', 'canceled'].includes(status)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'status must be all, active, expired, or canceled');
+  }
+  return status as AdminAirportAdStatusFilter;
+}
+
+function parseAdminAirportAdPlacement(value: unknown): AdminAirportAdPlacementFilter {
+  const placement = value === undefined || value === '' ? 'all' : String(value);
+  if (!['all', 'deal', 'home_1', 'home_2', 'home_3', 'home_4'].includes(placement)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'placement must be all, deal, or home_1 through home_4');
+  }
+  return placement as AdminAirportAdPlacementFilter;
+}
+
 function parseDate(value: unknown): string {
   const date = String(value || getDateInTimezone());
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
@@ -3002,6 +3073,10 @@ function parseMarketingSettingsPayload(
       payload.airport_ad_monthly_price === undefined
         ? undefined
         : mustNumber(payload.airport_ad_monthly_price, 'airport_ad_monthly_price'),
+    home_ad_slot_monthly_prices:
+      payload.home_ad_slot_monthly_prices === undefined
+        ? undefined
+        : parseHomeAdSlotMonthlyPricesPayload(payload.home_ad_slot_monthly_prices),
     recharge_amounts:
       payload.recharge_amounts === undefined
         ? undefined
@@ -3015,6 +3090,18 @@ function parseMarketingSettingsPayload(
         ? undefined
         : parseHomeSectionLimitsPayload(payload.home_section_limits),
   };
+}
+
+function parseHomeAdSlotMonthlyPricesPayload(
+  payload: unknown,
+): MarketingSettingsInput['home_ad_slot_monthly_prices'] {
+  const record = toPlainObject(payload, 'home_ad_slot_monthly_prices');
+  return Object.fromEntries(
+    Object.entries(record).map(([slot, value]) => [
+      slot,
+      mustNumber(value, `home_ad_slot_monthly_prices.${slot}`),
+    ]),
+  ) as MarketingSettingsInput['home_ad_slot_monthly_prices'];
 }
 
 function parseRankClickChargeAmountsPayload(

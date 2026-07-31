@@ -2,13 +2,18 @@ import { APPLICATION_FEE_AMOUNT, CLICK_CHARGE_AMOUNT, RECHARGE_AMOUNTS } from '.
 import { HttpError } from '../middleware/errorHandler';
 import type { SystemSettingRecord } from '../repositories/systemSettingRepository';
 import { formatDateTimeInTimezoneIso } from '../utils/time';
-import { AIRPORT_AD_MONTHLY_PRICE } from '../../../shared/airportAds';
+import {
+  AIRPORT_AD_MONTHLY_PRICE,
+  AIRPORT_HOME_AD_SLOTS,
+  type AirportHomeAdSlotPrices,
+} from '../../../shared/airportAds';
 
 export interface MarketingSettingsInput {
   application_fee_amount?: number;
   click_charge_amount?: number;
   rank_click_charge_amounts?: Partial<RankClickChargeAmounts>;
   airport_ad_monthly_price?: number;
+  home_ad_slot_monthly_prices?: Partial<AirportHomeAdSlotPrices>;
   recharge_amounts?: number[];
   admin_telegram_username?: string | null;
   home_section_limits?: Partial<HomeSectionLimits>;
@@ -31,6 +36,7 @@ export interface MarketingSettingsView {
   click_charge_amount: number;
   rank_click_charge_amounts: RankClickChargeAmounts;
   airport_ad_monthly_price: number;
+  home_ad_slot_monthly_prices: AirportHomeAdSlotPrices;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
   home_section_limits: HomeSectionLimits;
@@ -43,6 +49,7 @@ export interface MarketingBillingConfig {
   click_charge_amount: number;
   rank_click_charge_amounts: RankClickChargeAmounts;
   airport_ad_monthly_price: number;
+  home_ad_slot_monthly_prices: AirportHomeAdSlotPrices;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
   home_section_limits: HomeSectionLimits;
@@ -123,6 +130,14 @@ export class MarketingSettingsService {
         input.airport_ad_monthly_price === undefined
           ? base.airport_ad_monthly_price
           : normalizePositiveAmount(input.airport_ad_monthly_price, 'airport_ad_monthly_price'),
+      home_ad_slot_monthly_prices:
+        input.home_ad_slot_monthly_prices === undefined
+          ? base.home_ad_slot_monthly_prices
+          : normalizeHomeAdSlotMonthlyPrices(
+              input.home_ad_slot_monthly_prices,
+              base.home_ad_slot_monthly_prices,
+              true,
+            ),
       recharge_amounts:
         input.recharge_amounts === undefined
           ? base.recharge_amounts
@@ -188,6 +203,7 @@ function getBaseDefaults(): MarketingBillingConfig {
     click_charge_amount: DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT,
     rank_click_charge_amounts: createDefaultRankClickChargeAmounts(),
     airport_ad_monthly_price: DEFAULT_AIRPORT_AD_MONTHLY_PRICE,
+    home_ad_slot_monthly_prices: createDefaultHomeAdSlotMonthlyPrices(),
     recharge_amounts: [...DEFAULT_MARKETING_RECHARGE_AMOUNTS],
     admin_telegram_username: null,
     home_section_limits: { ...DEFAULT_HOME_SECTION_LIMITS },
@@ -213,6 +229,13 @@ function normalizeConfig(value: unknown, defaults: MarketingBillingConfig): Mark
     airport_ad_monthly_price: normalizeStoredAmount(
       record.airport_ad_monthly_price,
       defaults.airport_ad_monthly_price,
+    ),
+    home_ad_slot_monthly_prices: normalizeHomeAdSlotMonthlyPrices(
+      record.home_ad_slot_monthly_prices,
+      createDefaultHomeAdSlotMonthlyPrices(
+        normalizeStoredAmount(record.airport_ad_monthly_price, defaults.airport_ad_monthly_price),
+      ),
+      false,
     ),
     recharge_amounts: normalizeRechargeAmounts(
       record.recharge_amounts,
@@ -253,6 +276,60 @@ export function createDefaultRankClickChargeAmounts(): RankClickChargeAmounts {
     5: null,
     6: null,
   };
+}
+
+export function createDefaultHomeAdSlotMonthlyPrices(
+  fallback = DEFAULT_AIRPORT_AD_MONTHLY_PRICE,
+): AirportHomeAdSlotPrices {
+  return {
+    1: fallback,
+    2: fallback,
+    3: fallback,
+    4: fallback,
+  };
+}
+
+function normalizeHomeAdSlotMonthlyPrices(
+  value: unknown,
+  defaults: AirportHomeAdSlotPrices,
+  strict: boolean,
+): AirportHomeAdSlotPrices {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    if (strict) {
+      throw new HttpError(400, 'BAD_REQUEST', 'home_ad_slot_monthly_prices must be an object');
+    }
+    return { ...defaults };
+  }
+
+  const record = value as Record<string, unknown>;
+  const allowedKeys = new Set(AIRPORT_HOME_AD_SLOTS.map(String));
+  if (strict) {
+    const unknownKey = Object.keys(record).find((key) => !allowedKeys.has(key));
+    if (unknownKey) {
+      throw new HttpError(
+        400,
+        'BAD_REQUEST',
+        `home_ad_slot_monthly_prices.${unknownKey} is not supported`,
+      );
+    }
+  }
+
+  const result = { ...defaults };
+  for (const slot of AIRPORT_HOME_AD_SLOTS) {
+    const key = String(slot);
+    if (!Object.prototype.hasOwnProperty.call(record, key)) {
+      continue;
+    }
+    try {
+      result[slot] = normalizePositiveAmount(record[key], `home_ad_slot_monthly_prices.${slot}`);
+    } catch (error) {
+      if (strict) {
+        throw error;
+      }
+      result[slot] = defaults[slot];
+    }
+  }
+  return result;
 }
 
 function normalizeRankClickChargeAmounts(

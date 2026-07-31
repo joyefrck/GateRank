@@ -5164,6 +5164,62 @@ test('PATCH /system-settings/media-libraries updates settings and writes audit l
   }
 });
 
+test('GET admin marketing campaign list and detail forward normalized filters', async () => {
+  const listInputs: Array<Record<string, unknown>> = [];
+  const detailInputs: Array<Record<string, unknown>> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(createAdminRoutes({
+    airportRepository: stubAirportRepository(),
+    airportApplicationRepository: stubAirportApplicationRepository(),
+    probeSampleRepository: stubProbeSampleRepository(),
+    performanceRunRepository: stubPerformanceRunRepository(),
+    metricsRepository: stubMetricsRepository(),
+    scoreRepository: { getByAirportAndDate: async () => null, getTrend: async () => [] },
+    recomputeService: stubRecomputeService(),
+    aggregationService: stubAggregationService(),
+    manualJobService: stubManualJobService(),
+    auditRepository: { log: async () => undefined },
+    publicViewService: stubPublicViewService(),
+    airportAdCampaignRepository: {
+      listAdminStats: async (input) => {
+        listInputs.push(input);
+        return { items: [], pagination: { page: 2, page_size: 20, total: 0, total_pages: 0 } };
+      },
+      getAdminStats: async (input) => {
+        detailInputs.push(input);
+        return { campaign_id: 101, daily: [] } as never;
+      },
+    },
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const listResponse = await fetch(`http://127.0.0.1:${port}/marketing/ad-campaigns?page=2&q=YH&status=expired&placement=home_2`);
+    assert.equal(listResponse.status, 200);
+    assert.deepEqual(listInputs, [{ page: 2, keyword: 'YH', status: 'expired', placement: 'home_2' }]);
+
+    const detailResponse = await fetch(`http://127.0.0.1:${port}/marketing/ad-campaigns/101/stats?page=2`);
+    assert.equal(detailResponse.status, 200);
+    assert.deepEqual(detailInputs, [{ campaign_id: 101, page: 2 }]);
+
+    const badStatus = await fetch(`http://127.0.0.1:${port}/marketing/ad-campaigns?status=unknown`);
+    assert.equal(badStatus.status, 400);
+    const badPlacement = await fetch(`http://127.0.0.1:${port}/marketing/ad-campaigns?placement=home_9`);
+    assert.equal(badPlacement.status, 400);
+    const badPage = await fetch(`http://127.0.0.1:${port}/marketing/ad-campaigns?page=0`);
+    assert.equal(badPage.status, 400);
+    const badCampaign = await fetch(`http://127.0.0.1:${port}/marketing/ad-campaigns/nope/stats`);
+    assert.equal(badCampaign.status, 400);
+    const badDetailPage = await fetch(`http://127.0.0.1:${port}/marketing/ad-campaigns/101/stats?page=0`);
+    assert.equal(badDetailPage.status, 400);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /marketing/settings returns billing settings', async () => {
   const app = express();
   app.use(express.json());
@@ -5197,6 +5253,7 @@ test('GET /marketing/settings returns billing settings', async () => {
         click_charge_amount: 1.5,
         rank_click_charge_amounts: { 1: 2.5, 2: null, 3: null, 4: null, 5: null, 6: 1.6 },
         airport_ad_monthly_price: 1288.88,
+        home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288 },
         recharge_amounts: [50, 150, 300],
         admin_telegram_username: 'gaterank_admin',
         home_section_limits: {
@@ -5220,6 +5277,7 @@ test('GET /marketing/settings returns billing settings', async () => {
       click_charge_amount: number;
       rank_click_charge_amounts: Record<string, number | null>;
       airport_ad_monthly_price: number;
+      home_ad_slot_monthly_prices: Record<string, number>;
       recharge_amounts: number[];
       admin_telegram_username: string | null;
       home_section_limits: Record<string, number>;
@@ -5228,6 +5286,7 @@ test('GET /marketing/settings returns billing settings', async () => {
     assert.equal(data.click_charge_amount, 1.5);
     assert.deepEqual(data.rank_click_charge_amounts, { 1: 2.5, 2: null, 3: null, 4: null, 5: null, 6: 1.6 });
     assert.equal(data.airport_ad_monthly_price, 1288.88);
+    assert.deepEqual(data.home_ad_slot_monthly_prices, { 1: 1888, 2: 1688, 3: 1488, 4: 1288 });
     assert.deepEqual(data.recharge_amounts, [50, 150, 300]);
     assert.equal(data.admin_telegram_username, 'gaterank_admin');
     assert.deepEqual(data.home_section_limits, {
@@ -5286,6 +5345,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
             click_charge_amount: input.click_charge_amount,
             rank_click_charge_amounts: input.rank_click_charge_amounts,
             airport_ad_monthly_price: input.airport_ad_monthly_price,
+            home_ad_slot_monthly_prices: input.home_ad_slot_monthly_prices,
             recharge_amounts: input.recharge_amounts,
             admin_telegram_username: input.admin_telegram_username ?? null,
             home_section_limits: input.home_section_limits,
@@ -5313,6 +5373,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
         click_charge_amount: 2.5,
         rank_click_charge_amounts: { 1: 3.5, 2: null, 3: 3, 4: null, 5: null, 6: 2.6 },
         airport_ad_monthly_price: 1288.88,
+        home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288 },
         recharge_amounts: [120, 80, 240],
         admin_telegram_username: '@gaterank_admin',
         home_section_limits: {
@@ -5330,6 +5391,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
       click_charge_amount: 2.5,
       rank_click_charge_amounts: { 1: 3.5, 2: null, 3: 3, 4: null, 5: null, 6: 2.6 },
       airport_ad_monthly_price: 1288.88,
+      home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288 },
       recharge_amounts: [120, 80, 240],
       admin_telegram_username: '@gaterank_admin',
       home_section_limits: {
@@ -5348,6 +5410,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
       click_charge_amount: 2.5,
       rank_click_charge_amounts: { 1: 3.5, 2: null, 3: 3, 4: null, 5: null, 6: 2.6 },
       airport_ad_monthly_price: 1288.88,
+      home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288 },
       recharge_amounts: [120, 80, 240],
       admin_telegram_username: '@gaterank_admin',
       home_section_limits: {
@@ -7047,6 +7110,7 @@ function stubMarketingSettingsService(config: {
   click_charge_amount: number;
   rank_click_charge_amounts?: Record<number, number | null>;
   airport_ad_monthly_price?: number;
+  home_ad_slot_monthly_prices?: Record<number, number>;
   recharge_amounts?: number[];
   admin_telegram_username?: string | null;
   home_section_limits?: {
@@ -7061,6 +7125,7 @@ function stubMarketingSettingsService(config: {
   click_charge_amount: 1,
   rank_click_charge_amounts: { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
   airport_ad_monthly_price: 1000,
+  home_ad_slot_monthly_prices: { 1: 1000, 2: 1000, 3: 1000, 4: 1000 },
   recharge_amounts: [100, 300, 500, 1000],
   admin_telegram_username: null,
   home_section_limits: {
@@ -7075,6 +7140,8 @@ function stubMarketingSettingsService(config: {
     ...config,
     rank_click_charge_amounts: config.rank_click_charge_amounts ?? { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
     airport_ad_monthly_price: config.airport_ad_monthly_price ?? 1000,
+    home_ad_slot_monthly_prices: config.home_ad_slot_monthly_prices
+      ?? { 1: 1000, 2: 1000, 3: 1000, 4: 1000 },
     recharge_amounts: config.recharge_amounts ?? [100, 300, 500, 1000],
     admin_telegram_username: config.admin_telegram_username ?? null,
     home_section_limits: config.home_section_limits ?? {

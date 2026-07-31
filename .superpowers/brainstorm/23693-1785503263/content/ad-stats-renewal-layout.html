@@ -1,0 +1,72 @@
+<h2>用户端广告：统计与延期布局</h2>
+<p class="subtitle">基于现有广告投放页增加两个独立操作；统计弹窗看数据，延期弹窗只处理续费。</p>
+
+<div class="mockup" style="margin-bottom:22px">
+  <div class="mockup-header">广告投放列表</div>
+  <div class="mockup-body" style="padding:18px;overflow-x:auto">
+    <div style="min-width:900px;border:1px solid #dbe4f0;border-radius:18px;overflow:hidden;background:white">
+      <div style="display:grid;grid-template-columns:1fr 1.1fr 2.3fr 1.1fr 1fr 1.6fr;gap:14px;padding:14px 18px;background:#f7f9fc;color:#64748b;font-weight:800;font-size:13px">
+        <span>优惠码</span><span>投放位置</span><span>展示期</span><span>访问统计</span><span>状态</span><span>操作</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1.1fr 2.3fr 1.1fr 1fr 1.6fr;gap:14px;align-items:center;padding:16px 18px;border-top:1px solid #eef2f7;font-size:14px">
+        <strong style="color:#1d4ed8">34</strong><span>首页 1 号位</span><span>2026/7/31 至 2026/8/31</span>
+        <button class="mock-button" style="background:#eef6ff;color:#0369a1">查看统计</button><span style="color:#059669;font-weight:800">投放中</span>
+        <div style="display:flex;gap:7px"><button class="mock-button">修改</button><button class="mock-button" style="background:#111827;color:white">延期</button><button class="mock-button">下架</button></div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1.1fr 2.3fr 1.1fr 1fr 1.6fr;gap:14px;align-items:center;padding:16px 18px;border-top:1px solid #eef2f7;font-size:14px">
+        <strong style="color:#1d4ed8">GJTUYT</strong><span>普通优惠活动</span><span>2026/5/24 至 2026/6/24</span>
+        <button class="mock-button" style="background:#eef6ff;color:#0369a1">查看统计</button><span style="color:#d97706;font-weight:800">已到期</span>
+        <div><button class="mock-button" style="background:#111827;color:white">延期</button></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="split">
+  <div class="mockup">
+    <div class="mockup-header">弹窗一：每日访问统计</div>
+    <div class="mockup-body" style="padding:22px">
+      <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start">
+        <div><div class="label">首页 1 号位 · 优惠码 34</div><h3 style="margin-top:6px">访问统计</h3></div><span style="color:#64748b">2026/7/31 起</span>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0">
+        <div style="padding:14px;border-radius:14px;background:#f0f9ff"><small>累计曝光</small><div style="font-size:24px;font-weight:900;color:#0369a1">1,284</div></div>
+        <div style="padding:14px;border-radius:14px;background:#ecfdf5"><small>累计点击</small><div style="font-size:24px;font-weight:900;color:#047857">96</div></div>
+        <div style="padding:14px;border-radius:14px;background:#f8fafc"><small>点击率</small><div style="font-size:24px;font-weight:900">7.48%</div></div>
+      </div>
+      <div style="border:1px solid #e2e8f0;border-radius:14px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;padding:10px 12px;background:#f8fafc;font-weight:800"><span>日期</span><span>曝光</span><span>点击</span><span>点击率</span></div>
+        <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;padding:11px 12px;border-top:1px solid #e2e8f0"><span>2026/8/2</span><span>502</span><span>41</span><span>8.17%</span></div>
+        <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;padding:11px 12px;border-top:1px solid #e2e8f0"><span>2026/8/1</span><span>782</span><span>55</span><span>7.03%</span></div>
+        <div style="padding:11px 12px;border-top:1px solid #e2e8f0;color:#94a3b8">上线前：暂无精确数据</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="mockup">
+    <div class="mockup-header">弹窗二：延期投放</div>
+    <div class="mockup-body" style="padding:22px">
+      <div class="label">普通优惠活动 · 优惠码 GJTUYT</div><h3 style="margin-top:6px">延期投放</h3>
+      <div style="margin:18px 0;padding:14px;border-radius:14px;background:#f8fafc;line-height:1.9">
+        <div>当前状态：<strong style="color:#d97706">已到期</strong></div>
+        <div>重新开始：<strong>付款成功后立即投放</strong></div>
+        <div>当前月价：<strong>¥25 / 月</strong></div>
+      </div>
+      <div class="label">延期时长</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 18px">
+        <button class="mock-button">1 个月</button><button class="mock-button" style="background:#111827;color:white">2 个月</button><button class="mock-button">3 个月</button><button class="mock-button">6 个月</button><button class="mock-button">12 个月</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px;border-top:1px solid #e2e8f0">
+        <span>延期后结束</span><strong style="text-align:right">2026/10/2</strong><span>本次扣费</span><strong style="text-align:right;font-size:20px">¥50</strong><span>扣费后余额</span><strong style="text-align:right">¥3,968.40</strong>
+      </div>
+      <button class="mock-button" style="width:100%;margin-top:16px;background:#020617;color:white;padding:13px">确认延期并扣费</button>
+    </div>
+  </div>
+</div>
+
+<div class="options" style="margin-top:22px">
+  <div class="option" data-choice="confirm-layout" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content"><h3>采用此布局</h3><p>列表使用两个独立入口，统计与延期互不混杂。</p></div>
+  </div>
+</div>

@@ -1,8 +1,8 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Zap } from 'lucide-react';
 
 import { PUBLIC_SITE_BRAND_NAME } from '../../shared/publicBrand';
-import { type PublicNavigationKind } from '../../shared/publicNavigation';
+import { PUBLIC_NAVIGATION_ITEMS, type PublicNavigationKind } from '../../shared/publicNavigation';
 import { PUBLIC_TOP_NAV_STYLES, renderPublicTopNav } from '../../shared/publicTopNav';
 import { getPublicOgImageForPath, type PublicOgImage } from '../../shared/publicSeo';
 import { buildFullRankingPath, EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../shared/fullRankingFilters';
@@ -39,6 +39,14 @@ function getSiteUrl(): string {
 export function buildAbsoluteUrl(path: string): string {
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${getSiteUrl()}${normalizedPath}`;
+}
+
+export function normalizeExternalHref(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) return '#';
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  if (trimmed.startsWith('//')) return `https:${trimmed}`;
+  return `https://${trimmed}`;
 }
 
 export function resolvePageOgImageMeta(canonicalPath: string): PublicOgImage | undefined {
@@ -238,11 +246,7 @@ export function PageFrame({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen bg-white font-sans flex flex-col relative">
-      <div
-        className="fixed inset-0 opacity-[0.015] pointer-events-none z-0"
-        style={{ backgroundImage: 'linear-gradient(#000 1px, transparent 1px), linear-gradient(90deg, #000 1px, transparent 1px)', backgroundSize: '40px 40px' }}
-      />
+    <div className="min-h-screen bg-[#fafafa] font-sans flex flex-col relative">
       <PublicTopNav active={active} />
       <div className="relative z-10 flex-grow">{children}</div>
       <SiteFooter />
@@ -252,21 +256,77 @@ export function PageFrame({
 
 function PublicTopNav({ active }: { active: NavigationKind }) {
   const resolvedActive: PublicNavigationKind = active === 'docs' ? 'home' : active;
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const root = rootRef.current;
+    const drawer = root?.querySelector<HTMLDetailsElement>('[data-public-mobile-drawer="true"]');
+    const summary = drawer?.querySelector<HTMLElement>('summary');
+    if (!drawer || !summary) return;
+
+    const onToggle = () => {
+      summary.setAttribute('aria-label', drawer.open ? '关闭主导航' : '打开主导航');
+      document.documentElement.style.overflow = drawer.open ? 'hidden' : '';
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || !drawer.open) return;
+      drawer.open = false;
+      onToggle();
+      summary.focus();
+    };
+    const onRootClick = (event: MouseEvent) => {
+      if (!(event.target as HTMLElement).closest('[data-public-mobile-drawer="true"] > summary')) return;
+      window.requestAnimationFrame(onToggle);
+    };
+    drawer.addEventListener('toggle', onToggle);
+    root.addEventListener('click', onRootClick);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      drawer.removeEventListener('toggle', onToggle);
+      root.removeEventListener('click', onRootClick);
+      document.removeEventListener('keydown', onKeyDown);
+      document.documentElement.style.overflow = '';
+    };
+  }, []);
 
   return (
     <>
       <style>{PUBLIC_TOP_NAV_STYLES}</style>
       <div
+        ref={rootRef}
+        className="public-top-nav-root"
         onClick={(event) => {
-          const link = (event.target as HTMLElement).closest('a[data-client-nav="true"]');
+          const target = event.target as HTMLElement;
+          if (target.closest('[data-public-mobile-drawer="true"] > summary')) {
+            window.setTimeout(() => {
+              const drawer = rootRef.current?.querySelector<HTMLDetailsElement>('[data-public-mobile-drawer="true"]');
+              const summary = drawer?.querySelector<HTMLElement>('summary');
+              if (!drawer || !summary) return;
+              summary.setAttribute('aria-label', drawer.open ? '关闭主导航' : '打开主导航');
+              document.documentElement.style.overflow = drawer.open ? 'hidden' : '';
+            }, 0);
+          }
+          const link = target.closest('a[data-client-nav="true"]');
           if (!link) {
             return;
           }
+          const drawer = rootRef.current?.querySelector<HTMLDetailsElement>('[data-public-mobile-drawer="true"]');
+          if (drawer?.open) drawer.open = false;
           event.preventDefault();
           const href = link.getAttribute('href');
           if (href) {
             navigate(href);
           }
+        }}
+        onKeyDown={(event) => {
+          if (event.key !== 'Escape') return;
+          const drawer = rootRef.current?.querySelector<HTMLDetailsElement>('[data-public-mobile-drawer="true"]');
+          const summary = drawer?.querySelector<HTMLElement>('summary');
+          if (!drawer?.open || !summary) return;
+          drawer.open = false;
+          summary.setAttribute('aria-label', '打开主导航');
+          document.documentElement.style.overflow = '';
+          summary.focus();
         }}
         dangerouslySetInnerHTML={{ __html: renderPublicTopNav(resolvedActive) }}
       />
@@ -275,39 +335,41 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
 }
 
 function SiteFooter() {
+  const footerNavigation = PUBLIC_NAVIGATION_ITEMS.filter((item) => item.href);
   return (
-    <footer className="bg-white border-t border-neutral-200 mt-24 py-16">
-      <div className="max-w-7xl mx-auto px-4 text-center">
-        <div className="flex flex-col items-center gap-6 mb-12">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-black rounded-lg flex items-center justify-center">
-              <Zap className="text-white w-5 h-5" />
-            </div>
-            <span className="font-black text-xl tracking-tighter leading-none">{PUBLIC_SITE_BRAND_NAME}</span>
+    <footer
+      className="relative mt-16 overflow-hidden border-t border-gray-100 bg-white py-16"
+      style={{
+        backgroundImage: 'linear-gradient(to right, rgba(0, 0, 0, 0.03) 1px, transparent 1px), linear-gradient(to bottom, rgba(0, 0, 0, 0.03) 1px, transparent 1px)',
+        backgroundSize: '30px 30px',
+      }}
+    >
+      <div className="absolute inset-0 bg-[radial-gradient(#f3f3f3_1.2px,transparent_1.2px)] [background-size:24px_24px] opacity-60" />
+      <div className="relative mx-auto max-w-7xl space-y-8 px-4 text-center sm:px-6 lg:px-8">
+        <div className="flex flex-col items-center justify-center gap-3">
+          <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-black shadow-sm">
+            <Zap className="h-6 w-6 fill-white text-white" />
           </div>
-          <p className="max-w-2xl text-[13px] md:text-sm leading-7 text-neutral-500">
+          <h2 className="text-[18px] font-bold tracking-tight text-gray-950">{PUBLIC_SITE_BRAND_NAME}</h2>
+        </div>
+        <p className="mx-auto max-w-3xl text-sm leading-relaxed text-gray-400">
             {PUBLIC_SITE_BRAND_NAME}
             以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在今日推荐、机场排行与测评报告之间完成交叉判断。
-          </p>
-        </div>
+        </p>
 
-        <div className="flex flex-wrap justify-center gap-x-12 gap-y-4 text-sm font-bold text-neutral-600 mb-12">
-          <a href={buildHomeHref()} onClick={(event) => { event.preventDefault(); navigate('/'); }} className="hover:text-black transition-colors">今日推荐</a>
-          <a href={buildFullRankingHref()} onClick={(event) => { event.preventDefault(); navigate('/rankings/all'); }} className="hover:text-black transition-colors">机场排行</a>
-          <a href={buildMonthlyReportsHref()} onClick={(event) => { event.preventDefault(); navigate(buildMonthlyReportsHref()); }} className="hover:text-black transition-colors">月度报告</a>
-          <a href={buildDealsHref()} onClick={(event) => { event.preventDefault(); navigate(buildDealsHref()); }} className="hover:text-black transition-colors">活动优惠</a>
-          <a href={buildRiskMonitorHref()} onClick={(event) => { event.preventDefault(); navigate(buildRiskMonitorHref()); }} className="hover:text-black transition-colors">跑路监测</a>
-          <a href={buildMethodologyHref()} onClick={(event) => { event.preventDefault(); navigate(buildMethodologyHref()); }} className="hover:text-black transition-colors">测评方法</a>
-          <a href={buildToolsHref()} onClick={(event) => { event.preventDefault(); navigate(buildToolsHref()); }} className="hover:text-black transition-colors">工具</a>
-          <a href={buildToolsDownloadHref()} onClick={(event) => { event.preventDefault(); navigate(buildToolsDownloadHref()); }} className="hover:text-black transition-colors">翻墙工具下载</a>
-          <a href={buildNewsHref()} className="hover:text-black transition-colors">News</a>
+        <nav aria-label="页脚导航" className="flex flex-wrap justify-center gap-x-8 gap-y-3 pt-2 text-[14px] font-semibold text-gray-700">
+          {footerNavigation.map((item) => item.kind === 'news' ? (
+            <a key={item.kind} href={item.href} className="transition-colors hover:text-black">{item.label}</a>
+          ) : (
+            <a key={item.kind} href={item.href} onClick={(event) => { event.preventDefault(); navigate(item.href || '/'); }} className="transition-colors hover:text-black">{item.label}</a>
+          ))}
           <a href="/apply" className="hover:text-black transition-colors">申请入驻</a>
-        </div>
+        </nav>
 
-        <div className="border-t border-neutral-100 pt-8">
-          <div className="text-[11px] md:text-xs text-neutral-400 font-medium">
-            © 2026 {PUBLIC_SITE_BRAND_NAME}. All rights reserved. 评分独立性声明：本站不含任何付费推广排名。
-          </div>
+        <div className="mx-auto max-w-5xl border-t border-gray-100" />
+        <div className="text-[12px] font-medium tracking-wide text-gray-400">
+          <span>© 2026 {PUBLIC_SITE_BRAND_NAME}. All rights reserved. </span>
+          <span className="mt-1 block font-normal text-gray-300 sm:mt-0 sm:inline">评分独立性声明：本站不含任何付费推广排名。</span>
         </div>
       </div>
     </footer>

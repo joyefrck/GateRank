@@ -238,7 +238,7 @@ test('tools public routes expose published downloads and page config', async () 
   const app = express();
   app.use('/api/v1', createToolsPublicRoutes({
     toolsDownloadService: {
-      getDownloadPageView: async (platform) => ({
+      getDownloadPageView: async (platform: any) => ({
         config: DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
         platform: platform ?? null,
         platforms: ['windows', 'macos', 'ios', 'android', 'linux'],
@@ -313,9 +313,9 @@ test('tools admin routes update page SEO config and publish downloads', async ()
     },
     toolsDownloadService: {
       getAdminDownloadPageConfig: async () => DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
-      updateAdminDownloadPageConfig: async (input) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
+      updateAdminDownloadPageConfig: async (input: any) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
       listAdminDownloads: async () => ({ page: 1, page_size: 20, total: 0, items: [] }),
-      createDownload: async (payload) => {
+      createDownload: async (payload: any) => {
         createdPayloads.push(payload);
         return {
           id: 3,
@@ -340,7 +340,7 @@ test('tools admin routes update page SEO config and publish downloads', async ()
           updated_at: '2026-07-08 09:00:00',
         };
       },
-      updateDownloadStatus: async (_id, status) => {
+      updateDownloadStatus: async (_id: number, status: any) => {
         currentStatus = status;
         return {
           id: 3,
@@ -424,7 +424,7 @@ test('tools admin routes return conflict when tool download slug already exists'
     } as never,
     toolsDownloadService: {
       getAdminDownloadPageConfig: async () => DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
-      updateAdminDownloadPageConfig: async (input) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
+      updateAdminDownloadPageConfig: async (input: any) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
       listAdminDownloads: async () => ({ page: 1, page_size: 20, total: 0, items: [] }),
       createDownload: async () => {
         throw Object.assign(new Error('Duplicate entry'), {
@@ -484,7 +484,7 @@ test('tools admin routes recover recent uploaded tool file by size and extension
     } as never,
     toolsDownloadService: {
       getAdminDownloadPageConfig: async () => DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
-      updateAdminDownloadPageConfig: async (input) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
+      updateAdminDownloadPageConfig: async (input: any) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
       listAdminDownloads: async () => ({ page: 1, page_size: 20, total: 0, items: [] }),
       createDownload: async () => ({}),
       updateDownload: async () => ({}),
@@ -540,7 +540,7 @@ test('tools admin routes accept chunked tool file upload and complete final pack
     publicPageCache: { clear: () => {} },
     toolsDownloadService: {
       getAdminDownloadPageConfig: async () => DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
-      updateAdminDownloadPageConfig: async (input) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
+      updateAdminDownloadPageConfig: async (input: any) => ({ ...DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, ...input }),
       listAdminDownloads: async () => ({ page: 1, page_size: 20, total: 0, items: [] }),
       createDownload: async () => ({}),
       updateDownload: async () => ({}),

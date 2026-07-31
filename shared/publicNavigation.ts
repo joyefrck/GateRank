@@ -20,7 +20,7 @@ export interface PublicNavigationItem {
 export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
   {
     kind: 'home',
-    label: '今日推荐',
+    label: '首页',
     href: '/',
   },
   {
@@ -43,6 +43,11 @@ export const PUBLIC_NAVIGATION_ITEMS: PublicNavigationItem[] = [
     label: '跑路监测',
     href: '/risk-monitor',
     badge: '快照',
+  },
+  {
+    kind: 'methodology',
+    label: '测评方法',
+    href: '/methodology',
   },
   {
     kind: 'tools',

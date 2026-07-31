@@ -100,6 +100,170 @@ function createMockAirportDeal(overrides: Record<string, unknown> = {}) {
   };
 }
 
+test('GET /portal/ad-campaign/:campaignId/stats forwards authenticated ownership and page', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+  let statsInput: Record<string, unknown> | null = null;
+  app.use(createPortalRoutes({
+    applicantAccountRepository: {
+      getById: async () => createMockApplicantAccount({ application_id: 7 }),
+      updatePassword: async () => true,
+    },
+    airportApplicationRepository: {
+      getById: async () => ({ id: 7, approved_airport_id: 11 }),
+      markPaid: async () => true,
+    },
+    applicationPaymentOrderRepository: {
+      create: async () => 1,
+      getLatestByApplicationId: async () => null,
+      getByOutTradeNo: async () => null,
+      markPaid: async () => true,
+      expireOpenOrdersByApplicationId: async () => 0,
+    },
+    applicantBillingRepository: createMockBillingRepository(),
+    airportAdCampaignRepository: {
+      getPortalStatus: async () => ({
+        active_campaign: null,
+        campaigns: [],
+        monthly_price: 1000,
+        low_balance_warning_threshold: 100,
+        allowed_months: [1, 2, 3, 6, 12],
+      }),
+      getPortalStats: async (input: Record<string, unknown>) => {
+        statsInput = input;
+        return {
+          campaign_id: 99,
+          tracking_started_on: '2026-07-01',
+          summary: { impressions: 10, clicks: 2, ctr: 0.2 },
+          daily: [],
+          pagination: { page: 2, page_size: 30, total: 31, total_pages: 2 },
+        };
+      },
+      purchase: async () => { throw new Error('not used'); },
+      update: async () => { throw new Error('not used'); },
+      cancel: async () => { throw new Error('not used'); },
+    },
+    applicantPortalAuthService: { login: async () => { throw new Error('not used'); } },
+    paymentGatewaySettingsService: { getConfig: async () => ({ epay: { enabled: true } }) },
+    paymentGatewayService: {
+      createOrder: async () => { throw new Error('not used'); },
+      verifyNotificationPayload: async () => true,
+    },
+  } as any));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/ad-campaign/99/stats?page=2`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(statsInput, {
+      campaign_id: 99,
+      airport_id: 11,
+      applicant_account_id: 1,
+      application_id: 7,
+      page: 2,
+    });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST /portal/ad-campaign/:campaignId/renew uses current placement price for expired ads', async () => {
+  process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
+  const app = express();
+  app.use(express.json());
+  let renewInput: Record<string, unknown> | null = null;
+  app.use(createPortalRoutes({
+    applicantAccountRepository: {
+      getById: async () => createMockApplicantAccount({ application_id: 7 }),
+      updatePassword: async () => true,
+    },
+    airportApplicationRepository: {
+      getById: async () => ({
+        id: 7,
+        approved_airport_id: 11,
+        payment_status: 'paid',
+        review_status: 'reviewed',
+      }),
+      markPaid: async () => true,
+    },
+    applicationPaymentOrderRepository: {
+      create: async () => 1,
+      getLatestByApplicationId: async () => null,
+      getByOutTradeNo: async () => null,
+      markPaid: async () => true,
+      expireOpenOrdersByApplicationId: async () => 0,
+    },
+    applicantBillingRepository: createMockBillingRepository(),
+    airportAdCampaignRepository: {
+      getPortalStatus: async (_airportId: number | null, monthlyPrice?: number) => ({
+        active_campaign: null,
+        campaigns: [{
+          ...createMockAirportDeal({ campaign_id: 99, home_slot: 2, is_homepage: true }),
+          status: 'expired',
+          status_label: '已到期',
+          is_active: false,
+        }],
+        monthly_price: monthlyPrice ?? 1000,
+        home_slot_monthly_prices: { 1: 6000, 2: 5000, 3: 4000, 4: 3000 },
+        low_balance_warning_threshold: 100,
+        allowed_months: [1, 2, 3, 6, 12],
+      }),
+      renew: async (input: Record<string, unknown>) => {
+        renewInput = input;
+        return createMockAirportDeal({ campaign_id: 99, home_slot: 2, is_homepage: true });
+      },
+      purchase: async () => { throw new Error('not used'); },
+      update: async () => { throw new Error('not used'); },
+      cancel: async () => { throw new Error('not used'); },
+    },
+    applicantPortalAuthService: { login: async () => { throw new Error('not used'); } },
+    paymentGatewaySettingsService: { getConfig: async () => ({ epay: { enabled: true } }) },
+    marketingSettingsService: {
+      getConfig: async () => ({
+        application_fee_amount: 300,
+        click_charge_amount: 1,
+        airport_ad_monthly_price: 1000,
+        home_ad_slot_monthly_prices: { 1: 6000, 2: 5000, 3: 4000, 4: 3000 },
+      }),
+    },
+    paymentGatewayService: {
+      createOrder: async () => { throw new Error('not used'); },
+      verifyNotificationPayload: async () => true,
+    },
+  } as any));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const { token } = signApplicantToken('portal-test-secret', 1, 'user@example.com', 1);
+    const response = await fetch(`http://127.0.0.1:${port}/portal/ad-campaign/99/renew`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ months: 2 }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(renewInput, {
+      campaign_id: 99,
+      airport_id: 11,
+      applicant_account_id: 1,
+      application_id: 7,
+      months: 2,
+      monthly_price: 5000,
+    });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /portal/me returns marketing billing fees', async () => {
   process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
   const app = express();
@@ -208,7 +372,7 @@ test('GET /portal/me returns marketing billing fees', async () => {
   }
 });
 
-test('GET /portal/me exposes remaining ad slots based on active campaign count', async () => {
+test('GET /portal/me omits the removed global campaign capacity fields', async () => {
   process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
   const app = express();
   app.use(express.json());
@@ -281,8 +445,6 @@ test('GET /portal/me exposes remaining ad slots based on active campaign count',
             status_label: '投放中',
             is_active: true,
           }],
-          remaining_slots: 5,
-          slot_limit: 6,
           monthly_price: monthlyPrice ?? 1000,
           low_balance_warning_threshold: 100,
           allowed_months: [1, 2, 3, 6, 12],
@@ -327,11 +489,11 @@ test('GET /portal/me exposes remaining ad slots based on active campaign count',
     const response = await fetch(`http://127.0.0.1:${port}/portal/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
-    const data = (await response.json()) as { ad_status: { remaining_slots: number; slot_limit: number; monthly_price: number; campaigns: unknown[] } };
+    const data = (await response.json()) as { ad_status: { monthly_price: number; campaigns: unknown[] } };
 
     assert.equal(response.status, 200);
-    assert.equal(data.ad_status.remaining_slots, 5);
-    assert.equal(data.ad_status.slot_limit, 6);
+    assert.equal('remaining_slots' in data.ad_status, false);
+    assert.equal('slot_limit' in data.ad_status, false);
     assert.equal(data.ad_status.monthly_price, 1288.88);
     assert.equal(data.ad_status.campaigns.length, 1);
   } finally {
@@ -409,7 +571,7 @@ test('GET /portal/wallet returns configured recharge amounts', async () => {
   }
 });
 
-test('POST /portal/ad-campaign purchases another campaign when the same airport already has an active ad', async () => {
+test('POST /portal/ad-campaign uses the selected homepage slot price instead of the ordinary monthly price', async () => {
   process.env.APPLICANT_PORTAL_JWT_SECRET = 'portal-test-secret';
   const app = express();
   app.use(express.json());
@@ -475,12 +637,12 @@ test('POST /portal/ad-campaign purchases another campaign when the same airport 
       }),
     }),
     airportAdCampaignRepository: {
-      getPortalStatus: async (_airportId, monthlyPrice) => ({
+      getPortalStatus: async (_airportId, monthlyPrice, homeSlotMonthlyPrices) => ({
         active_campaign: createMockAirportDeal(),
         campaigns: [],
-        remaining_slots: 5,
-        slot_limit: 6,
         monthly_price: monthlyPrice ?? 1000,
+        home_slot_monthly_prices: homeSlotMonthlyPrices,
+        home_slot_availability: { 1: true, 2: true, 3: false, 4: true },
         low_balance_warning_threshold: 100,
         allowed_months: [1, 2, 3, 6, 12],
       }),
@@ -496,6 +658,8 @@ test('POST /portal/ad-campaign purchases another campaign when the same airport 
           is_stackable: input.is_stackable,
           refund_supported: input.refund_supported,
           discount_percent: input.discount_percent,
+          home_slot: input.home_slot,
+          is_homepage: input.home_slot !== null,
         });
       },
       update: async () => {
@@ -516,6 +680,7 @@ test('POST /portal/ad-campaign purchases another campaign when the same airport 
         application_fee_amount: 300,
         click_charge_amount: 1,
         airport_ad_monthly_price: 1288.88,
+        home_ad_slot_monthly_prices: { 1: 1988, 2: 1888, 3: 1788, 4: 1688 },
       }),
     },
     paymentGatewayService: {
@@ -544,6 +709,8 @@ test('POST /portal/ad-campaign purchases another campaign when the same airport 
       },
       body: JSON.stringify({
         months: 1,
+        is_homepage: true,
+        home_slot: 2,
         coupon_code: 'NEW220',
         discount_title: '新用户优惠',
         discount_description: '新用户首单 8 折',
@@ -553,16 +720,17 @@ test('POST /portal/ad-campaign purchases another campaign when the same airport 
         discount_percent: 20,
       }),
     });
-    const data = (await response.json()) as { campaign: { campaign_id: number }; ad_status: { remaining_slots: number; slot_limit: number } };
+    const data = (await response.json()) as { campaign: { campaign_id: number }; ad_status: Record<string, unknown> };
     assert.equal(response.status, 201);
     assert.equal(data.campaign.campaign_id, 99);
-    assert.equal(data.ad_status.remaining_slots, 5);
-    assert.equal(data.ad_status.slot_limit, 6);
+    assert.equal('remaining_slots' in data.ad_status, false);
+    assert.equal('slot_limit' in data.ad_status, false);
     const capturedPurchase = purchaseInput as unknown as Record<string, unknown>;
     assert.equal(capturedPurchase.airport_id, 11);
     assert.equal(capturedPurchase.applicant_account_id, 1);
     assert.equal(capturedPurchase.application_id, 7);
-    assert.equal(capturedPurchase.monthly_price, 1288.88);
+    assert.equal(capturedPurchase.monthly_price, 1888);
+    assert.equal(capturedPurchase.home_slot, 2);
     assert.equal(capturedPurchase.coupon_code, 'NEW220');
     assert.equal(cacheCleared, true);
   } finally {
@@ -623,8 +791,6 @@ test('PATCH /portal/ad-campaign/:campaignId edits an active campaign without ext
       getPortalStatus: async (_airportId, monthlyPrice) => ({
         active_campaign: createMockAirportDeal(),
         campaigns: [],
-        remaining_slots: 6,
-        slot_limit: 6,
         monthly_price: monthlyPrice ?? 1000,
         low_balance_warning_threshold: 100,
         allowed_months: [1, 2, 3, 6, 12],
@@ -753,8 +919,6 @@ test('PATCH /portal/ad-campaign/:campaignId forwards extension months for paid r
       getPortalStatus: async (_airportId, monthlyPrice) => ({
         active_campaign: createMockAirportDeal(),
         campaigns: [],
-        remaining_slots: 6,
-        slot_limit: 6,
         monthly_price: monthlyPrice ?? 1000,
         low_balance_warning_threshold: 100,
         allowed_months: [1, 2, 3, 6, 12],
@@ -884,8 +1048,6 @@ test('POST /portal/ad-campaign/:campaignId/cancel marks campaign canceled withou
           status_label: '已下架',
           is_active: false,
         }],
-        remaining_slots: 6,
-        slot_limit: 6,
         monthly_price: 1000,
         low_balance_warning_threshold: 100,
         allowed_months: [1, 2, 3, 6, 12],
@@ -930,7 +1092,7 @@ test('POST /portal/ad-campaign/:campaignId/cancel marks campaign canceled withou
       headers: { Authorization: `Bearer ${token}` },
     });
     const data = (await response.json()) as {
-      ad_status: { remaining_slots: number; campaigns: Array<{ status: string; status_label: string; is_active: boolean }> };
+      ad_status: { campaigns: Array<{ status: string; status_label: string; is_active: boolean }> };
       wallet: { balance: number };
     };
 
@@ -942,7 +1104,6 @@ test('POST /portal/ad-campaign/:campaignId/cancel marks campaign canceled withou
     assert.equal(capturedCancel.application_id, 7);
     assert.equal(cacheCleared, true);
     assert.equal(data.wallet.balance, 500);
-    assert.equal(data.ad_status.remaining_slots, 6);
     assert.equal(data.ad_status.campaigns[0].status, 'canceled');
     assert.equal(data.ad_status.campaigns[0].status_label, '已下架');
     assert.equal(data.ad_status.campaigns[0].is_active, false);

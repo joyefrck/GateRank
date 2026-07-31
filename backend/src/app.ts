@@ -217,6 +217,8 @@ export async function createApp() {
       statsRepository,
       subscriptionNodeSnapshotRepository,
       toolsDownloadService,
+      airportAdCampaignRepository,
+      newsRepository,
     });
   const newsContentService = new NewsContentService();
   const newsCoverImageService = new NewsCoverImageService();
@@ -381,6 +383,7 @@ export async function createApp() {
       applicationPaymentOrderRepository,
       applicantBillingRepository,
       applicantAccountRepository,
+      airportAdCampaignRepository,
       probeSampleRepository,
       performanceRunRepository,
       subscriptionNodeSnapshotRepository,

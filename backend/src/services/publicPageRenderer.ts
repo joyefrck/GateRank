@@ -60,7 +60,7 @@ import {
   PUBLIC_TOP_NAV_STYLES,
   renderPublicTopNav,
 } from '../../../shared/publicTopNav';
-import type { PublicNavigationKind } from '../../../shared/publicNavigation';
+import { PUBLIC_NAVIGATION_ITEMS, type PublicNavigationKind } from '../../../shared/publicNavigation';
 import {
   FALLBACK_PUBLIC_FRONTEND_ASSETS,
   type PublicFrontendAssets,
@@ -156,7 +156,7 @@ export function renderHomePublicPage(
     realtimeTests: view.hero.realtime_tests,
   });
   const canonicalPath = `/${buildQuery({ date: requestedDate })}`;
-  const todayPickItems = view.sections.today_pick.items;
+  const rankingItems = view.ranking_preview?.items || view.sections.today_pick.items;
 
   return renderPublicDocument({
     siteUrl,
@@ -176,7 +176,7 @@ export function renderHomePublicPage(
         name: seo.title,
         description: seo.description,
         url: `${siteUrl}${canonicalPath}`,
-        mainEntity: buildItemList(siteUrl, todayPickItems),
+        mainEntity: buildItemList(siteUrl, rankingItems),
       },
       {
         '@context': 'https://schema.org',
@@ -198,21 +198,34 @@ export function renderHomePublicPage(
     },
     frontendAssets,
     body: `
-      ${renderTransparencyStatementNotice()}
-      <main class="page-main">
-        <section class="hero">
-          <div class="eyebrow">今日推荐</div>
-          <h1>机场榜：机场 VPN 推荐与可靠性榜单</h1>
-          <p><strong class="hero-highlight">${escapeHtml(HOME_HERO_HIGHLIGHT_TEXT)}</strong>${escapeHtml(HOME_HERO_SUPPORTING_TEXT)}</p>
-          <div class="metric-grid">
-            ${renderMetric('监测机场', `${formatNumber(view.hero.monitored_airports)}+`)}
-            ${renderMetric('实时测速', `${formatNumber(view.hero.realtime_tests)}+`)}
-            ${renderMetric('数据日期', view.date)}
-            ${renderMetric('更新时间', view.hero.report_time_text)}
+      <main class="home-v3">
+        <section class="home-v3-hero">
+          <div class="home-v3-hero-copy">
+            <div class="home-v3-pill">${escapeHtml(HOME_HERO_HIGHLIGHT_TEXT)}</div>
+            <h1>机场榜：机场 VPN 推荐与<span>可靠性榜单</span></h1>
+            <p>${escapeHtml(HOME_HERO_SUPPORTING_TEXT)}</p>
+            <div class="home-v3-actions">
+              <a class="home-v3-primary" href="/rankings/all">查看完整排行 <span aria-hidden="true">→</span></a>
+              <a href="/methodology">了解测评方法</a>
+            </div>
+            ${view.resolved_from_fallback && view.fallback_notice ? `<p class="home-v3-fallback">${escapeHtml(view.fallback_notice)}</p>` : ''}
+          </div>
+          <div class="home-v3-metrics">
+            ${renderHomeV3Metric('监测机场', `${formatNumber(view.hero.monitored_airports)}+`, 'LIVE')}
+            ${renderHomeV3Metric('实时测速', `${formatNumber(view.hero.realtime_tests)}+`, 'AUTO')}
+            <p class="home-v3-report-time"><i></i>报告时间：<strong>${escapeHtml(view.hero.report_time_text)}</strong></p>
           </div>
         </section>
-        ${renderHomeSections(view)}
-        ${renderHomeSeoContent()}
+        <div class="home-v3-main">
+          ${renderHomeV3SponsoredDeals(view)}
+          <div class="home-v3-columns">
+            ${renderHomeV3Ranking(view)}
+            ${renderHomeV3Sidebar(view)}
+          </div>
+          ${renderHomeV3Summaries(view)}
+          ${renderHomeV3Trust()}
+          ${renderHomeV3Faq()}
+        </div>
       </main>
     `,
   });
@@ -384,7 +397,7 @@ export function renderDealsPublicPage(
               <p>${escapeHtml(seo.description)}</p>
             </div>
             <div class="metric-grid">
-              ${renderMetric('当前活动', `${deals.length}/6`)}
+              ${renderMetric('当前活动', `${deals.length}`)}
               ${renderMetric('免费试用', `${deals.filter((deal) => deal.supports_trial).length}+`)}
               ${renderMetric('支持 USDT', `${deals.filter((deal) => deal.supports_usdt).length}+`)}
             </div>
@@ -1832,6 +1845,7 @@ function resolvePublicTopNavActive(active: RenderOptions['active']): PublicNavig
     monthlyReports: 'monthly_reports',
     deals: 'deals',
     risk: 'risk_monitor',
+    methodology: 'methodology',
     tools: 'tools',
   };
   return map[active] || null;
@@ -1840,8 +1854,14 @@ function resolvePublicTopNavActive(active: RenderOptions['active']): PublicNavig
 function renderFooter(): string {
   return `
     <footer class="footer">
+      <span class="footer-mark" aria-hidden="true">ϟ</span>
       <strong>${escapeHtml(PUBLIC_SITE_BRAND_NAME)}</strong>
-      <p>以公开监测数据、评分趋势和风险记录构建机场推荐体系。</p>
+      <p>以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在推荐、排行与测评报告之间完成交叉判断。</p>
+      <nav aria-label="页脚导航">
+        ${PUBLIC_NAVIGATION_ITEMS.filter((item) => item.href).map((item) => `<a href="${escapeAttribute(item.href || '/')}">${escapeHtml(item.label)}</a>`).join('')}
+        <a href="/apply">申请入驻</a>
+      </nav>
+      <small>© 2026 ${escapeHtml(PUBLIC_SITE_BRAND_NAME)}. All rights reserved. 评分独立性声明：本站不含任何付费推广排名。</small>
     </footer>
   `;
 }
@@ -1989,6 +2009,224 @@ function buildToolDownloadSoftwareJsonLd(siteUrl: string, items: ToolDownloadIte
     downloadUrl: item.local_file_url && item.platforms[0] ? `${siteUrl}${buildToolControlledDownloadUrl(item, item.platforms[0])}` : undefined,
     image: item.icon_url ? absoluteImageUrl(siteUrl, item.icon_url) : undefined,
   }));
+}
+
+function renderHomeV3Metric(label: string, value: string, badge: string): string {
+  return `
+    <div class="home-v3-metric">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(value)}</strong>
+      <em>${escapeHtml(badge)}</em>
+    </div>
+  `;
+}
+
+function renderHomeV3SectionHead(eyebrow: string, title: string, subtitle: string, action = ''): string {
+  return `
+    <div class="home-v3-section-head">
+      <div>
+        <span>${escapeHtml(eyebrow)}</span>
+        <h2>${escapeHtml(title)}</h2>
+        <p>${escapeHtml(subtitle)}</p>
+      </div>
+      ${action}
+    </div>
+  `;
+}
+
+function renderHomeV3SponsoredDeals(view: HomePageView): string {
+  const deals = view.sponsored_deals?.items || [];
+  const total = view.sponsored_deals?.total || 0;
+  const dealsBySlot = new Map(deals.map((deal) => [deal.home_slot, deal]));
+  return `
+    <section aria-labelledby="home-v3-sponsored-title">
+      ${renderHomeV3SectionHead(
+        'Sponsored discovery',
+        '今日赞助推荐',
+        `广告仅提供曝光，不参与评分与排名 · 当前 ${total} 个有效活动`,
+        '<a href="/deals">全部优惠 →</a>',
+      ).replace('<h2>', '<h2 id="home-v3-sponsored-title">')}
+      <div class="home-v3-deal-grid">
+          ${([1, 2, 3, 4] as const).map((slot) => {
+            const deal = dealsBySlot.get(slot);
+            return deal ? `
+            <article class="home-v3-deal" data-marketing-placement="deal_card" data-airport-id="${deal.airport_id}">
+              <div class="home-v3-deal-top">
+                <span class="home-v3-airport-mark" aria-hidden="true">${escapeHtml(deal.name.slice(0, 1) || 'G')}</span>
+                <div><h3>${escapeHtml(deal.name)}</h3><small>${deal.tracking_days} 天观察</small></div>
+                <b>广告</b>
+              </div>
+              <div class="home-v3-deal-offer">
+                <p>${escapeHtml(deal.discount_title || '查看官网了解当前优惠活动。')}</p>
+                ${deal.coupon_code ? `<code>优惠码 ${escapeHtml(deal.coupon_code)}</code>` : ''}
+              </div>
+              <div class="home-v3-tags">${deal.tags.slice(0, 3).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>
+              <div class="home-v3-deal-bottom">
+                <span><small>月付起 / 公开分</small><strong>¥${escapeHtml(formatPublicPrice(deal.plan_price_month))} · ${escapeHtml(formatPublicListScore(deal))}</strong></span>
+                <a href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow sponsored noopener noreferrer" aria-label="访问 ${escapeAttribute(deal.name)} 官网">↗</a>
+              </div>
+              <a class="home-v3-report-link" href="${escapeAttribute(deal.report_url)}">查看测评报告</a>
+            </article>
+          ` : `
+            <article class="home-v3-deal home-v3-empty">
+              <strong>首页 ${slot} 号广告位招募中</strong>
+              <a href="/apply">申请入驻</a>
+            </article>
+          `;
+          }).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderHomeV3Ranking(view: HomePageView): string {
+  const items = view.ranking_preview?.items || [];
+  return `
+    <section class="home-v3-ranking" aria-labelledby="home-v3-ranking-title">
+      ${renderHomeV3SectionHead(
+        `Daily ranking · ${view.date}`,
+        '综合实力排行',
+        '前 10 名真实数据',
+        `<a href="/rankings/all?date=${encodeURIComponent(view.date)}">全量榜单 →</a>`,
+      ).replace('<h2>', '<h2 id="home-v3-ranking-title">')}
+      ${items.length > 0 ? `
+        <div class="home-v3-table-wrap">
+          <table>
+            <caption>GateRank 综合实力排行榜前十名</caption>
+            <thead><tr><th scope="col">排名</th><th scope="col">机场</th><th scope="col">评分 / 涨跌</th><th scope="col">月付 / 观察</th><th scope="col">入口</th></tr></thead>
+            <tbody>
+              ${items.slice(0, 10).map((item) => {
+                const reportUrl = item.report_url || `/reports/${item.airport_id}?date=${encodeURIComponent(view.date)}`;
+                return `
+                  <tr>
+                    <td><b class="home-v3-rank home-v3-rank-${item.rank}">${item.rank}</b></td>
+                    <td><a class="home-v3-airport-name" href="${escapeAttribute(reportUrl)}">${escapeHtml(item.name)}</a><div class="home-v3-tags">${item.tags.slice(0, 2).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div></td>
+                    <td><strong>${escapeHtml(formatPublicListScore(item))}</strong><small>${escapeHtml(formatHomeV3Delta(item.score_delta_vs_yesterday.value))}</small></td>
+                    <td><strong>¥${escapeHtml(formatPublicPrice(item.plan_price_month))}/月</strong><small>${escapeHtml(formatHomeV3Observation(item.founded_on, view.date))}</small></td>
+                    <td><a class="home-v3-row-action" href="${escapeAttribute(reportUrl)}">报告</a></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      ` : '<div class="home-v3-empty"><strong>综合榜暂无数据</strong><p>当前日期尚未生成可公开展示的排名。</p></div>'}
+    </section>
+  `;
+}
+
+function renderHomeV3Sidebar(view: HomePageView): string {
+  const news = view.news_updates || [];
+  return `
+    <aside class="home-v3-sidebar" aria-label="工具与最新动态">
+      <section>
+        ${renderHomeV3SectionHead('Quick tools', '网络工具箱', '从客户端安装到出口网络验证')}
+        <div class="home-v3-tools">
+          ${PUBLIC_TOOL_DEFINITIONS.map((tool) => `
+            <a href="${escapeAttribute(tool.href)}">
+              <strong>${escapeHtml(tool.label)}</strong>
+              <span>${escapeHtml(tool.summary)}</span>
+              <i aria-hidden="true">→</i>
+            </a>
+          `).join('')}
+        </div>
+      </section>
+      <section>
+        ${renderHomeV3SectionHead('Latest updates', '最新 News', '最近发布的公开动态')}
+        ${news.length > 0 ? `
+          <ol class="home-v3-news">
+            ${news.slice(0, 5).map((item) => `
+              <li><a href="${escapeAttribute(item.href)}">${escapeHtml(item.title)}</a><time datetime="${escapeAttribute(item.published_at || '')}">${escapeHtml(item.published_at ? formatDateOnly(item.published_at) : '日期待更新')}</time></li>
+            `).join('')}
+          </ol>
+        ` : '<p class="home-v3-muted">暂无已发布 News，稍后再来查看。</p>'}
+        <a class="home-v3-more" href="/news">查看全部 News →</a>
+      </section>
+    </aside>
+  `;
+}
+
+function renderHomeV3Summaries(view: HomePageView): string {
+  const configurations: Array<{ key: keyof HomePageView['sections']; title: string; href: string }> = [
+    { key: 'most_stable', title: '长期稳定', href: '/rankings/all' },
+    { key: 'best_value', title: '性价比榜', href: '/rankings/all' },
+    { key: 'new_entries', title: '新入榜', href: '/rankings/all' },
+    { key: 'risk_alerts', title: '风险预警', href: '/risk-monitor' },
+  ];
+  return `
+    <section aria-labelledby="home-v3-summary-title">
+      ${renderHomeV3SectionHead('Multiple signals', '从不同维度交叉判断', '每组最多显示 4 条真实数据，不足时保持空缺。').replace('<h2>', '<h2 id="home-v3-summary-title">')}
+      <div class="home-v3-summary-grid">
+        ${configurations.map((config) => {
+          const section = view.sections[config.key];
+          return `
+            <article>
+              <div class="home-v3-summary-title"><h3>${escapeHtml(config.title)}</h3><a href="${escapeAttribute(config.href)}" aria-label="查看${escapeAttribute(config.title)}">→</a></div>
+              <p>${escapeHtml(section.subtitle)}</p>
+              ${section.items.length > 0 ? `
+                <ol>${section.items.slice(0, 4).map((item, index) => `
+                  <li><span>${String(index + 1).padStart(2, '0')}</span><a href="${escapeAttribute(item.report_url)}">${escapeHtml(item.name)}</a><strong>${escapeHtml(formatPublicListScore(item))}</strong></li>
+                `).join('')}</ol>
+              ` : '<p class="home-v3-muted">当前没有可展示数据</p>'}
+            </article>
+          `;
+        }).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function renderHomeV3Trust(): string {
+  const items = [
+    ['公正客观', '广告活动不参与评分，也不会改变综合榜排序。'],
+    ['真实数据', '公开监测、测速指标和风险记录共同构成判断依据。'],
+    ['持续更新', '每日重算榜单，同时保留历史趋势供交叉判断。'],
+    ['风险并列', '推荐与风险提示同时展示，不只呈现单一高分。'],
+    ['方法透明', '评分口径、榜单规则与报告入口均可公开查阅。'],
+  ];
+  return `
+    <section class="home-v3-trust" aria-labelledby="home-v3-trust-title">
+      <div class="home-v3-center-head"><span>Core philosophy</span><h2 id="home-v3-trust-title">为什么选择 GateRank？</h2><p>公开监测与透明方法，帮助你把推荐、价格和风险放在同一个判断框架里。</p></div>
+      <div>${items.map(([title, body]) => `<article><i aria-hidden="true">✓</i><h3>${escapeHtml(title)}</h3><p>${escapeHtml(body)}</p></article>`).join('')}</div>
+      <nav aria-label="首页深度内容入口">
+        <a href="/methodology">测评方法</a><a href="/risk-monitor">跑路监测</a><a href="/deals">机场优惠码</a><a href="/rankings/payment/alipay">支付宝机场</a><a href="/rankings/payment/usdt-trc20">USDT 机场</a><a href="/rankings/unlock/chatgpt">ChatGPT 机场</a><a href="/rankings/unlock/netflix">Netflix 机场</a>
+      </nav>
+    </section>
+  `;
+}
+
+function renderHomeV3Faq(): string {
+  return `
+    <section class="home-v3-faq" aria-labelledby="home-v3-faq-title">
+      ${renderHomeV3SectionHead('FAQ & guide', '常见问题与机场选购指南', '围绕价格、稳定性、支付方式与晚高峰测试的公开说明。').replace('<h2>', '<h2 id="home-v3-faq-title">')}
+      <div>
+        ${HOME_FAQ_ITEMS.map((item, index) => `
+          <details${index === 0 ? ' open' : ''}>
+            <summary><b>Q</b>${escapeHtml(item.question)}<span aria-hidden="true">⌄</span></summary>
+            <p>${escapeHtml(item.answer)}</p>
+          </details>
+        `).join('')}
+      </div>
+    </section>
+  `;
+}
+
+function formatPublicPrice(value: number): string {
+  if (!Number.isFinite(value)) return '—';
+  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+}
+
+function formatHomeV3Delta(value: number | null): string {
+  if (value === null) return '—';
+  return `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
+}
+
+function formatHomeV3Observation(foundedOn: string | null | undefined, date: string): string {
+  if (!foundedOn) return '观察期 —';
+  const start = new Date(`${foundedOn}T00:00:00+08:00`);
+  const end = new Date(`${date}T00:00:00+08:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '观察期 —';
+  return `观察 ${Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86_400_000))} 天`;
 }
 
 function renderHomeSections(view: HomePageView): string {
@@ -3191,5 +3429,133 @@ const styles = `
   @media (max-width: 1279px) {
     .report-fixed-nav { display: none; }
   }
-  .footer { margin-top: auto; border-top: 1px solid #eee; padding: 32px 24px; text-align: center; color: #666; }
+  .home-v3 { flex: 1; background: #fafafa; color: #262626; }
+  .home-v3-hero { position: relative; display: grid; grid-template-columns: minmax(0,2fr) minmax(260px,1fr); gap: 32px; align-items: center; overflow: hidden; border-bottom: 1px solid #f1f1f1; padding: 38px max(24px, calc((100vw - 1280px) / 2)); background-color: #fff; background-image: radial-gradient(#e5e7eb 1px, transparent 1px); background-size: 20px 20px; }
+  .home-v3-hero-copy { max-width: 780px; }
+  .home-v3-pill { display: inline-flex; border: 1px solid #ffe4e6; border-radius: 999px; background: #fff1f2; padding: 5px 11px; color: #e11d48; font-size: 11px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
+  .home-v3-hero h1 { margin: 16px 0 0; color: #0a0a0a; font-size: clamp(32px,4.3vw,48px); font-weight: 900; line-height: 1.05; letter-spacing: -.04em; }
+  .home-v3-hero h1 span { color: #a3a3a3; }
+  .home-v3-hero-copy > p { max-width: 720px; margin: 14px 0 0; color: #737373; font-size: 14px; font-weight: 500; line-height: 1.85; }
+  .home-v3-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
+  .home-v3-actions a { display: inline-flex; min-height: 40px; align-items: center; gap: 8px; border: 1px solid #e5e5e5; border-radius: 12px; background: #fff; padding: 0 16px; color: #404040; font-size: 12px; font-weight: 900; text-decoration: none; }
+  .home-v3-actions .home-v3-primary { border-color: #171717; background: #171717; color: #fff; box-shadow: 0 14px 30px rgba(23,23,23,.12); }
+  .home-v3-fallback { display: inline-flex; border: 1px solid #fde68a; border-radius: 8px; background: #fffbeb; padding: 7px 10px; color: #b45309 !important; font-size: 12px !important; font-weight: 800 !important; }
+  .home-v3-metrics { display: grid; gap: 8px; }
+  .home-v3-metric { position: relative; display: grid; min-height: 68px; grid-template-columns: 1fr auto; align-items: center; border: 1px solid #f0f0f0; border-radius: 12px; background: #fff; padding: 12px 72px 12px 14px; box-shadow: 0 3px 14px rgba(15,23,42,.03); }
+  .home-v3-metric span { color: #a3a3a3; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+  .home-v3-metric strong { grid-row: 2; color: #171717; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 20px; font-weight: 900; }
+  .home-v3-metric em { position: absolute; right: 14px; border-radius: 999px; background: #ecfdf5; padding: 3px 8px; color: #059669; font-size: 10px; font-style: normal; font-weight: 900; }
+  .home-v3-report-time { display: flex; align-items: center; justify-content: flex-end; gap: 7px; margin: 4px 0 0; color: #737373; font-size: 12px; }
+  .home-v3-report-time i { width: 9px; height: 9px; border-radius: 50%; background: #10b981; }
+  .home-v3-report-time strong { color: #171717; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .home-v3-main { width: min(1280px, calc(100vw - 32px)); margin: 0 auto; padding: 40px 0 72px; display: grid; gap: 40px; }
+  .home-v3-section-head { display: flex; align-items: end; justify-content: space-between; gap: 18px; margin-bottom: 16px; }
+  .home-v3-section-head > div > span, .home-v3-center-head > span { color: #e11d48; font-size: 10px; font-weight: 900; letter-spacing: .2em; text-transform: uppercase; }
+  .home-v3-section-head h2 { margin: 5px 0 0; color: #0a0a0a; font-size: 21px; line-height: 1.2; letter-spacing: -.02em; }
+  .home-v3-section-head p { margin: 5px 0 0; color: #737373; font-size: 12px; line-height: 1.6; }
+  .home-v3-section-head > a { flex: 0 0 auto; color: #737373; font-size: 12px; font-weight: 900; text-decoration: none; }
+  .home-v3-deal-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }
+  .home-v3-deal { display: flex; min-height: 272px; flex-direction: column; border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 16px; box-shadow: 0 4px 20px rgba(15,23,42,.04); }
+  .home-v3-deal-top { display: flex; align-items: center; gap: 10px; }
+  .home-v3-airport-mark { display: inline-flex; width: 42px; height: 42px; flex: 0 0 42px; align-items: center; justify-content: center; border-radius: 12px; background: linear-gradient(135deg,#334155,#0f172a); color: #fff; font-weight: 900; }
+  .home-v3-deal-top > div { min-width: 0; flex: 1; }
+  .home-v3-deal h3 { overflow: hidden; margin: 0; color: #171717; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+  .home-v3-deal-top small { color: #a3a3a3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+  .home-v3-deal-top > b { align-self: flex-start; border: 1px solid #fde68a; border-radius: 5px; background: #fffbeb; padding: 2px 5px; color: #b45309; font-size: 9px; letter-spacing: .08em; }
+  .home-v3-deal-offer { margin-top: 14px; border-radius: 12px; background: #fafafa; padding: 12px; }
+  .home-v3-deal-offer strong { color: #171717; font-size: 14px; }
+  .home-v3-deal-offer p { min-height: 36px; margin: 4px 0 0; color: #737373; font-size: 11px; line-height: 1.65; }
+  .home-v3-deal-offer code { display: block; margin-top: 7px; color: #e11d48; font-size: 10px; font-weight: 800; }
+  .home-v3-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .home-v3-tags span { border-radius: 5px; background: #f5f5f5; padding: 2px 6px; color: #737373; font-size: 9px; font-weight: 800; }
+  .home-v3-deal-bottom { display: flex; align-items: end; justify-content: space-between; gap: 10px; margin-top: auto; border-top: 1px solid #f5f5f5; padding-top: 12px; }
+  .home-v3-deal-bottom > span small, .home-v3-deal-bottom > span strong { display: block; }
+  .home-v3-deal-bottom small { color: #a3a3a3; font-size: 10px; font-weight: 800; }
+  .home-v3-deal-bottom strong { margin-top: 2px; color: #171717; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+  .home-v3-deal-bottom > a { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 9px; background: #171717; color: #fff; text-decoration: none; }
+  .home-v3-report-link { margin-top: 7px; color: #737373; font-size: 10px; font-weight: 800; text-decoration: none; }
+  .home-v3-columns { display: grid; grid-template-columns: minmax(0,2fr) minmax(280px,1fr); gap: 28px; align-items: start; }
+  .home-v3-ranking, .home-v3-sidebar > section { overflow: hidden; border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 18px; box-shadow: 0 4px 22px rgba(15,23,42,.04); }
+  .home-v3-table-wrap { overflow-x: auto; margin: 0 -18px -18px; }
+  .home-v3-table-wrap table { min-width: 680px; }
+  .home-v3-table-wrap caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+  .home-v3-table-wrap th { background: #fafafa; color: #a3a3a3; font-size: 10px; }
+  .home-v3-table-wrap td { color: #404040; font-size: 12px; }
+  .home-v3-table-wrap td small { display: block; margin-top: 3px; color: #a3a3a3; font-size: 10px; }
+  .home-v3-rank { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 2px solid #f5f5f5; border-radius: 50%; background: #fafafa; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .home-v3-rank-1, .home-v3-rank-2, .home-v3-rank-3 { color: #fff; }
+  .home-v3-rank-1 { border-color: #fcd34d; background: #fbbf24; }
+  .home-v3-rank-2 { border-color: #cbd5e1; background: #94a3b8; }
+  .home-v3-rank-3 { border-color: #fdba74; background: #fb923c; }
+  .home-v3-airport-name { color: #171717; font-size: 13px; font-weight: 900; text-decoration: none; }
+  .home-v3-row-action { display: inline-flex; min-height: 32px; align-items: center; border: 1px solid #e5e5e5; border-radius: 8px; padding: 0 11px; color: #404040; font-size: 11px; font-weight: 900; text-decoration: none; }
+  .home-v3-sidebar { display: grid; gap: 18px; }
+  .home-v3-tools { display: grid; gap: 7px; }
+  .home-v3-tools a { position: relative; display: block; border: 1px solid #f1f1f1; border-radius: 12px; background: #fafafa; padding: 10px 34px 10px 12px; text-decoration: none; }
+  .home-v3-tools strong, .home-v3-tools span { display: block; }
+  .home-v3-tools strong { color: #262626; font-size: 12px; }
+  .home-v3-tools span { overflow: hidden; margin-top: 3px; color: #a3a3a3; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+  .home-v3-tools i { position: absolute; right: 12px; top: 50%; color: #a3a3a3; font-style: normal; transform: translateY(-50%); }
+  .home-v3-news { margin: 0; padding: 0; list-style: none; }
+  .home-v3-news li { border-top: 1px solid #f5f5f5; padding: 10px 0; }
+  .home-v3-news a { display: block; color: #404040; font-size: 12px; font-weight: 800; line-height: 1.55; text-decoration: none; }
+  .home-v3-news time { display: block; margin-top: 4px; color: #a3a3a3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+  .home-v3-more { color: #737373; font-size: 11px; font-weight: 900; text-decoration: none; }
+  .home-v3-muted { color: #a3a3a3 !important; font-size: 11px !important; }
+  .home-v3-summary-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }
+  .home-v3-summary-grid > article { border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 16px; }
+  .home-v3-summary-title { display: flex; justify-content: space-between; gap: 8px; }
+  .home-v3-summary-title h3 { color: #171717; font-size: 14px; }
+  .home-v3-summary-title a { color: #a3a3a3; text-decoration: none; }
+  .home-v3-summary-grid > article > p { margin: 0; color: #a3a3a3; font-size: 10px; line-height: 1.5; }
+  .home-v3-summary-grid ol { margin: 12px 0 0; padding: 0; list-style: none; }
+  .home-v3-summary-grid li { display: grid; grid-template-columns: 20px minmax(0,1fr) auto; gap: 6px; align-items: center; border-top: 1px solid #f5f5f5; padding: 9px 0; font-size: 11px; }
+  .home-v3-summary-grid li > span { color: #d4d4d4; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 900; }
+  .home-v3-summary-grid li a { overflow: hidden; color: #525252; font-weight: 800; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
+  .home-v3-summary-grid li strong { color: #171717; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .home-v3-trust { border-top: 1px solid #e5e5e5; padding-top: 38px; }
+  .home-v3-center-head { text-align: center; }
+  .home-v3-center-head h2 { margin: 7px 0 0; color: #0a0a0a; font-size: 25px; letter-spacing: -.02em; }
+  .home-v3-center-head p { margin: 7px 0 0; color: #737373; font-size: 12px; }
+  .home-v3-trust > div:nth-child(2) { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 14px; margin-top: 24px; }
+  .home-v3-trust article { border: 1px solid #f1f1f1; border-radius: 18px; background: #fff; padding: 18px; text-align: center; }
+  .home-v3-trust article i { display: inline-flex; width: 38px; height: 38px; align-items: center; justify-content: center; border-radius: 12px; background: #fff1f2; color: #e11d48; font-style: normal; font-weight: 900; }
+  .home-v3-trust article h3 { margin-top: 10px; color: #171717; font-size: 13px; }
+  .home-v3-trust article p { margin: 0; color: #737373; font-size: 10px; line-height: 1.7; }
+  .home-v3-trust nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 24px; margin-top: 22px; }
+  .home-v3-trust nav a { color: #525252; font-size: 12px; font-weight: 900; text-decoration: none; }
+  .home-v3-faq { border-top: 1px solid #e5e5e5; padding-top: 38px; }
+  .home-v3-faq > div:last-child { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+  .home-v3-faq details { align-self: start; overflow: hidden; border: 1px solid #e5e5e5; border-radius: 16px; background: #fff; }
+  .home-v3-faq details[open] { border-color: #fecdd3; }
+  .home-v3-faq summary { display: flex; align-items: flex-start; gap: 9px; padding: 14px; color: #404040; cursor: pointer; font-size: 13px; font-weight: 900; list-style: none; }
+  .home-v3-faq summary::-webkit-details-marker { display: none; }
+  .home-v3-faq summary b { display: inline-flex; width: 20px; height: 20px; flex: 0 0 20px; align-items: center; justify-content: center; border-radius: 6px; background: #fff1f2; color: #e11d48; font-size: 10px; }
+  .home-v3-faq summary span { margin-left: auto; color: #a3a3a3; }
+  .home-v3-faq details > p { margin: 0; border-top: 1px solid #f5f5f5; background: #fafafa; padding: 14px; color: #737373; font-size: 12px; line-height: 1.8; }
+  .home-v3-empty { border: 1px dashed #d4d4d4; border-radius: 18px; background: #fff; padding: 28px; text-align: center; }
+  .home-v3-empty strong { color: #404040; font-size: 14px; }
+  .home-v3-empty p { margin: 6px 0; color: #737373; font-size: 12px; }
+  .home-v3-empty a { color: #e11d48; font-size: 12px; font-weight: 900; }
+  .footer { position: relative; margin-top: auto; overflow: hidden; border-top: 1px solid #eee; padding: 56px 24px; background-color: #fff; background-image: linear-gradient(to right,rgba(0,0,0,.03) 1px,transparent 1px),linear-gradient(to bottom,rgba(0,0,0,.03) 1px,transparent 1px),radial-gradient(#eee 1px,transparent 1px); background-size: 30px 30px,30px 30px,24px 24px; text-align: center; color: #737373; }
+  .footer-mark { display: flex; width: 44px; height: 44px; align-items: center; justify-content: center; margin: 0 auto 12px; border-radius: 12px; background: #111; color: #fff; font-size: 24px; font-weight: 900; }
+  .footer > strong { display: block; color: #171717; font-size: 18px; }
+  .footer > p { max-width: 760px; margin: 14px auto 24px; color: #a3a3a3; font-size: 13px; }
+  .footer nav { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px 28px; }
+  .footer nav a { color: #525252; font-size: 13px; font-weight: 800; text-decoration: none; }
+  .footer small { display: block; max-width: 960px; margin: 30px auto 0; border-top: 1px solid #f1f1f1; padding-top: 24px; color: #a3a3a3; font-size: 11px; }
+  @media (max-width: 900px) {
+    .home-v3-hero { grid-template-columns: 1fr; padding: 28px 16px; }
+    .home-v3-main { width: min(100vw - 24px,1280px); padding-top: 28px; gap: 30px; }
+    .home-v3-columns { grid-template-columns: 1fr; }
+    .home-v3-deal-grid { grid-template-columns: 1fr 1fr; }
+    .home-v3-summary-grid { grid-template-columns: 1fr 1fr; }
+    .home-v3-trust > div:nth-child(2) { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    .home-v3-hero h1 { font-size: 32px; }
+    .home-v3-deal-grid, .home-v3-summary-grid, .home-v3-trust > div:nth-child(2), .home-v3-faq > div:last-child { grid-template-columns: 1fr; }
+    .home-v3-section-head { align-items: flex-start; flex-direction: column; }
+    .home-v3-table-wrap table { min-width: 620px; }
+  }
 `;

@@ -28,7 +28,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
     const baseUrl = `http://127.0.0.1:${port}`;
 
     const checks = [
-      ['/', /<h1>机场榜：机场 VPN 推荐与可靠性榜单<\/h1>/, /机场 VPN 推荐、科学上网机场测评与可靠性榜单/],
+      ['/', /<h1>机场榜：机场 VPN 推荐与<span>可靠性榜单<\/span><\/h1>/, /机场 VPN 推荐、科学上网机场测评与可靠性榜单/],
       ['/rankings/all', /<h1>机场排行榜：全量机场 VPN 评分排名<\/h1>/, /全量机场榜单 \| 全部已上线机场评分排名/],
       ['/methodology', /<h1>机场测评方法：评分规则、测速标准、风险扣分与推荐依据<\/h1>/, /机场测评方法/],
       ['/apply', /<h1>申请入驻 GateRank 机场测试<\/h1>/, /申请入驻测试/],
@@ -52,31 +52,33 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(html, /<link rel="stylesheet" href="\/assets\/index-BzS9fL3m\.css" \/>/);
       assert.match(html, /<script type="module" src="\/assets\/index-CkG9aP2q\.js"><\/script>/);
       assert.match(html, /data-public-top-nav="true"/);
-      assert.match(html, /\.public-top-nav-inner\s*\{[\s\S]*height:\s*72px;/);
+      assert.match(html, /\.public-top-nav-inner\s*\{[^}]*height:\s*64px;/);
+      assert.match(html, /\.footer\s*\{[^}]*linear-gradient\(to right,rgba\(0,0,0,\.03\) 1px,transparent 1px\)[^}]*background-size:\s*30px 30px,30px 30px,24px 24px;/);
       assert.match(html, /<span class="public-top-nav-brand-title">机场榜GateRank<\/span>/);
       assert.doesNotMatch(html, /<header class="topbar">/);
       if (path === '/') {
-        assert.match(html, /<strong class="hero-highlight">行业首创，每日更新<\/strong>/);
+        assert.match(html, /<div class="home-v3-pill">行业首创，每日更新<\/div>/);
         assert.match(html, /基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单/);
-        assert.match(html, /class="home-tool-download-cta"/);
+        assert.match(html, /今日赞助推荐/);
+        assert.match(html, /星云优惠机场/);
+        const sponsoredDealHtml = html.match(/<article class="home-v3-deal"[\s\S]*?<\/article>/)?.[0] || '';
+        assert.match(sponsoredDealHtml, /<p>新客八折<\/p>/);
+        assert.doesNotMatch(sponsoredDealHtml, /月付套餐限时优惠。/);
+        assert.doesNotMatch(html, /广告位空缺不会由普通优惠活动补位/);
+        assert.match(html, /rel="nofollow sponsored noopener noreferrer"/);
+        assert.match(html, /综合实力排行/);
+        assert.doesNotMatch(html, /共收录 \d+ 个机场/);
+        assert.match(html, /星云机场/);
+        assert.match(html, /href="\/airports\/nebula"/);
+        assert.match(html, /最新 News/);
+        assert.match(html, /GateRank 3\.0 发布说明/);
+        assert.match(html, /data-public-mobile-drawer="true"/);
         assert.match(html, /href="\/tools\/download"/);
-        assert.match(html, /翻墙工具客户端下载/);
-        assert.match(html, /Android、macOS、Windows、Linux 常用客户端集中下载/);
-        assert.match(html, /src="\/uploads\/tools\/icons\/v2rayn\.webp"/);
-        assert.ok(
-          html.indexOf('今日推荐机场') < html.indexOf('home-tool-download-cta')
-            && html.indexOf('home-tool-download-cta') < html.indexOf('新入榜潜力'),
-          'home download CTA should render between today pick and new entries',
-        );
-        assert.match(html, /<h2>读懂机场推荐逻辑<\/h2>/);
-        assert.match(html, /<h3>机场榜 GateRank 是什么？<\/h3>/);
-        assert.match(html, /<h3>GateRank 如何评测机场 VPN？<\/h3>/);
-        assert.match(html, /<h3>新手如何选择机场？<\/h3>/);
-        assert.match(html, /<h3>机场推荐主要看哪些指标？<\/h3>/);
-        assert.match(html, /<h3>不同需求推荐入口<\/h3>/);
-        assert.match(html, /<h3>常见问题<\/h3>/);
-        assert.match(html, /<h3>机场和 VPN 有什么区别？<\/h3>/);
-        assert.match(html, /<h3>机场推荐看价格还是稳定性？<\/h3>/);
+        assert.match(html, /网络工具箱/);
+        assert.match(html, /为什么选择 GateRank？/);
+        assert.match(html, /常见问题与机场选购指南/);
+        assert.match(html, /机场和 VPN 有什么区别？/);
+        assert.match(html, /机场推荐看价格还是稳定性？/);
         assert.match(html, /href="\/rankings\/all"/);
         assert.match(html, /href="\/methodology"/);
         assert.match(html, /href="\/risk-monitor"/);
@@ -200,6 +202,8 @@ test('GET /deals returns crawlable advertising deal HTML', async () => {
     assert.match(html, /<section class="hero hero-deals">/);
     assert.match(html, /linear-gradient\(135deg, #241207 0%, #6F2F0B 38%, #D97706 72%, #F7D7B2 100%\)/);
     assert.match(html, /<h1>机场优惠码大全：活动折扣、免费试用与 USDT 支付优惠<\/h1>/);
+    assert.match(html, /<div>当前活动<\/div>\s*<strong>2<\/strong>/);
+    assert.doesNotMatch(html, />2\/6<\/strong>/);
     assert.match(html, /机场优惠码大全 \| 机场折扣、活动优惠、免费试用与 USDT 支付/);
     assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/deals"/);
     assert.match(html, /什么是机场优惠码/);
@@ -410,7 +414,7 @@ test('GET /download/file/:slug uses controlled download headers and rejects obvi
       },
     });
     assert.equal(botResponse.status, 403);
-    assert.equal((await botResponse.json()).code, 'DOWNLOAD_FORBIDDEN');
+    assert.equal(((await botResponse.json()) as { code?: string }).code, 'DOWNLOAD_FORBIDDEN');
     assert.equal(recordedDownloads, 2);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -1543,6 +1547,61 @@ const homeView: HomePageView = {
       { slug: 'clash-verge-rev', name: 'Clash Verge Rev', icon_url: '/uploads/tools/icons/clash-verge-rev.webp' },
     ],
   },
+  ranking_preview: {
+    total: 12,
+    items: [
+      {
+        airport_id: 7,
+        rank: 1,
+        name: '星云机场',
+        website: 'https://nebula.example.com',
+        status: 'normal',
+        tags: ['稳定', '高速'],
+        founded_on: '2025-01-01',
+        plan_price_month: 18,
+        has_trial: true,
+        airport_intro: '适合日常使用。',
+        created_at: '2025-01-01',
+        score: 98.6,
+        score_delta_vs_yesterday: { label: '对比昨天', value: 1.2 },
+        score_date: '2026-03-23',
+        report_url: '/airports/nebula',
+      },
+    ],
+  },
+  sponsored_deals: {
+    total: 1,
+    display_limit: 4,
+    items: [
+      {
+        campaign_id: 101,
+        airport_id: 17,
+        home_slot: 1,
+        name: '星云优惠机场',
+        website: 'https://deal.example.com',
+        report_url: '/airports/nebula-deal',
+        discount_title: '新客八折',
+        discount_description: '月付套餐限时优惠。',
+        coupon_code: 'GATE20',
+        plan_price_month: 12,
+        tracking_days: 180,
+        tags: ['IEPL', '新客优惠'],
+        score: 91.2,
+        score_hidden: false,
+        score_hidden_reason: null,
+        score_delta_vs_yesterday: { label: '对比昨天', value: null },
+      },
+    ],
+  },
+  news_updates: [
+    {
+      id: 1,
+      title: 'GateRank 3.0 发布说明',
+      slug: 'gaterank-3-release',
+      href: '/news/gaterank-3-release',
+      published_at: '2026-03-23T09:00:00+08:00',
+    },
+  ],
   sections: {
     today_pick: {
       title: '今日推荐机场',

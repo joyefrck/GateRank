@@ -53,7 +53,12 @@ import { createDefaultAirportProfile, normalizeAirportProfile, parseAirportProfi
 import {
   AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD,
   AIRPORT_AD_MONTHLY_PRICE,
+  AIRPORT_HOME_AD_SLOTS,
+  type AirportAdMonthOption,
   type AirportDealView,
+  type AirportHomeAdSlot,
+  type AirportHomeAdSlotPrices,
+  type PortalAirportAdStatsView,
   type PortalAirportAdStatus,
 } from '../../../shared/airportAds';
 
@@ -167,13 +172,33 @@ interface PortalDeps {
     ): Promise<PaginatedBillingRecords<ApplicantClickView>>;
   };
   airportAdCampaignRepository?: {
-    getPortalStatus(airportId: number | null, monthlyPrice?: number): Promise<PortalAirportAdStatus>;
+    getPortalStatus(
+      airportId: number | null,
+      monthlyPrice?: number,
+      homeSlotMonthlyPrices?: AirportHomeAdSlotPrices,
+    ): Promise<PortalAirportAdStatus>;
+    getPortalStats?(input: {
+      campaign_id: number;
+      airport_id: number;
+      applicant_account_id: number;
+      application_id: number;
+      page: number;
+    }): Promise<PortalAirportAdStatsView>;
+    renew?(input: {
+      campaign_id: number;
+      airport_id: number;
+      applicant_account_id: number;
+      application_id: number;
+      months: AirportAdMonthOption;
+      monthly_price: number;
+    }): Promise<AirportDealView>;
     purchase(input: {
       airport_id: number;
       applicant_account_id: number;
       application_id: number;
       months: number;
       monthly_price: number;
+      home_slot?: AirportHomeAdSlot | null;
       coupon_code: string;
       discount_title: string;
       discount_description: string;
@@ -245,6 +270,7 @@ interface PortalDeps {
       click_charge_amount?: number;
       rank_click_charge_amounts?: Partial<RankClickChargeAmounts>;
       airport_ad_monthly_price?: number;
+      home_ad_slot_monthly_prices?: Partial<AirportHomeAdSlotPrices>;
       recharge_amounts?: number[];
       admin_telegram_username?: string | null;
     }>;
@@ -611,7 +637,42 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       res.json(await requireAirportAdCampaignRepository(deps).getPortalStatus(
         airportId,
         marketingConfig.airport_ad_monthly_price,
+        marketingConfig.home_ad_slot_monthly_prices,
       ));
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/portal/ad-campaign/:campaignId/stats', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      const application = await requireApplication(deps, account.application_id);
+      const airportId = Number(application.approved_airport_id || 0);
+      if (!airportId) {
+        throw new HttpError(409, 'AIRPORT_AD_AIRPORT_NOT_APPROVED', '当前申请尚未绑定已审核机场');
+      }
+      const campaignId = Number(req.params.campaignId);
+      if (!Number.isInteger(campaignId) || campaignId <= 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'campaignId must be positive integer');
+      }
+      const rawPage = Array.isArray(req.query.page) ? req.query.page[0] : req.query.page;
+      const page = rawPage === undefined ? 1 : Number(rawPage);
+      if (!Number.isInteger(page) || page <= 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'page must be positive integer');
+      }
+      const repository = requireAirportAdCampaignRepository(deps);
+      if (!repository.getPortalStats) {
+        throw new Error('airportAdCampaignRepository.getPortalStats is not configured');
+      }
+      res.json(await repository.getPortalStats({
+        campaign_id: campaignId,
+        airport_id: airportId,
+        applicant_account_id: account.id,
+        application_id: account.application_id,
+        page,
+      }));
     } catch (error) {
       next(error);
     }
@@ -641,6 +702,10 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const payload = toPlainObject(req.body ?? {}, 'body');
       const months = mustAdMonths(payload.months);
       const marketingConfig = await getMarketingBillingConfig(deps);
+      const isHomepage = payload.is_homepage === undefined
+        ? false
+        : mustBoolean(payload.is_homepage, 'is_homepage');
+      const homeSlot = isHomepage ? mustHomeAdSlot(payload.home_slot) : null;
       const discountPercent = payload.discount_percent === undefined || payload.discount_percent === null || payload.discount_percent === ''
         ? null
         : mustDiscountPercent(payload.discount_percent);
@@ -649,7 +714,10 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         applicant_account_id: account.id,
         application_id: account.application_id,
         months,
-        monthly_price: marketingConfig.airport_ad_monthly_price,
+        monthly_price: homeSlot === null
+          ? marketingConfig.airport_ad_monthly_price
+          : marketingConfig.home_ad_slot_monthly_prices[homeSlot],
+        home_slot: homeSlot,
         coupon_code: mustBoundedString(payload.coupon_code, 'coupon_code', 64),
         discount_title: mustBoundedString(payload.discount_title, 'discount_title', 128),
         discount_description: mustBoundedString(payload.discount_description, 'discount_description', 800),
@@ -664,6 +732,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         ad_status: await requireAirportAdCampaignRepository(deps).getPortalStatus(
           airportId,
           marketingConfig.airport_ad_monthly_price,
+          marketingConfig.home_ad_slot_monthly_prices,
         ),
         wallet: await deps.applicantBillingRepository.getWalletByAccountId(account.id),
       });
@@ -694,16 +763,27 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const payload = toPlainObject(req.body ?? {}, 'body');
       const extendMonths = mustAdExtendMonths(payload.extend_months);
       const marketingConfig = await getMarketingBillingConfig(deps);
+      const adRepository = requireAirportAdCampaignRepository(deps);
+      const currentAdStatus = await adRepository.getPortalStatus(
+        airportId,
+        marketingConfig.airport_ad_monthly_price,
+        marketingConfig.home_ad_slot_monthly_prices,
+      );
+      const currentCampaign = currentAdStatus.campaigns.find((item) => item.campaign_id === campaignId);
+      const currentHomeSlot = currentCampaign?.home_slot ?? null;
+      const renewalMonthlyPrice = currentHomeSlot === null
+        ? marketingConfig.airport_ad_monthly_price
+        : marketingConfig.home_ad_slot_monthly_prices[currentHomeSlot];
       const discountPercent = payload.discount_percent === undefined || payload.discount_percent === null || payload.discount_percent === ''
         ? null
         : mustDiscountPercent(payload.discount_percent);
-      const campaign = await requireAirportAdCampaignRepository(deps).update({
+      const campaign = await adRepository.update({
         campaign_id: campaignId,
         airport_id: airportId,
         applicant_account_id: account.id,
         application_id: account.application_id,
         extend_months: extendMonths,
-        monthly_price: marketingConfig.airport_ad_monthly_price,
+        monthly_price: renewalMonthlyPrice,
         coupon_code: mustBoundedString(payload.coupon_code, 'coupon_code', 64),
         discount_title: mustBoundedString(payload.discount_title, 'discount_title', 128),
         discount_description: mustBoundedString(payload.discount_description, 'discount_description', 800),
@@ -718,6 +798,69 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         ad_status: await requireAirportAdCampaignRepository(deps).getPortalStatus(
           airportId,
           marketingConfig.airport_ad_monthly_price,
+          marketingConfig.home_ad_slot_monthly_prices,
+        ),
+        wallet: await deps.applicantBillingRepository.getWalletByAccountId(account.id),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post('/portal/ad-campaign/:campaignId/renew', portalAuth, async (req, res, next) => {
+    try {
+      const session = requireApplicantSession(req);
+      const account = await requireApplicantAccount(deps, session.applicant_id);
+      if (account.must_change_password) {
+        throw new HttpError(409, 'PASSWORD_CHANGE_REQUIRED', '首次登录后必须先修改密码');
+      }
+      const application = await requireApplication(deps, account.application_id);
+      if (application.payment_status !== 'paid' || application.review_status !== 'reviewed') {
+        throw new HttpError(409, 'AIRPORT_AD_APPLICATION_NOT_READY', '申请通过并支付后才能延期投放');
+      }
+      const airportId = Number(application.approved_airport_id || 0);
+      if (!airportId) {
+        throw new HttpError(409, 'AIRPORT_AD_AIRPORT_NOT_APPROVED', '当前申请尚未绑定已审核机场');
+      }
+      const campaignId = Number(req.params.campaignId);
+      if (!Number.isInteger(campaignId) || campaignId <= 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'campaignId must be positive integer');
+      }
+      const payload = toPlainObject(req.body ?? {}, 'body');
+      const months = mustAdMonths(payload.months);
+      const marketingConfig = await getMarketingBillingConfig(deps);
+      const repository = requireAirportAdCampaignRepository(deps);
+      if (!repository.renew) {
+        throw new Error('airportAdCampaignRepository.renew is not configured');
+      }
+      const currentAdStatus = await repository.getPortalStatus(
+        airportId,
+        marketingConfig.airport_ad_monthly_price,
+        marketingConfig.home_ad_slot_monthly_prices,
+      );
+      const currentCampaign = currentAdStatus.campaigns.find((item) => item.campaign_id === campaignId);
+      if (!currentCampaign || currentCampaign.status === 'canceled') {
+        throw new HttpError(409, 'AIRPORT_AD_CAMPAIGN_NOT_RENEWABLE', '投放不存在、已下架或不属于当前机场');
+      }
+      const homeSlot = currentCampaign.home_slot ?? null;
+      const monthlyPrice = homeSlot === null
+        ? marketingConfig.airport_ad_monthly_price
+        : marketingConfig.home_ad_slot_monthly_prices[homeSlot];
+      const campaign = await repository.renew({
+        campaign_id: campaignId,
+        airport_id: airportId,
+        applicant_account_id: account.id,
+        application_id: account.application_id,
+        months,
+        monthly_price: monthlyPrice,
+      });
+      deps.publicPageCache?.clear();
+      res.json({
+        campaign,
+        ad_status: await repository.getPortalStatus(
+          airportId,
+          marketingConfig.airport_ad_monthly_price,
+          marketingConfig.home_ad_slot_monthly_prices,
         ),
         wallet: await deps.applicantBillingRepository.getWalletByAccountId(account.id),
       });
@@ -758,6 +901,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         ad_status: await requireAirportAdCampaignRepository(deps).getPortalStatus(
           airportId,
           marketingConfig.airport_ad_monthly_price,
+          marketingConfig.home_ad_slot_monthly_prices,
         ),
         wallet: await deps.applicantBillingRepository.getWalletByAccountId(account.id),
       });
@@ -1304,13 +1448,14 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
     ? await deps.airportAdCampaignRepository.getPortalStatus(
       approvedAirportId,
       marketingConfig.airport_ad_monthly_price,
+      marketingConfig.home_ad_slot_monthly_prices,
     )
     : {
         active_campaign: null,
         campaigns: [],
-        remaining_slots: 0,
-        slot_limit: 6,
         monthly_price: marketingConfig.airport_ad_monthly_price,
+        home_slot_monthly_prices: marketingConfig.home_ad_slot_monthly_prices,
+        home_slot_availability: { 1: true, 2: true, 3: true, 4: true },
         low_balance_warning_threshold: AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD,
         allowed_months: [1, 2, 3, 6, 12],
       };
@@ -1541,6 +1686,7 @@ async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
   click_charge_amount: number;
   rank_click_charge_amounts: RankClickChargeAmounts;
   airport_ad_monthly_price: number;
+  home_ad_slot_monthly_prices: AirportHomeAdSlotPrices;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
 }> {
@@ -1550,6 +1696,7 @@ async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
       click_charge_amount: CLICK_CHARGE_AMOUNT,
       rank_click_charge_amounts: createDefaultRankClickChargeAmounts(),
       airport_ad_monthly_price: AIRPORT_AD_MONTHLY_PRICE,
+      home_ad_slot_monthly_prices: createDefaultHomeAdSlotMonthlyPrices(),
       recharge_amounts: [...RECHARGE_AMOUNTS],
       admin_telegram_username: null,
     };
@@ -1558,14 +1705,39 @@ async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
   const rechargeAmounts = Array.isArray(config.recharge_amounts) && config.recharge_amounts.length > 0
     ? config.recharge_amounts.map(Number).filter((amount) => Number.isInteger(amount) && amount > 0)
     : [...RECHARGE_AMOUNTS];
+  const airportAdMonthlyPrice = Number(config.airport_ad_monthly_price || AIRPORT_AD_MONTHLY_PRICE);
   return {
     application_fee_amount: Number(config.application_fee_amount || APPLICATION_FEE_AMOUNT),
     click_charge_amount: Number(config.click_charge_amount || CLICK_CHARGE_AMOUNT),
     rank_click_charge_amounts: normalizeRankClickChargeAmounts(config.rank_click_charge_amounts),
-    airport_ad_monthly_price: Number(config.airport_ad_monthly_price || AIRPORT_AD_MONTHLY_PRICE),
+    airport_ad_monthly_price: airportAdMonthlyPrice,
+    home_ad_slot_monthly_prices: normalizeHomeAdSlotMonthlyPrices(
+      config.home_ad_slot_monthly_prices,
+      airportAdMonthlyPrice,
+    ),
     recharge_amounts: rechargeAmounts.length > 0 ? rechargeAmounts : [...RECHARGE_AMOUNTS],
     admin_telegram_username: config.admin_telegram_username ?? null,
   };
+}
+
+function createDefaultHomeAdSlotMonthlyPrices(
+  fallback = AIRPORT_AD_MONTHLY_PRICE,
+): AirportHomeAdSlotPrices {
+  return { 1: fallback, 2: fallback, 3: fallback, 4: fallback };
+}
+
+function normalizeHomeAdSlotMonthlyPrices(
+  value: Partial<AirportHomeAdSlotPrices> | undefined,
+  fallback: number,
+): AirportHomeAdSlotPrices {
+  const result = createDefaultHomeAdSlotMonthlyPrices(fallback);
+  for (const slot of AIRPORT_HOME_AD_SLOTS) {
+    const amount = Number(value?.[slot]);
+    if (Number.isFinite(amount) && amount > 0) {
+      result[slot] = Number(amount.toFixed(2));
+    }
+  }
+  return result;
 }
 
 function normalizeRankClickChargeAmounts(
@@ -1816,12 +1988,12 @@ function mustBoundedString(value: unknown, fieldName: string, maxLength: number)
   return text;
 }
 
-function mustAdMonths(value: unknown): number {
+function mustAdMonths(value: unknown): AirportAdMonthOption {
   const months = Number(value);
   if (![1, 2, 3, 6, 12].includes(months)) {
     throw new HttpError(400, 'BAD_REQUEST', 'months must be one of 1,2,3,6,12');
   }
-  return months;
+  return months as AirportAdMonthOption;
 }
 
 function mustAdExtendMonths(value: unknown): number {
@@ -1830,6 +2002,21 @@ function mustAdExtendMonths(value: unknown): number {
     throw new HttpError(400, 'BAD_REQUEST', 'extend_months must be one of 0,1,2,3,6,12');
   }
   return months;
+}
+
+function mustBoolean(value: unknown, fieldName: string): boolean {
+  if (typeof value !== 'boolean') {
+    throw new HttpError(400, 'BAD_REQUEST', `${fieldName} must be boolean`);
+  }
+  return value;
+}
+
+function mustHomeAdSlot(value: unknown): AirportHomeAdSlot {
+  const slot = Number(value);
+  if (!(AIRPORT_HOME_AD_SLOTS as readonly number[]).includes(slot)) {
+    throw new HttpError(400, 'BAD_REQUEST', '请选择首页 1–4 号位');
+  }
+  return slot as AirportHomeAdSlot;
 }
 
 function mustDiscountPercent(value: unknown): number {

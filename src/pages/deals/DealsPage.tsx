@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpenCheck,
   CircleHelp,
@@ -17,8 +17,8 @@ import {
 import { DEALS_CONTENT_SECTIONS, DEALS_FAQ_ITEMS, buildDealsSeo, buildDealsStructuredData } from '../../../shared/publicSeo';
 import type { AirportDealView } from '../../../shared/airportAds';
 import { ListPageHero } from '../../components/ListPageHero';
-import { buildAbsoluteUrl, buildDealsHref, navigate, PageFrame, usePageSeo } from '../../site/publicSite';
-import { createTrackedOutboundClickHandler } from '../../site/marketing';
+import { buildAbsoluteUrl, buildDealsHref, navigate, normalizeExternalHref, PageFrame, usePageSeo } from '../../site/publicSite';
+import { createTrackedOutboundClickHandler, useMarketingImpression } from '../../site/marketing';
 import { readDealsInitialData, shouldFetchDealsData, type DealsResponse } from './dealsInitialData';
 
 export function DealsPage() {
@@ -102,7 +102,7 @@ export function DealsPage() {
               description={seo.description}
               tone="orange"
               stats={[
-                { label: '当前活动', value: `${deals.length}/6` },
+                { label: '当前活动', value: `${deals.length}` },
                 { label: '免费试用', value: `${deals.filter((deal) => deal.supports_trial).length}+` },
                 { label: '支持 USDT', value: `${deals.filter((deal) => deal.supports_usdt).length}+` },
               ]}
@@ -148,9 +148,20 @@ export function DealsPage() {
 }
 
 function DealCard({ deal, tone, copied, onCopy }: { key?: React.Key; deal: AirportDealView; tone: string; copied: boolean; onCopy: () => void }) {
+  const ref = useRef<HTMLElement>(null);
   const websiteHref = normalizeExternalHref(deal.website);
+  useMarketingImpression({
+    airportId: deal.airport_id,
+    campaignId: deal.campaign_id,
+    pageKind: 'deals',
+    placement: 'deal_card',
+    pagePath: buildDealsHref(),
+    dedupeKey: `deals|deal_card|${deal.campaign_id}`,
+    ref,
+  });
   const outboundClick = createTrackedOutboundClickHandler({
     airportId: deal.airport_id,
+    campaignId: deal.campaign_id,
     pageKind: 'deals',
     placement: 'deal_card',
     targetKind: 'website',
@@ -158,7 +169,7 @@ function DealCard({ deal, tone, copied, onCopy }: { key?: React.Key; deal: Airpo
     pagePath: buildDealsHref(),
   });
   return (
-    <article className="relative rounded-2xl border border-slate-200 bg-white p-[22px] shadow-[0_8px_24px_rgba(15,23,42,0.035)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(15,23,42,0.07)]">
+    <article ref={ref} className="relative rounded-2xl border border-slate-200 bg-white p-[22px] shadow-[0_8px_24px_rgba(15,23,42,0.035)] transition duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_rgba(15,23,42,0.07)]">
       <span className="absolute right-[18px] top-[18px] inline-flex h-[26px] items-center rounded-[7px] border border-slate-200 bg-white px-2.5 text-xs font-black text-slate-500">广告</span>
       <div className="mb-[18px] flex items-center gap-3.5 pr-14">
         <div className={`grid h-[54px] w-[54px] shrink-0 place-items-center rounded-[13px] text-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.18)] ${toneClass(tone)}`}>
@@ -286,12 +297,6 @@ function toneClass(tone: string): string {
   if (tone === 'orange') return 'bg-[linear-gradient(135deg,#f97316,#ef4444)]';
   if (tone === 'teal') return 'bg-[linear-gradient(135deg,#14b8a6,#22c55e)]';
   return 'bg-[linear-gradient(135deg,#1d4ed8,#38bdf8)]';
-}
-
-function normalizeExternalHref(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) return '#';
-  return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
 function formatDate(value: string): string {

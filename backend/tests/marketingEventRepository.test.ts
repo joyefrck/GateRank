@@ -15,6 +15,50 @@ test('MarketingEventRepository.ensureSchema creates marketing_events table', asy
   await repository.ensureSchema();
 
   assert.ok(queries.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS marketing_events')));
+  assert.ok(queries.some((sql) => sql.includes('campaign_id BIGINT UNSIGNED NULL')));
+  assert.ok(queries.some((sql) => sql.includes('idx_marketing_events_campaign_date_type')));
+});
+
+test('MarketingEventRepository.insertMany persists campaign ids', async () => {
+  let insertSql = '';
+  let insertParams: unknown[] = [];
+  const repository = new MarketingEventRepository({
+    query: async () => [[]],
+    execute: async (sql: string, params?: unknown[]) => {
+      insertSql = sql;
+      insertParams = params || [];
+      return [{}];
+    },
+  } as never);
+
+  await repository.insertMany([{
+    occurred_at: '2026-07-31 10:00:00',
+    event_date: '2026-07-31',
+    event_type: 'airport_impression',
+    page_path: '/',
+    page_kind: 'home',
+    referrer_path: null,
+    external_referrer_host: null,
+    source_type: 'direct_or_unknown',
+    source_label: 'Direct / Unknown',
+    airport_id: 7,
+    campaign_id: 77,
+    placement: 'deal_card',
+    target_kind: null,
+    target_url: null,
+    utm_source: null,
+    utm_medium: null,
+    utm_campaign: null,
+    utm_content: null,
+    utm_term: null,
+    country_code: 'ZZ',
+    country_name: 'Unknown',
+    visitor_hash: 'v'.repeat(64),
+    session_hash: 's'.repeat(64),
+  }]);
+
+  assert.match(insertSql, /airport_id,\s+campaign_id,\s+placement/);
+  assert.equal(insertParams[10], 77);
 });
 
 test('MarketingEventRepository migrates legacy page kind ENUM to VARCHAR once', async () => {

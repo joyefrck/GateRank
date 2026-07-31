@@ -335,6 +335,33 @@ export interface HomeSectionView {
   items: PublicCardItem[];
 }
 
+export interface HomeSponsoredDealView {
+  campaign_id: number;
+  airport_id: number;
+  home_slot: 1 | 2 | 3 | 4;
+  name: string;
+  website: string;
+  report_url: string;
+  discount_title: string;
+  discount_description: string;
+  coupon_code: string;
+  plan_price_month: number;
+  tracking_days: number;
+  tags: string[];
+  score: number | null;
+  score_hidden: boolean;
+  score_hidden_reason: 'insufficient_balance' | null;
+  score_delta_vs_yesterday: ScoreDeltaView;
+}
+
+export interface HomeNewsUpdateView {
+  id: number;
+  title: string;
+  slug: string;
+  href: string;
+  published_at: string | null;
+}
+
 export interface HomePageView {
   requested_date: string;
   date: string;
@@ -348,6 +375,16 @@ export interface HomePageView {
     realtime_tests: number;
   };
   tool_download_cta: HomeToolDownloadCta;
+  ranking_preview?: {
+    total: number;
+    items: FullRankingItem[];
+  };
+  sponsored_deals?: {
+    total: number;
+    display_limit: number;
+    items: HomeSponsoredDealView[];
+  };
+  news_updates?: HomeNewsUpdateView[];
   sections: {
     today_pick: HomeSectionView;
     most_stable: HomeSectionView;

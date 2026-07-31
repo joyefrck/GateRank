@@ -1,0 +1,6 @@
+{
+  "name": "GateRank 3.0",
+  "description": "GateRank 3.0 是最公正客观的机场推荐与可靠性排行评估系统。集今日推荐、全量榜单、活动优惠、在线跑路监测及实用测速工具于一体。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

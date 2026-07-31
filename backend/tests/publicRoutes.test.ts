@@ -114,6 +114,7 @@ test('POST /marketing/events stores validated marketing events', async () => {
             page_kind: 'home',
             page_path: '/',
             airport_id: 7,
+            campaign_id: 77,
             placement: 'home_card',
             occurred_at: '2026-04-18T10:00:01.000Z',
             client_session_id: 'session-1',
@@ -137,6 +138,7 @@ test('POST /marketing/events stores validated marketing events', async () => {
     assert.equal(insertedRecords.length, 3);
     assert.equal(insertedRecords[0]?.event_type, 'page_view');
     assert.equal(insertedRecords[1]?.placement, 'home_card');
+    assert.equal(insertedRecords[1]?.campaign_id, 77);
     assert.equal(insertedRecords[2]?.target_kind, 'website');
     assert.equal(insertedRecords[0]?.event_date, '2026-04-18');
     assert.equal(insertedRecords[2]?.page_path, '/reports/7');

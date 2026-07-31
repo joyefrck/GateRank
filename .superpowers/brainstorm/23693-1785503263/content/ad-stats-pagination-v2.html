@@ -1,0 +1,43 @@
+<h2>访问统计弹窗 · 分页版</h2>
+<p class="subtitle">每日明细按日期倒序，每页固定展示 30 条；累计指标不随分页变化。</p>
+
+<div class="mockup" style="max-width:920px;margin:0 auto">
+  <div class="mockup-header">首页 1 号位 · 优惠码 34</div>
+  <div class="mockup-body" style="padding:24px">
+    <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start">
+      <div><div class="label">AD PERFORMANCE</div><h3 style="margin-top:6px;font-size:24px">每日访问统计</h3></div>
+      <span style="color:#64748b">统计始于 2026/8/1</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:20px 0">
+      <div style="padding:16px;border-radius:15px;background:#f0f9ff"><small>累计曝光</small><div style="font-size:26px;font-weight:900;color:#0369a1">12,840</div></div>
+      <div style="padding:16px;border-radius:15px;background:#ecfdf5"><small>累计点击</small><div style="font-size:26px;font-weight:900;color:#047857">960</div></div>
+      <div style="padding:16px;border-radius:15px;background:#f8fafc"><small>总体点击率</small><div style="font-size:26px;font-weight:900">7.48%</div></div>
+    </div>
+    <div style="border:1px solid #e2e8f0;border-radius:15px;overflow:hidden">
+      <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;padding:12px 16px;background:#f8fafc;font-weight:800"><span>日期</span><span>曝光</span><span>点击</span><span>点击率</span></div>
+      <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;padding:12px 16px;border-top:1px solid #e2e8f0"><span>2026/8/31</span><span>502</span><span>41</span><span>8.17%</span></div>
+      <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;padding:12px 16px;border-top:1px solid #e2e8f0"><span>2026/8/30</span><span>487</span><span>36</span><span>7.39%</span></div>
+      <div style="display:grid;grid-template-columns:1.5fr 1fr 1fr 1fr;padding:12px 16px;border-top:1px solid #e2e8f0"><span>2026/8/29</span><span>531</span><span>43</span><span>8.10%</span></div>
+      <div style="padding:16px;text-align:center;color:#94a3b8;border-top:1px solid #e2e8f0">中间省略，共 30 条每日数据</div>
+    </div>
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:16px">
+      <span style="color:#64748b;font-size:14px">共 93 天 · 每页 30 条</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="mock-button">上一页</button>
+        <button class="mock-button" style="background:#111827;color:white">1</button>
+        <button class="mock-button">2</button>
+        <button class="mock-button">3</button>
+        <button class="mock-button">4</button>
+        <button class="mock-button">下一页</button>
+      </div>
+    </div>
+    <div style="margin-top:14px;color:#94a3b8;font-size:13px">上线前历史未记录广告 ID，因此不纳入分页总数。</div>
+  </div>
+</div>
+
+<div class="options" style="max-width:920px;margin:22px auto 0">
+  <div class="option" data-choice="confirm-pagination" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content"><h3>确认分页版</h3><p>最新日期优先，每页 30 条，累计指标始终展示全周期数据。</p></div>
+  </div>
+</div>

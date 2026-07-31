@@ -5,7 +5,10 @@ import type {
   Airport,
   DailyMetrics,
   FullRankingView,
+  HomeNewsUpdateView,
   HomePageView,
+  HomeSponsoredDealView,
+  NewsArticleListItem,
   PublicCardItem,
   PublicCardType,
   RankingItem,
@@ -18,6 +21,7 @@ import type {
   ScoreDeltaView,
   SubscriptionNodeSnapshot,
 } from '../types/domain';
+import type { AirportDealView } from '../../../shared/airportAds';
 import {
   dateDaysAgo,
   diffDays,
@@ -187,6 +191,16 @@ interface PublicViewDeps {
   toolsDownloadService?: {
     getDownloadPageView(platform?: null): Promise<ToolsDownloadPageView>;
   };
+  airportAdCampaignRepository?: {
+    listActiveDeals(): Promise<AirportDealView[]>;
+    listActiveHomeDeals?(): Promise<AirportDealView[]>;
+  };
+  newsRepository?: {
+    listPublished(options: { page?: number; pageSize?: number }): Promise<{
+      items: NewsArticleListItem[];
+      total: number;
+    }>;
+  };
 }
 
 interface CardContext {
@@ -261,6 +275,8 @@ const DEFAULT_SCORE_VISIBILITY: PublicScoreVisibility = {
   score_hidden_reason: null,
 };
 const HOME_TOOL_DOWNLOAD_CTA_LIMIT = 4;
+const HOME_SPONSORED_DEAL_LIMIT = 4;
+const HOME_NEWS_UPDATE_LIMIT = 5;
 
 export class PublicViewService {
   constructor(private readonly deps: PublicViewDeps) {}
@@ -280,6 +296,8 @@ export class PublicViewService {
       latestApprovedApplicationAirports,
       riskMonitor,
       toolDownloadCta,
+      activeDeals,
+      newsResult,
     ] = await Promise.all([
       this.deps.statsRepository.getHomeStats(resolvedDate),
         this.deps.scoreRepository.getPublicFullRankingByDate(
@@ -299,13 +317,16 @@ export class PublicViewService {
         : Promise.resolve([]),
       this.deps.scoreRepository.getPublicRiskMonitorByDate
         ? this.deps.scoreRepository.getPublicRiskMonitorByDate(
-            resolvedDate,
+              resolvedDate,
               1,
               sectionLimits.risk_alerts,
               clickChargeAmount,
             )
         : Promise.resolve({ total: 0, items: [] }),
       this.buildToolDownloadCta(),
+      this.loadActiveHomeDeals(),
+      this.deps.newsRepository?.listPublished({ page: 1, pageSize: HOME_NEWS_UPDATE_LIMIT })
+        ?? Promise.resolve({ items: [], total: 0 }),
     ]);
     const preloadedContexts = await this.preloadCardContexts(
       collectRankingAirportIds(
@@ -314,13 +335,27 @@ export class PublicViewService {
         value,
         newest,
         latestApprovedApplicationAirports.map((airport) => ({ airport_id: airport.id })),
+        activeDeals.map((deal) => ({ airport_id: deal.airport_id })),
         ),
         resolvedDate,
         clickChargeAmount,
       );
     const loadCardContext = this.createCardContextLoader(preloadedContexts, clickChargeAmount);
-    const [todayPickItems, stableItems, valueItems, newestItems, latestApprovedApplicationItems] = await Promise.all([
-      this.buildHomeSectionItems('today_pick', fullRankingPreview.items, resolvedDate, loadCardContext, sectionLimits),
+    const [
+      todayPickItems,
+      stableItems,
+      valueItems,
+      newestItems,
+      latestApprovedApplicationItems,
+      sponsoredDeals,
+    ] = await Promise.all([
+      this.buildHomeSectionItems(
+        'today_pick',
+        fullRankingPreview.items.slice(0, sectionLimits.today_pick),
+        resolvedDate,
+        loadCardContext,
+        sectionLimits,
+      ),
       stable.length > 0
         ? this.buildHomeSectionItems('most_stable', stable, resolvedDate, loadCardContext, sectionLimits)
         : Promise.resolve([]),
@@ -339,6 +374,7 @@ export class PublicViewService {
             sectionLimits,
           )
         : Promise.resolve([]),
+      this.buildHomeSponsoredDeals(activeDeals, resolvedDate, loadCardContext),
     ]);
     const newEntryItems = mergeHomeSectionItems(
       sectionLimits.new_entries,
@@ -350,7 +386,12 @@ export class PublicViewService {
       stable.length === 0 ||
       value.length === 0 ||
       newEntryItems.length < sectionLimits.new_entries
-          ? await this.buildFallbackHomeSections(resolvedDate, loadCardContext, clickChargeAmount, sectionLimits)
+          ? await this.buildFallbackHomeSections(
+              resolvedDate,
+              loadCardContext,
+              clickChargeAmount,
+              sectionLimits,
+            )
           : null;
     const finalNewEntryItems = mergeHomeSectionItems(
       sectionLimits.new_entries,
@@ -371,6 +412,16 @@ export class PublicViewService {
         realtime_tests: stats.realtime_tests,
       },
       tool_download_cta: toolDownloadCta,
+      ranking_preview: {
+        total: fullRankingPreview.total,
+        items: fullRankingPreview.items.slice(0, sectionLimits.today_pick),
+      },
+      sponsored_deals: {
+        total: activeDeals.length,
+        display_limit: HOME_SPONSORED_DEAL_LIMIT,
+        items: sponsoredDeals,
+      },
+      news_updates: newsResult.items.slice(0, HOME_NEWS_UPDATE_LIMIT).map(toHomeNewsUpdate),
       sections: {
         today_pick: {
           title: SECTION_CONFIG.today_pick.title,
@@ -629,6 +680,63 @@ export class PublicViewService {
       airportIds,
       clickChargeAmount,
     );
+  }
+
+  private async buildHomeSponsoredDeals(
+    deals: AirportDealView[],
+    date: string,
+    loadCardContext: (airportId: number, targetDate: string) => Promise<CardContext | null>,
+  ): Promise<HomeSponsoredDealView[]> {
+    const items = await Promise.all(
+      deals.slice(0, HOME_SPONSORED_DEAL_LIMIT).map(async (deal) => {
+        const homeSlot = Number(deal.home_slot);
+        if (![1, 2, 3, 4].includes(homeSlot)) {
+          return null;
+        }
+        const context = await loadCardContext(deal.airport_id, date);
+        const airport = context?.airport;
+        const currentScore = context?.score.display_score ?? null;
+        const yesterdayScore = context?.score.yesterday_display_score ?? null;
+        const foundedOn = airport?.founded_on || deal.founded_on;
+
+        return {
+          campaign_id: deal.campaign_id,
+          airport_id: deal.airport_id,
+          home_slot: homeSlot as 1 | 2 | 3 | 4,
+          name: airport?.name || deal.airport_name,
+          website: airport?.website || deal.website,
+          report_url: deal.report_url,
+          discount_title: deal.discount_title,
+          discount_description: deal.discount_description,
+          coupon_code: deal.coupon_code,
+          plan_price_month: Number(airport?.plan_price_month ?? deal.plan_price_month ?? 0),
+          tracking_days: foundedOn ? Math.max(0, diffDays(foundedOn, date)) : 0,
+          tags: (airport?.tags || deal.tags || []).slice(0, 3),
+          score: currentScore,
+          score_hidden: context?.score.score_hidden ?? false,
+          score_hidden_reason: context?.score.score_hidden_reason ?? null,
+          score_delta_vs_yesterday: buildScoreDeltaView(currentScore, yesterdayScore),
+        };
+      }),
+    );
+
+    return items
+      .filter((item): item is HomeSponsoredDealView => item !== null)
+      .sort((left, right) => left.home_slot - right.home_slot);
+  }
+
+  private async loadActiveHomeDeals(): Promise<AirportDealView[]> {
+    const repository = this.deps.airportAdCampaignRepository;
+    if (!repository) {
+      return [];
+    }
+    const deals = repository.listActiveHomeDeals
+      ? await repository.listActiveHomeDeals()
+      : await repository.listActiveDeals();
+    return deals
+      .filter((deal) => [1, 2, 3, 4].includes(Number(deal.home_slot)))
+      .sort((left, right) => Number(left.home_slot) - Number(right.home_slot))
+      .slice(0, HOME_SPONSORED_DEAL_LIMIT);
   }
 
   private async buildHomeSectionItems(
@@ -1569,6 +1677,16 @@ function getPenaltyValue(details: Record<string, ScoreDetailValue>, key: string)
 
 function buildPublicFallbackNotice(requestedDate: string, resolvedDate: string): string {
   return `${requestedDate} 的公开分数尚未生成，当前展示 ${resolvedDate} 的最新已生成快照，非实时探测结果。`;
+}
+
+function toHomeNewsUpdate(item: NewsArticleListItem): HomeNewsUpdateView {
+  return {
+    id: item.id,
+    title: item.title,
+    slug: item.slug,
+    href: `/news/${encodeURIComponent(item.slug)}`,
+    published_at: item.published_at,
+  };
 }
 
 function getDisplayScore(score: { final_score: number; details?: Record<string, unknown> }): number {

@@ -27,6 +27,7 @@ export interface MarketingEventInsertRecord {
   source_type: MarketingSourceType;
   source_label: string;
   airport_id: number | null;
+  campaign_id: number | null;
   placement: MarketingPlacement | null;
   target_kind: MarketingTargetKind | null;
   target_url: string | null;
@@ -53,6 +54,7 @@ export interface MarketingEventPayload {
   referrer_path?: string | null;
   external_referrer_host?: string | null;
   airport_id?: number | null;
+  campaign_id?: number | null;
   placement?: MarketingPlacement | null;
   target_kind?: MarketingTargetKind | null;
   target_url?: string | null;
@@ -131,6 +133,7 @@ export function buildMarketingEventRecord(
     source_type: attribution.source_type,
     source_label: attribution.source_label,
     airport_id: payload.airport_id ?? null,
+    campaign_id: payload.campaign_id ?? null,
     placement: payload.placement ?? null,
     target_kind: payload.target_kind ?? null,
     target_url: payload.target_url?.trim() || null,
@@ -170,6 +173,7 @@ export function buildServerPageViewRecord(
     source_type: attribution.source_type,
     source_label: attribution.source_label,
     airport_id: null,
+    campaign_id: null,
     placement: null,
     target_kind: null,
     target_url: null,

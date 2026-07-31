@@ -114,6 +114,7 @@ export class MarketingEventRepository {
         source_type VARCHAR(64) NOT NULL DEFAULT 'direct_or_unknown',
         source_label VARCHAR(255) NOT NULL DEFAULT 'Direct / Unknown',
         airport_id BIGINT UNSIGNED NULL,
+        campaign_id BIGINT UNSIGNED NULL,
         placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'deal_card', 'news_article') NULL,
         target_kind ENUM('website', 'subscription_url') NULL,
         target_url VARCHAR(2048) NULL,
@@ -130,6 +131,7 @@ export class MarketingEventRepository {
         PRIMARY KEY (id),
         INDEX idx_marketing_events_date_type (event_date, event_type),
         INDEX idx_marketing_events_airport_date_type (airport_id, event_date, event_type),
+        INDEX idx_marketing_events_campaign_date_type (campaign_id, event_date, event_type),
         INDEX idx_marketing_events_page_kind_date (page_kind, event_date),
         INDEX idx_marketing_events_page_path (page_path(255)),
         INDEX idx_marketing_events_occurred_at (occurred_at),
@@ -148,12 +150,14 @@ export class MarketingEventRepository {
     await this.ensureColumnExists('utm_term', 'ALTER TABLE marketing_events ADD COLUMN utm_term VARCHAR(255) NULL AFTER utm_content');
     await this.ensureColumnExists('country_code', 'ALTER TABLE marketing_events ADD COLUMN country_code CHAR(2) NOT NULL DEFAULT \'ZZ\' AFTER utm_term');
     await this.ensureColumnExists('country_name', 'ALTER TABLE marketing_events ADD COLUMN country_name VARCHAR(128) NOT NULL DEFAULT \'Unknown\' AFTER country_code');
+    await this.ensureColumnExists('campaign_id', 'ALTER TABLE marketing_events ADD COLUMN campaign_id BIGINT UNSIGNED NULL AFTER airport_id');
     await this.pool.query(`
       ALTER TABLE marketing_events
         MODIFY COLUMN placement ENUM('home_card', 'full_ranking_item', 'risk_monitor_item', 'report_header', 'deal_card', 'news_article') NULL
     `);
     await this.ensureIndexExists('idx_marketing_events_source_label_date', 'CREATE INDEX idx_marketing_events_source_label_date ON marketing_events (source_label(191), event_date)');
     await this.ensureIndexExists('idx_marketing_events_country_code_date', 'CREATE INDEX idx_marketing_events_country_code_date ON marketing_events (country_code, event_date)');
+    await this.ensureIndexExists('idx_marketing_events_campaign_date_type', 'CREATE INDEX idx_marketing_events_campaign_date_type ON marketing_events (campaign_id, event_date, event_type)');
   }
 
   async insertMany(records: MarketingEventInsertRecord[]): Promise<void> {
@@ -161,7 +165,7 @@ export class MarketingEventRepository {
       return;
     }
 
-    const placeholders = records.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
+    const placeholders = records.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
     const params = records.flatMap((record) => [
       record.occurred_at,
       record.event_date,
@@ -173,6 +177,7 @@ export class MarketingEventRepository {
       record.source_type,
       record.source_label,
       record.airport_id,
+      record.campaign_id,
       record.placement,
       record.target_kind,
       record.target_url,
@@ -199,6 +204,7 @@ export class MarketingEventRepository {
          source_type,
          source_label,
          airport_id,
+         campaign_id,
          placement,
          target_kind,
          target_url,

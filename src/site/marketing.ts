@@ -13,6 +13,7 @@ interface MarketingEventPayload {
   referrer_path?: string | null;
   external_referrer_host?: string | null;
   airport_id?: number | null;
+  campaign_id?: number | null;
   placement?: MarketingPlacement | null;
   target_kind?: MarketingTargetKind | null;
   target_url?: string | null;
@@ -37,6 +38,7 @@ interface MarketingAttributionContext {
 interface MarketingImpressionOptions {
   enabled?: boolean;
   airportId: number;
+  campaignId?: number | null;
   placement: MarketingPlacement;
   pageKind: MarketingPageKind;
   pagePath?: string;
@@ -78,6 +80,7 @@ export function useMarketingImpression(options: MarketingImpressionOptions): voi
   const {
     enabled = true,
     airportId,
+    campaignId,
     placement,
     pageKind,
     pagePath = window.location.pathname,
@@ -109,6 +112,7 @@ export function useMarketingImpression(options: MarketingImpressionOptions): voi
         page_kind: pageKind,
         page_path: normalizePath(pagePath),
         airport_id: airportId,
+        campaign_id: campaignId ?? null,
         placement,
       });
       observer.disconnect();
@@ -116,11 +120,12 @@ export function useMarketingImpression(options: MarketingImpressionOptions): voi
 
     observer.observe(element);
     return () => observer.disconnect();
-  }, [airportId, dedupeKey, enabled, pageKind, pagePath, placement, ref, threshold]);
+  }, [airportId, campaignId, dedupeKey, enabled, pageKind, pagePath, placement, ref, threshold]);
 }
 
 export function createTrackedOutboundClickHandler(input: {
   airportId: number;
+  campaignId?: number | null;
   pageKind: MarketingPageKind;
   placement: MarketingPlacement;
   targetKind: MarketingTargetKind;
@@ -133,6 +138,7 @@ export function createTrackedOutboundClickHandler(input: {
       page_kind: input.pageKind,
       page_path: normalizePath(input.pagePath || window.location.pathname),
       airport_id: input.airportId,
+      campaign_id: input.campaignId ?? null,
       placement: input.placement,
       target_kind: input.targetKind,
       target_url: input.targetUrl,

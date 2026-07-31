@@ -7,6 +7,7 @@ import {
   DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT,
   DEFAULT_MARKETING_RECHARGE_AMOUNTS,
   MarketingSettingsService,
+  createDefaultHomeAdSlotMonthlyPrices,
   createDefaultRankClickChargeAmounts,
   resolveClickChargeAmount,
 } from '../src/services/marketingSettingsService';
@@ -45,6 +46,10 @@ test('MarketingSettingsService returns defaults when no settings exist', async (
   assert.equal(view.click_charge_amount, DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT);
   assert.deepEqual(view.rank_click_charge_amounts, createDefaultRankClickChargeAmounts());
   assert.equal(view.airport_ad_monthly_price, DEFAULT_AIRPORT_AD_MONTHLY_PRICE);
+  assert.deepEqual(
+    view.home_ad_slot_monthly_prices,
+    createDefaultHomeAdSlotMonthlyPrices(),
+  );
   assert.deepEqual(view.recharge_amounts, DEFAULT_MARKETING_RECHARGE_AMOUNTS);
   assert.equal(view.admin_telegram_username, null);
   assert.deepEqual(view.home_section_limits, DEFAULT_HOME_SECTION_LIMITS);
@@ -64,6 +69,10 @@ test('MarketingSettingsService falls back to legacy payment gateway application 
   assert.equal(view.click_charge_amount, DEFAULT_MARKETING_CLICK_CHARGE_AMOUNT);
   assert.deepEqual(view.rank_click_charge_amounts, createDefaultRankClickChargeAmounts());
   assert.equal(view.airport_ad_monthly_price, DEFAULT_AIRPORT_AD_MONTHLY_PRICE);
+  assert.deepEqual(
+    view.home_ad_slot_monthly_prices,
+    createDefaultHomeAdSlotMonthlyPrices(),
+  );
   assert.deepEqual(view.recharge_amounts, DEFAULT_MARKETING_RECHARGE_AMOUNTS);
   assert.equal(view.admin_telegram_username, null);
   assert.deepEqual(view.home_section_limits, DEFAULT_HOME_SECTION_LIMITS);
@@ -78,6 +87,7 @@ test('MarketingSettingsService saves application, click fees, ad monthly price, 
     click_charge_amount: 1.256,
     rank_click_charge_amounts: { 1: 2.345, 2: null, 6: 0.75 },
     airport_ad_monthly_price: 1288.884,
+    home_ad_slot_monthly_prices: { 1: 1688.884, 2: 1588.884, 3: 1488.884, 4: 1388.884 },
     recharge_amounts: [500, 100, 300],
     admin_telegram_username: 'https://t.me/GateRank_Admin',
     home_section_limits: {
@@ -100,6 +110,12 @@ test('MarketingSettingsService saves application, click fees, ad monthly price, 
     6: 0.75,
   });
   assert.equal(view.airport_ad_monthly_price, 1288.88);
+  assert.deepEqual(view.home_ad_slot_monthly_prices, {
+    1: 1688.88,
+    2: 1588.88,
+    3: 1488.88,
+    4: 1388.88,
+  });
   assert.deepEqual(view.recharge_amounts, [100, 300, 500]);
   assert.equal(view.admin_telegram_username, 'GateRank_Admin');
   assert.deepEqual(view.home_section_limits, {
@@ -121,6 +137,12 @@ test('MarketingSettingsService saves application, click fees, ad monthly price, 
       6: 0.75,
     },
     airport_ad_monthly_price: 1288.88,
+    home_ad_slot_monthly_prices: {
+      1: 1688.88,
+      2: 1588.88,
+      3: 1488.88,
+      4: 1388.88,
+    },
     recharge_amounts: [100, 300, 500],
     admin_telegram_username: 'GateRank_Admin',
     home_section_limits: {
@@ -149,6 +171,10 @@ test('MarketingSettingsService keeps default home section limits for legacy mark
   assert.equal(view.click_charge_amount, 1.5);
   assert.deepEqual(view.rank_click_charge_amounts, createDefaultRankClickChargeAmounts());
   assert.equal(view.airport_ad_monthly_price, DEFAULT_AIRPORT_AD_MONTHLY_PRICE);
+  assert.deepEqual(
+    view.home_ad_slot_monthly_prices,
+    createDefaultHomeAdSlotMonthlyPrices(),
+  );
   assert.deepEqual(view.recharge_amounts, DEFAULT_MARKETING_RECHARGE_AMOUNTS);
   assert.deepEqual(view.home_section_limits, DEFAULT_HOME_SECTION_LIMITS);
 });
@@ -178,6 +204,45 @@ test('MarketingSettingsService partially updates and clears ranked click charges
     4: null,
     5: null,
     6: 0.8,
+  });
+});
+
+test('MarketingSettingsService uses the ordinary ad price as legacy homepage slot fallback', async () => {
+  const { repository } = createSettingsRepository({
+    marketing_billing: {
+      airport_ad_monthly_price: 1288.88,
+    },
+  });
+  const service = new MarketingSettingsService({ systemSettingRepository: repository });
+
+  const view = await service.getAdminSettings();
+
+  assert.deepEqual(view.home_ad_slot_monthly_prices, {
+    1: 1288.88,
+    2: 1288.88,
+    3: 1288.88,
+    4: 1288.88,
+  });
+});
+
+test('MarketingSettingsService partially updates homepage slot monthly prices', async () => {
+  const { repository } = createSettingsRepository({
+    marketing_billing: {
+      airport_ad_monthly_price: 1000,
+      home_ad_slot_monthly_prices: { 1: 1500, 2: 1400, 3: 1300, 4: 1200 },
+    },
+  });
+  const service = new MarketingSettingsService({ systemSettingRepository: repository });
+
+  const view = await service.updateAdminSettings({
+    home_ad_slot_monthly_prices: { 2: 1450.126, 4: 1250 },
+  }, 'admin');
+
+  assert.deepEqual(view.home_ad_slot_monthly_prices, {
+    1: 1500,
+    2: 1450.13,
+    3: 1300,
+    4: 1250,
   });
 });
 
@@ -259,6 +324,16 @@ test('MarketingSettingsService rejects non-positive amounts on update', async ()
       const next = error as { code?: string; message?: string };
       assert.equal(next.code, 'BAD_REQUEST');
       assert.match(String(next.message || ''), /airport_ad_monthly_price/);
+      return true;
+    },
+  );
+
+  await assert.rejects(
+    () => service.updateAdminSettings({ home_ad_slot_monthly_prices: { 3: 0 } }, 'admin'),
+    (error: unknown) => {
+      const next = error as { code?: string; message?: string };
+      assert.equal(next.code, 'BAD_REQUEST');
+      assert.match(String(next.message || ''), /home_ad_slot_monthly_prices\.3/);
       return true;
     },
   );

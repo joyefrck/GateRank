@@ -527,6 +527,7 @@ function validateMarketingEventPayload(
   referrer_path?: string | null;
   external_referrer_host?: string | null;
   airport_id?: number | null;
+  campaign_id?: number | null;
   placement?: MarketingPlacement | null;
   target_kind?: MarketingTargetKind | null;
   target_url?: string | null;
@@ -577,6 +578,9 @@ function validateMarketingEventPayload(
   const airportId = payload.airport_id === undefined || payload.airport_id === null
     ? null
     : mustPositiveInt(payload.airport_id, `events[${index}].airport_id`);
+  const campaignId = payload.campaign_id === undefined || payload.campaign_id === null
+    ? null
+    : mustPositiveInt(payload.campaign_id, `events[${index}].campaign_id`);
   const placement = payload.placement === undefined || payload.placement === null
     ? null
     : mustMarketingPlacement(payload.placement, `events[${index}].placement`);
@@ -619,6 +623,7 @@ function validateMarketingEventPayload(
     referrer_path: referrerPath,
     external_referrer_host: externalReferrerHost,
     airport_id: airportId,
+    campaign_id: campaignId,
     placement,
     target_kind: targetKind,
     target_url: targetUrl,

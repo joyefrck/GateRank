@@ -33,6 +33,8 @@ import {
 import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
 import { MonthlyReportEditorPage, MonthlyReportListPage } from './monthlyReports/MonthlyReportPages';
+import { MarketingModuleTabs } from './marketing/MarketingModuleTabs';
+import { MarketingStatisticsPage } from './marketing/MarketingStatisticsPage';
 import { buildPublishTokenDocsHref } from '../site/publicSite';
 import {
   getMarketingPageKindLabel,
@@ -919,6 +921,7 @@ interface MarketingSettingsView {
   click_charge_amount: number;
   rank_click_charge_amounts: Record<MarketingClickChargeRank, number | null>;
   airport_ad_monthly_price: number;
+  home_ad_slot_monthly_prices: Record<MarketingHomeAdSlot, number>;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
   home_section_limits: {
@@ -937,6 +940,7 @@ interface MarketingSettingsFormState {
   click_charge_amount: string;
   rank_click_charge_amounts: Record<MarketingClickChargeRank, string>;
   airport_ad_monthly_price: string;
+  home_ad_slot_monthly_prices: Record<MarketingHomeAdSlot, string>;
   recharge_amounts: string[];
   admin_telegram_username: string;
   home_section_limits: {
@@ -949,8 +953,10 @@ interface MarketingSettingsFormState {
 }
 
 type MarketingClickChargeRank = '1' | '2' | '3' | '4' | '5' | '6';
+type MarketingHomeAdSlot = '1' | '2' | '3' | '4';
 
 const marketingClickChargeRanks: MarketingClickChargeRank[] = ['1', '2', '3', '4', '5', '6'];
+const marketingHomeAdSlots: MarketingHomeAdSlot[] = ['1', '2', '3', '4'];
 
 const defaultRankClickChargeAmountForm: Record<MarketingClickChargeRank, string> = {
   1: '',
@@ -959,6 +965,13 @@ const defaultRankClickChargeAmountForm: Record<MarketingClickChargeRank, string>
   4: '',
   5: '',
   6: '',
+};
+
+const defaultHomeAdSlotMonthlyPriceForm: Record<MarketingHomeAdSlot, string> = {
+  1: '1000',
+  2: '1000',
+  3: '1000',
+  4: '1000',
 };
 
 interface SmtpSettingsView {
@@ -1179,7 +1192,7 @@ const ADMIN_NAV_ITEMS = [
     path: '/admin/marketing-settings',
     label: '营销模块',
     icon: MousePointerClick,
-    isActive: (path: string) => path === '/admin/marketing-settings',
+    isActive: (path: string) => path === '/admin/marketing-settings' || path === '/admin/marketing-statistics',
   },
   {
     path: '/admin/airports',
@@ -1717,7 +1730,15 @@ export default function AdminApp() {
             />
           )}
           {path === '/admin/marketing' && <MarketingPage />}
-          {path === '/admin/marketing-settings' && <MarketingSettingsPage />}
+          {path === '/admin/marketing-settings' && <MarketingSettingsPage onNavigateTab={navigate} />}
+          {path === '/admin/marketing-statistics' && (
+            <MarketingStatisticsPage
+              routeSearch={search}
+              fetchJson={apiFetch}
+              onUpdateUrl={(to, mode) => (mode === 'replace' ? replaceNavigate(to) : navigate(to))}
+              onNavigateTab={navigate}
+            />
+          )}
           {(path === '/admin/news/new' || path.match(/^\/admin\/news\/\d+$/)) && (
             <NewsEditorPage
               articleId={path === '/admin/news/new' ? undefined : Number(path.split('/')[3])}
@@ -4322,7 +4343,7 @@ function MarketingTrendChart({
 }
 
 const homeSectionLimitFields = [
-  { key: 'today_pick', label: '今日推荐' },
+  { key: 'today_pick', label: '排行榜数量' },
   { key: 'most_stable', label: '长期稳定' },
   { key: 'best_value', label: '性价比' },
   { key: 'new_entries', label: '新入榜' },
@@ -4339,7 +4360,7 @@ const defaultHomeSectionLimitForm = {
 
 const defaultRechargeAmountForm = ['100', '300', '500', '1000'];
 
-function MarketingSettingsPage() {
+function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string) => void }) {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -4350,6 +4371,7 @@ function MarketingSettingsPage() {
     click_charge_amount: '1',
     rank_click_charge_amounts: { ...defaultRankClickChargeAmountForm },
     airport_ad_monthly_price: '1000',
+    home_ad_slot_monthly_prices: { ...defaultHomeAdSlotMonthlyPriceForm },
     recharge_amounts: defaultRechargeAmountForm,
     admin_telegram_username: '',
     home_section_limits: defaultHomeSectionLimitForm,
@@ -4360,9 +4382,16 @@ function MarketingSettingsPage() {
       ? view.recharge_amounts
       : defaultRechargeAmountForm.map(Number);
     const airportAdMonthlyPrice = Number(view.airport_ad_monthly_price || 1000);
+    const homeAdSlotMonthlyPrices = Object.fromEntries(
+      marketingHomeAdSlots.map((slot) => [
+        slot,
+        Number(view.home_ad_slot_monthly_prices?.[slot] || airportAdMonthlyPrice),
+      ]),
+    ) as Record<MarketingHomeAdSlot, number>;
     setSettings({
       ...view,
       airport_ad_monthly_price: airportAdMonthlyPrice,
+      home_ad_slot_monthly_prices: homeAdSlotMonthlyPrices,
     });
     setForm({
       application_fee_amount: String(view.application_fee_amount || 300),
@@ -4374,6 +4403,9 @@ function MarketingSettingsPage() {
         ]),
       ) as Record<MarketingClickChargeRank, string>,
       airport_ad_monthly_price: String(airportAdMonthlyPrice),
+      home_ad_slot_monthly_prices: Object.fromEntries(
+        marketingHomeAdSlots.map((slot) => [slot, String(homeAdSlotMonthlyPrices[slot])]),
+      ) as Record<MarketingHomeAdSlot, string>,
       recharge_amounts: rechargeAmounts.map((amount) => String(amount)),
       admin_telegram_username: view.admin_telegram_username ? `@${view.admin_telegram_username}` : '',
       home_section_limits: {
@@ -4422,6 +4454,12 @@ function MarketingSettingsPage() {
             ]),
           ),
           airport_ad_monthly_price: Number(form.airport_ad_monthly_price),
+          home_ad_slot_monthly_prices: Object.fromEntries(
+            marketingHomeAdSlots.map((slot) => [
+              slot,
+              Number(form.home_ad_slot_monthly_prices[slot]),
+            ]),
+          ),
           recharge_amounts: form.recharge_amounts.map((amount) => Number(amount)),
           admin_telegram_username: form.admin_telegram_username,
           home_section_limits: {
@@ -4495,6 +4533,8 @@ function MarketingSettingsPage() {
         </button>
       </div>
 
+      <MarketingModuleTabs active="settings" onNavigate={onNavigateTab} />
+
       <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-6">
         {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
         {success && <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">{success}</div>}
@@ -4507,7 +4547,7 @@ function MarketingSettingsPage() {
                 <div className="text-xs font-medium text-neutral-500">费用规则</div>
                 <div className="mt-2 text-sm font-bold text-neutral-950">
                   {settings
-                    ? `入驻 ¥${settings.application_fee_amount} / 点击默认 ¥${settings.click_charge_amount} / 前六名定制 ${marketingClickChargeRanks.filter((rank) => settings.rank_click_charge_amounts?.[rank] != null).length} 档 / 广告月费 ¥${settings.airport_ad_monthly_price || 1000}`
+                    ? `入驻 ¥${settings.application_fee_amount} / 点击默认 ¥${settings.click_charge_amount} / 普通广告 ¥${settings.airport_ad_monthly_price || 1000} / 首页 1–4：${marketingHomeAdSlots.map((slot) => `¥${settings.home_ad_slot_monthly_prices[slot]}`).join(' / ')}`
                     : '-'}
                 </div>
               </div>
@@ -4555,7 +4595,7 @@ function MarketingSettingsPage() {
                     onChange={(e) => setForm({ ...form, click_charge_amount: e.target.value })}
                   />
                 </FormField>
-                <FormField label="广告投放月费 (元)" hint="申请人后台新建投放和续投时使用。">
+                <FormField label="普通优惠活动月费 (元)" hint="未选择首页时，新建投放和续投使用。">
                   <input
                     className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
                     type="number"
@@ -4565,6 +4605,35 @@ function MarketingSettingsPage() {
                     onChange={(e) => setForm({ ...form, airport_ad_monthly_price: e.target.value })}
                   />
                 </FormField>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
+                <div className="text-sm font-bold text-neutral-950">首页广告位月费（元）</div>
+                <div className="mt-1 text-xs leading-5 text-neutral-500">
+                  用户选择投放首页后，按所选位置的价格替代普通优惠活动月费，不叠加收费。
+                </div>
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {marketingHomeAdSlots.map((slot) => (
+                    <div key={slot}>
+                      <FormField label={`首页 ${slot} 号位 (元)`} hint="新建首页投放和续投时使用。">
+                        <input
+                          className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={form.home_ad_slot_monthly_prices[slot]}
+                          onChange={(event) => setForm({
+                            ...form,
+                            home_ad_slot_monthly_prices: {
+                              ...form.home_ad_slot_monthly_prices,
+                              [slot]: event.target.value,
+                            },
+                          })}
+                        />
+                      </FormField>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="mt-5 rounded-2xl border border-neutral-200 bg-neutral-50 p-4">
@@ -4646,7 +4715,7 @@ function MarketingSettingsPage() {
 
             <MarketingSettingsSection
               title="首页展示"
-              description="控制公开首页五个榜单板块各自展示的卡片数量，范围 1-12。"
+              description="控制公开首页排行榜与四个摘要模块的展示数量，范围 1-12。"
             >
               <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                 {homeSectionLimitFields.map((item) => (

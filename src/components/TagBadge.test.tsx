@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
-import { TagBadge } from './TagBadge';
+import { getTagBadgeTone, TagBadge } from './TagBadge';
 
 function renderClassName(tag: string): string {
   const element = TagBadge({ tag });
@@ -20,4 +20,9 @@ test('unknown tags resolve to stable non-silver colors', () => {
 
   assert.equal(firstClassName, secondClassName);
   assert.doesNotMatch(firstClassName, /\b(?:neutral|slate)-/);
+});
+
+test('risk and value tags keep the original system color families', () => {
+  assert.match(getTagBadgeTone('风险观察').className, /\borange-/);
+  assert.match(getTagBadgeTone('性价比高').className, /\byellow-/);
 });

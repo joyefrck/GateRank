@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { PublicViewService } from '../src/services/publicViewService';
+import type { AirportDealView } from '../../shared/airportAds';
 import type { ToolDownloadItem } from '../../shared/toolDownloads';
 
 test('PublicViewService.getHomePageView falls back to latest ranking date', async () => {
@@ -56,6 +57,125 @@ test('PublicViewService.getHomePageView falls back to latest ranking date', asyn
     '2026-03-24',
     '2026-03-24',
   ]);
+});
+
+test('PublicViewService.getHomePageView applies configured ranking count with four sponsored deals and five news updates', async () => {
+  const rankingPageSizes: number[] = [];
+  const deals = Array.from({ length: 5 }, (_, index) => ({
+    campaign_id: index + 1,
+    airport_id: index + 1,
+    airport_name: `广告机场 ${index + 1}`,
+    airport_slug: `deal-${index + 1}`,
+    website: `https://deal-${index + 1}.example`,
+    report_url: `/airports/deal-${index + 1}`,
+    plan_price_month: 10 + index,
+    founded_on: '2026-01-01',
+    airport_intro: `广告机场 ${index + 1} 简介`,
+    tags: ['IEPL', '新客优惠'],
+    coupon_code: `DEAL${index + 1}`,
+    discount_title: `优惠 ${index + 1}`,
+    discount_description: `优惠说明 ${index + 1}`,
+    applicable_plan: '全部套餐',
+    starts_at: '2026-03-01T00:00:00+08:00',
+    ends_at: '2026-09-01T00:00:00+08:00',
+    purchased_months: 6,
+    billed_amount: 6000,
+    is_stackable: false,
+    refund_supported: false,
+    supports_trial: false,
+    supports_usdt: false,
+    supports_streaming: false,
+    supports_ai: false,
+    low_price_plan: true,
+    discount_percent: 20,
+    home_slot: index < 4 ? (index + 1) as 1 | 2 | 3 | 4 : null,
+    is_homepage: index < 4,
+    created_at: '2026-03-01T00:00:00+08:00',
+  })) satisfies AirportDealView[];
+  const rankingItems = Array.from({ length: 12 }, (_, index) => ({
+    airport_id: index + 1,
+    rank: index + 1,
+    name: `机场 ${index + 1}`,
+    website: `https://airport-${index + 1}.example`,
+    status: 'normal',
+    tags: [],
+    founded_on: '2026-01-01',
+    plan_price_month: 10,
+    has_trial: false,
+    created_at: '2026-01-01T00:00:00+08:00',
+    score: 90 - index,
+    score_delta_vs_yesterday: { label: '对比昨天', value: 0.1 },
+    report_url: `/airports/airport-${index + 1}`,
+  })) as never[];
+  const newsItems = Array.from({ length: 6 }, (_, index) => ({
+    id: index + 1,
+    title: `News ${index + 1}`,
+    slug: `news-${index + 1}`,
+    published_at: `2026-03-${String(24 - index).padStart(2, '0')}T08:00:00+08:00`,
+  })) as never[];
+
+  const service = new PublicViewService({
+    airportRepository: {
+      getById: async () => null,
+    },
+    metricsRepository: {
+      getByAirportAndDate: async () => null,
+      getTrend: async () => [],
+    },
+    scoreRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getByAirportAndDate: async () => null,
+      getPublicDisplayScoreByAirportAndDate: async () => null,
+      getTrend: async () => [],
+      getPublicFullRankingByDate: async (_date, _page, pageSize) => {
+        rankingPageSizes.push(pageSize);
+        return { total: 12, items: rankingItems };
+      },
+    },
+    rankingRepository: {
+      getLatestAvailableDate: async () => '2026-03-24',
+      getRanking: async () => [],
+      getRanksForAirport: async () => ({}),
+    },
+    statsRepository: {
+      getHomeStats: async () => ({
+        monitored_airports: 12,
+        realtime_tests: 345,
+        latest_data_at: '2026-03-24T08:00:00+08:00',
+      }),
+    },
+    airportAdCampaignRepository: {
+      listActiveDeals: async () => deals,
+      listActiveHomeDeals: async () => deals.filter((deal) => deal.home_slot !== null),
+    },
+    newsRepository: {
+      listPublished: async () => ({ items: newsItems, total: newsItems.length }),
+    },
+    marketingSettingsService: {
+      getConfig: async () => ({
+        click_charge_amount: 1,
+        home_section_limits: {
+          today_pick: 3,
+          most_stable: 3,
+          best_value: 3,
+          new_entries: 6,
+          risk_alerts: 1,
+        },
+      }),
+    },
+  });
+
+  const result = await service.getHomePageView('2026-03-24');
+
+  assert.equal(rankingPageSizes[0], 3);
+  assert.equal(result.ranking_preview!.total, 12);
+  assert.equal(result.ranking_preview!.items.length, 3);
+  assert.equal(result.sponsored_deals!.total, 4);
+  assert.equal(result.sponsored_deals!.items.length, 4);
+  assert.equal(result.sponsored_deals!.items[0]?.discount_title, '优惠 1');
+  assert.deepEqual(result.sponsored_deals!.items.map((item) => item.home_slot), [1, 2, 3, 4]);
+  assert.equal(result.news_updates!.length, 5);
+  assert.equal(result.news_updates![0]?.href, '/news/news-1');
 });
 
 test('PublicViewService.getHomePageView builds prioritized tool download CTA from published icons', async () => {
@@ -126,7 +246,7 @@ test('PublicViewService.getHomePageView builds prioritized tool download CTA fro
   assert.ok(result.tool_download_cta.items.every((item) => item.icon_url));
 });
 
-test('PublicViewService.getHomePageView uses configured home section limits for source queries', async () => {
+test('PublicViewService.getHomePageView applies exact configured homepage limits', async () => {
   const fullRankingPageSizes: number[] = [];
   const approvedApplicationLimits: number[] = [];
   const riskPageSizes: number[] = [];
@@ -167,10 +287,10 @@ test('PublicViewService.getHomePageView uses configured home section limits for 
         click_charge_amount: 1,
         home_section_limits: {
           today_pick: 4,
-          most_stable: 5,
-          best_value: 6,
-          new_entries: 7,
-          risk_alerts: 2,
+          most_stable: 1,
+          best_value: 2,
+          new_entries: 3,
+          risk_alerts: 1,
         },
       }),
     },
@@ -191,8 +311,8 @@ test('PublicViewService.getHomePageView uses configured home section limits for 
   await service.getHomePageView('2026-03-24');
 
   assert.equal(fullRankingPageSizes[0], 4);
-  assert.equal(approvedApplicationLimits[0], 7);
-  assert.equal(riskPageSizes[0], 2);
+  assert.equal(approvedApplicationLimits[0], 3);
+  assert.equal(riskPageSizes[0], 1);
 });
 
 test('PublicViewService.getHomePageView defaults home section limits without marketing settings', async () => {

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolvePageOgImageMeta } from '../../src/site/publicSite';
 import { withPublicBrandTitle } from '../../shared/publicBrand';
+import { getPublicOgImageForPath as resolvePageOgImageMeta } from '../../shared/publicSeo';
 
 test('withPublicBrandTitle appends and normalizes the public brand suffix', () => {
   assert.equal(withPublicBrandTitle('IP 检测'), 'IP 检测 | 机场榜GateRank');
