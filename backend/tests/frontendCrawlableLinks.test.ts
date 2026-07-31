@@ -160,6 +160,10 @@ test('React homepage keeps compact feature tags on the shared system color palet
 
 test('React homepage exposes desktop table, mobile cards, empty states, hidden scores, and sponsored links', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/pages/home/HomePageV3.tsx'), 'utf8');
+  const sponsoredCardSource = source.slice(
+    source.indexOf('function SponsoredDealCard'),
+    source.indexOf('function SponsoredEmptySlot'),
+  );
 
   assert.match(source, /<table className="w-full border-collapse text-left">/);
   assert.match(source, /排名每日更新，基于真实数据和客观多节点测速得出<\/p>/);
@@ -184,6 +188,9 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
   assert.match(source, /\{deal\.discount_title \|\| '查看官网了解当前优惠活动。'\}/);
   assert.doesNotMatch(source, /deal\.discount_description \|\| deal\.discount_title/);
   assert.doesNotMatch(source, /天观察 · \{scoreLabel\(deal\.score, deal\.score_hidden\)\} 分/);
+  assert.doesNotMatch(sponsoredCardSource, /AD 广告/);
+  assert.doesNotMatch(sponsoredCardSource, /scoreLabel\(deal\.score, deal\.score_hidden\)/);
+  assert.doesNotMatch(sponsoredCardSource, /<Star className=/);
   assert.doesNotMatch(source, /该位置空缺，不会由普通优惠活动补位/);
 });
 

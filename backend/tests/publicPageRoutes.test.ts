@@ -67,6 +67,10 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         const sponsoredDealHtml = html.match(/<article class="home-v3-deal"[\s\S]*?<\/article>/)?.[0] || '';
         assert.match(sponsoredDealHtml, /<p>新客八折<\/p>/);
         assert.doesNotMatch(sponsoredDealHtml, /月付套餐限时优惠。/);
+        assert.doesNotMatch(sponsoredDealHtml, /<b>广告<\/b>/);
+        assert.doesNotMatch(sponsoredDealHtml, /公开分/);
+        assert.doesNotMatch(sponsoredDealHtml, /91\.2/);
+        assert.match(sponsoredDealHtml, /<small>月付起<\/small><strong>¥12<\/strong>/);
         assert.doesNotMatch(html, /广告位空缺不会由普通优惠活动补位/);
         assert.match(html, /rel="nofollow sponsored noopener noreferrer"/);
         assert.match(html, /综合实力排行/);

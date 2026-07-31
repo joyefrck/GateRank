@@ -483,7 +483,6 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
               <span className="mt-1 font-mono text-[11.5px] leading-none text-gray-400">{deal.tracking_days} 天观察</span>
             </div>
           </div>
-          <span className="shrink-0 rounded border border-stone-200/80 bg-stone-100 px-1.5 py-0.5 text-[9.5px] font-black uppercase leading-none tracking-wider text-stone-600">AD 广告</span>
         </div>
         <p className="line-clamp-2 text-[12.5px] font-medium leading-relaxed text-gray-500">
           {deal.discount_title || '查看官网了解当前优惠活动。'}
@@ -497,10 +496,6 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
           <div className="space-y-0.5">
             <span className="block text-[10px] font-bold leading-none text-gray-400">起步月付</span>
             <span className="font-mono text-[15px] font-black text-indigo-600">¥{formatPrice(deal.plan_price_month)} <span className="text-[10.5px] font-normal text-gray-400">/起</span></span>
-          </div>
-          <div className="flex items-center gap-1 rounded-lg border border-amber-200/50 bg-amber-50 px-2 py-0.5">
-            <Star className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
-            <span className="font-mono text-[12px] font-extrabold text-amber-700">{scoreLabel(deal.score, deal.score_hidden)}</span>
           </div>
         </div>
         <div className="flex items-center gap-2 pt-0.5">

@@ -2055,7 +2055,6 @@ function renderHomeV3SponsoredDeals(view: HomePageView): string {
               <div class="home-v3-deal-top">
                 <span class="home-v3-airport-mark" aria-hidden="true">${escapeHtml(deal.name.slice(0, 1) || 'G')}</span>
                 <div><h3>${escapeHtml(deal.name)}</h3><small>${deal.tracking_days} 天观察</small></div>
-                <b>广告</b>
               </div>
               <div class="home-v3-deal-offer">
                 <p>${escapeHtml(deal.discount_title || '查看官网了解当前优惠活动。')}</p>
@@ -2063,7 +2062,7 @@ function renderHomeV3SponsoredDeals(view: HomePageView): string {
               </div>
               <div class="home-v3-tags">${deal.tags.slice(0, 3).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>
               <div class="home-v3-deal-bottom">
-                <span><small>月付起 / 公开分</small><strong>¥${escapeHtml(formatPublicPrice(deal.plan_price_month))} · ${escapeHtml(formatPublicListScore(deal))}</strong></span>
+                <span><small>月付起</small><strong>¥${escapeHtml(formatPublicPrice(deal.plan_price_month))}</strong></span>
                 <a href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow sponsored noopener noreferrer" aria-label="访问 ${escapeAttribute(deal.name)} 官网">↗</a>
               </div>
               <a class="home-v3-report-link" href="${escapeAttribute(deal.report_url)}">查看测评报告</a>
