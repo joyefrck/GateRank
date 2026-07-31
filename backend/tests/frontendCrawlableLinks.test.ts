@@ -164,6 +164,11 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
     source.indexOf('function SponsoredDealCard'),
     source.indexOf('function SponsoredEmptySlot'),
   );
+  const rankingTableRowSource = source.slice(
+    source.indexOf('function RankingTableRow'),
+    source.indexOf('function RankingMobileCard'),
+  );
+  const verticallyCenteredRankingCells = rankingTableRowSource.match(/<td className="align-middle px-4 py-4(?: text-center)?">/g) || [];
 
   assert.match(source, /<table className="w-full border-collapse text-left">/);
   assert.match(source, /排名每日更新，基于真实数据和客观多节点测速得出<\/p>/);
@@ -172,6 +177,8 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
   assert.match(source, /data-testid="home-ranking-mobile"/);
   assert.match(source, /function RankingTableRow/);
   assert.match(source, /function RankingMobileCard/);
+  assert.equal(verticallyCenteredRankingCells.length, 4);
+  assert.match(rankingTableRowSource, /<td className="align-middle px-4 py-4 text-center"><RankBadge/);
   assert.match(source, /observationDays\(item\.created_at, date, false\)/);
   assert.match(source, /observationDays\(item\.created_at, date, true\)/);
   assert.doesNotMatch(source, /observationDays\(item\.founded_on/);

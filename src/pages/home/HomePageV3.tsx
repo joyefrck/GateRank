@@ -590,7 +590,7 @@ function RankingTableRow({ item, index, date }: { item: FullRankingItem; index: 
       transition={{ duration: 0.3, delay: index * 0.02 }}
       className="group transition-colors hover:bg-gray-50/50"
     >
-      <td className="px-4 py-4 text-center"><RankBadge rank={item.rank} /></td>
+      <td className="align-middle px-4 py-4 text-center"><RankBadge rank={item.rank} /></td>
       <td className="px-4 py-4">
         <div className="flex items-center gap-3">
           <AirportMark name={item.name} />
@@ -602,7 +602,7 @@ function RankingTableRow({ item, index, date }: { item: FullRankingItem; index: 
           </div>
         </div>
       </td>
-      <td className="px-4 py-4">
+      <td className="align-middle px-4 py-4">
         <div className="flex flex-col justify-center">
           <div className="flex items-center gap-1.5">
             <Star className="h-[18px] w-[18px] fill-amber-300 text-amber-400" />
@@ -614,13 +614,13 @@ function RankingTableRow({ item, index, date }: { item: FullRankingItem; index: 
           </div>
         </div>
       </td>
-      <td className="px-4 py-4">
+      <td className="align-middle px-4 py-4">
         <div className="flex flex-col">
           <span className="font-mono text-[15.5px] font-black leading-none text-gray-900">¥{formatPrice(item.plan_price_month)}</span>
           <span className="mt-1 text-[11.5px] font-medium leading-none text-gray-500">起 / 月付</span>
         </div>
       </td>
-      <td className="px-4 py-4"><span className="font-mono text-[14.5px] font-bold text-gray-700">{observationDays(item.created_at, date, false)}</span></td>
+      <td className="align-middle px-4 py-4"><span className="font-mono text-[14.5px] font-bold text-gray-700">{observationDays(item.created_at, date, false)}</span></td>
       <td className="px-4 py-4">
         <div className="flex min-w-[105px] flex-col items-center justify-center gap-1.5">
           <RouteLink
