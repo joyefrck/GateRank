@@ -1320,7 +1320,7 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
       if (!articleId) {
         onNavigateToArticle(article.id);
       }
-      setNotice('草稿已保存');
+      setNotice(form.status === 'published' ? '文章更新已保存' : '草稿已保存');
       return article;
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : '草稿保存失败');
@@ -1723,16 +1723,18 @@ export function NewsEditorPage({ articleId, onBack, onNavigateToArticle }: NewsE
             disabled={saving}
           >
             <Save size={16} />
-            保存草稿
+            {form.status === 'published' ? '保存更新' : '保存草稿'}
           </button>
-          <button
-            className="inline-flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
-            onClick={() => void publishArticle()}
-            disabled={saving}
-          >
-            <Send size={16} />
-            发布文章
-          </button>
+          {form.status !== 'published' ? (
+            <button
+              className="inline-flex items-center gap-2 rounded-xl bg-neutral-900 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
+              onClick={() => void publishArticle()}
+              disabled={saving}
+            >
+              <Send size={16} />
+              {form.status === 'archived' ? '恢复发布' : '发布文章'}
+            </button>
+          ) : null}
           {articleId && form.status === 'published' ? (
             <button
               className="inline-flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50 px-4 py-2.5 text-sm font-medium text-rose-700 disabled:opacity-50"
