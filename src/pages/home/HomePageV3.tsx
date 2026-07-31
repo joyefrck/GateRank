@@ -26,6 +26,7 @@ import {
 import { HOME_FAQ_ITEMS, buildHomeSeo } from '../../../shared/publicSeo';
 import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
 import { PUBLIC_TOOL_DEFINITIONS } from '../../../shared/publicTools';
+import { calculateObservationDays } from '../../../shared/observationDays';
 import { getTagBadgeTone } from '../../components/TagBadge';
 import {
   buildAbsoluteUrl,
@@ -68,7 +69,7 @@ interface FullRankingItem {
   website: string;
   status: AirportStatus;
   tags: string[];
-  founded_on?: string | null;
+  created_at: string;
   plan_price_month: number;
   score: number | null;
   score_hidden?: boolean;
@@ -624,7 +625,7 @@ function RankingTableRow({ item, index, date }: { item: FullRankingItem; index: 
           <span className="mt-1 text-[11.5px] font-medium leading-none text-gray-500">起 / 月付</span>
         </div>
       </td>
-      <td className="px-4 py-4"><span className="font-mono text-[14.5px] font-bold text-gray-700">{observationDays(item.founded_on, date, false)}</span></td>
+      <td className="px-4 py-4"><span className="font-mono text-[14.5px] font-bold text-gray-700">{observationDays(item.created_at, date, false)}</span></td>
       <td className="px-4 py-4">
         <div className="flex min-w-[105px] flex-col items-center justify-center gap-1.5">
           <RouteLink
@@ -659,7 +660,7 @@ function RankingMobileCard({ item, index, date }: { item: FullRankingItem; index
             </div>
           </div>
           <div className="mt-3 flex items-center justify-between rounded-xl bg-white px-3 py-2 text-[11px] text-gray-500">
-            <span>¥{formatPrice(item.plan_price_month)}/月 · {observationDays(item.founded_on, date, true)}</span>
+            <span>¥{formatPrice(item.plan_price_month)}/月 · {observationDays(item.created_at, date, true)}</span>
             <RouteLink href={href} className="font-black text-gray-900">查看报告 <ArrowRight className="inline h-3 w-3" /></RouteLink>
           </div>
         </div>
@@ -971,12 +972,9 @@ function formatNumber(value: number): string {
   return new Intl.NumberFormat('zh-CN').format(value);
 }
 
-function observationDays(foundedOn: string | null | undefined, date: string, compact: boolean): string {
-  if (!foundedOn) return compact ? '观察 —' : '--';
-  const founded = new Date(`${foundedOn}T00:00:00+08:00`);
-  const target = new Date(`${date}T00:00:00+08:00`);
-  if (Number.isNaN(founded.getTime()) || Number.isNaN(target.getTime())) return compact ? '观察 —' : '--';
-  const days = Math.max(0, Math.floor((target.getTime() - founded.getTime()) / 86_400_000));
+function observationDays(onboardedAt: string | null | undefined, date: string, compact: boolean): string {
+  const days = calculateObservationDays(onboardedAt, date);
+  if (days === null) return compact ? '观察 —' : '--';
   return compact ? `观察 ${days} 天` : `${days} 天`;
 }
 

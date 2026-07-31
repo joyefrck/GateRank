@@ -168,6 +168,9 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
   assert.match(source, /data-testid="home-ranking-mobile"/);
   assert.match(source, /function RankingTableRow/);
   assert.match(source, /function RankingMobileCard/);
+  assert.match(source, /observationDays\(item\.created_at, date, false\)/);
+  assert.match(source, /observationDays\(item\.created_at, date, true\)/);
+  assert.doesNotMatch(source, /observationDays\(item\.founded_on/);
   assert.match(source, /if \(hidden \|\| value === null\) return '未公开'/);
   assert.match(source, /当前暂无有效广告/);
   assert.match(source, /综合榜暂无数据/);

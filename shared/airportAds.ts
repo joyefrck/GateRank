@@ -17,6 +17,7 @@ export interface AirportDealView {
   report_url: string;
   plan_price_month?: number;
   founded_on?: string | null;
+  airport_created_at?: string;
   airport_intro?: string;
   tags?: string[];
   coupon_code: string;

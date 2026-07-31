@@ -69,7 +69,8 @@ test('PublicViewService.getHomePageView applies configured ranking count with fo
     website: `https://deal-${index + 1}.example`,
     report_url: `/airports/deal-${index + 1}`,
     plan_price_month: 10 + index,
-    founded_on: '2026-01-01',
+    founded_on: '2024-01-01',
+    airport_created_at: '2026-03-21T00:00:00+08:00',
     airport_intro: `广告机场 ${index + 1} 简介`,
     tags: ['IEPL', '新客优惠'],
     coupon_code: `DEAL${index + 1}`,
@@ -173,6 +174,7 @@ test('PublicViewService.getHomePageView applies configured ranking count with fo
   assert.equal(result.sponsored_deals!.total, 4);
   assert.equal(result.sponsored_deals!.items.length, 4);
   assert.equal(result.sponsored_deals!.items[0]?.discount_title, '优惠 1');
+  assert.equal(result.sponsored_deals!.items[0]?.tracking_days, 4);
   assert.deepEqual(result.sponsored_deals!.items.map((item) => item.home_slot), [1, 2, 3, 4]);
   assert.equal(result.news_updates!.length, 5);
   assert.equal(result.news_updates![0]?.href, '/news/news-1');

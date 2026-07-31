@@ -10,6 +10,8 @@ function createCampaignRow(overrides: Record<string, unknown> = {}) {
     airport_slug: 'xiaomi',
     website: 'https://www.xiaomi.com',
     plan_price_month: 18,
+    founded_on: '2024-01-01',
+    airport_created_at: '2026-03-21 00:00:00',
     has_trial: 1,
     streaming_support_json: '["netflix","chatgpt"]',
     payment_methods_json: '["usdt"]',
@@ -307,7 +309,9 @@ test('AirportAdCampaignRepository.listActiveDeals excludes canceled campaigns in
 
   assert.equal(deals.length, 1);
   assert.equal(deals[0].campaign_id, 101);
+  assert.equal(deals[0].airport_created_at, '2026-03-21T00:00:00+08:00');
   assert.ok(calls[0].sql.includes("campaign.status = 'active'"));
+  assert.match(calls[0].sql, /airport\.created_at[\s\S]*AS airport_created_at/);
   assert.ok(calls[0].sql.includes('campaign.ends_at > ?'));
   assert.doesNotMatch(calls[0].sql, /LIMIT\s+6\b/);
 });

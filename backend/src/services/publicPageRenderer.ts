@@ -101,6 +101,7 @@ import {
 } from '../../../shared/toolDownloads';
 import { STREAMING_SERVICES } from '../../../shared/streamingCheck';
 import { REPORT_ANCHOR_SECTIONS, buildReportRadarPoints } from '../../../shared/reportUi';
+import { calculateObservationDays } from '../../../shared/observationDays';
 
 interface RenderOptions {
   siteUrl: string;
@@ -2102,7 +2103,7 @@ function renderHomeV3Ranking(view: HomePageView): string {
                     <td><b class="home-v3-rank home-v3-rank-${item.rank}">${item.rank}</b></td>
                     <td><a class="home-v3-airport-name" href="${escapeAttribute(reportUrl)}">${escapeHtml(item.name)}</a><div class="home-v3-tags">${item.tags.slice(0, 2).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div></td>
                     <td><strong>${escapeHtml(formatPublicListScore(item))}</strong><small>${escapeHtml(formatHomeV3Delta(item.score_delta_vs_yesterday.value))}</small></td>
-                    <td><strong>¥${escapeHtml(formatPublicPrice(item.plan_price_month))}/月</strong><small>${escapeHtml(formatHomeV3Observation(item.founded_on, view.date))}</small></td>
+                    <td><strong>¥${escapeHtml(formatPublicPrice(item.plan_price_month))}/月</strong><small>${escapeHtml(formatHomeV3Observation(item.created_at, view.date))}</small></td>
                     <td><a class="home-v3-row-action" href="${escapeAttribute(reportUrl)}">报告</a></td>
                   </tr>
                 `;
@@ -2221,12 +2222,9 @@ function formatHomeV3Delta(value: number | null): string {
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
 }
 
-function formatHomeV3Observation(foundedOn: string | null | undefined, date: string): string {
-  if (!foundedOn) return '观察期 —';
-  const start = new Date(`${foundedOn}T00:00:00+08:00`);
-  const end = new Date(`${date}T00:00:00+08:00`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return '观察期 —';
-  return `观察 ${Math.max(0, Math.floor((end.getTime() - start.getTime()) / 86_400_000))} 天`;
+function formatHomeV3Observation(onboardedAt: string | null | undefined, date: string): string {
+  const days = calculateObservationDays(onboardedAt, date);
+  return days === null ? '观察期 —' : `观察 ${days} 天`;
 }
 
 function renderHomeSections(view: HomePageView): string {

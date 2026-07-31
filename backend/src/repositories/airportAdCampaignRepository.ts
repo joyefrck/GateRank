@@ -59,6 +59,7 @@ interface CampaignRow extends RowDataPacket {
   website: string;
   plan_price_month: number;
   founded_on: string | null;
+  airport_created_at: string;
   airport_intro: string | null;
   tags_json: unknown;
   has_trial: number;
@@ -895,6 +896,7 @@ export class AirportAdCampaignRepository {
         airport.website,
         airport.plan_price_month,
         DATE_FORMAT(airport.founded_on, '%Y-%m-%d') AS founded_on,
+        DATE_FORMAT(airport.created_at, '%Y-%m-%d %H:%i:%s') AS airport_created_at,
         airport.airport_intro,
         airport.tags_json,
         airport.has_trial,
@@ -1171,6 +1173,7 @@ function toDealView(row: CampaignRow): AirportDealView {
     report_url: `/airports/${slug}`,
     plan_price_month: Number(row.plan_price_month || 0),
     founded_on: row.founded_on || null,
+    airport_created_at: sqlDateTimeToTimezoneIso(row.airport_created_at),
     airport_intro: row.airport_intro || '',
     tags: normalizeStringList(row.tags_json),
     coupon_code: row.coupon_code,

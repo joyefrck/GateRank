@@ -34,6 +34,7 @@ import { buildTodayPickRows, isTodayPickEligible, type RankedAirportInput } from
 import { DEFAULT_HOME_SECTION_LIMITS, type HomeSectionLimits } from './marketingSettingsService';
 import { buildAirportReportPath, buildAirportSlugCandidate } from '../../../shared/publicSeo';
 import { EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../../shared/fullRankingFilters';
+import { calculateObservationDays } from '../../../shared/observationDays';
 import {
   buildHomeToolDownloadCta,
   type HomeToolDownloadCta,
@@ -697,7 +698,7 @@ export class PublicViewService {
         const airport = context?.airport;
         const currentScore = context?.score.display_score ?? null;
         const yesterdayScore = context?.score.yesterday_display_score ?? null;
-        const foundedOn = airport?.founded_on || deal.founded_on;
+        const onboardedAt = airport?.created_at || deal.airport_created_at;
 
         return {
           campaign_id: deal.campaign_id,
@@ -710,7 +711,7 @@ export class PublicViewService {
           discount_description: deal.discount_description,
           coupon_code: deal.coupon_code,
           plan_price_month: Number(airport?.plan_price_month ?? deal.plan_price_month ?? 0),
-          tracking_days: foundedOn ? Math.max(0, diffDays(foundedOn, date)) : 0,
+          tracking_days: calculateObservationDays(onboardedAt, date) ?? 0,
           tags: (airport?.tags || deal.tags || []).slice(0, 3),
           score: currentScore,
           score_hidden: context?.score.score_hidden ?? false,

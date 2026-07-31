@@ -72,6 +72,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.match(html, /综合实力排行/);
         assert.doesNotMatch(html, /共收录 \d+ 个机场/);
         assert.match(html, /星云机场/);
+        assert.match(html, /观察 4 天/);
         assert.match(html, /href="\/airports\/nebula"/);
         assert.match(html, /最新 News/);
         assert.match(html, /GateRank 3\.0 发布说明/);
@@ -1564,7 +1565,7 @@ const homeView: HomePageView = {
         plan_price_month: 18,
         has_trial: true,
         airport_intro: '适合日常使用。',
-        created_at: '2025-01-01',
+        created_at: '2026-03-20',
         score: 98.6,
         score_delta_vs_yesterday: { label: '对比昨天', value: 1.2 },
         score_date: '2026-03-23',
