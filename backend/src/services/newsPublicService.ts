@@ -62,6 +62,25 @@ export interface PublicNewsArticleView extends PublicNewsCardView {
   next: PublicNewsCardView | null;
 }
 
+function takeUniqueCards(
+  candidates: PublicNewsCardView[],
+  usedIds: Set<number>,
+  limit: number,
+): PublicNewsCardView[] {
+  const selected: PublicNewsCardView[] = [];
+  for (const candidate of candidates) {
+    if (selected.length >= limit) {
+      break;
+    }
+    if (usedIds.has(candidate.id)) {
+      continue;
+    }
+    usedIds.add(candidate.id);
+    selected.push(candidate);
+  }
+  return selected;
+}
+
 export class NewsPublicService {
   constructor(
     private readonly newsRepository: NewsRepository,
@@ -76,54 +95,64 @@ export class NewsPublicService {
     const safePage = Math.max(1, page);
     const safePageSize = Math.min(24, Math.max(1, pageSize));
     const keyword = String(filters.q || '').trim();
-    const [categories, topics, category, topic, result, featuredArticle, recommendedItems, riskItems, guideItems] = await Promise.all([
+    const [categories, topics, category, topic, explicitFeaturedArticle, recommendedItems, riskItems, guideItems] = await Promise.all([
       this.newsRepository.listCategories(),
       this.newsRepository.listTopics(),
       filters.category_slug ? this.newsRepository.getCategoryBySlug(filters.category_slug) : Promise.resolve(null),
       filters.topic_slug ? this.newsRepository.getTopicBySlug(filters.topic_slug) : Promise.resolve(null),
-      this.newsRepository.listPublishedDetailed({
-        page: safePage,
-        pageSize: safePageSize,
+      this.newsRepository.getFeaturedPublished({
         category_slug: filters.category_slug,
         topic_slug: filters.topic_slug,
         keyword,
       }),
-      safePage === 1
-        ? this.newsRepository.getFeaturedPublished({
-            category_slug: filters.category_slug,
-            topic_slug: filters.topic_slug,
-            keyword,
-          })
-        : Promise.resolve(null),
-      this.newsRepository.listRecommendedPublished(6),
-      this.newsRepository.listLatestByCategory('risk-warning', 3),
-      this.newsRepository.listLatestByCategory('tutorials', 3),
+      this.newsRepository.listRecommendedPublished(18),
+      this.newsRepository.listLatestByCategory('risk-warning', 9),
+      this.newsRepository.listLatestByCategory('tutorials', 9),
     ]);
-
-    const cards = result.items.map((article) => this.toCardView(article));
-    const featured = safePage === 1
-      ? (featuredArticle || result.items[0] ? this.toCardView(featuredArticle || result.items[0]) : null)
-      : null;
-    const items = featured ? cards.filter((card) => card.id !== featured.id) : cards;
-    const recommended = recommendedItems.length > 0
-      ? recommendedItems.map((item) => this.toCardView(item))
-      : cards.slice(0, 6);
+    const fallbackFeaturedArticle = explicitFeaturedArticle
+      ? null
+      : (await this.newsRepository.listPublishedDetailed({
+          page: 1,
+          pageSize: 1,
+          category_slug: filters.category_slug,
+          topic_slug: filters.topic_slug,
+          keyword,
+        })).items[0] || null;
+    const resolvedFeaturedArticle = explicitFeaturedArticle || fallbackFeaturedArticle;
+    const result = await this.newsRepository.listPublishedDetailed({
+      page: safePage,
+      pageSize: safePageSize,
+      category_slug: filters.category_slug,
+      topic_slug: filters.topic_slug,
+      keyword,
+      exclude_ids: resolvedFeaturedArticle ? [resolvedFeaturedArticle.id] : [],
+    });
+    const usedIds = new Set<number>();
+    const resolvedFeatured = resolvedFeaturedArticle ? this.toCardView(resolvedFeaturedArticle) : null;
+    if (resolvedFeatured) {
+      usedIds.add(resolvedFeatured.id);
+    }
+    const items = takeUniqueCards(result.items.map((article) => this.toCardView(article)), usedIds, safePageSize);
+    const recommended = takeUniqueCards(recommendedItems.map((item) => this.toCardView(item)), usedIds, 6);
+    const riskWatch = takeUniqueCards(riskItems.map((item) => this.toCardView(item)), usedIds, 3);
+    const guides = takeUniqueCards(guideItems.map((item) => this.toCardView(item)), usedIds, 3);
+    const total = result.total + (resolvedFeatured ? 1 : 0);
 
     return {
       page: safePage,
       page_size: safePageSize,
-      total: result.total,
-      total_pages: Math.max(1, Math.ceil(result.total / safePageSize)),
+      total,
+      total_pages: Math.max(1, Math.ceil(total / safePageSize)),
       query: keyword,
       category,
       topic,
       categories,
       topics,
-      featured,
+      featured: safePage === 1 ? resolvedFeatured : null,
       items,
       recommended,
-      risk_watch: riskItems.map((item) => this.toCardView(item)),
-      guides: guideItems.map((item) => this.toCardView(item)),
+      risk_watch: riskWatch,
+      guides,
     };
   }
 
@@ -140,15 +169,15 @@ export class NewsPublicService {
       this.newsRepository.listCategories(),
       this.newsRepository.listTopics(),
       this.newsRepository.getTopicBySlug(slug),
-      this.newsRepository.listRecommendedPublished(6),
+      this.newsRepository.listRecommendedPublished(18),
     ]);
     if (!topic) {
       return null;
     }
-    const resolvedPinnedArticles = safePage === 1 && !keyword
+    const allPinnedArticles = !keyword
       ? await this.newsRepository.listPublishedPinnedByTopic(topic.id)
       : [];
-    const pinnedIds = resolvedPinnedArticles.map((article) => article.id);
+    const pinnedIds = allPinnedArticles.map((article) => article.id);
     const result = await this.newsRepository.listPublishedDetailed({
       page: safePage,
       pageSize: safePageSize,
@@ -157,18 +186,26 @@ export class NewsPublicService {
       exclude_ids: pinnedIds,
     });
 
+    const usedIds = new Set(pinnedIds);
+    const pinned = safePage === 1
+      ? allPinnedArticles.map((article) => this.toCardView(article))
+      : [];
+    const items = takeUniqueCards(result.items.map((article) => this.toCardView(article)), usedIds, safePageSize);
+    const recommended = takeUniqueCards(recommendedItems.map((item) => this.toCardView(item)), usedIds, 6);
+    const total = result.total + allPinnedArticles.length;
+
     return {
       page: safePage,
       page_size: safePageSize,
-      total: result.total,
-      total_pages: Math.max(1, Math.ceil(result.total / safePageSize)),
+      total,
+      total_pages: Math.max(1, Math.ceil(total / safePageSize)),
       query: keyword,
       topic,
       categories,
       topics,
-      pinned: resolvedPinnedArticles.map((article) => this.toCardView(article)),
-      items: result.items.map((article) => this.toCardView(article)),
-      recommended: recommendedItems.map((item) => this.toCardView(item)),
+      pinned,
+      items,
+      recommended,
     };
   }
 
