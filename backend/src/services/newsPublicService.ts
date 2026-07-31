@@ -14,6 +14,7 @@ export interface PublicNewsCardView {
   excerpt: string;
   cover_image_url: string;
   published_at: string | null;
+  updated_at: string;
   view_count: number;
   reading_minutes: number;
   category: NewsCategorySummary | null;
@@ -228,6 +229,7 @@ export class NewsPublicService {
       excerpt: article.excerpt,
       cover_image_url: article.cover_image_url,
       published_at: article.published_at,
+      updated_at: article.updated_at,
       view_count: article.view_count,
       reading_minutes: this.newsContentService.render(markdown).reading_minutes,
       category: article.category,

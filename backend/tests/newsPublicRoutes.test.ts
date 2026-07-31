@@ -697,6 +697,7 @@ function createPreviewRouteApp() {
           excerpt: '用于验证 News 预览页不扣费。',
           cover_image_url: '',
           published_at: '2026-03-28 18:00:00',
+          updated_at: '2026-03-28 18:00:00',
           view_count: 0,
           reading_minutes: 3,
           content_html: '<p class="news-paragraph"><a class="news-airport-inline-link" href="/api/v1/outbound/airports/12?target=website&amp;placement=news_article" target="_blank" rel="noreferrer noopener" data-airport-website="https://vip.gsyaff.com/">光速云</a></p>',
@@ -778,6 +779,7 @@ test('GET /news/:slug returns server-rendered HTML with seo metadata', async () 
             excerpt: '用于验证文章详情页 meta、canonical 和 JSON-LD。',
             cover_image_url: '/uploads/news/cover.webp',
             published_at: '2026-03-28 18:00:00',
+            updated_at: '2026-04-02 09:30:00',
             view_count: 123,
             reading_minutes: 6,
             content_html: '<p class="news-paragraph">hello world</p>',
@@ -812,6 +814,8 @@ test('GET /news/:slug returns server-rendered HTML with seo metadata', async () 
     assert.match(html, /<meta name="twitter:image" content="http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/cover\.webp"/);
     assert.match(html, /<meta name="twitter:image:alt" content="服务端 SEO 测试"/);
     assert.match(html, /"@type":"Article"/);
+    assert.match(html, /"datePublished":"2026-03-28T18:00:00\+08:00"/);
+    assert.match(html, /"dateModified":"2026-04-02T09:30:00\+08:00"/);
     assert.match(html, /"image":\["http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/cover\.webp"\]/);
     assert.match(html, /<img src="\/uploads\/news\/cover\.webp" alt="服务端 SEO 测试" loading="eager" decoding="async" fetchpriority="high"/);
     assert.match(html, /分享到 Reddit/);
@@ -1007,7 +1011,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
             status: 'published',
             published_at: '2026-03-28 18:00:00',
             created_at: '2026-03-28 18:00:00',
-            updated_at: '2026-03-28 18:00:00',
+            updated_at: '2026-04-02 09:30:00',
           },
         ],
         getSitemapTaxonomy: async () => ({
@@ -1089,8 +1093,8 @@ test('GET /sitemap.xml includes published news urls', async () => {
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/airports\/nebula<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/topic\/active-topic<\/loc>\n    <lastmod>2026-04-02T09:30:00\+08:00<\/lastmod>/);
     assert.doesNotMatch(xml, /\/news\/topic\/inactive-topic/);
-    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>\n    <lastmod>2026-03-28T18:00:00\+08:00<\/lastmod>/);
-    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news<\/loc>\n    <lastmod>2026-03-28T18:00:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>\n    <lastmod>2026-04-02T09:30:00\+08:00<\/lastmod>/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news<\/loc>\n    <lastmod>2026-04-02T09:30:00\+08:00<\/lastmod>/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

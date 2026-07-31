@@ -1502,7 +1502,7 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
     headline: article.title,
     description: article.excerpt,
     datePublished: toIsoDate(article.published_at),
-    dateModified: toIsoDate(article.published_at),
+    dateModified: toIsoDate(article.updated_at || article.published_at),
     author: {
       '@type': 'Organization',
       name: 'GateRank 编辑部',

@@ -307,7 +307,7 @@ function getMonthlyReportsIndexLastmod(entries: Array<{ lastmod: string }>): str
 
 function getNewsIndexLastmod(items: NewsArticleListItem[]): string {
   const latest = items
-    .map((item) => item.published_at)
+    .map((item) => item.updated_at || item.published_at)
     .filter((value): value is string => Boolean(value))
     .sort()
     .at(-1);
@@ -375,8 +375,9 @@ function buildSitemapXml(
     lastmodByPath.set(path, lastmod);
   });
   newsItems.forEach((item) => {
-    if (item.published_at) {
-      lastmodByPath.set(`/news/${item.slug}`, item.published_at.replace(' ', 'T') + '+08:00');
+    const lastmod = item.updated_at || item.published_at;
+    if (lastmod) {
+      lastmodByPath.set(`/news/${item.slug}`, lastmod.replace(' ', 'T') + '+08:00');
     }
   });
 
