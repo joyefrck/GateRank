@@ -184,6 +184,25 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
   assert.doesNotMatch(source, /该位置空缺，不会由普通优惠活动补位/);
 });
 
+test('React homepage omits summary more links and the announcement schedule note', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/pages/home/HomePageV3.tsx'), 'utf8');
+  const sidebarStart = source.indexOf('function HomeSidebar');
+  const summaryStart = source.indexOf('function SummaryBoards', sidebarStart);
+  const summaryEnd = source.indexOf('function SummaryRank', summaryStart);
+
+  assert.notEqual(sidebarStart, -1);
+  assert.notEqual(summaryStart, -1);
+  assert.notEqual(summaryEnd, -1);
+
+  const sidebarSource = source.slice(sidebarStart, summaryStart);
+  const summarySource = source.slice(summaryStart, summaryEnd);
+
+  assert.doesNotMatch(sidebarSource, /测速物理中转每日清晨 6 点重算评分/);
+  assert.match(sidebarSource, /href="\/news"[^>]*>更多 <ChevronRight/);
+  assert.doesNotMatch(summarySource, /查看更多\$\{config\.title\}/);
+  assert.doesNotMatch(summarySource, /href=\{config\.href\}/);
+});
+
 test('React homepage sidebar keeps the 3.0 tool icon tones and News row rhythm', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/pages/home/HomePageV3.tsx'), 'utf8');
 

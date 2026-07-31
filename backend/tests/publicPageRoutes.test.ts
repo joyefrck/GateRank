@@ -60,6 +60,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.doesNotMatch(html, /<header class="topbar">/);
       if (path === '/') {
         assert.match(html, /<div class="home-v3-pill">行业首创，每日更新<\/div>/);
+        assert.doesNotMatch(html, /aria-label="查看(?:长期稳定|性价比榜|新入榜|风险预警)"/);
         assert.match(html, /基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单/);
         assert.match(html, /今日赞助推荐/);
         assert.match(html, /星云优惠机场/);

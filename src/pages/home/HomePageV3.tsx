@@ -141,7 +141,6 @@ const summaryConfig: Array<{
   key: Exclude<HomeSectionKey, 'today_pick'>;
   title: string;
   subtitle: string;
-  href: string;
   icon: typeof TrendingUp;
   tone: string;
   hoverTone: string;
@@ -151,7 +150,6 @@ const summaryConfig: Array<{
     key: 'new_entries',
     title: '新秀机场',
     subtitle: '潜力新晋 · 近期上榜',
-    href: '/rankings/all',
     icon: TrendingUp,
     tone: 'bg-indigo-50 border-indigo-100 text-indigo-600',
     hoverTone: 'hover:border-indigo-200',
@@ -160,7 +158,6 @@ const summaryConfig: Array<{
     key: 'best_value',
     title: '性价比最佳',
     subtitle: '大带宽 · 日常省钱',
-    href: '/rankings/all',
     icon: Zap,
     tone: 'bg-emerald-50 border-emerald-100 text-emerald-600',
     hoverTone: 'hover:border-emerald-200',
@@ -169,7 +166,6 @@ const summaryConfig: Array<{
     key: 'most_stable',
     title: '长期稳定机场',
     subtitle: 'IEPL专线 · 不宕机',
-    href: '/rankings/all',
     icon: ShieldCheck,
     tone: 'bg-sky-50 border-sky-100 text-sky-600',
     hoverTone: 'hover:border-sky-200',
@@ -178,7 +174,6 @@ const summaryConfig: Array<{
     key: 'risk_alerts',
     title: '风险预警',
     subtitle: '避坑红榜 · 实时防封',
-    href: '/risk-monitor',
     icon: AlertTriangle,
     tone: 'bg-rose-50 border-rose-100 text-rose-600',
     hoverTone: 'hover:border-rose-200',
@@ -740,7 +735,6 @@ function HomeSidebar({ news }: { news: NewsUpdate[] }) {
             ))}
           </ol>
         )}
-        <div className="rounded-xl border border-gray-100 bg-gray-50 p-2.5 text-center text-[11.5px] font-bold leading-normal text-gray-500">测速物理中转每日清晨 6 点重算评分</div>
       </section>
     </aside>
   );
@@ -764,7 +758,6 @@ function SummaryBoards({ sections }: { sections: HomePageData['sections'] }) {
                       <span className={`text-[11px] font-semibold ${config.risk ? 'text-rose-500' : 'text-gray-400'}`}>{config.subtitle}</span>
                     </div>
                   </div>
-                  <RouteLink href={config.href} aria-label={`查看更多${config.title}`} className="flex items-center gap-0.5 text-[12px] font-bold text-gray-400 hover:text-indigo-600">更多 <ChevronRight className="h-3.5 w-3.5" /></RouteLink>
                 </div>
                 {items.length === 0 ? (
                   <p className="rounded-xl bg-gray-50 p-4 text-center text-xs text-gray-400">当前没有可展示数据</p>

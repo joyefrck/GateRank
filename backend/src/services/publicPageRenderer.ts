@@ -2147,11 +2147,11 @@ function renderHomeV3Sidebar(view: HomePageView): string {
 }
 
 function renderHomeV3Summaries(view: HomePageView): string {
-  const configurations: Array<{ key: keyof HomePageView['sections']; title: string; href: string }> = [
-    { key: 'most_stable', title: '长期稳定', href: '/rankings/all' },
-    { key: 'best_value', title: '性价比榜', href: '/rankings/all' },
-    { key: 'new_entries', title: '新入榜', href: '/rankings/all' },
-    { key: 'risk_alerts', title: '风险预警', href: '/risk-monitor' },
+  const configurations: Array<{ key: keyof HomePageView['sections']; title: string }> = [
+    { key: 'most_stable', title: '长期稳定' },
+    { key: 'best_value', title: '性价比榜' },
+    { key: 'new_entries', title: '新入榜' },
+    { key: 'risk_alerts', title: '风险预警' },
   ];
   return `
     <section aria-labelledby="home-v3-summary-title">
@@ -2161,7 +2161,7 @@ function renderHomeV3Summaries(view: HomePageView): string {
           const section = view.sections[config.key];
           return `
             <article>
-              <div class="home-v3-summary-title"><h3>${escapeHtml(config.title)}</h3><a href="${escapeAttribute(config.href)}" aria-label="查看${escapeAttribute(config.title)}">→</a></div>
+              <div class="home-v3-summary-title"><h3>${escapeHtml(config.title)}</h3></div>
               <p>${escapeHtml(section.subtitle)}</p>
               ${section.items.length > 0 ? `
                 <ol>${section.items.slice(0, 4).map((item, index) => `
@@ -3506,7 +3506,6 @@ const styles = `
   .home-v3-summary-grid > article { border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 16px; }
   .home-v3-summary-title { display: flex; justify-content: space-between; gap: 8px; }
   .home-v3-summary-title h3 { color: #171717; font-size: 14px; }
-  .home-v3-summary-title a { color: #a3a3a3; text-decoration: none; }
   .home-v3-summary-grid > article > p { margin: 0; color: #a3a3a3; font-size: 10px; line-height: 1.5; }
   .home-v3-summary-grid ol { margin: 12px 0 0; padding: 0; list-style: none; }
   .home-v3-summary-grid li { display: grid; grid-template-columns: 20px minmax(0,1fr) auto; gap: 6px; align-items: center; border-top: 1px solid #f5f5f5; padding: 9px 0; font-size: 11px; }
