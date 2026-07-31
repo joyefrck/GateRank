@@ -15,6 +15,7 @@ interface CurrentArticleState {
   cover_image_url: string;
   content_markdown: string;
   status: NewsStatus;
+  published_at: string | null;
 }
 
 interface NewsMutationServiceDeps {
@@ -54,7 +55,7 @@ export class NewsMutationService {
       ...articleInput,
       ...metadataInput,
       status: 'published',
-      published_at: nowInShanghai(),
+      published_at: current.published_at || nowInShanghai(),
     });
     return this.requireArticle(id);
   }

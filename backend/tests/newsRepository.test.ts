@@ -121,7 +121,10 @@ test('NewsRepository.incrementViewCount increments article view count by id', as
   assert.equal(changed, true);
   assert.deepEqual(calls, [
     {
-      sql: 'UPDATE news_articles SET view_count = view_count + 1 WHERE id = ?',
+      sql: `UPDATE news_articles
+          SET view_count = view_count + 1,
+              updated_at = updated_at
+        WHERE id = ?`,
       params: [42],
     },
   ]);

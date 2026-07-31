@@ -757,7 +757,10 @@ export class NewsRepository {
 
   async incrementViewCount(articleId: number): Promise<boolean> {
     const [result] = await this.pool.execute<ResultSetHeader>(
-      'UPDATE news_articles SET view_count = view_count + 1 WHERE id = ?',
+      `UPDATE news_articles
+          SET view_count = view_count + 1,
+              updated_at = updated_at
+        WHERE id = ?`,
       [articleId],
     );
     return result.affectedRows > 0;
