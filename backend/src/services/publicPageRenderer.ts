@@ -2868,7 +2868,7 @@ const styles = `
   * { box-sizing: border-box; }
   html { scroll-behavior: smooth; }
   body { margin: 0; font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif; color: #111; background: #fff; }
-  a { color: inherit; }
+  @layer base { a { color: inherit; } }
   .page-shell { min-height: 100vh; display: flex; flex-direction: column; }
   .topbar { min-height: 72px; display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 0 24px; border-bottom: 1px solid #eee; background: rgba(255,255,255,.92); position: sticky; top: 0; z-index: 10; }
   .brand { font-weight: 900; text-decoration: none; }

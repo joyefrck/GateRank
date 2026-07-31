@@ -50,6 +50,8 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(html, h1Pattern);
       assert.match(html, /<script type="application\/ld\+json">/);
       assert.match(html, /<link rel="stylesheet" href="\/assets\/index-BzS9fL3m\.css" \/>/);
+      assert.match(html, /@layer base\s*\{\s*a\s*\{\s*color:\s*inherit;\s*\}\s*\}/);
+      assert.doesNotMatch(html, /(?:<style>|\})\s*a\s*\{\s*color:\s*inherit;\s*\}/);
       assert.match(html, /<script type="module" src="\/assets\/index-CkG9aP2q\.js"><\/script>/);
       assert.match(html, /data-public-top-nav="true"/);
       assert.match(html, /\.public-top-nav-inner\s*\{[^}]*height:\s*64px;/);
