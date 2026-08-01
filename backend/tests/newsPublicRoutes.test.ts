@@ -428,7 +428,7 @@ test('GET /news/topic/:slug returns independent topic SEO page with pinned artic
             },
             categories: [],
             topics: [],
-            pinned: [
+            pinned: page === 1 && !filters?.q ? [
               {
                 id: 3,
                 title: '置顶专题文章',
@@ -444,7 +444,7 @@ test('GET /news/topic/:slug returns independent topic SEO page with pinned artic
                 is_recommended: false,
                 recommend_weight: 0,
               },
-            ],
+            ] : [],
             items: [
               {
                 id: 4,
@@ -488,14 +488,43 @@ test('GET /news/topic/:slug returns independent topic SEO page with pinned artic
     assert.match(html, /<meta name="description" content="2026 机场推荐专题 SEO 描述，覆盖选择标准、稳定性和风险。"/);
     assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/news\/topic\/airport-recommendations-2026"/);
     assert.match(html, /<h1 class="topic-hero-title">2026 机场推荐专题独立页<\/h1>/);
-    assert.match(html, /这里是后台维护的专题导语。/);
+    assert.match(html, /<p id="topic-hero-intro" class="topic-hero-intro is-collapsed">这里是后台维护的专题导语。<\/p>/);
+    assert.match(html, /<button[^>]+class="topic-hero-intro-toggle"[^>]+aria-expanded="false"[^>]+aria-controls="topic-hero-intro"[^>]+hidden>展开<\/button>/);
     assert.match(html, /置顶专题文章/);
     assert.match(html, /普通专题文章/);
     assert.match(html, /"@type":"FAQPage"/);
-    assert.match(html, /怎么选择机场？/);
+    assert.match(html, /<details class="topic-faq-item">\s*<summary class="topic-faq-summary">/);
+    assert.match(html, /<span class="topic-faq-question">怎么选择机场？<\/span>/);
+    assert.match(html, /<p class="topic-faq-answer">优先交叉查看稳定性、价格和风险记录。<\/p>/);
+    assert.ok(html.indexOf('专题精选') < html.indexOf('专题最新文章'));
+    assert.ok(html.indexOf('专题最新文章') < html.indexOf('专题问答'));
+    assert.match(html, /font-size: clamp\(34px, 4vw, 52px\);/);
+    assert.match(html, /font-size: clamp\(30px, 8vw, 36px\);/);
     assert.match(html, /<meta property="og:image" content="http:\/\/127\.0\.0\.1:\d+\/uploads\/news\/topic-cover\.webp"/);
     assert.match(html, /<img src="\/uploads\/news\/topic-cover\.webp" alt="2026机场推荐专题" loading="eager" decoding="async" fetchpriority="high"/);
     assert.match(html, /<img src="\/uploads\/news\/regular-cover\.webp" alt="普通专题文章" loading="lazy" decoding="async"/);
+
+    const pagedResponse = await fetch(`http://127.0.0.1:${port}/news/topic/airport-recommendations-2026?page=2`, {
+      headers: { host: `127.0.0.1:${port}` },
+    });
+    assert.equal(pagedResponse.status, 200);
+    const pagedHtml = await pagedResponse.text();
+    assert.match(pagedHtml, /2026机场推荐专题 SEO 标题 第 2 页/);
+    assert.ok(pagedHtml.indexOf('专题最新文章') < pagedHtml.indexOf('专题问答'));
+
+    const searchResponse = await fetch(`http://127.0.0.1:${port}/news/topic/airport-recommendations-2026?q=稳定`, {
+      headers: { host: `127.0.0.1:${port}` },
+    });
+    assert.equal(searchResponse.status, 200);
+    const searchHtml = await searchResponse.text();
+    assert.match(searchHtml, /<meta name="robots" content="noindex,follow,max-image-preview:large"/);
+    assert.doesNotMatch(searchHtml, /专题精选/);
+    assert.ok(searchHtml.indexOf('专题搜索结果') < searchHtml.indexOf('专题问答'));
+    assert.deepEqual(calls, [
+      { slug: 'airport-recommendations-2026', page: 1, pageSize: 12, q: undefined },
+      { slug: 'airport-recommendations-2026', page: 2, pageSize: 12, q: undefined },
+      { slug: 'airport-recommendations-2026', page: 1, pageSize: 12, q: '稳定' },
+    ]);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -564,7 +593,10 @@ test('GET /news/topic/:slug uses static topic OG fallback when topic has no cove
     const baseUrl = `http://127.0.0.1:${port}`;
     const response = await fetch(`${baseUrl}/news/topic/no-cover-topic`, { headers: { host: `127.0.0.1:${port}` } });
     assert.equal(response.status, 200);
-    assertNewsOgImage(await response.text(), baseUrl, '/og/news-topic.png', 'GateRank News 专题页分享图', 'image/png');
+    const html = await response.text();
+    assertNewsOgImage(html, baseUrl, '/og/news-topic.png', 'GateRank News 专题页分享图', 'image/png');
+    assert.doesNotMatch(html, /专题问答/);
+    assert.doesNotMatch(html, /<details class="topic-faq-item">/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

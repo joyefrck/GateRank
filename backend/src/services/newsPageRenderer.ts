@@ -990,27 +990,58 @@ const sharedStyles = `
     grid-template-columns: 1fr;
   }
   .topic-hero-copy {
-    padding: 48px;
+    padding: 40px;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 36px;
+    gap: 28px;
   }
   .topic-hero-title {
-    margin: 14px 0 0;
+    margin: 12px 0 0;
     max-width: 850px;
-    font-size: clamp(38px, 5vw, 68px);
-    line-height: 1.02;
+    font-size: clamp(34px, 4vw, 52px);
+    line-height: 1.08;
     letter-spacing: -0.03em;
     font-weight: 900;
     text-wrap: balance;
   }
   .topic-hero-intro {
     max-width: 66ch;
-    margin: 22px 0 0;
+    margin: 18px 0 0;
     color: rgba(17,17,17,0.72);
     font-size: 17px;
-    line-height: 1.9;
+    line-height: 1.75;
+  }
+  .topic-hero-intro.is-collapsed {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+    overflow: hidden;
+  }
+  .topic-hero-intro-toggle {
+    margin-top: 10px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--topic-accent, #c93a2e);
+    padding: 0;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.5;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .topic-hero-intro-toggle:hover,
+  .topic-hero-intro-toggle:focus-visible {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+  }
+  .topic-hero-intro-toggle:focus-visible {
+    outline: 2px solid var(--topic-accent, #c93a2e);
+    outline-offset: 4px;
+  }
+  .topic-hero-intro-toggle[hidden] {
+    display: none;
   }
   .topic-hero-cover {
     min-height: 420px;
@@ -1049,24 +1080,69 @@ const sharedStyles = `
   }
   .topic-faq-grid {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 14px;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
   }
   .topic-faq-item {
     border: 1px solid rgba(17,17,17,0.10);
-    border-radius: 22px;
+    border-radius: 18px;
     background: #ffffff;
-    padding: 22px;
     box-shadow: 0 16px 38px rgba(17,17,17,0.04);
+    overflow: hidden;
+  }
+  .topic-faq-summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 20px 22px;
+    cursor: pointer;
+    list-style: none;
+  }
+  .topic-faq-summary::-webkit-details-marker {
+    display: none;
+  }
+  .topic-faq-summary:hover,
+  .topic-faq-summary:focus-visible {
+    background: var(--topic-accent-soft, rgba(201,58,46,0.08));
+  }
+  .topic-faq-summary:focus-visible {
+    outline: 2px solid var(--topic-accent, #c93a2e);
+    outline-offset: -2px;
   }
   .topic-faq-question {
-    margin: 0;
     font-size: 16px;
     line-height: 1.45;
     font-weight: 900;
   }
+  .topic-faq-icon {
+    position: relative;
+    flex: 0 0 auto;
+    width: 18px;
+    height: 18px;
+  }
+  .topic-faq-icon::before,
+  .topic-faq-icon::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 14px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+    transform: translate(-50%, -50%);
+    transition: transform 160ms ease;
+  }
+  .topic-faq-icon::after {
+    transform: translate(-50%, -50%) rotate(90deg);
+  }
+  .topic-faq-item[open] .topic-faq-icon::after {
+    transform: translate(-50%, -50%) rotate(0deg);
+  }
   .topic-faq-answer {
-    margin: 10px 0 0;
+    margin: 0;
+    padding: 0 22px 22px;
     color: rgba(17,17,17,0.68);
     font-size: 14px;
     line-height: 1.75;
@@ -1157,6 +1233,19 @@ const sharedStyles = `
     }
     .topic-hero-cover {
       min-height: 240px;
+    }
+    .topic-hero-title {
+      font-size: clamp(30px, 8vw, 36px);
+    }
+    .topic-hero-intro {
+      font-size: 15px;
+      line-height: 1.7;
+    }
+    .topic-faq-summary {
+      padding: 18px;
+    }
+    .topic-faq-answer {
+      padding: 0 18px 18px;
     }
     .hero-title,
     .article-title {
@@ -1420,7 +1509,8 @@ export function renderNewsTopicPage(options: RenderTopicPageOptions): string {
               <div>
                 <div class="eyebrow">GateRank Topic</div>
                 <h1 class="topic-hero-title">${escapeHtml(h1)}</h1>
-                <p class="topic-hero-intro">${escapeHtml(intro)}</p>
+                <p id="topic-hero-intro" class="topic-hero-intro is-collapsed">${escapeHtml(intro)}</p>
+                <button type="button" class="topic-hero-intro-toggle" aria-expanded="false" aria-controls="topic-hero-intro" hidden>展开</button>
               </div>
               <div class="topic-stat-row">
                 <span class="topic-stat-pill">${topicView.total + topicView.pinned.length} 篇内容</span>
@@ -1442,20 +1532,6 @@ export function renderNewsTopicPage(options: RenderTopicPageOptions): string {
             </section>
           ` : ''}
 
-          ${faqItems.length > 0 ? `
-            <section class="topic-section-block">
-              <h2 class="news-section-heading">专题问答</h2>
-              <div class="topic-faq-grid">
-                ${faqItems.map((item) => `
-                  <article class="topic-faq-item">
-                    <h3 class="topic-faq-question">${escapeHtml(item.question)}</h3>
-                    <p class="topic-faq-answer">${escapeHtml(item.answer)}</p>
-                  </article>
-                `).join('')}
-              </div>
-            </section>
-          ` : ''}
-
           <section class="news-content-grid">
             <div>
               <h2 class="news-section-heading">${isSearch ? '专题搜索结果' : '专题最新文章'}</h2>
@@ -1470,9 +1546,56 @@ export function renderNewsTopicPage(options: RenderTopicPageOptions): string {
               ${renderCompactPanel('热门文章', topicView.recommended, false)}
             </aside>
           </section>
+
+          ${faqItems.length > 0 ? `
+            <section class="topic-section-block">
+              <h2 class="news-section-heading">专题问答</h2>
+              <div class="topic-faq-grid">
+                ${faqItems.map((item) => `
+                  <details class="topic-faq-item">
+                    <summary class="topic-faq-summary">
+                      <span class="topic-faq-question">${escapeHtml(item.question)}</span>
+                      <span class="topic-faq-icon" aria-hidden="true"></span>
+                    </summary>
+                    <p class="topic-faq-answer">${escapeHtml(item.answer)}</p>
+                  </details>
+                `).join('')}
+              </div>
+            </section>
+          ` : ''}
         </main>
         ${renderFooter()}
       </div>
+      <script>
+        (function () {
+          var intro = document.getElementById('topic-hero-intro');
+          var toggle = document.querySelector('.topic-hero-intro-toggle');
+          if (!intro || !toggle) {
+            return;
+          }
+
+          var updateToggleVisibility = function () {
+            if (toggle.getAttribute('aria-expanded') === 'true') {
+              return;
+            }
+            toggle.hidden = intro.scrollHeight <= intro.clientHeight + 1;
+          };
+
+          toggle.addEventListener('click', function () {
+            var expanded = toggle.getAttribute('aria-expanded') !== 'true';
+            intro.classList.toggle('is-collapsed', !expanded);
+            toggle.setAttribute('aria-expanded', String(expanded));
+            toggle.textContent = expanded ? '收起' : '展开';
+            toggle.hidden = false;
+          });
+
+          window.addEventListener('resize', updateToggleVisibility, { passive: true });
+          window.requestAnimationFrame(updateToggleVisibility);
+          if (document.fonts && document.fonts.ready) {
+            document.fonts.ready.then(updateToggleVisibility);
+          }
+        })();
+      </script>
     `,
   });
 }
