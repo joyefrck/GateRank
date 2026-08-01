@@ -172,6 +172,14 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
     source.indexOf('function RankingTableRow'),
     source.indexOf('function RankingMobileCard'),
   );
+  const summaryBoardItemSource = source.slice(
+    source.indexOf('function SummaryBoardItem'),
+    source.indexOf('function SummaryRank'),
+  );
+  const summaryBoardsSource = source.slice(
+    source.indexOf('function SummaryBoards'),
+    source.indexOf('function TrustSection'),
+  );
   const verticallyCenteredRankingCells = rankingTableRowSource.match(/<td className="align-middle px-4 py-4(?: text-center)?">/g) || [];
 
   assert.match(source, /<table className="w-full border-collapse text-left">/);
@@ -195,6 +203,17 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
   assert.match(source, /const websiteHref = normalizeExternalHref\(deal\.website\)/);
   assert.match(source, /href=\{websiteHref\}/);
   assert.match(source, /targetUrl: websiteHref/);
+  assert.match(rankingTableRowSource, /const websiteHref = buildHomepageWebsiteHref\(item\.airport_id\)/);
+  assert.match(rankingTableRowSource, /href=\{websiteHref\}/);
+  assert.match(rankingTableRowSource, /createTrackedOutboundClickHandler\(\{[\s\S]*pageKind: 'home',[\s\S]*placement: 'home_card',[\s\S]*targetUrl: item\.website/);
+  assert.match(rankingTableRowSource, /dedupeKey: `home\|ranking\|\$\{item\.airport_id\}`/);
+  assert.match(rankingTableRowSource, /<motion\.tr[\s\S]*ref=\{ref\}/);
+  assert.doesNotMatch(rankingTableRowSource, /href=\{item\.website\}/);
+  assert.match(summaryBoardsSource, /<SummaryBoardItem/);
+  assert.match(summaryBoardsSource, /sectionKey=\{config\.key\}/);
+  assert.match(summaryBoardItemSource, /useMarketingImpression\(\{/);
+  assert.match(summaryBoardItemSource, /dedupeKey: `home\|summary\|\$\{sectionKey\}\|\$\{item\.airport_id\}`/);
+  assert.match(summaryBoardItemSource, /<li ref=\{ref\}>/);
   assert.match(source, /\{deal\.tracking_days\} 天观察<\/span>/);
   assert.match(source, /\{deal\.discount_title \|\| '查看官网了解当前优惠活动。'\}/);
   assert.doesNotMatch(source, /deal\.discount_description \|\| deal\.discount_title/);

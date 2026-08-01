@@ -131,6 +131,7 @@ function SummaryBoardItem({
   index: number;
   sectionKey: Exclude<HomeSectionKey, 'today_pick'>;
   risk?: boolean;
+  key?: React.Key;
 }) {
   const ref = useRef<HTMLLIElement>(null);
   useMarketingImpression({

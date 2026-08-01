@@ -581,10 +581,24 @@ function RankingPreview({ items, date }: { items: FullRankingItem[]; date: strin
   );
 }
 
+function buildHomepageWebsiteHref(airportId: number): string {
+  return `/api/v1/outbound/airports/${airportId}?target=website&placement=home_card`;
+}
+
 function RankingTableRow({ item, index, date }: { item: FullRankingItem; index: number; date: string; key?: React.Key }) {
+  const ref = useRef<HTMLTableRowElement>(null);
   const href = item.report_url || `/reports/${item.airport_id}?date=${encodeURIComponent(date)}`;
+  const websiteHref = buildHomepageWebsiteHref(item.airport_id);
+  useMarketingImpression({
+    airportId: item.airport_id,
+    pageKind: 'home',
+    placement: 'home_card',
+    dedupeKey: `home|ranking|${item.airport_id}`,
+    ref,
+  });
   return (
     <motion.tr
+      ref={ref}
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.3, delay: index * 0.02 }}
@@ -629,7 +643,21 @@ function RankingTableRow({ item, index, date }: { item: FullRankingItem; index: 
           >
             查看报告 <span className="text-[10px]">&gt;</span>
           </RouteLink>
-          <a href={item.website} target="_blank" rel="nofollow noreferrer noopener" className="flex w-full items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1 text-center text-[12px] font-bold leading-relaxed text-gray-700 shadow-sm hover:bg-gray-50">官网 <ExternalLink className="h-3 w-3 text-gray-400" /></a>
+          <a
+            href={websiteHref}
+            target="_blank"
+            rel="nofollow noreferrer noopener"
+            onClick={createTrackedOutboundClickHandler({
+              airportId: item.airport_id,
+              pageKind: 'home',
+              placement: 'home_card',
+              targetKind: 'website',
+              targetUrl: item.website,
+            })}
+            className="flex w-full items-center justify-center gap-1 rounded-xl border border-gray-200 bg-white px-3 py-1 text-center text-[12px] font-bold leading-relaxed text-gray-700 shadow-sm hover:bg-gray-50"
+          >
+            官网 <ExternalLink className="h-3 w-3 text-gray-400" />
+          </a>
         </div>
       </td>
     </motion.tr>
@@ -760,23 +788,13 @@ function SummaryBoards({ sections }: { sections: HomePageData['sections'] }) {
                 ) : (
                   <ol className="space-y-2">
                     {items.map((item, index) => (
-                      <li key={item.airport_id}>
-                        <RouteLink href={item.report_url} className={`group/item flex items-center justify-between gap-2.5 rounded-xl border border-transparent p-2 transition-all ${config.risk ? 'bg-rose-50/30 hover:border-rose-200 hover:bg-rose-50/70' : 'bg-gray-50/60 hover:border-gray-200 hover:bg-white hover:shadow-sm'}`}>
-                          <span className="flex min-w-0 flex-1 items-center gap-2.5">
-                            <SummaryRank index={index} risk={config.risk} />
-                            <AirportMark name={item.name} compact />
-                            <span className="min-w-0">
-                              <strong className="block truncate text-[13.5px] font-black text-gray-800">{item.name}</strong>
-                              <span className={`block truncate text-[10.5px] font-medium ${config.risk ? 'text-rose-500/90' : 'text-gray-400'}`}>{item.details?.[0]?.value || item.conclusion}</span>
-                            </span>
-                          </span>
-                          {config.risk ? (
-                            <span className="shrink-0 rounded-lg bg-rose-600 px-2 py-0.5 text-[10.5px] font-extrabold text-white">风险</span>
-                          ) : (
-                            <span className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-200/60 bg-amber-50 px-2 py-0.5"><Star className="h-3 w-3 fill-amber-400 text-amber-400" /><span className="font-mono text-[12px] font-extrabold text-amber-800">{scoreLabel(item.score, item.score_hidden)}</span></span>
-                          )}
-                        </RouteLink>
-                      </li>
+                      <SummaryBoardItem
+                        key={item.airport_id}
+                        item={item}
+                        index={index}
+                        sectionKey={config.key}
+                        risk={config.risk}
+                      />
                     ))}
                   </ol>
                 )}
@@ -885,6 +903,48 @@ function RankBadge({ rank }: { rank: number }) {
         ? 'border-orange-300 bg-orange-400 text-white'
         : 'border-transparent bg-transparent text-gray-500';
   return <span className={`mx-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-full border-2 font-mono text-[13.5px] font-black ${tone}`}>{rank}</span>;
+}
+
+function SummaryBoardItem({
+  item,
+  index,
+  sectionKey,
+  risk = false,
+}: {
+  item: HomeCardItem;
+  index: number;
+  sectionKey: Exclude<HomeSectionKey, 'today_pick'>;
+  risk?: boolean;
+  key?: React.Key;
+}) {
+  const ref = useRef<HTMLLIElement>(null);
+  useMarketingImpression({
+    airportId: item.airport_id,
+    pageKind: 'home',
+    placement: 'home_card',
+    dedupeKey: `home|summary|${sectionKey}|${item.airport_id}`,
+    ref,
+  });
+
+  return (
+    <li ref={ref}>
+      <RouteLink href={item.report_url} className={`group/item flex items-center justify-between gap-2.5 rounded-xl border border-transparent p-2 transition-all ${risk ? 'bg-rose-50/30 hover:border-rose-200 hover:bg-rose-50/70' : 'bg-gray-50/60 hover:border-gray-200 hover:bg-white hover:shadow-sm'}`}>
+        <span className="flex min-w-0 flex-1 items-center gap-2.5">
+          <SummaryRank index={index} risk={risk} />
+          <AirportMark name={item.name} compact />
+          <span className="min-w-0">
+            <strong className="block truncate text-[13.5px] font-black text-gray-800">{item.name}</strong>
+            <span className={`block truncate text-[10.5px] font-medium ${risk ? 'text-rose-500/90' : 'text-gray-400'}`}>{item.details?.[0]?.value || item.conclusion}</span>
+          </span>
+        </span>
+        {risk ? (
+          <span className="shrink-0 rounded-lg bg-rose-600 px-2 py-0.5 text-[10.5px] font-extrabold text-white">风险</span>
+        ) : (
+          <span className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-200/60 bg-amber-50 px-2 py-0.5"><Star className="h-3 w-3 fill-amber-400 text-amber-400" /><span className="font-mono text-[12px] font-extrabold text-amber-800">{scoreLabel(item.score, item.score_hidden)}</span></span>
+        )}
+      </RouteLink>
+    </li>
+  );
 }
 
 function SummaryRank({ index, risk }: { index: number; risk?: boolean }) {
