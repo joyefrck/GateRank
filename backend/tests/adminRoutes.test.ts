@@ -8,6 +8,7 @@ import { SmtpSendError } from '../src/services/mailService';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
 import type { PerformanceRunInput, ProbeSampleInput, ReportView } from '../src/types/domain';
 import { buildPerformanceNodeKey, buildPerformanceNodeMatchIdentity } from '../src/utils/performanceNodeKey';
+import type { AirportHomeAdSlotPrices } from '../../shared/airportAds';
 
 test('POST /performance-runs stores run diagnostics and performance samples', async () => {
   const insertedSamples: ProbeSampleInput[] = [];
@@ -7110,7 +7111,7 @@ function stubMarketingSettingsService(config: {
   click_charge_amount: number;
   rank_click_charge_amounts?: Record<number, number | null>;
   airport_ad_monthly_price?: number;
-  home_ad_slot_monthly_prices?: Record<number, number>;
+  home_ad_slot_monthly_prices?: AirportHomeAdSlotPrices;
   recharge_amounts?: number[];
   admin_telegram_username?: string | null;
   home_section_limits?: {
@@ -7163,7 +7164,7 @@ function stubMarketingSettingsService(config: {
       click_charge_amount?: number;
       rank_click_charge_amounts?: Record<number, number | null>;
       airport_ad_monthly_price?: number;
-      home_ad_slot_monthly_prices?: Record<number, number>;
+      home_ad_slot_monthly_prices?: Partial<AirportHomeAdSlotPrices>;
       recharge_amounts?: number[];
       admin_telegram_username?: string | null;
       home_section_limits?: {

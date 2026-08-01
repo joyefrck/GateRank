@@ -352,13 +352,19 @@ test('MarketingSettingsService rejects non-positive amounts on update', async ()
     },
   );
 
-  for (const home_ad_slot_monthly_prices of [{ 3: 0 }, { 5: 0 }]) {
+  for (const {
+    home_ad_slot_monthly_prices,
+    expectedField,
+  } of [
+    { home_ad_slot_monthly_prices: { 3: 0 }, expectedField: 'home_ad_slot_monthly_prices.3' },
+    { home_ad_slot_monthly_prices: { 5: 0 }, expectedField: 'home_ad_slot_monthly_prices.5' },
+  ]) {
     await assert.rejects(
       () => service.updateAdminSettings({ home_ad_slot_monthly_prices }, 'admin'),
       (error: unknown) => {
         const next = error as { code?: string; message?: string };
         assert.equal(next.code, 'BAD_REQUEST');
-        assert.match(String(next.message || ''), /home_ad_slot_monthly_prices/);
+        assert.match(String(next.message || ''), new RegExp(expectedField.replace('.', '\\.')));
         return true;
       },
     );
