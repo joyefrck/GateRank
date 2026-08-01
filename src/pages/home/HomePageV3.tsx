@@ -742,7 +742,7 @@ function SummaryBoards({ sections }: { sections: HomePageData['sections'] }) {
       <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-4">
         {summaryConfig.map((config) => {
           const Icon = config.icon;
-          const items = sections[config.key]?.items?.slice(0, 4) || [];
+          const items = sections[config.key]?.items || [];
           return (
             <article key={config.key} className={`group flex flex-col justify-between rounded-[24px] border border-gray-200 bg-white p-5 shadow-sm transition-all duration-300 hover:shadow-md ${config.hoverTone}`}>
               <div>

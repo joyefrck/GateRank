@@ -220,6 +220,8 @@ test('React homepage omits summary more links and the announcement schedule note
 
   assert.doesNotMatch(sidebarSource, /测速物理中转每日清晨 6 点重算评分/);
   assert.match(sidebarSource, /href="\/news"[^>]*>更多 <ChevronRight/);
+  assert.match(summarySource, /const items = sections\[config\.key\]\?\.items \|\| \[\];/);
+  assert.doesNotMatch(summarySource, /slice\(0,\s*4\)/);
   assert.doesNotMatch(summarySource, /查看更多\$\{config\.title\}/);
   assert.doesNotMatch(summarySource, /href=\{config\.href\}/);
 });

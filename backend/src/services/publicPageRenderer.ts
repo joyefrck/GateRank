@@ -2155,7 +2155,7 @@ function renderHomeV3Summaries(view: HomePageView): string {
   ];
   return `
     <section aria-labelledby="home-v3-summary-title">
-      ${renderHomeV3SectionHead('Multiple signals', '从不同维度交叉判断', '每组最多显示 4 条真实数据，不足时保持空缺。').replace('<h2>', '<h2 id="home-v3-summary-title">')}
+      ${renderHomeV3SectionHead('Multiple signals', '从不同维度交叉判断', '展示真实榜单数据，不足时保持空缺。').replace('<h2>', '<h2 id="home-v3-summary-title">')}
       <div class="home-v3-summary-grid">
         ${configurations.map((config) => {
           const section = view.sections[config.key];
@@ -2164,7 +2164,7 @@ function renderHomeV3Summaries(view: HomePageView): string {
               <div class="home-v3-summary-title"><h3>${escapeHtml(config.title)}</h3></div>
               <p>${escapeHtml(section.subtitle)}</p>
               ${section.items.length > 0 ? `
-                <ol>${section.items.slice(0, 4).map((item, index) => `
+                <ol>${section.items.map((item, index) => `
                   <li><span>${String(index + 1).padStart(2, '0')}</span><a href="${escapeAttribute(item.report_url)}">${escapeHtml(item.name)}</a><strong>${escapeHtml(formatPublicListScore(item))}</strong></li>
                 `).join('')}</ol>
               ` : '<p class="home-v3-muted">当前没有可展示数据</p>'}

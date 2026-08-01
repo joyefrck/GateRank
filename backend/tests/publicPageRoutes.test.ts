@@ -114,6 +114,50 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
   }
 });
 
+test('homepage SSR renders every summary item supplied by the configured backend limit', async () => {
+  const baseItem = homeView.sections.new_entries.items[0];
+  assert.ok(baseItem);
+  const configuredItems = Array.from({ length: 5 }, (_, index) => ({
+    ...baseItem,
+    airport_id: 80 + index,
+    name: `配置数量机场 ${index + 1}`,
+    report_url: `/airports/configured-${index + 1}`,
+  }));
+  const configuredHomeView: HomePageView = {
+    ...homeView,
+    sections: {
+      ...homeView.sections,
+      new_entries: {
+        ...homeView.sections.new_entries,
+        items: configuredItems,
+      },
+    },
+  };
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: {
+      ...createPublicViewServiceStub(),
+      getHomePageView: async () => configuredHomeView,
+    },
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+
+    for (const item of configuredItems) {
+      assert.match(html, new RegExp(`href="${escapeRegExp(item.report_url)}"[^>]*>${escapeRegExp(item.name)}<`));
+    }
+    assert.doesNotMatch(html, /每组最多显示 4 条真实数据/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('core SEO descriptions include expanded search context', async () => {
   const app = express();
   app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
