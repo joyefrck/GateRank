@@ -46,7 +46,7 @@ import {
   type PublicFullRankingTopicContent,
   type PublicSeoText,
 } from '../../../shared/publicSeo';
-import type { AirportDealView } from '../../../shared/airportAds';
+import { AIRPORT_HOME_AD_SLOTS, type AirportDealView } from '../../../shared/airportAds';
 import {
   PUBLIC_SITE_BRAND_NAME,
   withPublicBrandTitle,
@@ -2048,7 +2048,7 @@ function renderHomeV3SponsoredDeals(view: HomePageView): string {
         '<a href="/deals">全部优惠 →</a>',
       ).replace('<h2>', '<h2 id="home-v3-sponsored-title">')}
       <div class="home-v3-deal-grid">
-          ${([1, 2, 3, 4] as const).map((slot) => {
+          ${AIRPORT_HOME_AD_SLOTS.map((slot) => {
             const deal = dealsBySlot.get(slot);
             return deal ? `
             <article class="home-v3-deal" data-marketing-placement="deal_card" data-airport-id="${deal.airport_id}">
@@ -2063,9 +2063,11 @@ function renderHomeV3SponsoredDeals(view: HomePageView): string {
               <div class="home-v3-tags">${deal.tags.slice(0, 3).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>
               <div class="home-v3-deal-bottom">
                 <span><small>月付起</small><strong>¥${escapeHtml(formatPublicPrice(deal.plan_price_month))}</strong></span>
-                <a href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow sponsored noopener noreferrer" aria-label="访问 ${escapeAttribute(deal.name)} 官网">↗</a>
               </div>
-              <a class="home-v3-report-link" href="${escapeAttribute(deal.report_url)}">查看测评报告</a>
+              <div class="home-v3-deal-actions">
+                <a class="home-v3-deal-report" href="${escapeAttribute(deal.report_url)}">查看测评报告</a>
+                <a class="home-v3-deal-website" href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow sponsored noopener noreferrer">官网 ↗</a>
+              </div>
             </article>
           ` : `
             <article class="home-v3-deal home-v3-empty">
@@ -3451,15 +3453,15 @@ const styles = `
   .home-v3-section-head h2 { margin: 5px 0 0; color: #0a0a0a; font-size: 21px; line-height: 1.2; letter-spacing: -.02em; }
   .home-v3-section-head p { margin: 5px 0 0; color: #737373; font-size: 12px; line-height: 1.6; }
   .home-v3-section-head > a { flex: 0 0 auto; color: #737373; font-size: 12px; font-weight: 900; text-decoration: none; }
-  .home-v3-deal-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }
-  .home-v3-deal { display: flex; min-height: 272px; flex-direction: column; border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 16px; box-shadow: 0 4px 20px rgba(15,23,42,.04); }
+  .home-v3-deal-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; }
+  .home-v3-deal { display: flex; min-height: 264px; flex-direction: column; border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 14px; box-shadow: 0 4px 20px rgba(15,23,42,.04); }
   .home-v3-deal-top { display: flex; align-items: center; gap: 10px; }
   .home-v3-airport-mark { display: inline-flex; width: 42px; height: 42px; flex: 0 0 42px; align-items: center; justify-content: center; border-radius: 12px; background: linear-gradient(135deg,#334155,#0f172a); color: #fff; font-weight: 900; }
   .home-v3-deal-top > div { min-width: 0; flex: 1; }
   .home-v3-deal h3 { overflow: hidden; margin: 0; color: #171717; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
   .home-v3-deal-top small { color: #a3a3a3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
   .home-v3-deal-top > b { align-self: flex-start; border: 1px solid #fde68a; border-radius: 5px; background: #fffbeb; padding: 2px 5px; color: #b45309; font-size: 9px; letter-spacing: .08em; }
-  .home-v3-deal-offer { margin-top: 14px; border-radius: 12px; background: #fafafa; padding: 12px; }
+  .home-v3-deal-offer { margin-top: 12px; border-radius: 12px; background: #fafafa; padding: 10px; }
   .home-v3-deal-offer strong { color: #171717; font-size: 14px; }
   .home-v3-deal-offer p { min-height: 36px; margin: 4px 0 0; color: #737373; font-size: 11px; line-height: 1.65; }
   .home-v3-deal-offer code { display: block; margin-top: 7px; color: #e11d48; font-size: 10px; font-weight: 800; }
@@ -3469,8 +3471,10 @@ const styles = `
   .home-v3-deal-bottom > span small, .home-v3-deal-bottom > span strong { display: block; }
   .home-v3-deal-bottom small { color: #a3a3a3; font-size: 10px; font-weight: 800; }
   .home-v3-deal-bottom strong { margin-top: 2px; color: #171717; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-  .home-v3-deal-bottom > a { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 9px; background: #171717; color: #fff; text-decoration: none; }
-  .home-v3-report-link { margin-top: 7px; color: #737373; font-size: 10px; font-weight: 800; text-decoration: none; }
+  .home-v3-deal-actions { display: grid; grid-template-columns: 1fr; gap: 7px; margin-top: 10px; }
+  .home-v3-deal-actions a { display: flex; width: 100%; min-height: 32px; box-sizing: border-box; align-items: center; justify-content: center; border: 1px solid #e5e5e5; border-radius: 8px; font-size: 10px; font-weight: 900; text-decoration: none; }
+  .home-v3-deal-report { border-color: #171717 !important; background: #171717; color: #fff; }
+  .home-v3-deal-website { background: #fafafa; color: #404040; }
   .home-v3-columns { display: grid; grid-template-columns: minmax(0,2fr) minmax(280px,1fr); gap: 28px; align-items: start; }
   .home-v3-ranking, .home-v3-sidebar > section { overflow: hidden; border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 18px; box-shadow: 0 4px 22px rgba(15,23,42,.04); }
   .home-v3-table-wrap { overflow-x: auto; margin: 0 -18px -18px; }
@@ -3509,7 +3513,7 @@ const styles = `
   .home-v3-summary-grid li { display: grid; grid-template-columns: 20px minmax(0,1fr) auto; gap: 6px; align-items: center; border-top: 1px solid #f5f5f5; padding: 9px 0; font-size: 11px; }
   .home-v3-summary-grid li > span { color: #d4d4d4; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 900; }
   .home-v3-summary-grid li a { overflow: hidden; color: #525252; font-weight: 800; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
-  .home-v3-summary-grid li strong { color: #171717; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .home-v3-summary-grid li strong { color: #404040; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
   .home-v3-trust { border-top: 1px solid #e5e5e5; padding-top: 38px; }
   .home-v3-center-head { text-align: center; }
   .home-v3-center-head h2 { margin: 7px 0 0; color: #0a0a0a; font-size: 25px; letter-spacing: -.02em; }

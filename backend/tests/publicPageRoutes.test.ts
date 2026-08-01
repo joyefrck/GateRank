@@ -71,6 +71,9 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.match(html, /<h2 id="home-v3-sponsored-title">商业合作专区<\/h2>/);
         assert.doesNotMatch(html, /<h2 id="home-v3-sponsored-title">今日赞助推荐<\/h2>/);
         assert.match(html, /星云优惠机场/);
+        const homepageDealCards = Array.from(html.matchAll(/<article class="home-v3-deal(?: home-v3-empty)?"/g));
+        assert.equal(homepageDealCards.length, 5, 'homepage SSR renders five commercial deal slots');
+        assert.match(html, /首页 5 号广告位招募中/);
         const sponsoredDealHtml = html.match(/<article class="home-v3-deal"[\s\S]*?<\/article>/)?.[0] || '';
         assert.match(sponsoredDealHtml, /<p>新客八折<\/p>/);
         assert.doesNotMatch(sponsoredDealHtml, /月付套餐限时优惠。/);
@@ -78,6 +81,13 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.doesNotMatch(sponsoredDealHtml, /公开分/);
         assert.doesNotMatch(sponsoredDealHtml, /91\.2/);
         assert.match(sponsoredDealHtml, /<small>月付起<\/small><strong>¥12<\/strong>/);
+        const dealActionsHtml = sponsoredDealHtml.match(/<div class="home-v3-deal-actions">[\s\S]*?<\/div>/)?.[0] || '';
+        assert.match(dealActionsHtml, /href="\/airports\/nebula-deal">查看测评报告<\/a>[\s\S]*href="https:\/\/deal\.example\.com" target="_blank" rel="nofollow sponsored noopener noreferrer"[^>]*>官网 ↗<\/a>/);
+        assert.match(html, /\.home-v3-deal-grid\s*\{[^}]*grid-template-columns:\s*repeat\(5,minmax\(0,1fr\)\);[^}]*gap:\s*12px;/);
+        assert.match(html, /\.home-v3-deal-actions\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*1fr;[^}]*gap:/);
+        assert.match(html, /\.home-v3-deal-actions a\s*\{[^}]*width:\s*100%;[^}]*justify-content:\s*center;/);
+        assert.match(html, /\.home-v3-summary-grid li strong\s*\{[^}]*color:\s*#404040;[^}]*font-family:\s*ui-monospace,[^}]*text-align:\s*right;/);
+        assert.doesNotMatch(html, /\.home-v3-summary-grid li strong\s*\{[^}]*\b(?:background|border|mask|content):/);
         assert.doesNotMatch(html, /广告位空缺不会由普通优惠活动补位/);
         assert.match(html, /rel="nofollow sponsored noopener noreferrer"/);
         assert.match(html, /<h2 id="home-v3-ranking-title">🏆 GateRank 排行榜<\/h2>/);
