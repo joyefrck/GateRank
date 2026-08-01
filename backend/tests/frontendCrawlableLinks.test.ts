@@ -9,6 +9,18 @@ test('Admin homepage settings label the legacy today-pick key as ranking count',
   assert.match(adminSource, /\{ key: 'today_pick', label: '排行榜数量' \}/);
 });
 
+test('Admin and applicant interfaces expose all shared homepage ad slots', async () => {
+  const [adminSource, appSource] = await Promise.all([
+    readFile(path.join(process.cwd(), 'src/admin/AdminApp.tsx'), 'utf8'),
+    readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8'),
+  ]);
+
+  assert.match(adminSource, /const marketingHomeAdSlots = AIRPORT_HOME_AD_SLOTS\.map\(String\) as MarketingHomeAdSlot\[\];/);
+  assert.match(adminSource, /首页 1–5：/);
+  assert.match(appSource, /AIRPORT_HOME_AD_SLOTS\.map\(\(slot\) =>/);
+  assert.match(appSource, /请选择首页 1–5 号位/);
+});
+
 test('React streaming check only starts from the button and probes six services once per run', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/pages/streamingCheck/StreamingCheckPage.tsx'), 'utf8');
   assert.match(source, /onClick=\{\(\) => \{ void runCheck\(\); \}\}/);

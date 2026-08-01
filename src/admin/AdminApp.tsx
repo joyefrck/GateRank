@@ -45,6 +45,10 @@ import {
   buildSubscriptionNodeViewRows,
   type SubscriptionNodeSnapshotViewNode,
 } from './subscriptionNodeSnapshotView';
+import {
+  AIRPORT_HOME_AD_SLOTS,
+  type AirportHomeAdSlot,
+} from '../../shared/airportAds';
 
 type AirportStatus = 'normal' | 'risk' | 'down';
 type AirportListedFilter = '' | 'listed' | 'unlisted';
@@ -953,10 +957,10 @@ interface MarketingSettingsFormState {
 }
 
 type MarketingClickChargeRank = '1' | '2' | '3' | '4' | '5' | '6';
-type MarketingHomeAdSlot = '1' | '2' | '3' | '4';
+type MarketingHomeAdSlot = `${AirportHomeAdSlot}`;
 
 const marketingClickChargeRanks: MarketingClickChargeRank[] = ['1', '2', '3', '4', '5', '6'];
-const marketingHomeAdSlots: MarketingHomeAdSlot[] = ['1', '2', '3', '4'];
+const marketingHomeAdSlots = AIRPORT_HOME_AD_SLOTS.map(String) as MarketingHomeAdSlot[];
 
 const defaultRankClickChargeAmountForm: Record<MarketingClickChargeRank, string> = {
   1: '',
@@ -967,12 +971,9 @@ const defaultRankClickChargeAmountForm: Record<MarketingClickChargeRank, string>
   6: '',
 };
 
-const defaultHomeAdSlotMonthlyPriceForm: Record<MarketingHomeAdSlot, string> = {
-  1: '1000',
-  2: '1000',
-  3: '1000',
-  4: '1000',
-};
+const defaultHomeAdSlotMonthlyPriceForm = Object.fromEntries(
+  marketingHomeAdSlots.map((slot) => [slot, '1000']),
+) as Record<MarketingHomeAdSlot, string>;
 
 interface SmtpSettingsView {
   enabled: boolean;
@@ -4547,7 +4548,7 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
                 <div className="text-xs font-medium text-neutral-500">费用规则</div>
                 <div className="mt-2 text-sm font-bold text-neutral-950">
                   {settings
-                    ? `入驻 ¥${settings.application_fee_amount} / 点击默认 ¥${settings.click_charge_amount} / 普通广告 ¥${settings.airport_ad_monthly_price || 1000} / 首页 1–4：${marketingHomeAdSlots.map((slot) => `¥${settings.home_ad_slot_monthly_prices[slot]}`).join(' / ')}`
+                    ? `入驻 ¥${settings.application_fee_amount} / 点击默认 ¥${settings.click_charge_amount} / 普通广告 ¥${settings.airport_ad_monthly_price || 1000} / 首页 1–5：${marketingHomeAdSlots.map((slot) => `¥${settings.home_ad_slot_monthly_prices[slot]}`).join(' / ')}`
                     : '-'}
                 </div>
               </div>
@@ -4612,7 +4613,7 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
                 <div className="mt-1 text-xs leading-5 text-neutral-500">
                   用户选择投放首页后，按所选位置的价格替代普通优惠活动月费，不叠加收费。
                 </div>
-                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
                   {marketingHomeAdSlots.map((slot) => (
                     <div key={slot}>
                       <FormField label={`首页 ${slot} 号位 (元)`} hint="新建首页投放和续投时使用。">

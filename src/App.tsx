@@ -145,6 +145,7 @@ import {
 import {
   AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD,
   AIRPORT_AD_MONTHLY_PRICE,
+  AIRPORT_HOME_AD_SLOTS,
   type AirportDealView,
   type AirportHomeAdSlot,
   type PortalAirportAdCampaignView,
@@ -2806,8 +2807,8 @@ function PortalAdCampaignModal({
                       </button>
                     </div>
                     {form.is_homepage ? (
-                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                        {([1, 2, 3, 4] as AirportHomeAdSlot[]).map((slot) => {
+                      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+                        {AIRPORT_HOME_AD_SLOTS.map((slot) => {
                           const available = adStatus.home_slot_availability?.[slot] ?? true;
                           const price = adStatus.home_slot_monthly_prices?.[slot]
                             || adStatus.monthly_price
@@ -7036,7 +7037,7 @@ function PortalPage() {
       return;
     }
     if (!isEdit && adCampaignForm.is_homepage && adCampaignForm.home_slot === null) {
-      setError('请选择首页 1–4 号位');
+      setError('请选择首页 1–5 号位');
       setSuccess('');
       return;
     }
