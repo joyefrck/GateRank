@@ -59,7 +59,7 @@ test('PublicViewService.getHomePageView falls back to latest ranking date', asyn
   ]);
 });
 
-test('PublicViewService.getHomePageView applies configured ranking count with four sponsored deals and five news updates', async () => {
+test('PublicViewService.getHomePageView applies configured ranking count with five sponsored deals and five news updates', async () => {
   const rankingPageSizes: number[] = [];
   const deals = Array.from({ length: 5 }, (_, index) => ({
     campaign_id: index + 1,
@@ -89,8 +89,8 @@ test('PublicViewService.getHomePageView applies configured ranking count with fo
     supports_ai: false,
     low_price_plan: true,
     discount_percent: 20,
-    home_slot: index < 4 ? (index + 1) as 1 | 2 | 3 | 4 : null,
-    is_homepage: index < 4,
+    home_slot: (index + 1) as 1 | 2 | 3 | 4 | 5,
+    is_homepage: true,
     created_at: '2026-03-01T00:00:00+08:00',
   })) satisfies AirportDealView[];
   const rankingItems = Array.from({ length: 12 }, (_, index) => ({
@@ -171,11 +171,12 @@ test('PublicViewService.getHomePageView applies configured ranking count with fo
   assert.equal(rankingPageSizes[0], 3);
   assert.equal(result.ranking_preview!.total, 12);
   assert.equal(result.ranking_preview!.items.length, 3);
-  assert.equal(result.sponsored_deals!.total, 4);
-  assert.equal(result.sponsored_deals!.items.length, 4);
+  assert.equal(result.sponsored_deals!.total, 5);
+  assert.equal(result.sponsored_deals!.display_limit, 5);
+  assert.equal(result.sponsored_deals!.items.length, 5);
   assert.equal(result.sponsored_deals!.items[0]?.discount_title, '优惠 1');
   assert.equal(result.sponsored_deals!.items[0]?.tracking_days, 4);
-  assert.deepEqual(result.sponsored_deals!.items.map((item) => item.home_slot), [1, 2, 3, 4]);
+  assert.deepEqual(result.sponsored_deals!.items.map((item) => item.home_slot), [1, 2, 3, 4, 5]);
   assert.equal(result.news_updates!.length, 5);
   assert.equal(result.news_updates![0]?.href, '/news/news-1');
 });

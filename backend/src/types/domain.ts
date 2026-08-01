@@ -1,6 +1,7 @@
 import type { FullRankingFilters } from '../../../shared/fullRankingFilters';
 import type { MarketingPageKind } from '../../../shared/marketingAnalytics';
 import type { HomeToolDownloadCta } from '../../../shared/toolDownloads';
+import type { AirportHomeAdSlot } from '../../../shared/airportAds';
 
 export type { MarketingPageKind } from '../../../shared/marketingAnalytics';
 
@@ -338,7 +339,7 @@ export interface HomeSectionView {
 export interface HomeSponsoredDealView {
   campaign_id: number;
   airport_id: number;
-  home_slot: 1 | 2 | 3 | 4;
+  home_slot: AirportHomeAdSlot;
   name: string;
   website: string;
   report_url: string;

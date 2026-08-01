@@ -21,7 +21,11 @@ import type {
   ScoreDeltaView,
   SubscriptionNodeSnapshot,
 } from '../types/domain';
-import type { AirportDealView } from '../../../shared/airportAds';
+import {
+  AIRPORT_HOME_AD_SLOTS,
+  type AirportDealView,
+  type AirportHomeAdSlot,
+} from '../../../shared/airportAds';
 import {
   dateDaysAgo,
   diffDays,
@@ -276,7 +280,7 @@ const DEFAULT_SCORE_VISIBILITY: PublicScoreVisibility = {
   score_hidden_reason: null,
 };
 const HOME_TOOL_DOWNLOAD_CTA_LIMIT = 4;
-const HOME_SPONSORED_DEAL_LIMIT = 4;
+const HOME_SPONSORED_DEAL_LIMIT = AIRPORT_HOME_AD_SLOTS.length;
 const HOME_NEWS_UPDATE_LIMIT = 5;
 
 export class PublicViewService {
@@ -691,7 +695,7 @@ export class PublicViewService {
     const items = await Promise.all(
       deals.slice(0, HOME_SPONSORED_DEAL_LIMIT).map(async (deal) => {
         const homeSlot = Number(deal.home_slot);
-        if (![1, 2, 3, 4].includes(homeSlot)) {
+        if (!AIRPORT_HOME_AD_SLOTS.includes(homeSlot as AirportHomeAdSlot)) {
           return null;
         }
         const context = await loadCardContext(deal.airport_id, date);
@@ -703,7 +707,7 @@ export class PublicViewService {
         return {
           campaign_id: deal.campaign_id,
           airport_id: deal.airport_id,
-          home_slot: homeSlot as 1 | 2 | 3 | 4,
+          home_slot: homeSlot as AirportHomeAdSlot,
           name: airport?.name || deal.airport_name,
           website: airport?.website || deal.website,
           report_url: deal.report_url,
@@ -735,7 +739,7 @@ export class PublicViewService {
       ? await repository.listActiveHomeDeals()
       : await repository.listActiveDeals();
     return deals
-      .filter((deal) => [1, 2, 3, 4].includes(Number(deal.home_slot)))
+      .filter((deal) => AIRPORT_HOME_AD_SLOTS.includes(Number(deal.home_slot) as AirportHomeAdSlot))
       .sort((left, right) => Number(left.home_slot) - Number(right.home_slot))
       .slice(0, HOME_SPONSORED_DEAL_LIMIT);
   }
