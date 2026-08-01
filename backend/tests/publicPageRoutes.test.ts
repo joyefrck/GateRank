@@ -60,6 +60,10 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.doesNotMatch(html, /<header class="topbar">/);
       if (path === '/') {
         assert.match(html, /<div class="home-v3-pill">行业首创，每日更新<\/div>/);
+        assert.match(html, /\.home-v3-hero h1\s*\{[^}]*font-size:\s*clamp\(20px,\s*2\.4vw,\s*30px\)/);
+        assert.match(html, /@media \(min-width:\s*640px\)\s*\{\s*\.home-v3-hero h1\s*\{\s*white-space:\s*nowrap;/);
+        assert.match(html, /\.page-main h1\s*\{[^}]*font-size:\s*clamp\(36px,\s*7vw,\s*64px\)/);
+        assert.doesNotMatch(html, /(?:^|\})\s*h1\s*\{[^}]*font-size:\s*clamp\(36px,\s*7vw,\s*64px\)/);
         assert.match(html, /\.home-v3-table-wrap td\s*\{[^}]*vertical-align:\s*middle;/);
         assert.match(html, /#gaterank-ranking-section td\.align-middle\s*\{[^}]*vertical-align:\s*middle;/);
         assert.doesNotMatch(html, /aria-label="查看(?:长期稳定|性价比榜|新入榜|风险预警)"/);

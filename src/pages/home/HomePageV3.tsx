@@ -349,7 +349,7 @@ function HomeHero({ data, reportTime }: { data: HomePageData | null; reportTime:
             className="flex flex-col justify-center lg:col-span-8"
           >
             <div className="space-y-2.5">
-              <h1 className="font-sans text-xl font-black leading-tight tracking-tight text-gray-900 sm:text-2xl md:text-3xl lg:leading-[1.15]">
+              <h1 className="font-sans text-xl font-black leading-tight tracking-tight text-gray-900 sm:whitespace-nowrap sm:text-2xl md:text-3xl lg:leading-[1.15]">
                 机场榜：机场 <span className="inline-block font-extrabold text-black">VPN</span> 推荐与
                 <span className="mt-0.5 block bg-gradient-to-r from-gray-500 via-gray-400 to-gray-300 bg-clip-text font-extrabold text-transparent drop-shadow-sm sm:mt-0 sm:inline">
                   可靠性榜单
