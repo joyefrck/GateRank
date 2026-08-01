@@ -266,6 +266,45 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
   assert.doesNotMatch(source, /该位置空缺，不会由普通优惠活动补位/);
 });
 
+test('React homepage uses shared five-slot commercial cards and plain summary scores', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/pages/home/HomePageV3.tsx'), 'utf8');
+  const sponsoredDealsStart = source.indexOf('function SponsoredDeals');
+  const sponsoredDealCardStart = source.indexOf('function SponsoredDealCard');
+  const sponsoredEmptySlotStart = source.indexOf('function SponsoredEmptySlot');
+  const rankingPreviewStart = source.indexOf('function RankingPreview');
+  const summaryBoardItemStart = source.indexOf('function SummaryBoardItem');
+  const summaryRankStart = source.indexOf('function SummaryRank');
+
+  assert.notEqual(sponsoredDealsStart, -1);
+  assert.notEqual(sponsoredDealCardStart, -1);
+  assert.notEqual(sponsoredEmptySlotStart, -1);
+  assert.notEqual(rankingPreviewStart, -1);
+  assert.notEqual(summaryBoardItemStart, -1);
+  assert.notEqual(summaryRankStart, -1);
+
+  const sponsoredDealsSource = source.slice(sponsoredDealsStart, sponsoredDealCardStart);
+  const sponsoredDealCardSource = source.slice(sponsoredDealCardStart, sponsoredEmptySlotStart);
+  const sponsoredEmptySlotSource = source.slice(sponsoredEmptySlotStart, rankingPreviewStart);
+  const summaryBoardItemSource = source.slice(summaryBoardItemStart, summaryRankStart);
+
+  assert.match(source, /import \{ AIRPORT_HOME_AD_SLOTS, type AirportHomeAdSlot \} from '\.\.\/\.\.\/\.\.\/shared\/airportAds';/);
+  assert.match(source, /home_slot: AirportHomeAdSlot;/);
+  assert.match(sponsoredDealsSource, /AIRPORT_HOME_AD_SLOTS\.map\(\(slot\) =>/);
+  assert.doesNotMatch(sponsoredDealsSource, /Array\.from\(\{ length: 4 \}\)/);
+  assert.match(sponsoredDealsSource, /grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5/);
+  assert.match(sponsoredDealCardSource, /p-4/);
+  assert.match(sponsoredEmptySlotSource, /p-4/);
+  assert.match(sponsoredDealCardSource, /flex flex-col gap-1\.5/);
+  assert.match(sponsoredDealCardSource, /<RouteLink href=\{deal\.report_url\} className="flex w-full/);
+  assert.match(sponsoredDealCardSource, /className="flex w-full items-center justify-center[^"]*"\s*>\s*官网/);
+  assert.ok(sponsoredDealCardSource.indexOf('<RouteLink href={deal.report_url}') < sponsoredDealCardSource.indexOf('<a\n            href={websiteHref}'));
+
+  assert.match(summaryBoardItemSource, /bg-rose-600[^>]*>风险<\/span>/);
+  assert.doesNotMatch(summaryBoardItemSource, /<Star/);
+  assert.doesNotMatch(summaryBoardItemSource, /amber-/);
+  assert.match(summaryBoardItemSource, /ml-auto shrink-0 text-right font-mono/);
+});
+
 test('React homepage omits summary more links and the announcement schedule note', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/pages/home/HomePageV3.tsx'), 'utf8');
   const sidebarStart = source.indexOf('function HomeSidebar');

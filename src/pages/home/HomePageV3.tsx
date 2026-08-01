@@ -27,6 +27,7 @@ import { HOME_FAQ_ITEMS, buildHomeSeo } from '../../../shared/publicSeo';
 import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
 import { PUBLIC_TOOL_DEFINITIONS } from '../../../shared/publicTools';
 import { calculateObservationDays } from '../../../shared/observationDays';
+import { AIRPORT_HOME_AD_SLOTS, type AirportHomeAdSlot } from '../../../shared/airportAds';
 import { getTagBadgeTone } from '../../components/TagBadge';
 import {
   buildAbsoluteUrl,
@@ -80,7 +81,7 @@ interface FullRankingItem {
 interface SponsoredDeal {
   campaign_id: number;
   airport_id: number;
-  home_slot: 1 | 2 | 3 | 4;
+  home_slot: AirportHomeAdSlot;
   name: string;
   website: string;
   report_url: string;
@@ -441,9 +442,8 @@ function SponsoredDeals({ deals }: { deals: SponsoredDeal[] }) {
             <RouteLink href="/apply" className="text-[11.5px] font-extrabold text-indigo-600 hover:text-indigo-800 hover:underline">申请入驻 &gt;</RouteLink>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, index) => {
-            const slot = (index + 1) as SponsoredDeal['home_slot'];
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {AIRPORT_HOME_AD_SLOTS.map((slot) => {
             const deal = dealsBySlot.get(slot);
             return deal
               ? <SponsoredDealCard key={deal.campaign_id} deal={deal} />
@@ -472,9 +472,9 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
       ref={ref}
       whileHover={{ y: -3 }}
       transition={{ duration: 0.2 }}
-      className="group relative flex min-h-[225px] flex-col justify-between overflow-hidden rounded-[20px] border border-gray-200 bg-gradient-to-b from-slate-50/60 to-white p-[18px] shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
+      className="group relative flex min-h-[215px] flex-col justify-between overflow-hidden rounded-[20px] border border-gray-200 bg-gradient-to-b from-slate-50/60 to-white p-4 shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
     >
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
             <AirportMark name={deal.name} />
@@ -491,15 +491,15 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
           {deal.tags.slice(0, 2).map((tag) => <FeatureTag key={tag} tag={tag} bordered />)}
         </div>
       </div>
-      <div className="mt-3 space-y-2.5 border-t border-gray-100 pt-3">
+      <div className="mt-2.5 space-y-2 border-t border-gray-100 pt-2.5">
         <div className="flex items-center justify-between">
           <div className="space-y-0.5">
             <span className="block text-[10px] font-bold leading-none text-gray-400">起步月付</span>
             <span className="font-mono text-[15px] font-black text-indigo-600">¥{formatPrice(deal.plan_price_month)} <span className="text-[10.5px] font-normal text-gray-400">/起</span></span>
           </div>
         </div>
-        <div className="flex items-center gap-2 pt-0.5">
-          <RouteLink href={deal.report_url} className="flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-stone-900 bg-stone-900 px-2 py-2 text-center text-[12px] font-black leading-none text-white shadow-sm hover:bg-black">
+        <div className="flex flex-col gap-1.5 pt-0.5">
+          <RouteLink href={deal.report_url} className="flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-stone-900 bg-stone-900 px-2 py-2 text-center text-[12px] font-black leading-none text-white shadow-sm hover:bg-black">
             查看报告 <span className="text-[10px]">&gt;</span>
           </RouteLink>
           <a
@@ -514,7 +514,7 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
               targetKind: 'website',
               targetUrl: websiteHref,
             })}
-            className="flex flex-1 items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-2 py-2 text-center text-[12px] font-bold leading-none text-gray-700 shadow-sm hover:bg-gray-50"
+            className="flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-2 py-2 text-center text-[12px] font-bold leading-none text-gray-700 shadow-sm hover:bg-gray-50"
           >
             官网 <ExternalLink className="h-3 w-3 text-gray-400" />
           </a>
@@ -526,7 +526,7 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
 
 function SponsoredEmptySlot({ slot }: { slot: SponsoredDeal['home_slot']; key?: React.Key }) {
   return (
-    <RouteLink href="/apply" className="group relative flex min-h-[225px] flex-col items-center justify-between overflow-hidden rounded-[20px] border border-dashed border-gray-300 bg-gray-50/70 p-[18px] text-center transition-all hover:border-indigo-300 hover:bg-indigo-50/20">
+    <RouteLink href="/apply" className="group relative flex min-h-[215px] flex-col items-center justify-between overflow-hidden rounded-[20px] border border-dashed border-gray-300 bg-gray-50/70 p-4 text-center transition-all hover:border-indigo-300 hover:bg-indigo-50/20">
       <div className="my-auto space-y-2">
         <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 transition-transform group-hover:scale-110"><Sparkles className="h-5 w-5" /></div>
         <span className="block text-[14px] font-extrabold text-gray-800">首页 {slot} 号广告位招募中</span>
@@ -940,7 +940,7 @@ function SummaryBoardItem({
         {risk ? (
           <span className="shrink-0 rounded-lg bg-rose-600 px-2 py-0.5 text-[10.5px] font-extrabold text-white">风险</span>
         ) : (
-          <span className="flex shrink-0 items-center gap-1 rounded-lg border border-amber-200/60 bg-amber-50 px-2 py-0.5"><Star className="h-3 w-3 fill-amber-400 text-amber-400" /><span className="font-mono text-[12px] font-extrabold text-amber-800">{scoreLabel(item.score, item.score_hidden)}</span></span>
+          <span className="ml-auto shrink-0 text-right font-mono text-[12px] font-extrabold text-gray-700">{scoreLabel(item.score, item.score_hidden)}</span>
         )}
       </RouteLink>
     </li>
