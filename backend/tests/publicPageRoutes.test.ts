@@ -80,14 +80,26 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.doesNotMatch(sponsoredDealHtml, /<b>广告<\/b>/);
         assert.doesNotMatch(sponsoredDealHtml, /公开分/);
         assert.doesNotMatch(sponsoredDealHtml, /91\.2/);
+        assert.match(sponsoredDealHtml, /<small>180 天观察<\/small>/);
+        assert.match(sponsoredDealHtml, /<code>优惠码 GATE20<\/code>/);
+        assert.match(sponsoredDealHtml, /<div class="home-v3-tags"><span>IEPL<\/span><span>新客优惠<\/span><\/div>/);
         assert.match(sponsoredDealHtml, /<small>月付起<\/small><strong>¥12<\/strong>/);
         const dealActionsHtml = sponsoredDealHtml.match(/<div class="home-v3-deal-actions">[\s\S]*?<\/div>/)?.[0] || '';
         assert.match(dealActionsHtml, /href="\/airports\/nebula-deal">查看测评报告<\/a>[\s\S]*href="https:\/\/deal\.example\.com" target="_blank" rel="nofollow sponsored noopener noreferrer"[^>]*>官网 ↗<\/a>/);
         assert.match(html, /\.home-v3-deal-grid\s*\{[^}]*grid-template-columns:\s*repeat\(5,minmax\(0,1fr\)\);[^}]*gap:\s*12px;/);
-        assert.match(html, /\.home-v3-deal-actions\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*1fr;[^}]*gap:/);
-        assert.match(html, /\.home-v3-deal-actions a\s*\{[^}]*width:\s*100%;[^}]*justify-content:\s*center;/);
+        assert.match(html, /@media \(max-width:\s*900px\)\s*\{[\s\S]*?\.home-v3-deal-grid\s*\{\s*grid-template-columns:\s*1fr 1fr;\s*\}/);
+        assert.match(html, /@media \(max-width:\s*600px\)\s*\{[\s\S]*?\.home-v3-deal-grid,\s*\.home-v3-summary-grid[^}]*grid-template-columns:\s*1fr;/);
+        assert.match(html, /\.home-v3-deal\s*\{[^}]*min-height:\s*264px;[^}]*padding:\s*14px;/);
+        assert.match(html, /\.home-v3-deal-actions\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*1fr;[^}]*gap:\s*7px;[^}]*margin-top:\s*10px;/);
+        assert.match(html, /\.home-v3-deal-actions a\s*\{[^}]*width:\s*100%;[^}]*justify-content:\s*center;[^}]*border:\s*1px solid #e5e5e5;/);
+        assert.match(html, /\.home-v3-deal-report\s*\{[^}]*border-color:\s*#171717 !important;[^}]*background:\s*#171717;[^}]*color:\s*#fff;/);
+        assert.match(html, /\.home-v3-deal-website\s*\{[^}]*background:\s*#fafafa;[^}]*color:\s*#404040;/);
+        assert.doesNotMatch(html, /\.home-v3-deal-bottom > a\s*\{/);
         assert.match(html, /\.home-v3-summary-grid li strong\s*\{[^}]*color:\s*#404040;[^}]*font-family:\s*ui-monospace,[^}]*text-align:\s*right;/);
         assert.doesNotMatch(html, /\.home-v3-summary-grid li strong\s*\{[^}]*\b(?:background|border|mask|content):/);
+        const riskSummaryHtml = html.match(/<article>\s*<div class="home-v3-summary-title"><h3>风险预警<\/h3><\/div>[\s\S]*?<\/article>/)?.[0] || '';
+        assert.match(riskSummaryHtml, /<li><span>01<\/span><a href="\/airports\/risk-alert">风险观察机场<\/a><strong>67\.40<\/strong><\/li>/);
+        assert.doesNotMatch(riskSummaryHtml, /(?:no-score-badge|no-ad-badge|class="[^"]*badge)/);
         assert.doesNotMatch(html, /广告位空缺不会由普通优惠活动补位/);
         assert.match(html, /rel="nofollow sponsored noopener noreferrer"/);
         assert.match(html, /<h2 id="home-v3-ranking-title">🏆 GateRank 排行榜<\/h2>/);
@@ -1720,7 +1732,28 @@ const homeView: HomePageView = {
         },
       ],
     },
-    risk_alerts: { title: '风险预警', subtitle: 'Risk Alerts', items: [] },
+    risk_alerts: {
+      title: '风险预警',
+      subtitle: 'Risk Alerts',
+      items: [
+        {
+          type: 'risk',
+          airport_id: 9,
+          name: '风险观察机场',
+          website: 'https://risk-alert.example.com',
+          tags: ['域名异常'],
+          score: 67.4,
+          score_delta_vs_yesterday: { label: '对比昨天', value: -4.2 },
+          stability_tier: 'volatile',
+          details: [
+            { label: '异常记录', value: '域名异常' },
+            { label: '投诉指数', value: '上升' },
+          ],
+          conclusion: '近期存在风险信号，建议谨慎选择。',
+          report_url: '/airports/risk-alert',
+        },
+      ],
+    },
   },
 };
 
