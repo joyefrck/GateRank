@@ -19,6 +19,12 @@ test('admin marketing statistics query normalizes invalid and default values', (
     status: 'all',
     placement: 'all',
   });
+  assert.deepEqual(readAdminMarketingStatisticsQuery('?placement=home_5'), {
+    page: 1,
+    q: '',
+    status: 'all',
+    placement: 'home_5',
+  });
 });
 
 test('admin marketing statistics query serializes only non-default values', () => {
@@ -32,17 +38,23 @@ test('admin marketing statistics query serializes only non-default values', () =
     page: 1,
     q: '',
     status: 'all',
+    placement: 'home_5',
+  }), '?placement=home_5');
+  assert.equal(buildAdminMarketingStatisticsSearch({
+    page: 1,
+    q: '',
+    status: 'all',
     placement: 'all',
   }), '');
 });
 
 test('admin marketing statistics filter updates reset page while pagination preserves filters', () => {
-  const current = { page: 3, q: 'YH', status: 'active' as const, placement: 'home_1' as const };
+  const current = { page: 3, q: 'YH', status: 'active' as const, placement: 'home_5' as const };
   assert.deepEqual(updateAdminMarketingStatisticsQuery(current, { status: 'expired' }), {
     page: 1,
     q: 'YH',
     status: 'expired',
-    placement: 'home_1',
+    placement: 'home_5',
   });
   assert.deepEqual(updateAdminMarketingStatisticsQuery(current, { page: 4 }), {
     ...current,

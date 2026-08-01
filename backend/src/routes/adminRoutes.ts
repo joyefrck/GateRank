@@ -81,12 +81,13 @@ import {
 import { buildPortalLoginUrl, getSiteOrigin } from '../utils/siteUrl';
 import { buildPerformanceNodeKey, buildPerformanceNodeMatchIdentity } from '../utils/performanceNodeKey';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
-import type {
-  AdminAirportAdPlacementFilter,
-  AdminAirportAdStatsListView,
-  AdminAirportAdStatsView,
-  AdminAirportAdStatusFilter,
-  AirportHomeAdSlotPrices,
+import {
+  AIRPORT_HOME_AD_SLOTS,
+  type AdminAirportAdPlacementFilter,
+  type AdminAirportAdStatsListView,
+  type AdminAirportAdStatsView,
+  type AdminAirportAdStatusFilter,
+  type AirportHomeAdSlotPrices,
 } from '../../../shared/airportAds';
 
 interface AdminDeps {
@@ -2669,8 +2670,8 @@ function parseAdminAirportAdStatus(value: unknown): AdminAirportAdStatusFilter {
 
 function parseAdminAirportAdPlacement(value: unknown): AdminAirportAdPlacementFilter {
   const placement = value === undefined || value === '' ? 'all' : String(value);
-  if (!['all', 'deal', 'home_1', 'home_2', 'home_3', 'home_4'].includes(placement)) {
-    throw new HttpError(400, 'BAD_REQUEST', 'placement must be all, deal, or home_1 through home_4');
+  if (placement !== 'all' && placement !== 'deal' && !AIRPORT_HOME_AD_SLOTS.some((slot) => placement === `home_${slot}`)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'placement must be all, deal, or a configured homepage slot');
   }
   return placement as AdminAirportAdPlacementFilter;
 }

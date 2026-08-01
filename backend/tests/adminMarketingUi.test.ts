@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { AIRPORT_HOME_AD_SLOTS } from '../../shared/airportAds';
 
 const adminAppSource = readFileSync(resolve(process.cwd(), 'src/admin/AdminApp.tsx'), 'utf8');
 const marketingTabsPath = resolve(process.cwd(), 'src/admin/marketing/MarketingModuleTabs.tsx');
@@ -47,4 +48,12 @@ test('admin marketing statistics renders campaign context, metrics, pagination, 
   assert.match(marketingStatisticsSource, /每页 30 条/);
   assert.match(marketingStatisticsSource, /role="dialog"/);
   assert.match(marketingStatisticsSource, /aria-modal="true"/);
+});
+
+test('admin marketing statistics offers every configured homepage slot and formats slot five consistently', () => {
+  assert.ok(AIRPORT_HOME_AD_SLOTS.includes(5));
+  assert.match(marketingStatisticsSource, /AIRPORT_HOME_AD_SLOTS\.map\(\(slot\) =>/);
+  assert.match(marketingStatisticsSource, /value=\{`home_\$\{slot\}`\}/);
+  assert.match(marketingStatisticsSource, />首页 \{slot\} 号位<\/option>/);
+  assert.match(marketingStatisticsSource, /return homeSlot === null \? '普通优惠活动' : `首页 \$\{homeSlot\} 号位`;/);
 });

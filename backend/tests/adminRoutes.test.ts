@@ -5202,6 +5202,10 @@ test('GET admin marketing campaign list and detail forward normalized filters', 
     assert.equal(listResponse.status, 200);
     assert.deepEqual(listInputs, [{ page: 2, keyword: 'YH', status: 'expired', placement: 'home_2' }]);
 
+    const fifthSlotResponse = await fetch(`http://127.0.0.1:${port}/marketing/ad-campaigns?placement=home_5`);
+    assert.equal(fifthSlotResponse.status, 200);
+    assert.deepEqual(listInputs[1], { page: 1, keyword: undefined, status: 'all', placement: 'home_5' });
+
     const detailResponse = await fetch(`http://127.0.0.1:${port}/marketing/ad-campaigns/101/stats?page=2`);
     assert.equal(detailResponse.status, 200);
     assert.deepEqual(detailInputs, [{ campaign_id: 101, page: 2 }]);

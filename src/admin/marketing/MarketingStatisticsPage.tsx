@@ -1,12 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, RefreshCw, Search, X } from 'lucide-react';
-import type {
-  AdminAirportAdDerivedStatus,
-  AdminAirportAdPlacementFilter,
-  AdminAirportAdStatsListItem,
-  AdminAirportAdStatsListView,
-  AdminAirportAdStatsView,
-  AdminAirportAdStatusFilter,
+import {
+  AIRPORT_HOME_AD_SLOTS,
+  type AdminAirportAdDerivedStatus,
+  type AdminAirportAdPlacementFilter,
+  type AdminAirportAdStatsListItem,
+  type AdminAirportAdStatsListView,
+  type AdminAirportAdStatsView,
+  type AdminAirportAdStatusFilter,
 } from '../../../shared/airportAds';
 import { MarketingModuleTabs } from './MarketingModuleTabs';
 import {
@@ -173,10 +174,7 @@ export function MarketingStatisticsPage({
         >
           <option value="all">全部位置</option>
           <option value="deal">普通优惠活动</option>
-          <option value="home_1">首页 1 号位</option>
-          <option value="home_2">首页 2 号位</option>
-          <option value="home_3">首页 3 号位</option>
-          <option value="home_4">首页 4 号位</option>
+          {AIRPORT_HOME_AD_SLOTS.map((slot) => <option key={slot} value={`home_${slot}`}>首页 {slot} 号位</option>)}
         </select>
       </form>
 

@@ -1,6 +1,7 @@
-import type {
-  AdminAirportAdPlacementFilter,
-  AdminAirportAdStatusFilter,
+import {
+  AIRPORT_HOME_AD_SLOTS,
+  type AdminAirportAdPlacementFilter,
+  type AdminAirportAdStatusFilter,
 } from '../../../shared/airportAds';
 
 export interface AdminMarketingStatisticsQueryState {
@@ -14,10 +15,7 @@ const STATUS_VALUES: AdminAirportAdStatusFilter[] = ['all', 'active', 'expired',
 const PLACEMENT_VALUES: AdminAirportAdPlacementFilter[] = [
   'all',
   'deal',
-  'home_1',
-  'home_2',
-  'home_3',
-  'home_4',
+  ...AIRPORT_HOME_AD_SLOTS.map((slot): `home_${typeof slot}` => `home_${slot}`),
 ];
 
 export function readAdminMarketingStatisticsQuery(search: string): AdminMarketingStatisticsQueryState {
