@@ -61,6 +61,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       if (path === '/') {
         assert.match(html, /<div class="home-v3-pill">行业首创，每日更新<\/div>/);
         assert.match(html, /\.home-v3-table-wrap td\s*\{[^}]*vertical-align:\s*middle;/);
+        assert.match(html, /#gaterank-ranking-section td\.align-middle\s*\{[^}]*vertical-align:\s*middle;/);
         assert.doesNotMatch(html, /aria-label="查看(?:长期稳定|性价比榜|新入榜|风险预警)"/);
         assert.match(html, /基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单/);
         assert.match(html, /今日赞助推荐/);

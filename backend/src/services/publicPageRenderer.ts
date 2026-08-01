@@ -3478,6 +3478,7 @@ const styles = `
   .home-v3-table-wrap caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
   .home-v3-table-wrap th { background: #fafafa; color: #a3a3a3; font-size: 10px; }
   .home-v3-table-wrap td { color: #404040; font-size: 12px; vertical-align: middle; }
+  #gaterank-ranking-section td.align-middle { vertical-align: middle; }
   .home-v3-table-wrap td small { display: block; margin-top: 3px; color: #a3a3a3; font-size: 10px; }
   .home-v3-rank { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border: 2px solid #f5f5f5; border-radius: 50%; background: #fafafa; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
   .home-v3-rank-1, .home-v3-rank-2, .home-v3-rank-3 { color: #fff; }
