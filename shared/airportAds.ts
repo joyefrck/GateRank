@@ -1,7 +1,7 @@
 export const AIRPORT_AD_MONTHLY_PRICE = 1000;
 export const AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD = 100;
 export const AIRPORT_AD_ALLOWED_MONTHS = [1, 2, 3, 6, 12] as const;
-export const AIRPORT_HOME_AD_SLOTS = [1, 2, 3, 4] as const;
+export const AIRPORT_HOME_AD_SLOTS = [1, 2, 3, 4, 5] as const;
 
 export type AirportAdMonthOption = (typeof AIRPORT_AD_ALLOWED_MONTHS)[number];
 export type AirportHomeAdSlot = (typeof AIRPORT_HOME_AD_SLOTS)[number];

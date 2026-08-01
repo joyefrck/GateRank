@@ -87,7 +87,7 @@ test('MarketingSettingsService saves application, click fees, ad monthly price, 
     click_charge_amount: 1.256,
     rank_click_charge_amounts: { 1: 2.345, 2: null, 6: 0.75 },
     airport_ad_monthly_price: 1288.884,
-    home_ad_slot_monthly_prices: { 1: 1688.884, 2: 1588.884, 3: 1488.884, 4: 1388.884 },
+    home_ad_slot_monthly_prices: { 1: 1688.884, 2: 1588.884, 3: 1488.884, 4: 1388.884, 5: 1288.884 },
     recharge_amounts: [500, 100, 300],
     admin_telegram_username: 'https://t.me/GateRank_Admin',
     home_section_limits: {
@@ -115,6 +115,7 @@ test('MarketingSettingsService saves application, click fees, ad monthly price, 
     2: 1588.88,
     3: 1488.88,
     4: 1388.88,
+    5: 1288.88,
   });
   assert.deepEqual(view.recharge_amounts, [100, 300, 500]);
   assert.equal(view.admin_telegram_username, 'GateRank_Admin');
@@ -142,6 +143,7 @@ test('MarketingSettingsService saves application, click fees, ad monthly price, 
       2: 1588.88,
       3: 1488.88,
       4: 1388.88,
+      5: 1288.88,
     },
     recharge_amounts: [100, 300, 500],
     admin_telegram_username: 'GateRank_Admin',
@@ -222,6 +224,27 @@ test('MarketingSettingsService uses the ordinary ad price as legacy homepage slo
     2: 1288.88,
     3: 1288.88,
     4: 1288.88,
+    5: 1288.88,
+  });
+});
+
+test('MarketingSettingsService preserves legacy homepage slot prices and falls back slot 5 to the ordinary ad price', async () => {
+  const { repository } = createSettingsRepository({
+    marketing_billing: {
+      airport_ad_monthly_price: 1288.88,
+      home_ad_slot_monthly_prices: { 1: 1688, 2: 1588, 3: 1488, 4: 1388 },
+    },
+  });
+  const service = new MarketingSettingsService({ systemSettingRepository: repository });
+
+  const view = await service.getAdminSettings();
+
+  assert.deepEqual(view.home_ad_slot_monthly_prices, {
+    1: 1688,
+    2: 1588,
+    3: 1488,
+    4: 1388,
+    5: 1288.88,
   });
 });
 
@@ -229,13 +252,13 @@ test('MarketingSettingsService partially updates homepage slot monthly prices', 
   const { repository } = createSettingsRepository({
     marketing_billing: {
       airport_ad_monthly_price: 1000,
-      home_ad_slot_monthly_prices: { 1: 1500, 2: 1400, 3: 1300, 4: 1200 },
+      home_ad_slot_monthly_prices: { 1: 1500, 2: 1400, 3: 1300, 4: 1200, 5: 1100 },
     },
   });
   const service = new MarketingSettingsService({ systemSettingRepository: repository });
 
   const view = await service.updateAdminSettings({
-    home_ad_slot_monthly_prices: { 2: 1450.126, 4: 1250 },
+    home_ad_slot_monthly_prices: { 2: 1450.126, 4: 1250, 5: 1150.126 },
   }, 'admin');
 
   assert.deepEqual(view.home_ad_slot_monthly_prices, {
@@ -243,6 +266,7 @@ test('MarketingSettingsService partially updates homepage slot monthly prices', 
     2: 1450.13,
     3: 1300,
     4: 1250,
+    5: 1150.13,
   });
 });
 
@@ -328,15 +352,17 @@ test('MarketingSettingsService rejects non-positive amounts on update', async ()
     },
   );
 
-  await assert.rejects(
-    () => service.updateAdminSettings({ home_ad_slot_monthly_prices: { 3: 0 } }, 'admin'),
-    (error: unknown) => {
-      const next = error as { code?: string; message?: string };
-      assert.equal(next.code, 'BAD_REQUEST');
-      assert.match(String(next.message || ''), /home_ad_slot_monthly_prices\.3/);
-      return true;
-    },
-  );
+  for (const home_ad_slot_monthly_prices of [{ 3: 0 }, { 5: 0 }]) {
+    await assert.rejects(
+      () => service.updateAdminSettings({ home_ad_slot_monthly_prices }, 'admin'),
+      (error: unknown) => {
+        const next = error as { code?: string; message?: string };
+        assert.equal(next.code, 'BAD_REQUEST');
+        assert.match(String(next.message || ''), /home_ad_slot_monthly_prices/);
+        return true;
+      },
+    );
+  }
 });
 
 test('MarketingSettingsService rejects invalid home section limits on update', async () => {

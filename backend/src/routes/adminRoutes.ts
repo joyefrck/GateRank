@@ -86,6 +86,7 @@ import type {
   AdminAirportAdStatsListView,
   AdminAirportAdStatsView,
   AdminAirportAdStatusFilter,
+  AirportHomeAdSlotPrices,
 } from '../../../shared/airportAds';
 
 interface AdminDeps {
@@ -355,7 +356,7 @@ interface AdminDeps {
       application_fee_amount: number;
       click_charge_amount: number;
       airport_ad_monthly_price?: number;
-      home_ad_slot_monthly_prices?: Record<1 | 2 | 3 | 4, number>;
+      home_ad_slot_monthly_prices?: AirportHomeAdSlotPrices;
       recharge_amounts?: number[];
       admin_telegram_username?: string | null;
       home_section_limits?: HomeSectionLimits;

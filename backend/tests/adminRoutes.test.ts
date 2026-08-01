@@ -5253,7 +5253,7 @@ test('GET /marketing/settings returns billing settings', async () => {
         click_charge_amount: 1.5,
         rank_click_charge_amounts: { 1: 2.5, 2: null, 3: null, 4: null, 5: null, 6: 1.6 },
         airport_ad_monthly_price: 1288.88,
-        home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288 },
+        home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288, 5: 1088 },
         recharge_amounts: [50, 150, 300],
         admin_telegram_username: 'gaterank_admin',
         home_section_limits: {
@@ -5286,7 +5286,7 @@ test('GET /marketing/settings returns billing settings', async () => {
     assert.equal(data.click_charge_amount, 1.5);
     assert.deepEqual(data.rank_click_charge_amounts, { 1: 2.5, 2: null, 3: null, 4: null, 5: null, 6: 1.6 });
     assert.equal(data.airport_ad_monthly_price, 1288.88);
-    assert.deepEqual(data.home_ad_slot_monthly_prices, { 1: 1888, 2: 1688, 3: 1488, 4: 1288 });
+    assert.deepEqual(data.home_ad_slot_monthly_prices, { 1: 1888, 2: 1688, 3: 1488, 4: 1288, 5: 1088 });
     assert.deepEqual(data.recharge_amounts, [50, 150, 300]);
     assert.equal(data.admin_telegram_username, 'gaterank_admin');
     assert.deepEqual(data.home_section_limits, {
@@ -5373,7 +5373,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
         click_charge_amount: 2.5,
         rank_click_charge_amounts: { 1: 3.5, 2: null, 3: 3, 4: null, 5: null, 6: 2.6 },
         airport_ad_monthly_price: 1288.88,
-        home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288 },
+        home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288, 5: 1088 },
         recharge_amounts: [120, 80, 240],
         admin_telegram_username: '@gaterank_admin',
         home_section_limits: {
@@ -5391,7 +5391,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
       click_charge_amount: 2.5,
       rank_click_charge_amounts: { 1: 3.5, 2: null, 3: 3, 4: null, 5: null, 6: 2.6 },
       airport_ad_monthly_price: 1288.88,
-      home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288 },
+      home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288, 5: 1088 },
       recharge_amounts: [120, 80, 240],
       admin_telegram_username: '@gaterank_admin',
       home_section_limits: {
@@ -5410,7 +5410,7 @@ test('PATCH /marketing/settings updates billing settings and writes audit log', 
       click_charge_amount: 2.5,
       rank_click_charge_amounts: { 1: 3.5, 2: null, 3: 3, 4: null, 5: null, 6: 2.6 },
       airport_ad_monthly_price: 1288.88,
-      home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288 },
+      home_ad_slot_monthly_prices: { 1: 1888, 2: 1688, 3: 1488, 4: 1288, 5: 1088 },
       recharge_amounts: [120, 80, 240],
       admin_telegram_username: '@gaterank_admin',
       home_section_limits: {
@@ -7125,7 +7125,7 @@ function stubMarketingSettingsService(config: {
   click_charge_amount: 1,
   rank_click_charge_amounts: { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
   airport_ad_monthly_price: 1000,
-  home_ad_slot_monthly_prices: { 1: 1000, 2: 1000, 3: 1000, 4: 1000 },
+  home_ad_slot_monthly_prices: { 1: 1000, 2: 1000, 3: 1000, 4: 1000, 5: 1000 },
   recharge_amounts: [100, 300, 500, 1000],
   admin_telegram_username: null,
   home_section_limits: {
@@ -7141,7 +7141,7 @@ function stubMarketingSettingsService(config: {
     rank_click_charge_amounts: config.rank_click_charge_amounts ?? { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null },
     airport_ad_monthly_price: config.airport_ad_monthly_price ?? 1000,
     home_ad_slot_monthly_prices: config.home_ad_slot_monthly_prices
-      ?? { 1: 1000, 2: 1000, 3: 1000, 4: 1000 },
+      ?? { 1: 1000, 2: 1000, 3: 1000, 4: 1000, 5: 1000 },
     recharge_amounts: config.recharge_amounts ?? [100, 300, 500, 1000],
     admin_telegram_username: config.admin_telegram_username ?? null,
     home_section_limits: config.home_section_limits ?? {
@@ -7163,6 +7163,7 @@ function stubMarketingSettingsService(config: {
       click_charge_amount?: number;
       rank_click_charge_amounts?: Record<number, number | null>;
       airport_ad_monthly_price?: number;
+      home_ad_slot_monthly_prices?: Record<number, number>;
       recharge_amounts?: number[];
       admin_telegram_username?: string | null;
       home_section_limits?: {
@@ -7177,6 +7178,7 @@ function stubMarketingSettingsService(config: {
       click_charge_amount: input.click_charge_amount ?? normalizedConfig.click_charge_amount,
       rank_click_charge_amounts: input.rank_click_charge_amounts ?? normalizedConfig.rank_click_charge_amounts,
       airport_ad_monthly_price: input.airport_ad_monthly_price ?? normalizedConfig.airport_ad_monthly_price,
+      home_ad_slot_monthly_prices: input.home_ad_slot_monthly_prices ?? normalizedConfig.home_ad_slot_monthly_prices,
       recharge_amounts: input.recharge_amounts ?? normalizedConfig.recharge_amounts,
       admin_telegram_username: input.admin_telegram_username ?? normalizedConfig.admin_telegram_username,
       home_section_limits: input.home_section_limits

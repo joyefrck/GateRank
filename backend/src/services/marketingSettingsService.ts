@@ -281,12 +281,9 @@ export function createDefaultRankClickChargeAmounts(): RankClickChargeAmounts {
 export function createDefaultHomeAdSlotMonthlyPrices(
   fallback = DEFAULT_AIRPORT_AD_MONTHLY_PRICE,
 ): AirportHomeAdSlotPrices {
-  return {
-    1: fallback,
-    2: fallback,
-    3: fallback,
-    4: fallback,
-  };
+  return Object.fromEntries(
+    AIRPORT_HOME_AD_SLOTS.map((slot) => [slot, fallback]),
+  ) as AirportHomeAdSlotPrices;
 }
 
 function normalizeHomeAdSlotMonthlyPrices(
