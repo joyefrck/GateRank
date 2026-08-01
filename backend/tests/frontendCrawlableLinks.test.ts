@@ -141,6 +141,9 @@ test('React homepage renders the 3.0 trust and FAQ content without a duplicated 
   const source = await readFile(path.join(process.cwd(), 'src/pages/home/HomePageV3.tsx'), 'utf8');
 
   assert.match(source, /<h1 className="[^"]*sm:whitespace-nowrap[^"]*">/);
+  assert.match(source, />商业合作专区<\/h2>/);
+  assert.match(source, />🏆 GateRank 排行榜<\/h2>/);
+  assert.match(source, /公告与动态<\/h2>/);
   assert.match(source, /HOME_FAQ_ITEMS/);
   assert.match(source, /function TrustSection/);
   assert.match(source, /function FaqSection/);

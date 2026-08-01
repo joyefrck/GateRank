@@ -16,30 +16,30 @@
 - Modify: `backend/tests/publicPageRoutes.test.ts:71-87`
 - Modify: `backend/tests/frontendCrawlableLinks.test.ts:143-153`
 
-- [ ] **Step 1: Change the SSR expectations to the target headings**
+- [x] **Step 1: Change the SSR expectations to the target headings**
 
 Replace the three old positive assertions with positive and negative checks:
 
 ```ts
-assert.match(html, /商业合作专区/);
-assert.doesNotMatch(html, /今日赞助推荐/);
-assert.match(html, /🏆 GateRank 排行榜/);
-assert.doesNotMatch(html, /综合实力排行/);
-assert.match(html, /公告与动态/);
-assert.doesNotMatch(html, /最新 News/);
+assert.match(html, /<h2 id="home-v3-sponsored-title">商业合作专区<\/h2>/);
+assert.doesNotMatch(html, /<h2 id="home-v3-sponsored-title">今日赞助推荐<\/h2>/);
+assert.match(html, /<h2 id="home-v3-ranking-title">🏆 GateRank 排行榜<\/h2>/);
+assert.doesNotMatch(html, /<h2 id="home-v3-ranking-title">综合实力排行<\/h2>/);
+assert.match(html, /<h2>公告与动态<\/h2>/);
+assert.doesNotMatch(html, /<h2>最新 News<\/h2>/);
 ```
 
-- [ ] **Step 2: Protect the React source-of-truth headings**
+- [x] **Step 2: Protect the React source-of-truth headings**
 
 Add these assertions to the existing React homepage source contract test:
 
 ```ts
 assert.match(source, />商业合作专区<\/h2>/);
 assert.match(source, />🏆 GateRank 排行榜<\/h2>/);
-assert.match(source, />公告与动态<\/h2>/);
+assert.match(source, /公告与动态<\/h2>/);
 ```
 
-- [ ] **Step 3: Run the focused tests and verify the SSR contract fails**
+- [x] **Step 3: Run the focused tests and verify the SSR contract fails**
 
 Run:
 
@@ -54,7 +54,7 @@ Expected: `frontendCrawlableLinks.test.ts` passes its new source assertions, whi
 **Files:**
 - Modify: `backend/src/services/publicPageRenderer.ts:2044-2137`
 
-- [ ] **Step 1: Replace only the three SSR H2 title arguments**
+- [x] **Step 1: Replace only the three SSR H2 title arguments**
 
 Use the existing `renderHomeV3SectionHead` calls with these target titles:
 
@@ -66,7 +66,7 @@ Use the existing `renderHomeV3SectionHead` calls with these target titles:
 
 Keep eyebrow text, subtitles, actions, IDs, captions and surrounding markup unchanged.
 
-- [ ] **Step 2: Run the focused tests and verify they pass**
+- [x] **Step 2: Run the focused tests and verify they pass**
 
 Run:
 
@@ -83,7 +83,7 @@ Expected: exit code `0` with both test files passing.
 - Verify: `backend/tests/publicPageRoutes.test.ts`
 - Verify: `backend/tests/frontendCrawlableLinks.test.ts`
 
-- [ ] **Step 1: Run backend and frontend type checks**
+- [x] **Step 1: Run backend and frontend type checks**
 
 ```bash
 npm run server:typecheck
@@ -92,7 +92,7 @@ npm run lint
 
 Expected: both commands exit `0`.
 
-- [ ] **Step 2: Build the production frontend**
+- [x] **Step 2: Build the production frontend**
 
 ```bash
 npm run build
@@ -100,7 +100,7 @@ npm run build
 
 Expected: Vite exits `0` and regenerates the tracked `dist` artifacts. Include changed generated assets in the implementation commit only when their content differs.
 
-- [ ] **Step 3: Check title occurrences and patch formatting**
+- [x] **Step 3: Check title occurrences and patch formatting**
 
 ```bash
 rg -n "今日赞助推荐|综合实力排行|最新 News|商业合作专区|GateRank 排行榜|公告与动态" backend/src/services/publicPageRenderer.ts src/pages/home/HomePageV3.tsx
@@ -109,7 +109,7 @@ git diff --check
 
 Expected: old H2 strings are absent from the SSR renderer, both render paths contain the three target headings, and `git diff --check` exits `0`.
 
-- [ ] **Step 4: Commit the implementation**
+- [x] **Step 4: Commit the implementation**
 
 ```bash
 git add backend/src/services/publicPageRenderer.ts backend/tests/publicPageRoutes.test.ts backend/tests/frontendCrawlableLinks.test.ts dist

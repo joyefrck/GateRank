@@ -2043,7 +2043,7 @@ function renderHomeV3SponsoredDeals(view: HomePageView): string {
     <section aria-labelledby="home-v3-sponsored-title">
       ${renderHomeV3SectionHead(
         'Sponsored discovery',
-        '今日赞助推荐',
+        '商业合作专区',
         `广告仅提供曝光，不参与评分与排名 · 当前 ${total} 个有效活动`,
         '<a href="/deals">全部优惠 →</a>',
       ).replace('<h2>', '<h2 id="home-v3-sponsored-title">')}
@@ -2085,7 +2085,7 @@ function renderHomeV3Ranking(view: HomePageView): string {
     <section class="home-v3-ranking" aria-labelledby="home-v3-ranking-title">
       ${renderHomeV3SectionHead(
         `Daily ranking · ${view.date}`,
-        '综合实力排行',
+        '🏆 GateRank 排行榜',
         '前 10 名真实数据',
         `<a href="/rankings/all?date=${encodeURIComponent(view.date)}">全量榜单 →</a>`,
       ).replace('<h2>', '<h2 id="home-v3-ranking-title">')}
@@ -2132,7 +2132,7 @@ function renderHomeV3Sidebar(view: HomePageView): string {
         </div>
       </section>
       <section>
-        ${renderHomeV3SectionHead('Latest updates', '最新 News', '最近发布的公开动态')}
+        ${renderHomeV3SectionHead('Latest updates', '公告与动态', '最近发布的公开动态')}
         ${news.length > 0 ? `
           <ol class="home-v3-news">
             ${news.slice(0, 5).map((item) => `
