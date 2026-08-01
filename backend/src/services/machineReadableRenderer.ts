@@ -341,6 +341,7 @@ export function renderRobotsTxt(siteUrl: string): string {
     'Allow: /',
     '',
     `Sitemap: ${siteUrl}/sitemap.xml`,
+    `Sitemap: ${siteUrl}/sitemap-ai.xml`,
     '',
     '# Content signals',
     '# GateRank allows search indexing and AI retrieval/grounding.',

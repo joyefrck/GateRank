@@ -50,7 +50,43 @@ test('GET /robots.txt returns explicit crawl policy and content signals', async 
     assert.match(body, /^Disallow: \/api\/v1\/portal$/m);
     assert.match(body, /^Allow: \/$/m);
     assert.match(body, new RegExp(`^Sitemap: ${baseUrl.replace(/\//g, '\\/')}/sitemap\\.xml$`, 'm'));
+    assert.match(body, new RegExp(`^Sitemap: ${baseUrl.replace(/\//g, '\\/')}/sitemap-ai\\.xml$`, 'm'));
     assert.match(body, /^Content-Signal: search=yes, ai-input=yes, ai-train=no$/m);
+  } finally {
+    await close();
+  }
+});
+
+test('GET /sitemap-ai.xml returns curated machine-readable and dynamic Markdown URLs', async () => {
+  const { baseUrl, close } = await startMachineReadableServer();
+  try {
+    const response = await fetch(`${baseUrl}/sitemap-ai.xml`);
+    assert.equal(response.status, 200);
+    assert.match(response.headers.get('content-type') || '', /application\/xml/);
+    assert.equal(
+      response.headers.get('cache-control'),
+      'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+    );
+    const xml = await response.text();
+    const locations = Array.from(xml.matchAll(/<loc>([^<]+)<\/loc>/g), (match) => match[1]);
+    assert.equal(new Set(locations).size, locations.length);
+    for (const path of [
+      '/llms.txt',
+      '/llms-full.txt',
+      '/for-ai',
+      '/data/rankings.json',
+      '/data/rankings.md',
+      '/data/risk-monitor.json',
+      '/data/risk-monitor.md',
+      '/deals.md',
+      '/monthly-reports.md',
+      '/tools',
+      '/tools/download',
+      '/airports/nebula.md',
+      '/monthly-reports/2026-06-airport-vpn-ranking-report.md',
+    ]) {
+      assert.ok(locations.includes(`${baseUrl}${path}`), path);
+    }
   } finally {
     await close();
   }
@@ -367,6 +403,7 @@ test('mounted machine-readable routes do not fall through to app 404 fallback', 
     const baseUrl = `http://127.0.0.1:${port}`;
     for (const path of [
       '/robots.txt',
+      '/sitemap-ai.xml',
       '/llms.txt',
       '/llms-full.txt',
       '/for-ai',

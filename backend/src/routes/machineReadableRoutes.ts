@@ -28,6 +28,7 @@ import {
   type PublicFrontendAssets,
 } from '../services/frontendAssets';
 import type { MonthlyReportPublicService } from '../services/monthlyReportPublicService';
+import { renderAiSitemapXml } from '../services/aiSitemapRenderer';
 import {
   trackServerMarketingPageView,
   type MarketingPageViewRepository,
@@ -56,6 +57,30 @@ export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
 
   router.get('/robots.txt', (req, res) => {
     sendText(res, 'text/plain; charset=utf-8', renderRobotsTxt(getSiteOrigin(req)));
+  });
+
+  router.get('/sitemap-ai.xml', async (req, res) => {
+    try {
+      const date = getDateInTimezone();
+      const [rankingsView, monthlyReportSlugs] = await Promise.all([
+        deps.publicViewService.getFullRankingView(date, 1, MACHINE_READABLE_PAGE_SIZE),
+        getAiSitemapMonthlyReportSlugs(deps),
+      ]);
+      const airportReportPaths = rankingsView.items
+        .map((item) => item.report_url || '')
+        .filter((path) => path.startsWith('/airports/'));
+      setPublicCacheHeaders(res);
+      res
+        .status(200)
+        .type('application/xml')
+        .send(renderAiSitemapXml(getSiteOrigin(req), airportReportPaths, monthlyReportSlugs));
+    } catch (error) {
+      console.error('[machine-readable] failed to render sitemap-ai.xml', {
+        error,
+        requestId: req.requestId || 'unknown',
+      });
+      sendText(res.status(500), 'text/plain; charset=utf-8', 'GateRank AI sitemap 暂时无法生成');
+    }
   });
 
   router.get('/openapi.json', (_req, res) => {
@@ -306,6 +331,21 @@ function requireMonthlyReportPublicService(deps: MachineReadableDeps): MonthlyRe
     throw new Error('monthlyReportPublicService is not configured');
   }
   return deps.monthlyReportPublicService;
+}
+
+async function getAiSitemapMonthlyReportSlugs(deps: MachineReadableDeps): Promise<string[]> {
+  if (!deps.monthlyReportPublicService) {
+    return [];
+  }
+  try {
+    const items = await deps.monthlyReportPublicService.getSitemapItems();
+    return items
+      .filter((item) => item.status === 'published' && Boolean(item.published_at))
+      .map((item) => item.slug);
+  } catch (error) {
+    console.error('[machine-readable] failed to load AI sitemap monthly reports', { error });
+    return [];
+  }
 }
 
 async function getSummary(deps: MachineReadableDeps, siteUrl: string, date = getDateInTimezone()) {

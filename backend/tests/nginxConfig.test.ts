@@ -23,6 +23,7 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
     '/risk-monitor',
     '/risk-watch',
     '/sitemap.xml',
+    '/sitemap-ai.xml',
     '/robots.txt',
     '/llms.txt',
     '/llms-full.txt',

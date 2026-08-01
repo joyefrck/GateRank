@@ -52,6 +52,7 @@ Disallow: /api/v1/portal
 Allow: /
 
 Sitemap: ${normalizedSiteUrl}/sitemap.xml
+Sitemap: ${normalizedSiteUrl}/sitemap-ai.xml
 
 # Content signals
 # GateRank allows search indexing and AI retrieval/grounding.
@@ -113,6 +114,10 @@ export default defineConfig(({mode}) => {
           changeOrigin: true,
         },
         '/sitemap.xml': {
+          target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8787',
+          changeOrigin: true,
+        },
+        '/sitemap-ai.xml': {
           target: env.VITE_API_PROXY_TARGET || 'http://127.0.0.1:8787',
           changeOrigin: true,
         },
