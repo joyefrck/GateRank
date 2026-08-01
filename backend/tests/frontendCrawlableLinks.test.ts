@@ -14,11 +14,41 @@ test('Admin and applicant interfaces expose all shared homepage ad slots', async
     readFile(path.join(process.cwd(), 'src/admin/AdminApp.tsx'), 'utf8'),
     readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8'),
   ]);
+  const marketingSettingsStart = adminSource.indexOf('function MarketingSettingsPage');
+  const marketingSettingsEnd = adminSource.indexOf('function MarketingSettingsSection', marketingSettingsStart);
+  const marketingSettingsSource = adminSource.slice(marketingSettingsStart, marketingSettingsEnd);
+  const adModalStart = appSource.indexOf('function PortalAdCampaignModal');
+  const adModalEnd = appSource.indexOf('function TrendPanel', adModalStart);
+  const adModalSource = appSource.slice(adModalStart, adModalEnd);
+  const submitStart = appSource.indexOf('const submitAdCampaign = async');
+  const submitEnd = appSource.indexOf('const cancelAdCampaign = async', submitStart);
+  const submitSource = appSource.slice(submitStart, submitEnd);
 
+  assert.notEqual(marketingSettingsStart, -1);
+  assert.notEqual(marketingSettingsEnd, -1);
+  assert.notEqual(adModalStart, -1);
+  assert.notEqual(adModalEnd, -1);
+  assert.notEqual(submitStart, -1);
+  assert.notEqual(submitEnd, -1);
+  assert.match(adminSource, /type MarketingHomeAdSlot = `\$\{AirportHomeAdSlot\}`;/);
   assert.match(adminSource, /const marketingHomeAdSlots = AIRPORT_HOME_AD_SLOTS\.map\(String\) as MarketingHomeAdSlot\[\];/);
-  assert.match(adminSource, /首页 1–5：/);
-  assert.match(appSource, /AIRPORT_HOME_AD_SLOTS\.map\(\(slot\) =>/);
-  assert.match(appSource, /请选择首页 1–5 号位/);
+  assert.match(
+    adminSource,
+    /const defaultHomeAdSlotMonthlyPriceForm = Object\.fromEntries\(\s*marketingHomeAdSlots\.map\(\(slot\) => \[slot, '1000'\]\),\s*\) as Record<MarketingHomeAdSlot, string>;/,
+  );
+  assert.match(marketingSettingsSource, /const homeAdSlotMonthlyPrices = Object\.fromEntries\(\s*marketingHomeAdSlots\.map\(\(slot\) => \[\s*slot,\s*Number\(view\.home_ad_slot_monthly_prices\?\.\[slot\] \|\| airportAdMonthlyPrice\),/);
+  assert.match(marketingSettingsSource, /home_ad_slot_monthly_prices: Object\.fromEntries\(\s*marketingHomeAdSlots\.map\(\(slot\) => \[\s*slot,\s*Number\(form\.home_ad_slot_monthly_prices\[slot\]\),/);
+  assert.match(marketingSettingsSource, /首页 1–5：/);
+  assert.match(marketingSettingsSource, /grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5/);
+
+  assert.match(adModalSource, /grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5/);
+  assert.match(adModalSource, /AIRPORT_HOME_AD_SLOTS\.map\(\(slot\) =>/);
+  assert.match(adModalSource, /const available = adStatus\.home_slot_availability\?\.\[slot\] \?\? true;/);
+  assert.match(adModalSource, /const price = adStatus\.home_slot_monthly_prices\?\.\[slot\]/);
+  assert.match(adModalSource, /disabled=\{!available\}/);
+  assert.match(adModalSource, /form\.home_slot === slot/);
+  assert.match(adModalSource, /onClick=\{\(\) => onFormChange\(\(current\) => \(\{ \.\.\.current, home_slot: slot \}\)\)\}/);
+  assert.match(submitSource, /请选择首页 1–5 号位/);
 });
 
 test('React streaming check only starts from the button and probes six services once per run', async () => {
