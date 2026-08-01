@@ -125,8 +125,8 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         const riskSummaryHtml = html.match(/<article>\s*<div class="home-v3-summary-title"><h3>风险预警<\/h3><\/div>[\s\S]*?<\/article>/)?.[0] || '';
         assert.match(riskSummaryHtml, /<li><span>01<\/span><a href="\/airports\/risk-alert">风险观察机场<\/a><strong class="home-v3-risk-status">风险<\/strong><\/li>/);
         assert.doesNotMatch(riskSummaryHtml, /(?:67\.40|no-score-badge|no-ad-badge|amber|★|☆)/);
-        assert.match(html, /\.home-v3-risk-status\s*\{[^}]*color:\s*#e11d48;[^}]*text-align:\s*right;/);
-        assert.doesNotMatch(html, /\.home-v3-risk-status\s*\{[^}]*\b(?:background|border|mask|content):/);
+        assert.match(html, /\.home-v3-summary-grid li strong\.home-v3-risk-status\s*\{[^}]*color:\s*#e11d48;[^}]*text-align:\s*right;/);
+        assert.doesNotMatch(html, /\.home-v3-summary-grid li strong\.home-v3-risk-status\s*\{[^}]*\b(?:background|border|mask|content):/);
         assert.doesNotMatch(html, /广告位空缺不会由普通优惠活动补位/);
         assert.match(html, /rel="nofollow sponsored noopener noreferrer"/);
         assert.match(html, /<h2 id="home-v3-ranking-title">🏆 GateRank 排行榜<\/h2>/);

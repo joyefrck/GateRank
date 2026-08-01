@@ -3514,7 +3514,7 @@ const styles = `
   .home-v3-summary-grid li > span { color: #d4d4d4; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 900; }
   .home-v3-summary-grid li a { overflow: hidden; color: #525252; font-weight: 800; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
   .home-v3-summary-grid li strong { color: #404040; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
-  .home-v3-risk-status { color: #e11d48; font-weight: 900; text-align: right; }
+  .home-v3-summary-grid li strong.home-v3-risk-status { color: #e11d48; font-weight: 900; text-align: right; }
   .home-v3-trust { border-top: 1px solid #e5e5e5; padding-top: 38px; }
   .home-v3-center-head { text-align: center; }
   .home-v3-center-head h2 { margin: 7px 0 0; color: #0a0a0a; font-size: 25px; letter-spacing: -.02em; }
