@@ -5,7 +5,7 @@ import { getCampaignMonthlyPrice, getRenewalEndsAt } from './adCampaignUi';
 
 const status = {
   monthly_price: 1000,
-  home_slot_monthly_prices: { 1: 6000, 2: 5000, 3: 4000, 4: 3000 },
+  home_slot_monthly_prices: { 1: 6000, 2: 5000, 3: 4000, 4: 3000, 5: 2000 },
 } as PortalAirportAdStatus;
 
 function campaign(overrides: Partial<PortalAirportAdCampaignView> = {}): PortalAirportAdCampaignView {
@@ -43,6 +43,7 @@ function campaign(overrides: Partial<PortalAirportAdCampaignView> = {}): PortalA
 test('getCampaignMonthlyPrice uses the current saved placement price', () => {
   assert.equal(getCampaignMonthlyPrice(status, campaign()), 1000);
   assert.equal(getCampaignMonthlyPrice(status, campaign({ home_slot: 2, is_homepage: true })), 5000);
+  assert.equal(getCampaignMonthlyPrice(status, campaign({ home_slot: 5, is_homepage: true })), 2000);
 });
 
 test('getRenewalEndsAt extends active ads from ends_at and expired ads from now', () => {

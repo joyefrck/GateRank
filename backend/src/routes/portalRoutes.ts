@@ -1455,7 +1455,7 @@ async function buildPortalView(deps: PortalDeps, applicantId: number) {
         campaigns: [],
         monthly_price: marketingConfig.airport_ad_monthly_price,
         home_slot_monthly_prices: marketingConfig.home_ad_slot_monthly_prices,
-        home_slot_availability: { 1: true, 2: true, 3: true, 4: true },
+        home_slot_availability: createDefaultHomeAdSlotAvailability(),
         low_balance_warning_threshold: AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD,
         allowed_months: [1, 2, 3, 6, 12],
       };
@@ -1723,7 +1723,15 @@ async function getMarketingBillingConfig(deps: PortalDeps): Promise<{
 function createDefaultHomeAdSlotMonthlyPrices(
   fallback = AIRPORT_AD_MONTHLY_PRICE,
 ): AirportHomeAdSlotPrices {
-  return { 1: fallback, 2: fallback, 3: fallback, 4: fallback };
+  return Object.fromEntries(
+    AIRPORT_HOME_AD_SLOTS.map((slot) => [slot, fallback]),
+  ) as AirportHomeAdSlotPrices;
+}
+
+function createDefaultHomeAdSlotAvailability(): Record<AirportHomeAdSlot, boolean> {
+  return Object.fromEntries(
+    AIRPORT_HOME_AD_SLOTS.map((slot) => [slot, true]),
+  ) as Record<AirportHomeAdSlot, boolean>;
 }
 
 function normalizeHomeAdSlotMonthlyPrices(
@@ -2014,7 +2022,7 @@ function mustBoolean(value: unknown, fieldName: string): boolean {
 function mustHomeAdSlot(value: unknown): AirportHomeAdSlot {
   const slot = Number(value);
   if (!(AIRPORT_HOME_AD_SLOTS as readonly number[]).includes(slot)) {
-    throw new HttpError(400, 'BAD_REQUEST', '请选择首页 1–4 号位');
+    throw new HttpError(400, 'BAD_REQUEST', '请选择首页 1–5 号位');
   }
   return slot as AirportHomeAdSlot;
 }

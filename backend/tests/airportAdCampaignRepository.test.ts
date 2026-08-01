@@ -280,17 +280,25 @@ test('AirportAdCampaignRepository.getPortalStatus reports homepage availability 
       if (sql.includes('WHERE campaign.airport_id = ?')) {
         return [[[createCampaignRow()]]][0];
       }
+      if (sql.includes('SELECT id, home_slot')) {
+        return [[{ id: 501, home_slot: 5 }]];
+      }
       return [[]];
     },
   } as never);
 
-  const status = await repository.getPortalStatus(11, 1288.88, new Date('2026-05-24T04:00:00+08:00'));
+  const status = await repository.getPortalStatus(
+    11,
+    1288.88,
+    { 1: 1988, 2: 1888, 3: 1788, 4: 1688, 5: 1588.888 },
+    new Date('2026-05-24T04:00:00+08:00'),
+  );
 
   assert.equal('remaining_slots' in status, false);
   assert.equal('slot_limit' in status, false);
   assert.equal(status.monthly_price, 1288.88);
-  assert.deepEqual(status.home_slot_monthly_prices, { 1: 1288.88, 2: 1288.88, 3: 1288.88, 4: 1288.88 });
-  assert.deepEqual(status.home_slot_availability, { 1: true, 2: true, 3: true, 4: true });
+  assert.deepEqual(status.home_slot_monthly_prices, { 1: 1988, 2: 1888, 3: 1788, 4: 1688, 5: 1588.89 });
+  assert.deepEqual(status.home_slot_availability, { 1: true, 2: true, 3: true, 4: true, 5: false });
   assert.equal(status.active_campaign?.airport_name, '小米');
   assert.equal(status.campaigns.length, 1);
   assert.ok(!calls.some((call) => call.sql.includes('COUNT(*) AS active_count')));

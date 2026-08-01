@@ -205,19 +205,19 @@ test('POST /portal/ad-campaign/:campaignId/renew uses current placement price fo
       getPortalStatus: async (_airportId: number | null, monthlyPrice?: number) => ({
         active_campaign: null,
         campaigns: [{
-          ...createMockAirportDeal({ campaign_id: 99, home_slot: 2, is_homepage: true }),
+          ...createMockAirportDeal({ campaign_id: 99, home_slot: 5, is_homepage: true }),
           status: 'expired',
           status_label: '已到期',
           is_active: false,
         }],
         monthly_price: monthlyPrice ?? 1000,
-        home_slot_monthly_prices: { 1: 6000, 2: 5000, 3: 4000, 4: 3000 },
+        home_slot_monthly_prices: { 1: 6000, 2: 5000, 3: 4000, 4: 3000, 5: 2000 },
         low_balance_warning_threshold: 100,
         allowed_months: [1, 2, 3, 6, 12],
       }),
       renew: async (input: Record<string, unknown>) => {
         renewInput = input;
-        return createMockAirportDeal({ campaign_id: 99, home_slot: 2, is_homepage: true });
+        return createMockAirportDeal({ campaign_id: 99, home_slot: 5, is_homepage: true });
       },
       purchase: async () => { throw new Error('not used'); },
       update: async () => { throw new Error('not used'); },
@@ -230,7 +230,7 @@ test('POST /portal/ad-campaign/:campaignId/renew uses current placement price fo
         application_fee_amount: 300,
         click_charge_amount: 1,
         airport_ad_monthly_price: 1000,
-        home_ad_slot_monthly_prices: { 1: 6000, 2: 5000, 3: 4000, 4: 3000 },
+        home_ad_slot_monthly_prices: { 1: 6000, 2: 5000, 3: 4000, 4: 3000, 5: 2000 },
       }),
     },
     paymentGatewayService: {
@@ -257,7 +257,7 @@ test('POST /portal/ad-campaign/:campaignId/renew uses current placement price fo
       applicant_account_id: 1,
       application_id: 7,
       months: 2,
-      monthly_price: 5000,
+      monthly_price: 2000,
     });
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
@@ -642,7 +642,7 @@ test('POST /portal/ad-campaign uses the selected homepage slot price instead of 
         campaigns: [],
         monthly_price: monthlyPrice ?? 1000,
         home_slot_monthly_prices: homeSlotMonthlyPrices,
-        home_slot_availability: { 1: true, 2: true, 3: false, 4: true },
+        home_slot_availability: { 1: true, 2: true, 3: false, 4: true, 5: true },
         low_balance_warning_threshold: 100,
         allowed_months: [1, 2, 3, 6, 12],
       }),
@@ -680,7 +680,7 @@ test('POST /portal/ad-campaign uses the selected homepage slot price instead of 
         application_fee_amount: 300,
         click_charge_amount: 1,
         airport_ad_monthly_price: 1288.88,
-        home_ad_slot_monthly_prices: { 1: 1988, 2: 1888, 3: 1788, 4: 1688 },
+        home_ad_slot_monthly_prices: { 1: 1988, 2: 1888, 3: 1788, 4: 1688, 5: 1588 },
       }),
     },
     paymentGatewayService: {
@@ -710,7 +710,7 @@ test('POST /portal/ad-campaign uses the selected homepage slot price instead of 
       body: JSON.stringify({
         months: 1,
         is_homepage: true,
-        home_slot: 2,
+        home_slot: 5,
         coupon_code: 'NEW220',
         discount_title: '新用户优惠',
         discount_description: '新用户首单 8 折',
@@ -729,8 +729,8 @@ test('POST /portal/ad-campaign uses the selected homepage slot price instead of 
     assert.equal(capturedPurchase.airport_id, 11);
     assert.equal(capturedPurchase.applicant_account_id, 1);
     assert.equal(capturedPurchase.application_id, 7);
-    assert.equal(capturedPurchase.monthly_price, 1888);
-    assert.equal(capturedPurchase.home_slot, 2);
+    assert.equal(capturedPurchase.monthly_price, 1588);
+    assert.equal(capturedPurchase.home_slot, 5);
     assert.equal(capturedPurchase.coupon_code, 'NEW220');
     assert.equal(cacheCleared, true);
   } finally {

@@ -271,12 +271,9 @@ export class AirportAdCampaignRepository {
       campaigns,
       monthly_price: normalizeMonthlyPrice(monthlyPrice),
       home_slot_monthly_prices: normalizeHomeSlotPrices(homeSlotMonthlyPrices, monthlyPrice),
-      home_slot_availability: {
-        1: !occupiedHomeSlots.has(1),
-        2: !occupiedHomeSlots.has(2),
-        3: !occupiedHomeSlots.has(3),
-        4: !occupiedHomeSlots.has(4),
-      },
+      home_slot_availability: Object.fromEntries(
+        AIRPORT_HOME_AD_SLOTS.map((slot) => [slot, !occupiedHomeSlots.has(slot)]),
+      ) as Record<AirportHomeAdSlot, boolean>,
       low_balance_warning_threshold: AIRPORT_AD_LOW_BALANCE_WARNING_THRESHOLD,
       allowed_months: [...AIRPORT_AD_ALLOWED_MONTHS],
     };
@@ -1249,12 +1246,9 @@ function normalizeMonthlyPrice(value: unknown): number {
 
 function createDefaultHomeSlotPrices(fallback: unknown): AirportHomeAdSlotPrices {
   const monthlyPrice = normalizeMonthlyPrice(fallback);
-  return {
-    1: monthlyPrice,
-    2: monthlyPrice,
-    3: monthlyPrice,
-    4: monthlyPrice,
-  };
+  return Object.fromEntries(
+    AIRPORT_HOME_AD_SLOTS.map((slot) => [slot, monthlyPrice]),
+  ) as AirportHomeAdSlotPrices;
 }
 
 function normalizeHomeSlotPrices(
@@ -1262,12 +1256,12 @@ function normalizeHomeSlotPrices(
   fallback: unknown,
 ): AirportHomeAdSlotPrices {
   const defaults = createDefaultHomeSlotPrices(fallback);
-  return {
-    1: normalizeMonthlyPrice(value?.[1] ?? defaults[1]),
-    2: normalizeMonthlyPrice(value?.[2] ?? defaults[2]),
-    3: normalizeMonthlyPrice(value?.[3] ?? defaults[3]),
-    4: normalizeMonthlyPrice(value?.[4] ?? defaults[4]),
-  };
+  return Object.fromEntries(
+    AIRPORT_HOME_AD_SLOTS.map((slot) => [
+      slot,
+      normalizeMonthlyPrice(value?.[slot] ?? defaults[slot]),
+    ]),
+  ) as AirportHomeAdSlotPrices;
 }
 
 function isAirportHomeAdSlot(value: number): value is AirportHomeAdSlot {
@@ -1276,7 +1270,7 @@ function isAirportHomeAdSlot(value: number): value is AirportHomeAdSlot {
 
 function assertHomeSlot(value: number): asserts value is AirportHomeAdSlot {
   if (!isAirportHomeAdSlot(value)) {
-    throw new HttpError(400, 'BAD_REQUEST', '请选择首页 1–4 号位');
+    throw new HttpError(400, 'BAD_REQUEST', '请选择首页 1–5 号位');
   }
 }
 
