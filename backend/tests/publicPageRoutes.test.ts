@@ -15,6 +15,29 @@ const TEST_FRONTEND_ASSETS = {
   stylesheet: '/assets/index-BzS9fL3m.css',
 };
 
+function extractBalancedCssBlock(css: string, openingPattern: RegExp, requiredSelector: string): string {
+  const flags = openingPattern.flags.includes('g') ? openingPattern.flags : `${openingPattern.flags}g`;
+  const matcher = new RegExp(openingPattern.source, flags);
+  let match: RegExpExecArray | null;
+
+  while ((match = matcher.exec(css)) !== null) {
+    const openingBraceIndex = css.indexOf('{', match.index + match[0].length);
+    if (openingBraceIndex === -1) continue;
+
+    let depth = 1;
+    for (let index = openingBraceIndex + 1; index < css.length; index += 1) {
+      if (css[index] === '{') depth += 1;
+      if (css[index] === '}') depth -= 1;
+      if (depth === 0) {
+        const block = css.slice(openingBraceIndex + 1, index);
+        if (block.includes(requiredSelector)) return block;
+        break;
+      }
+    }
+  }
+  throw new Error(`CSS block not found for ${requiredSelector}: ${openingPattern}`);
+}
+
 test('public SEO routes return crawlable HTML with unique head and H1 content', async () => {
   const app = express();
   app.use(createPublicPageRoutes({
@@ -85,10 +108,12 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.match(sponsoredDealHtml, /<div class="home-v3-tags"><span>IEPL<\/span><span>新客优惠<\/span><\/div>/);
         assert.match(sponsoredDealHtml, /<small>月付起<\/small><strong>¥12<\/strong>/);
         const dealActionsHtml = sponsoredDealHtml.match(/<div class="home-v3-deal-actions">[\s\S]*?<\/div>/)?.[0] || '';
-        assert.match(dealActionsHtml, /href="\/airports\/nebula-deal">查看测评报告<\/a>[\s\S]*href="https:\/\/deal\.example\.com" target="_blank" rel="nofollow sponsored noopener noreferrer"[^>]*>官网 ↗<\/a>/);
+        assert.match(dealActionsHtml, /href="\/airports\/nebula-deal">查看测评报告<\/a>[\s\S]*href="https:\/\/deal\.example\.com" target="_blank" rel="nofollow sponsored noopener noreferrer" aria-label="访问 星云优惠机场 官网">官网 <span aria-hidden="true">↗<\/span><\/a>/);
         assert.match(html, /\.home-v3-deal-grid\s*\{[^}]*grid-template-columns:\s*repeat\(5,minmax\(0,1fr\)\);[^}]*gap:\s*12px;/);
-        assert.match(html, /@media \(max-width:\s*900px\)\s*\{[\s\S]*?\.home-v3-deal-grid\s*\{\s*grid-template-columns:\s*1fr 1fr;\s*\}/);
-        assert.match(html, /@media \(max-width:\s*600px\)\s*\{[\s\S]*?\.home-v3-deal-grid,\s*\.home-v3-summary-grid[^}]*grid-template-columns:\s*1fr;/);
+        const max900Css = extractBalancedCssBlock(html, /@media \(max-width:\s*900px\)\s*/, '.home-v3-deal-grid');
+        const max600Css = extractBalancedCssBlock(html, /@media \(max-width:\s*600px\)\s*/, '.home-v3-deal-grid');
+        assert.match(max900Css, /\.home-v3-deal-grid\s*\{\s*grid-template-columns:\s*1fr 1fr;\s*\}/);
+        assert.match(max600Css, /\.home-v3-deal-grid,\s*\.home-v3-summary-grid[^}]*grid-template-columns:\s*1fr;/);
         assert.match(html, /\.home-v3-deal\s*\{[^}]*min-height:\s*264px;[^}]*padding:\s*14px;/);
         assert.match(html, /\.home-v3-deal-actions\s*\{[^}]*display:\s*grid;[^}]*grid-template-columns:\s*1fr;[^}]*gap:\s*7px;[^}]*margin-top:\s*10px;/);
         assert.match(html, /\.home-v3-deal-actions a\s*\{[^}]*width:\s*100%;[^}]*justify-content:\s*center;[^}]*border:\s*1px solid #e5e5e5;/);
@@ -98,8 +123,10 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.match(html, /\.home-v3-summary-grid li strong\s*\{[^}]*color:\s*#404040;[^}]*font-family:\s*ui-monospace,[^}]*text-align:\s*right;/);
         assert.doesNotMatch(html, /\.home-v3-summary-grid li strong\s*\{[^}]*\b(?:background|border|mask|content):/);
         const riskSummaryHtml = html.match(/<article>\s*<div class="home-v3-summary-title"><h3>风险预警<\/h3><\/div>[\s\S]*?<\/article>/)?.[0] || '';
-        assert.match(riskSummaryHtml, /<li><span>01<\/span><a href="\/airports\/risk-alert">风险观察机场<\/a><strong>67\.40<\/strong><\/li>/);
-        assert.doesNotMatch(riskSummaryHtml, /(?:no-score-badge|no-ad-badge|class="[^"]*badge)/);
+        assert.match(riskSummaryHtml, /<li><span>01<\/span><a href="\/airports\/risk-alert">风险观察机场<\/a><strong class="home-v3-risk-status">风险<\/strong><\/li>/);
+        assert.doesNotMatch(riskSummaryHtml, /(?:67\.40|no-score-badge|no-ad-badge|amber|★|☆)/);
+        assert.match(html, /\.home-v3-risk-status\s*\{[^}]*color:\s*#e11d48;[^}]*text-align:\s*right;/);
+        assert.doesNotMatch(html, /\.home-v3-risk-status\s*\{[^}]*\b(?:background|border|mask|content):/);
         assert.doesNotMatch(html, /广告位空缺不会由普通优惠活动补位/);
         assert.match(html, /rel="nofollow sponsored noopener noreferrer"/);
         assert.match(html, /<h2 id="home-v3-ranking-title">🏆 GateRank 排行榜<\/h2>/);

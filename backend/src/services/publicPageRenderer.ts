@@ -2066,7 +2066,7 @@ function renderHomeV3SponsoredDeals(view: HomePageView): string {
               </div>
               <div class="home-v3-deal-actions">
                 <a class="home-v3-deal-report" href="${escapeAttribute(deal.report_url)}">查看测评报告</a>
-                <a class="home-v3-deal-website" href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow sponsored noopener noreferrer">官网 ↗</a>
+                <a class="home-v3-deal-website" href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow sponsored noopener noreferrer" aria-label="访问 ${escapeAttribute(deal.name)} 官网">官网 <span aria-hidden="true">↗</span></a>
               </div>
             </article>
           ` : `
@@ -2149,11 +2149,11 @@ function renderHomeV3Sidebar(view: HomePageView): string {
 }
 
 function renderHomeV3Summaries(view: HomePageView): string {
-  const configurations: Array<{ key: keyof HomePageView['sections']; title: string }> = [
+  const configurations: Array<{ key: keyof HomePageView['sections']; title: string; risk?: boolean }> = [
     { key: 'most_stable', title: '长期稳定' },
     { key: 'best_value', title: '性价比榜' },
     { key: 'new_entries', title: '新入榜' },
-    { key: 'risk_alerts', title: '风险预警' },
+    { key: 'risk_alerts', title: '风险预警', risk: true },
   ];
   return `
     <section aria-labelledby="home-v3-summary-title">
@@ -2167,7 +2167,7 @@ function renderHomeV3Summaries(view: HomePageView): string {
               <p>${escapeHtml(section.subtitle)}</p>
               ${section.items.length > 0 ? `
                 <ol>${section.items.map((item, index) => `
-                  <li><span>${String(index + 1).padStart(2, '0')}</span><a href="${escapeAttribute(item.report_url)}">${escapeHtml(item.name)}</a><strong>${escapeHtml(formatPublicListScore(item))}</strong></li>
+                  <li><span>${String(index + 1).padStart(2, '0')}</span><a href="${escapeAttribute(item.report_url)}">${escapeHtml(item.name)}</a><strong${config.risk ? ' class="home-v3-risk-status"' : ''}>${config.risk ? '风险' : escapeHtml(formatPublicListScore(item))}</strong></li>
                 `).join('')}</ol>
               ` : '<p class="home-v3-muted">当前没有可展示数据</p>'}
             </article>
@@ -3514,6 +3514,7 @@ const styles = `
   .home-v3-summary-grid li > span { color: #d4d4d4; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 900; }
   .home-v3-summary-grid li a { overflow: hidden; color: #525252; font-weight: 800; text-decoration: none; text-overflow: ellipsis; white-space: nowrap; }
   .home-v3-summary-grid li strong { color: #404040; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-align: right; }
+  .home-v3-risk-status { color: #e11d48; font-weight: 900; text-align: right; }
   .home-v3-trust { border-top: 1px solid #e5e5e5; padding-top: 38px; }
   .home-v3-center-head { text-align: center; }
   .home-v3-center-head h2 { margin: 7px 0 0; color: #0a0a0a; font-size: 25px; letter-spacing: -.02em; }
