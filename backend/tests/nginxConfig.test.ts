@@ -63,6 +63,19 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
   assert.match(getLocationBlock(config, '= /deals/'), /proxy_pass\s+http:\/\/gaterank-api:8787\/deals\/;/);
 });
 
+test('nginx redirects retired report collection aliases to the canonical monthly reports URL', async () => {
+  const config = await readFile(path.join(process.cwd(), 'nginx.conf'), 'utf8');
+
+  for (const route of ['/reports', '/reports/']) {
+    const block = getLocationBlock(config, `= ${route}`);
+    assert.match(block, /return\s+301\s+https:\/\/gate-rank\.com\/monthly-reports;/);
+    assert.doesNotMatch(block, /proxy_pass/);
+  }
+
+  const legacyDetailBlock = getLocationBlock(config, '/reports/');
+  assert.match(legacyDetailBlock, /proxy_pass\s+http:\/\/gaterank-api:8787;/);
+});
+
 test('nginx protects tool installer downloads with rate, connection and internal file serving limits', async () => {
   const config = await readFile(path.join(process.cwd(), 'nginx.conf'), 'utf8');
 
