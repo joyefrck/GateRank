@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, ExternalLink, Info, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, Info, ShieldAlert } from 'lucide-react';
 
 import {
   buildAirportDealDetailFaqItems,
@@ -13,7 +13,6 @@ import {
   buildAirportDealDetailHref,
   buildDealsHref,
   navigate,
-  normalizeExternalHref,
   PageFrame,
   usePageSeo,
 } from '../../site/publicSite';
@@ -89,7 +88,6 @@ export function DealDetailPage({ slug }: { slug: string }) {
   }
 
   const detailHref = buildAirportDealDetailHref(data.airport.slug);
-  const websiteHref = normalizeExternalHref(data.airport.website);
   const paymentMethods = data.airport.payment_methods.length > 0
     ? data.airport.payment_methods.map((method) => getAirportFilterLabel('payment', method)).join('、')
     : '暂未收录';
@@ -154,10 +152,6 @@ export function DealDetailPage({ slug }: { slug: string }) {
               <InfoItem label="支付方式" value={paymentMethods} />
               <InfoItem label="机场简介" value={data.airport.airport_intro || '暂未收录机场简介。'} />
             </dl>
-            <div className="mt-5 flex flex-wrap gap-3">
-              <a href={`/airports/${encodeURIComponent(data.airport.slug)}`} onClick={(event) => { event.preventDefault(); navigate(`/airports/${encodeURIComponent(data.airport.slug)}`); }} className="inline-flex min-h-11 items-center rounded-lg bg-slate-950 px-5 text-sm font-black text-white">查看测评报告</a>
-              {websiteHref === '#' ? null : <a href={websiteHref} target="_blank" rel="sponsored nofollow noreferrer noopener" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-slate-200 px-5 text-sm font-black text-slate-900">访问官网<ExternalLink className="h-4 w-4" /></a>}
-            </div>
           </section>
 
           <section className="mt-8 rounded-[18px] border border-slate-200 bg-white p-6">

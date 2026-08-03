@@ -166,6 +166,18 @@ test('React airport deal detail route preserves one slug page and SSR takeover',
   assert.match(detailSource, /data\.active_deals\.map/);
   assert.match(detailSource, /当前暂无有效优惠码/);
   assert.match(detailSource, /RiskNotice/);
+  const riskSectionStart = detailSource.indexOf('购买前先核对服务能力与风险');
+  const usageSectionStart = detailSource.indexOf('优惠码怎么使用', riskSectionStart);
+  assert.notEqual(riskSectionStart, -1);
+  assert.notEqual(usageSectionStart, -1);
+  const riskSectionSource = detailSource.slice(riskSectionStart, usageSectionStart);
+  assert.match(riskSectionSource, /InfoItem label="机场状态"/);
+  assert.match(riskSectionSource, /InfoItem label="支付方式"/);
+  assert.match(riskSectionSource, /InfoItem label="机场简介"/);
+  assert.doesNotMatch(riskSectionSource, /查看测评报告/);
+  assert.doesNotMatch(riskSectionSource, /访问官网/);
+  assert.doesNotMatch(detailSource, /normalizeExternalHref/);
+  assert.doesNotMatch(detailSource, /ExternalLink/);
   assert.match(dealsSource, /detailHref=\{buildAirportDealDetailHref\(deal\.airport_slug\)\}/);
   assert.match(cardSource, /showDetailAction\?: boolean/);
   assert.match(cardSource, /showDetailAction = true/);
