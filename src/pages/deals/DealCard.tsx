@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Copy, ExternalLink, Sparkles } from 'lucide-react';
+import { Check, Copy, ExternalLink, Sparkles } from 'lucide-react';
 
 import type { AirportDealView } from '../../../shared/airportAds';
 import { navigate, normalizeExternalHref } from '../../site/publicSite';
@@ -61,7 +61,20 @@ export function DealCard({ deal, tone, pagePath, detailHref }: DealCardProps) {
       </div>
 
       <ul className="m-0 grid list-none gap-2.5 p-0">
-        <DealField label="优惠码"><span className="inline-flex h-7 items-center rounded-lg bg-blue-50 px-2.5 font-black text-blue-700">{deal.coupon_code}</span></DealField>
+        <DealField label="优惠码">
+          <span className="inline-flex items-center gap-1.5">
+            <span className="inline-flex h-7 items-center rounded-lg bg-blue-50 px-2.5 font-black text-blue-700">{deal.coupon_code}</span>
+            <button
+              type="button"
+              onClick={() => void copyCoupon()}
+              aria-label={copied ? '优惠码已复制' : '复制优惠码'}
+              title={copied ? '优惠码已复制' : '复制优惠码'}
+              className="inline-grid h-7 w-7 shrink-0 place-items-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
+            </button>
+          </span>
+        </DealField>
         <DealField label="折扣说明">{deal.discount_description}</DealField>
         <DealField label="适用套餐">{deal.applicable_plan}</DealField>
         <DealField label="活动时间">{formatDate(deal.starts_at)} ～ {formatDate(deal.ends_at)}</DealField>
@@ -74,11 +87,7 @@ export function DealCard({ deal, tone, pagePath, detailHref }: DealCardProps) {
         <SupportRow label="是否支持退款" ok={deal.refund_supported} yes="支持" no="不支持" />
       </ul>
 
-      <div className="mt-4 grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
-        <button type="button" onClick={() => void copyCoupon()} className="inline-flex h-[38px] items-center justify-center gap-2 rounded-lg bg-neutral-950 px-2.5 text-[13px] font-black text-white">
-          <Copy className="h-4 w-4" />
-          {copied ? '已复制' : '复制优惠码'}
-        </button>
+      <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-2.5">
         <a href={detailHref} onClick={(event) => { event.preventDefault(); navigate(detailHref); }} className="inline-flex h-[38px] items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] font-black text-slate-900">优惠详情</a>
         <a href={deal.report_url} onClick={(event) => { event.preventDefault(); navigate(deal.report_url); }} className="inline-flex h-[38px] items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] font-black text-slate-900">查看测评</a>
         {websiteHref === '#' ? null : (

@@ -169,6 +169,12 @@ test('React airport deal detail route preserves one slug page and SSR takeover',
   assert.match(dealsSource, /detailHref=\{buildAirportDealDetailHref\(deal\.airport_slug\)\}/);
   assert.match(cardSource, /sponsored nofollow noreferrer noopener/);
   assert.doesNotMatch(cardSource, /\/deals\/\$\{deal\.campaign_id\}/);
+  assert.match(cardSource, /import \{ Check, Copy, ExternalLink, Sparkles \} from 'lucide-react'/);
+  assert.match(cardSource, /aria-label=\{copied \? '优惠码已复制' : '复制优惠码'\}/);
+  assert.match(cardSource, /title=\{copied \? '优惠码已复制' : '复制优惠码'\}/);
+  assert.match(cardSource, /copied \? <Check[^>]*> : <Copy/);
+  assert.doesNotMatch(cardSource, /bg-neutral-950/);
+  assert.doesNotMatch(cardSource, /\{copied \? '已复制' : '复制优惠码'\}/);
 });
 
 test('Portal activity title helper only appears for homepage ads', async () => {
