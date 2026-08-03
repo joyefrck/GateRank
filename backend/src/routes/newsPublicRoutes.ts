@@ -14,6 +14,7 @@ import { getDateInTimezone } from '../utils/time';
 import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from '../../../shared/publishTokenDocs';
 import { PUBLIC_DEALS_LASTMOD, PUBLIC_SEO_STATIC_LASTMOD, RANKING_TRANSPARENCY_LASTMOD } from '../../../shared/publicSeo';
 import { getIndexableFullRankingFilterPaths } from '../../../shared/fullRankingFilters';
+import { buildAirportDealDetailPath, type AirportDealSitemapUpdate } from '../../../shared/airportAds';
 
 interface NewsPublicDeps {
   newsPublicService: NewsPublicService;
@@ -24,6 +25,9 @@ interface NewsPublicDeps {
     }>;
   };
   monthlyReportPublicService?: MonthlyReportPublicService;
+  airportAdCampaignRepository?: {
+    listDealSitemapUpdates(): Promise<AirportDealSitemapUpdate[]>;
+  };
   marketingRepository?: MarketingPageViewRepository;
 }
 
@@ -206,6 +210,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       ? await deps.newsPublicService.getSitemapTaxonomy()
       : { categories: [], topics: [] };
     const reportEntries = await getReportSitemapEntries(deps);
+    const dealEntries = await getDealSitemapEntries(deps, reportEntries);
     const monthlyReportEntries = await getMonthlyReportSitemapEntries(deps);
     const dataLastmod = reportEntries[0]?.lastmod || formatSitemapLastmodDate(getDateInTimezone());
     const newsLastmod = getNewsIndexLastmod(items);
@@ -232,6 +237,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       ...activeCategories.map((item) => `/news/category/${item.slug}`),
       ...activeTopics.map((item) => `/news/topic/${item.slug}`),
       ...reportEntries.map((entry) => entry.path),
+      ...dealEntries.map((entry) => entry.path),
       ...monthlyReportEntries.map((entry) => entry.path),
       ...items.map((item) => `/news/${item.slug}`),
     ];
@@ -256,6 +262,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       ...Object.fromEntries(activeCategories.map((item) => [`/news/category/${item.slug}`, formatTaxonomyLastmod(item.updated_at || newsLastmod)])),
       ...Object.fromEntries(activeTopics.map((item) => [`/news/topic/${item.slug}`, formatTaxonomyLastmod(item.updated_at || newsLastmod)])),
       ...Object.fromEntries(reportEntries.map((entry) => [entry.path, entry.lastmod])),
+      ...Object.fromEntries(dealEntries.map((entry) => [entry.path, entry.lastmod])),
       ...Object.fromEntries(monthlyReportEntries.map((entry) => [entry.path, entry.lastmod])),
     };
     const xml = buildSitemapXml(siteUrl, urls, items, staticLastmodByPath);
@@ -264,6 +271,32 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
   });
 
   return router;
+}
+
+async function getDealSitemapEntries(
+  deps: NewsPublicDeps,
+  reportEntries: Array<{ path: string; lastmod: string }>,
+): Promise<Array<{ path: string; lastmod: string }>> {
+  const updateBySlug = new Map<string, string>();
+  if (deps.airportAdCampaignRepository) {
+    try {
+      const updates = await deps.airportAdCampaignRepository.listDealSitemapUpdates();
+      updates.forEach((item) => updateBySlug.set(item.airport_slug, item.updated_at));
+    } catch (error) {
+      console.error('[sitemap] failed to load airport deal updates', { error });
+    }
+  }
+
+  const entries = new Map<string, { path: string; lastmod: string }>();
+  reportEntries.forEach((report) => {
+    const match = report.path.match(/^\/airports\/([^/?#]+)$/);
+    if (!match) return;
+    const slug = match[1];
+    const campaignLastmod = updateBySlug.get(slug);
+    const lastmod = campaignLastmod && campaignLastmod > report.lastmod ? campaignLastmod : report.lastmod;
+    entries.set(slug, { path: buildAirportDealDetailPath(slug), lastmod });
+  });
+  return [...entries.values()];
 }
 
 async function getReportSitemapEntries(deps: NewsPublicDeps): Promise<Array<{ path: string; lastmod: string }>> {

@@ -38,6 +38,7 @@ import { ListPageHero } from './components/ListPageHero';
 import {
   buildAbsoluteUrl,
   buildDealsHref,
+  buildAirportDealDetailHref,
   buildFullRankingHref,
   buildHomeHref,
   buildMethodologyHref,
@@ -4893,6 +4894,16 @@ function ReportHeroV2({ data }: { data: ReportViewResponse }) {
           <ReportTag label={getStabilityTierLabel(data.metrics.stability_tier)} tone="emerald" />
         </div>
         <div className="mt-6 flex flex-wrap gap-3">
+          <a
+            href={buildAirportDealDetailHref(data.airport.slug)}
+            onClick={(event) => {
+              event.preventDefault();
+              navigate(buildAirportDealDetailHref(data.airport.slug));
+            }}
+            className="inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-[8px] border border-slate-200 bg-white px-5 text-sm font-black text-slate-900 shadow-sm transition hover:border-slate-300 hover:bg-slate-50"
+          >
+            查看该机场优惠信息
+          </a>
           <a
             href={buildOutboundAirportHref(data.airport.id, 'website', 'report_header')}
             target="_blank"

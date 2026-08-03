@@ -30,6 +30,7 @@ function createCampaignRow(overrides: Record<string, unknown> = {}) {
     tracking_started_at: '2026-05-24 03:40:45',
     campaign_status: 'active',
     created_at: '2026-05-24 03:40:45',
+    updated_at: '2026-05-25 04:50:00',
     ...overrides,
   };
 }
@@ -318,10 +319,34 @@ test('AirportAdCampaignRepository.listActiveDeals excludes canceled campaigns in
   assert.equal(deals.length, 1);
   assert.equal(deals[0].campaign_id, 101);
   assert.equal(deals[0].airport_created_at, '2026-03-21T00:00:00+08:00');
+  assert.equal(deals[0].updated_at, '2026-05-25T04:50:00+08:00');
   assert.ok(calls[0].sql.includes("campaign.status = 'active'"));
   assert.match(calls[0].sql, /airport\.created_at[\s\S]*AS airport_created_at/);
   assert.ok(calls[0].sql.includes('campaign.ends_at > ?'));
   assert.doesNotMatch(calls[0].sql, /LIMIT\s+6\b/);
+});
+
+test('AirportAdCampaignRepository.listDealSitemapUpdates groups campaign updates by airport slug', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new AirportAdCampaignRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [[
+        { airport_slug: 'nebula', updated_at: '2026-08-03 10:30:00' },
+        { airport_slug: 'elephant', updated_at: '2026-08-02 09:00:00' },
+      ]];
+    },
+  } as never);
+
+  const updates = await repository.listDealSitemapUpdates();
+
+  assert.deepEqual(updates, [
+    { airport_slug: 'nebula', updated_at: '2026-08-03T10:30:00+08:00' },
+    { airport_slug: 'elephant', updated_at: '2026-08-02T09:00:00+08:00' },
+  ]);
+  assert.match(calls[0].sql, /MAX\(campaign\.updated_at\)/);
+  assert.match(calls[0].sql, /GROUP BY airport\.slug/);
+  assert.match(calls[0].sql, /airport\.is_listed = 1/);
 });
 
 test('AirportAdCampaignRepository.purchase allows an ordinary campaign after six active campaigns', async () => {

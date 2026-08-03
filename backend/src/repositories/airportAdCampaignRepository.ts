@@ -12,6 +12,7 @@ import {
   type AdminAirportAdStatusFilter,
   type AirportAdMonthOption,
   type AirportDealView,
+  type AirportDealSitemapUpdate,
   type AirportHomeAdSlot,
   type AirportHomeAdSlotPrices,
   type PortalAirportAdCampaignView,
@@ -80,6 +81,12 @@ interface CampaignRow extends RowDataPacket {
   tracking_started_at: string | null;
   campaign_status: 'active' | 'canceled';
   created_at: string;
+  updated_at: string;
+}
+
+interface DealSitemapUpdateRow extends RowDataPacket {
+  airport_slug: string;
+  updated_at: string;
 }
 
 interface WalletRow extends RowDataPacket {
@@ -233,6 +240,25 @@ export class AirportAdCampaignRepository {
       [nowSql, nowSql],
     );
     return rows.map(toDealView);
+  }
+
+  async listDealSitemapUpdates(): Promise<AirportDealSitemapUpdate[]> {
+    const [rows] = await this.pool.query<DealSitemapUpdateRow[]>(
+      `SELECT airport.slug AS airport_slug,
+              DATE_FORMAT(MAX(campaign.updated_at), '%Y-%m-%d %H:%i:%s') AS updated_at
+         FROM airport_ad_campaigns campaign
+         JOIN airports airport ON airport.id = campaign.airport_id
+        WHERE airport.is_listed = 1
+          AND airport.status <> 'down'
+          AND airport.slug IS NOT NULL
+          AND airport.slug <> ''
+        GROUP BY airport.slug
+        ORDER BY airport.slug ASC`,
+    );
+    return rows.map((row) => ({
+      airport_slug: row.airport_slug,
+      updated_at: sqlDateTimeToTimezoneIso(row.updated_at),
+    }));
   }
 
   async listActiveHomeDeals(now: Date = new Date()): Promise<AirportDealView[]> {
@@ -913,7 +939,8 @@ export class AirportAdCampaignRepository {
         campaign.home_slot,
         DATE_FORMAT(campaign.tracking_started_at, '%Y-%m-%d %H:%i:%s') AS tracking_started_at,
         campaign.status AS campaign_status,
-        DATE_FORMAT(campaign.created_at, '%Y-%m-%d %H:%i:%s') AS created_at
+        DATE_FORMAT(campaign.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
+        DATE_FORMAT(campaign.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
       FROM airport_ad_campaigns campaign
       JOIN airports airport ON airport.id = campaign.airport_id
     `;
@@ -1193,6 +1220,7 @@ function toDealView(row: CampaignRow): AirportDealView {
     is_homepage: isAirportHomeAdSlot(Number(row.home_slot)),
     tracking_started_at: row.tracking_started_at ? sqlDateTimeToTimezoneIso(row.tracking_started_at) : null,
     created_at: sqlDateTimeToTimezoneIso(row.created_at),
+    updated_at: sqlDateTimeToTimezoneIso(row.updated_at),
   };
 }
 

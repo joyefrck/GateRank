@@ -61,6 +61,7 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
   assert.match(getLocationBlock(config, '^~ /tools/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.match(getLocationBlock(config, '^~ /download/file/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.match(getLocationBlock(config, '= /deals/'), /proxy_pass\s+http:\/\/gaterank-api:8787\/deals\/;/);
+  assert.match(getLocationBlock(config, '^~ /deals/'), /proxy_pass\s+http:\/\/gaterank-api:8787;/);
 });
 
 test('nginx redirects retired report collection aliases to the canonical monthly reports URL', async () => {

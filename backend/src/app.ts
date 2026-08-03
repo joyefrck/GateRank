@@ -374,6 +374,7 @@ export async function createApp() {
       newsPublicService,
       publicViewService,
       monthlyReportPublicService,
+      airportAdCampaignRepository,
       marketingRepository: marketingEventRepository,
     }),
   );

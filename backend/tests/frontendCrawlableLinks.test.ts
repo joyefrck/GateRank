@@ -124,6 +124,8 @@ test('React report page keeps outbound CTA and comparison links as anchors', asy
   assert.match(heroSource, /href=\{buildOutboundAirportHref\(data\.airport\.id, 'website', 'report_header'\)\}/);
   assert.match(heroSource, /target="_blank"/);
   assert.match(heroSource, /createTrackedOutboundClickHandler/);
+  assert.match(heroSource, /href=\{buildAirportDealDetailHref\(data\.airport\.slug\)\}/);
+  assert.match(heroSource, /查看该机场优惠信息/);
 
   const comparisonStart = source.indexOf('function ReportComparisonLinks');
   assert.notEqual(comparisonStart, -1);

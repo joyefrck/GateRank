@@ -325,7 +325,8 @@ test('GET /deals returns crawlable advertising deal HTML', async () => {
     assert.match(html, /星云机场/);
     assert.match(html, /优惠码/);
     assert.match(html, /NEW220/);
-    assert.match(html, /href="https:\/\/www\.nebula\.example\.com" target="_blank" rel="nofollow noreferrer noopener">访问官网/);
+    assert.match(html, /href="\/deals\/nebula">优惠详情<\/a>/);
+    assert.match(html, /href="https:\/\/www\.nebula\.example\.com" target="_blank" rel="sponsored nofollow noreferrer noopener">访问官网/);
     assert.doesNotMatch(html, /href="www\.nebula\.example\.com"/);
     assert.match(html, /"@type":"CollectionPage"/);
     assert.match(html, /"@type":"BreadcrumbList"/);
@@ -1299,6 +1300,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     const okHtml = await okResponse.text();
     assert.match(okHtml, /<title>星云机场怎么样？星云机场测评、官网入口、稳定性与跑路风险分析 \| 机场榜GateRank<\/title>/);
     assert.match(okHtml, /<h1>星云机场测评：官网入口、稳定性、速度与跑路风险分析<\/h1>/);
+    assert.match(okHtml, /href="\/deals\/nebula"[^>]*>查看该机场优惠信息<\/a>/);
     assertStaticOgImage(okHtml, `http://127.0.0.1:${port}`, '/og/airport-report.png', 'GateRank 机场测评报告分享图');
     assert.match(okHtml, /id="report-top"/);
     assert.match(okHtml, /报告日期：2026-03-23/);

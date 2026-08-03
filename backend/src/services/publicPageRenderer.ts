@@ -1121,7 +1121,7 @@ export function renderReportPublicPage(
               <span>${escapeHtml(formatAirportStatusLabel(view.airport.status))}</span>
               <span>${escapeHtml(view.capabilities.plan.has_trial_plan ? '免费试用' : '试用未收录')}</span>
             </div>
-            <p><a class="primary-link" href="${escapeAttribute(normalizeExternalHref(view.airport.website))}" target="_blank" rel="nofollow noreferrer noopener">访问官网</a></p>
+            <p><a class="primary-link" href="${escapeAttribute(normalizeExternalHref(view.airport.website))}" target="_blank" rel="nofollow noreferrer noopener">访问官网</a> · <a href="${escapeAttribute(buildAirportDealDetailPath(view.airport.slug))}">查看该机场优惠信息</a></p>
           </div>
           ${renderReportScoreCard(view)}
         </section>
@@ -2501,16 +2501,18 @@ function renderAirportCard(item: {
 }
 
 function renderDealMiniCard(deal: AirportDealView): string {
+  const detailPath = buildAirportDealDetailPath(deal.airport_slug);
+  const websiteHref = normalizeExternalHref(deal.website);
   return `
     <article class="mini-card">
       <div class="eyebrow">广告</div>
-      <h3><a href="${escapeAttribute(deal.report_url)}">${escapeHtml(deal.airport_name)}</a></h3>
+      <h3><a href="${escapeAttribute(detailPath)}">${escapeHtml(deal.airport_name)}</a></h3>
       <p><strong>优惠码：</strong>${escapeHtml(deal.coupon_code)}</p>
       <p><strong>折扣说明：</strong>${escapeHtml(deal.discount_description)}</p>
       <p><strong>适用套餐：</strong>${escapeHtml(deal.applicable_plan)}</p>
       <p><strong>活动时间：</strong>${escapeHtml(formatDateOnly(deal.starts_at))} ～ ${escapeHtml(formatDateOnly(deal.ends_at))}</p>
       <p class="muted">试用：${deal.supports_trial ? '支持' : '不支持'} · USDT：${deal.supports_usdt ? '支持' : '不支持'} · 流媒体：${deal.supports_streaming ? '支持' : '不支持'} · AI：${deal.supports_ai ? '支持' : '不支持'}</p>
-      <p><a href="${escapeAttribute(deal.report_url)}">查看测评</a> · <a href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow noreferrer noopener">访问官网</a></p>
+      <p><a href="${escapeAttribute(detailPath)}">优惠详情</a> · <a href="${escapeAttribute(deal.report_url)}">查看测评</a>${websiteHref === '#' ? '' : ` · <a href="${escapeAttribute(websiteHref)}" target="_blank" rel="sponsored nofollow noreferrer noopener">访问官网</a>`}</p>
       <p class="muted">本活动不影响 GateRank Score。</p>
     </article>
   `;
