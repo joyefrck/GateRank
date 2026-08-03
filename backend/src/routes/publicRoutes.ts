@@ -20,7 +20,7 @@ import { buildPortalLoginUrl } from '../utils/siteUrl';
 import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { AirportApplicationReviewStatus, AirportStatus } from '../types/domain';
 import { parseFullRankingFilters, type FullRankingFilters } from '../../../shared/fullRankingFilters';
-import type { AirportDealView } from '../../../shared/airportAds';
+import type { AirportDealDetailView, AirportDealView } from '../../../shared/airportAds';
 import { isMarketingPageKind } from '../../../shared/marketingAnalytics';
 
 interface PublicDeps {
@@ -58,6 +58,9 @@ interface PublicDeps {
   };
   airportAdCampaignRepository?: {
     listActiveDeals(): Promise<AirportDealView[]>;
+  };
+  airportDealDetailService?: {
+    getBySlug(slug: string): Promise<AirportDealDetailView | null>;
   };
   applicationNotificationService?: {
     notifyNewAirportApplication(input: {
@@ -151,6 +154,26 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         items: deals,
         total: deals.length,
       });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/pages/deals/:slug', async (req, res, next) => {
+    try {
+      if (!deps.airportDealDetailService) {
+        throw new Error('airportDealDetailService is not configured');
+      }
+      const slug = String(req.params.slug || '');
+      const view = await pageCache.getOrLoad(
+        `deal-detail:${slug}`,
+        () => deps.airportDealDetailService!.getBySlug(slug),
+      );
+      if (!view) {
+        throw new HttpError(404, 'AIRPORT_DEAL_PAGE_NOT_FOUND', `airport deal page not found: ${slug}`);
+      }
+      setPublicCacheHeaders(res);
+      res.json(view);
     } catch (error) {
       next(error);
     }

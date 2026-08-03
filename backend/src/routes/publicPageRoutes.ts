@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../types/domain';
-import type { AirportDealView } from '../../../shared/airportAds';
+import type { AirportDealDetailView, AirportDealView } from '../../../shared/airportAds';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { getDateInTimezone } from '../utils/time';
 import {
@@ -11,6 +11,7 @@ import {
 } from '../utils/publicCache';
 import {
   renderApplyPublicPage,
+  renderAirportDealDetailPublicPage,
   renderDealsPublicPage,
   renderFullRankingPublicPage,
   renderHomePublicPage,
@@ -53,6 +54,9 @@ interface PublicPageDeps {
   };
   airportAdCampaignRepository?: {
     listActiveDeals(): Promise<AirportDealView[]>;
+  };
+  airportDealDetailService?: {
+    getBySlug(slug: string): Promise<AirportDealDetailView | null>;
   };
   monthlyReportPublicService?: MonthlyReportPublicService;
   toolsDownloadService?: Pick<ToolsDownloadService, 'getDownloadPageView' | 'getDownloadFileTarget' | 'recordDownload'>;
@@ -193,6 +197,29 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     } catch (error) {
       console.error('[public-page] failed to render deals page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '活动优惠加载失败', frontendAssets));
+    }
+  });
+
+  router.get('/deals/:slug', async (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    const slug = String(req.params.slug || '');
+    try {
+      if (!deps.airportDealDetailService) {
+        throw new Error('airportDealDetailService is not configured');
+      }
+      const view = await pageCache.getOrLoad(
+        `deal-detail:${slug}`,
+        () => deps.airportDealDetailService!.getBySlug(slug),
+      );
+      if (!view) {
+        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '机场优惠页面不存在', frontendAssets));
+        return;
+      }
+      setPublicCacheHeaders(res);
+      res.status(200).type('html').send(renderAirportDealDetailPublicPage(siteUrl, view, frontendAssets));
+    } catch (error) {
+      console.error('[public-page] failed to render airport deal page', { error, requestId: req.requestId || 'unknown' });
+      res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '机场优惠页面加载失败', frontendAssets));
     }
   });
 

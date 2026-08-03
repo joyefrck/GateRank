@@ -7,6 +7,40 @@ import { createPublicRoutes } from '../src/routes/publicRoutes';
 import type { MarketingEventInsertRecord } from '../src/utils/marketing';
 import { MARKETING_PAGE_KINDS } from '../../shared/marketingAnalytics';
 
+test('GET /pages/deals/:slug returns API 404 for an unknown airport', async () => {
+  const app = express();
+  app.use(createPublicRoutes({
+    airportRepository: { getById: async () => null },
+    airportApplicationRepository: { create: async () => 1 },
+    metricsRepository: { getByAirportAndDate: async () => null },
+    scoreRepository: {
+      getByAirportAndDate: async () => null,
+      getTrend: async () => [],
+    },
+    rankingRepository: { getRanking: async () => [] },
+    publicViewService: {
+      getHomePageView: async () => ({}),
+      getFullRankingView: async () => ({}),
+      getRiskMonitorView: async () => ({}),
+      getReportView: async () => null,
+    },
+    airportDealDetailService: { getBySlug: async () => null },
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/pages/deals/missing`);
+    const payload = await response.json() as { code: string };
+
+    assert.equal(response.status, 404);
+    assert.equal(payload.code, 'AIRPORT_DEAL_PAGE_NOT_FOUND');
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /application-config returns public application fee from marketing settings', async () => {
   const app = express();
   app.use(

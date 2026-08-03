@@ -71,6 +71,7 @@ import { IpGeolocationService } from './services/ipGeolocationService';
 import { DnsLeakTestService } from './services/dnsLeakTestService';
 import { ToolsDownloadService } from './services/toolsDownloadService';
 import { PublicViewService } from './services/publicViewService';
+import { AirportDealDetailService } from './services/airportDealDetailService';
 import { RecomputeService } from './services/recomputeService';
 import { RiskCheckService } from './services/riskCheckService';
 import { SmtpSettingsService } from './services/smtpSettingsService';
@@ -220,6 +221,10 @@ export async function createApp() {
       airportAdCampaignRepository,
       newsRepository,
     });
+  const airportDealDetailService = new AirportDealDetailService({
+    airportRepository,
+    airportAdCampaignRepository,
+  });
   const newsContentService = new NewsContentService();
   const newsCoverImageService = new NewsCoverImageService();
   const monthlyReportGenerationService = new MonthlyReportGenerationService({
@@ -294,6 +299,7 @@ export async function createApp() {
       scoreRepository,
       rankingRepository,
       publicViewService,
+      airportDealDetailService,
       pageCache: publicPageCache,
       marketingRepository: marketingEventRepository,
       marketingSettingsService,
@@ -466,6 +472,7 @@ export async function createApp() {
     createPublicPageRoutes({
       publicViewService,
       airportAdCampaignRepository,
+      airportDealDetailService,
       monthlyReportPublicService,
       toolsDownloadService,
       pageCache: publicPageCache,

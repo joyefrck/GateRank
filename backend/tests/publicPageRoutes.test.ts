@@ -6,7 +6,7 @@ import { createPublicPageRoutes } from '../src/routes/publicPageRoutes';
 import { createPublicRoutes } from '../src/routes/publicRoutes';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../src/types/domain';
 import { createTimedPromiseCache } from '../src/utils/publicCache';
-import type { AirportDealView } from '../../shared/airportAds';
+import type { AirportDealDetailView, AirportDealView } from '../../shared/airportAds';
 import { getDateInTimezone } from '../src/utils/time';
 import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG } from '../../shared/toolDownloads';
 
@@ -861,6 +861,100 @@ test('GET /deals and GET /api/v1/pages/deals reuse a shared active deals cache',
   }
 });
 
+test('GET deal detail HTML and API share one slug view with multiple campaign cards', async () => {
+  let detailCalls = 0;
+  const firstDeal = {
+    ...createDealView(1),
+    airport_name: '大象网络',
+    airport_slug: 'elphantroute',
+    website: 'https://www.elephant-ipcheck.com/',
+    report_url: '/airports/elphantroute',
+  };
+  const detailView = createAirportDealDetailView([
+    firstDeal,
+    {
+      ...firstDeal,
+      campaign_id: 8,
+      coupon_code: 'SECOND20',
+    },
+  ]);
+  const pageCache = createTimedPromiseCache(60_000);
+  const airportDealDetailService = {
+    getBySlug: async (): Promise<AirportDealDetailView> => {
+      detailCalls += 1;
+      return detailView;
+    },
+  };
+  const publicViewService = createPublicViewServiceStub();
+  const app = express();
+  app.use('/api/v1', createPublicRoutes({
+    airportRepository: { getById: async () => null },
+    airportApplicationRepository: { create: async () => 1 },
+    metricsRepository: { getByAirportAndDate: async () => null },
+    scoreRepository: {
+      getByAirportAndDate: async () => null,
+      getTrend: async () => [],
+    },
+    rankingRepository: { getRanking: async () => [] },
+    publicViewService,
+    airportDealDetailService,
+    pageCache,
+  }));
+  app.use(createPublicPageRoutes({
+    publicViewService,
+    airportDealDetailService,
+    pageCache,
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const htmlResponse = await fetch(`http://127.0.0.1:${port}/deals/elphantroute`);
+    const apiResponse = await fetch(`http://127.0.0.1:${port}/api/v1/pages/deals/elphantroute`);
+    const html = await htmlResponse.text();
+    const payload = await apiResponse.json() as AirportDealDetailView;
+
+    assert.equal(htmlResponse.status, 200);
+    assert.equal(apiResponse.status, 200);
+    assert.equal(detailCalls, 1);
+    assert.match(html, /<h1>大象网络优惠码与最新优惠活动<\/h1>/);
+    assert.match(html, /NEW220/);
+    assert.match(html, /SECOND20/);
+    assert.equal((html.match(/rel="canonical"/g) || []).length, 1);
+    assert.deepEqual(payload.active_deals.map((deal) => deal.campaign_id), [1, 8]);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('GET /deals/:slug returns 404 for an unknown airport and 200 without active deals', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: createPublicViewServiceStub(),
+    airportDealDetailService: {
+      getBySlug: async (slug: string) => slug === 'nebula'
+        ? createAirportDealDetailView([])
+        : null,
+    },
+    frontendAssets: TEST_FRONTEND_ASSETS,
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const emptyResponse = await fetch(`http://127.0.0.1:${port}/deals/nebula`);
+    const missingResponse = await fetch(`http://127.0.0.1:${port}/deals/missing`);
+
+    assert.equal(emptyResponse.status, 200);
+    assert.match(await emptyResponse.text(), /当前暂无有效优惠码/);
+    assert.equal(missingResponse.status, 404);
+    assert.match(await missingResponse.text(), /机场优惠页面不存在/);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /methodology includes expanded methodology SEO body and FAQ structured data', async () => {
   const app = express();
   app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
@@ -1547,6 +1641,25 @@ function createDealView(id: number): AirportDealView {
     low_price_plan: true,
     discount_percent: 20,
     created_at: '2026-05-24T10:00:00+08:00',
+  };
+}
+
+function createAirportDealDetailView(activeDeals: AirportDealView[]): AirportDealDetailView {
+  return {
+    airport: {
+      id: 1,
+      slug: activeDeals[0]?.airport_slug || 'nebula',
+      name: activeDeals[0]?.airport_name || '星云机场',
+      website: activeDeals[0]?.website || 'https://nebula.example.com',
+      status: 'normal',
+      plan_price_month: 12,
+      has_trial: true,
+      payment_methods: ['alipay', 'usdt_trc20'],
+      airport_intro: '稳定网络服务。',
+      tags: ['支持试用'],
+    },
+    active_deals: activeDeals,
+    generated_at: '2026-08-03T10:00:00+08:00',
   };
 }
 

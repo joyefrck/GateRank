@@ -24,6 +24,9 @@ import {
   buildMonthlyReportPath,
   buildMonthlyReportSeo,
   buildMonthlyReportsSeo,
+  buildAirportDealDetailFaqItems,
+  buildAirportDealDetailSeo,
+  buildAirportDealDetailStructuredData,
   buildDealsStructuredData,
   buildFullRankingHeading,
   buildFullRankingSeo,
@@ -46,7 +49,12 @@ import {
   type PublicFullRankingTopicContent,
   type PublicSeoText,
 } from '../../../shared/publicSeo';
-import { AIRPORT_HOME_AD_SLOTS, type AirportDealView } from '../../../shared/airportAds';
+import {
+  AIRPORT_HOME_AD_SLOTS,
+  buildAirportDealDetailPath,
+  type AirportDealDetailView,
+  type AirportDealView,
+} from '../../../shared/airportAds';
 import {
   PUBLIC_SITE_BRAND_NAME,
   withPublicBrandTitle,
@@ -126,11 +134,12 @@ interface DynamicOgImage {
 }
 
 interface PublicInitialData {
-  kind: 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'monthly_reports' | 'monthly_report' | 'tools_download';
+  kind: 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'deal_detail' | 'monthly_reports' | 'monthly_report' | 'tools_download';
   params: {
     date?: string | null;
     page?: number | null;
     filters?: FullRankingFilters;
+    slug?: string;
   };
   payload: unknown;
 }
@@ -417,6 +426,91 @@ export function renderDealsPublicPage(
         </section>
         ${renderDealsGuideSections()}
         ${renderDealsFaqSection()}
+      </main>
+    `,
+  });
+}
+
+export function renderAirportDealDetailPublicPage(
+  siteUrl: string,
+  view: AirportDealDetailView,
+  frontendAssets?: PublicFrontendAssets,
+): string {
+  const currentYear = Number(view.generated_at.slice(0, 4));
+  const canonicalPath = buildAirportDealDetailPath(view.airport.slug);
+  const seo = buildAirportDealDetailSeo(view, currentYear);
+  const faqItems = buildAirportDealDetailFaqItems(view);
+  const websiteHref = normalizeExternalHref(view.airport.website);
+  const paymentMethods = view.airport.payment_methods.length > 0
+    ? view.airport.payment_methods.map((method) => getAirportFilterLabel('payment', method)).join('、')
+    : '暂未收录';
+  const riskNotice = view.airport.status === 'down'
+    ? `<section class="content-card"><div class="eyebrow">风险提醒</div><h2>${escapeHtml(view.airport.name)}当前已标记为跑路</h2><p class="muted">请勿仅因优惠信息继续购买，先查看风险记录和历史测评。</p></section>`
+    : view.airport.status === 'risk'
+      ? `<section class="content-card"><div class="eyebrow">风险提醒</div><h2>${escapeHtml(view.airport.name)}当前处于风险观察</h2><p class="muted">购买前请核对官网、订阅可用性、退款规则与近期测评。</p></section>`
+      : '';
+
+  return renderPublicDocument({
+    siteUrl,
+    canonicalPath,
+    seo,
+    active: 'deals',
+    jsonLd: buildAirportDealDetailStructuredData(siteUrl, view, currentYear),
+    initialData: {
+      kind: 'deal_detail',
+      params: { slug: view.airport.slug },
+      payload: view,
+    },
+    frontendAssets,
+    body: `
+      <main class="page-main">
+        <section class="hero hero-deals">
+          <div class="hero-surface"></div>
+          <div class="hero-content">
+            <div>
+              <div class="breadcrumb"><a href="/">首页</a><span>/</span><a href="/deals">活动优惠</a><span>/</span>${escapeHtml(view.airport.name)}</div>
+              <div class="eyebrow">AIRPORT DEALS</div>
+              <h1>${escapeHtml(view.airport.name)}优惠码与最新优惠活动</h1>
+              <p>${escapeHtml(seo.description)}</p>
+            </div>
+            <div class="metric-grid">
+              ${renderMetric('有效活动', String(view.active_deals.length))}
+              ${renderMetric('月付价格', view.airport.plan_price_month > 0 ? `¥${formatMetric(view.airport.plan_price_month)}` : '未收录')}
+              ${renderMetric('试用支持', view.airport.has_trial ? '支持' : '不支持')}
+            </div>
+          </div>
+        </section>
+        ${riskNotice}
+        <section class="content-card">
+          <div class="eyebrow">当前优惠</div>
+          <h2>${escapeHtml(view.airport.name)}有效优惠码与折扣</h2>
+          <div class="card-grid">
+            ${view.active_deals.length > 0
+              ? view.active_deals.map(renderAirportDealDetailCard).join('')
+              : '<article class="mini-card"><h3>当前暂无有效优惠码</h3><p>本页会保留并在新活动生效后自动更新，请勿继续使用已经过期的优惠码。</p></article>'}
+          </div>
+        </section>
+        <section class="content-card">
+          <div class="eyebrow">机场参考信息</div>
+          <h2>购买前先核对服务能力与风险</h2>
+          <div class="card-grid">
+            <article class="mini-card"><h3>机场状态</h3><p>${escapeHtml(formatAirportStatusLabel(view.airport.status))}</p></article>
+            <article class="mini-card"><h3>支付方式</h3><p>${escapeHtml(paymentMethods)}</p></article>
+            <article class="mini-card"><h3>机场简介</h3><p>${escapeHtml(view.airport.airport_intro || '暂未收录机场简介。')}</p></article>
+          </div>
+          <p><a href="/airports/${encodeURIComponent(view.airport.slug)}">查看${escapeHtml(view.airport.name)}测评报告</a>${websiteHref === '#' ? '' : ` · <a href="${escapeAttribute(websiteHref)}" target="_blank" rel="sponsored nofollow noreferrer noopener">访问官网</a>`}</p>
+        </section>
+        <section class="content-card">
+          <div class="eyebrow">使用说明</div>
+          <h2>${escapeHtml(view.airport.name)}优惠码怎么使用</h2>
+          <p class="muted">复制仍在有效期内的优惠码，在服务商结算页面选择适用套餐后填写。提交订单前再次核对折后金额、活动期限、退款与叠加规则。优惠信息不影响 GateRank Score。</p>
+        </section>
+        <section class="content-card">
+          <h2>${escapeHtml(view.airport.name)}优惠码常见问题</h2>
+          <div class="card-grid">
+            ${faqItems.map((item) => `<article class="mini-card"><h3>${escapeHtml(item.question)}</h3><p>${escapeHtml(item.answer)}</p></article>`).join('')}
+          </div>
+        </section>
       </main>
     `,
   });
@@ -1374,6 +1468,7 @@ function formatOptionalCurrency(value: number | null | undefined): string {
 
 function normalizeExternalHref(value: string): string {
   const trimmed = value.trim();
+  if (!trimmed) return '#';
   return /^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`;
 }
 
@@ -2416,6 +2511,21 @@ function renderDealMiniCard(deal: AirportDealView): string {
       <p><strong>活动时间：</strong>${escapeHtml(formatDateOnly(deal.starts_at))} ～ ${escapeHtml(formatDateOnly(deal.ends_at))}</p>
       <p class="muted">试用：${deal.supports_trial ? '支持' : '不支持'} · USDT：${deal.supports_usdt ? '支持' : '不支持'} · 流媒体：${deal.supports_streaming ? '支持' : '不支持'} · AI：${deal.supports_ai ? '支持' : '不支持'}</p>
       <p><a href="${escapeAttribute(deal.report_url)}">查看测评</a> · <a href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow noreferrer noopener">访问官网</a></p>
+      <p class="muted">本活动不影响 GateRank Score。</p>
+    </article>
+  `;
+}
+
+function renderAirportDealDetailCard(deal: AirportDealView): string {
+  return `
+    <article class="mini-card" data-campaign-id="${escapeAttribute(String(deal.campaign_id))}">
+      <div class="eyebrow">广告</div>
+      <h3>${escapeHtml(deal.discount_title)}</h3>
+      <p><strong>优惠码：</strong><code>${escapeHtml(deal.coupon_code)}</code></p>
+      <p><strong>折扣说明：</strong>${escapeHtml(deal.discount_description)}</p>
+      <p><strong>适用套餐：</strong>${escapeHtml(deal.applicable_plan)}</p>
+      <p><strong>活动时间：</strong>${escapeHtml(formatDateOnly(deal.starts_at))} ～ ${escapeHtml(formatDateOnly(deal.ends_at))}</p>
+      <p class="muted">叠加：${deal.is_stackable ? '支持' : '不支持'} · 退款：${deal.refund_supported ? '支持' : '不支持'}</p>
       <p class="muted">本活动不影响 GateRank Score。</p>
     </article>
   `;
