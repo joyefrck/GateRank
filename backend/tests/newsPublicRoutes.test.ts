@@ -1082,7 +1082,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
       airportAdCampaignRepository: {
         listDealSitemapUpdates: async () => [
           { airport_slug: 'nebula', updated_at: '2026-04-05T12:30:00+08:00' },
-          { airport_slug: 'not-public', updated_at: '2026-04-06T12:30:00+08:00' },
+          { airport_slug: 'campaign-only', updated_at: '2026-04-06T12:30:00+08:00' },
         ],
       },
     }),
@@ -1104,7 +1104,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
     );
     const xml = await response.text();
     const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) || [];
-    assert.equal(urlBlocks.length, 68);
+    assert.equal(urlBlocks.length, 69);
     urlBlocks.forEach((block) => {
       assert.match(block, /<lastmod>[^<]+<\/lastmod>/);
     });
@@ -1130,7 +1130,8 @@ test('GET /sitemap.xml includes published news urls', async () => {
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/publish-token-docs<\/loc>\n    <lastmod>2026-05-24T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/airports\/nebula<\/loc>\n    <lastmod>2026-03-23T00:00:00\+08:00<\/lastmod>/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/deals\/nebula<\/loc>\n    <lastmod>2026-04-05T12:30:00\+08:00<\/lastmod>/);
-    assert.doesNotMatch(xml, /\/deals\/not-public/);
+    assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/deals\/campaign-only<\/loc>\n    <lastmod>2026-04-06T12:30:00\+08:00<\/lastmod>/);
+    assert.equal(xml.match(/\/deals\/nebula<\/loc>/g)?.length, 1);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/topic\/active-topic<\/loc>\n    <lastmod>2026-04-02T09:30:00\+08:00<\/lastmod>/);
     assert.doesNotMatch(xml, /\/news\/topic\/inactive-topic/);
     assert.match(xml, /<loc>http:\/\/127\.0\.0\.1:\d+\/news\/published-story<\/loc>\n    <lastmod>2026-04-02T09:30:00\+08:00<\/lastmod>/);

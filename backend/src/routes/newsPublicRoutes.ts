@@ -292,8 +292,13 @@ async function getDealSitemapEntries(
     const match = report.path.match(/^\/airports\/([^/?#]+)$/);
     if (!match) return;
     const slug = match[1];
-    const campaignLastmod = updateBySlug.get(slug);
-    const lastmod = campaignLastmod && campaignLastmod > report.lastmod ? campaignLastmod : report.lastmod;
+    entries.set(slug, { path: buildAirportDealDetailPath(slug), lastmod: report.lastmod });
+  });
+  updateBySlug.forEach((campaignLastmod, slug) => {
+    const existing = entries.get(slug);
+    const lastmod = existing && existing.lastmod > campaignLastmod
+      ? existing.lastmod
+      : campaignLastmod;
     entries.set(slug, { path: buildAirportDealDetailPath(slug), lastmod });
   });
   return [...entries.values()];
