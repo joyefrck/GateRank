@@ -11,9 +11,10 @@ interface DealCardProps {
   tone: string;
   pagePath: string;
   detailHref: string;
+  showDetailAction?: boolean;
 }
 
-export function DealCard({ deal, tone, pagePath, detailHref }: DealCardProps) {
+export function DealCard({ deal, tone, pagePath, detailHref, showDetailAction = true }: DealCardProps) {
   const ref = useRef<HTMLElement>(null);
   const [copied, setCopied] = useState(false);
   const websiteHref = normalizeExternalHref(deal.website);
@@ -87,19 +88,21 @@ export function DealCard({ deal, tone, pagePath, detailHref }: DealCardProps) {
         <SupportRow label="是否支持退款" ok={deal.refund_supported} yes="支持" no="不支持" />
       </ul>
 
-      <div className="mt-4 grid grid-cols-2 gap-y-1.5 border-t border-slate-200 pt-4 sm:grid-cols-[minmax(130px,1.15fr)_minmax(90px,.8fr)_minmax(76px,.65fr)] sm:gap-y-0">
-        <a
-          href={detailHref}
-          onClick={(event) => { event.preventDefault(); navigate(detailHref); }}
-          className="group col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-900 bg-stone-900 px-3 text-[13px] font-black text-white shadow-[0_8px_18px_rgba(23,23,23,0.14)] transition duration-200 hover:-translate-y-0.5 hover:bg-stone-800 hover:shadow-[0_12px_24px_rgba(23,23,23,0.18)] active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-900 focus-visible:ring-offset-2 motion-reduce:transform-none sm:col-span-1"
-        >
-          优惠详情
-          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-        </a>
+      <div className={`mt-4 grid grid-cols-2 gap-y-1.5 border-t border-slate-200 pt-4 ${showDetailAction ? 'sm:grid-cols-[minmax(130px,1.15fr)_minmax(90px,.8fr)_minmax(76px,.65fr)]' : 'sm:grid-cols-2'} sm:gap-y-0`}>
+        {showDetailAction ? (
+          <a
+            href={detailHref}
+            onClick={(event) => { event.preventDefault(); navigate(detailHref); }}
+            className="group col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-900 bg-stone-900 px-3 text-[13px] font-black text-white shadow-[0_8px_18px_rgba(23,23,23,0.14)] transition duration-200 hover:-translate-y-0.5 hover:bg-stone-800 hover:shadow-[0_12px_24px_rgba(23,23,23,0.18)] active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-900 focus-visible:ring-offset-2 motion-reduce:transform-none sm:col-span-1"
+          >
+            优惠详情
+            <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+          </a>
+        ) : null}
         <a
           href={deal.report_url}
           onClick={(event) => { event.preventDefault(); navigate(deal.report_url); }}
-          className="inline-flex h-10 items-center justify-center px-2 text-[13px] font-black text-slate-600 transition hover:text-slate-950 focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 sm:border-l sm:border-slate-200"
+          className={`inline-flex h-10 items-center justify-center px-2 text-[13px] font-black text-slate-600 transition hover:text-slate-950 focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 ${showDetailAction ? 'sm:border-l sm:border-slate-200' : ''} ${!showDetailAction && websiteHref === '#' ? 'col-span-2' : ''}`}
         >
           查看测评
         </a>

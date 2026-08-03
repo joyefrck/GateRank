@@ -134,6 +134,7 @@ export function DealDetailPage({ slug }: { slug: string }) {
                     tone={['orange', 'purple', 'blue', 'teal'][index % 4]}
                     pagePath={detailHref}
                     detailHref={detailHref}
+                    showDetailAction={false}
                   />
                 ))}
               </div>

@@ -167,6 +167,12 @@ test('React airport deal detail route preserves one slug page and SSR takeover',
   assert.match(detailSource, /当前暂无有效优惠码/);
   assert.match(detailSource, /RiskNotice/);
   assert.match(dealsSource, /detailHref=\{buildAirportDealDetailHref\(deal\.airport_slug\)\}/);
+  assert.match(cardSource, /showDetailAction\?: boolean/);
+  assert.match(cardSource, /showDetailAction = true/);
+  assert.match(detailSource, /showDetailAction=\{false\}/);
+  assert.doesNotMatch(dealsSource, /showDetailAction=\{false\}/);
+  assert.match(cardSource, /showDetailAction \? \(/);
+  assert.match(cardSource, /showDetailAction \? 'sm:grid-cols-/);
   assert.match(cardSource, /sponsored nofollow noreferrer noopener/);
   assert.doesNotMatch(cardSource, /\/deals\/\$\{deal\.campaign_id\}/);
   assert.match(cardSource, /import \{ ArrowRight, Check, Copy, ExternalLink, Sparkles \} from 'lucide-react'/);
