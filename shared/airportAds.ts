@@ -40,6 +40,43 @@ export interface AirportDealView {
   is_homepage?: boolean;
   tracking_started_at?: string | null;
   created_at: string;
+  updated_at?: string;
+}
+
+export interface AirportDealDetailAirport {
+  id: number;
+  slug: string;
+  name: string;
+  website: string;
+  status: 'normal' | 'risk' | 'down';
+  plan_price_month: number;
+  has_trial: boolean;
+  payment_methods: string[];
+  airport_intro: string;
+  tags: string[];
+}
+
+export interface AirportDealDetailView {
+  airport: AirportDealDetailAirport;
+  active_deals: AirportDealView[];
+  generated_at: string;
+}
+
+export interface AirportDealSitemapUpdate {
+  airport_slug: string;
+  updated_at: string;
+}
+
+export function buildAirportDealDetailPath(slug: string): string {
+  return `/deals/${encodeURIComponent(slug)}`;
+}
+
+export function sortAirportDealViews(deals: AirportDealView[]): AirportDealView[] {
+  return [...deals].sort((left, right) =>
+    left.ends_at.localeCompare(right.ends_at)
+      || left.starts_at.localeCompare(right.starts_at)
+      || left.campaign_id - right.campaign_id,
+  );
 }
 
 export type PortalAirportAdCampaignStatus = 'active' | 'expired' | 'canceled';

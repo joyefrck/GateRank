@@ -16,7 +16,11 @@ import {
   getAirportFilterSeoLabel,
   type AirportPrimaryIndexableFilterCategory,
 } from './airportFilterCatalog';
-import type { AirportDealView } from './airportAds';
+import {
+  buildAirportDealDetailPath,
+  type AirportDealDetailView,
+  type AirportDealView,
+} from './airportAds';
 
 export interface PublicSeoText {
   title: string;
@@ -467,7 +471,9 @@ export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | 
   if (pathname === PUBLIC_SEO_PATHS.monthlyReports || pathname.startsWith(`${PUBLIC_SEO_PATHS.monthlyReports}/`)) {
     return PUBLIC_CORE_OG_IMAGES.monthlyReports;
   }
-  if (pathname === PUBLIC_SEO_PATHS.deals) return PUBLIC_CORE_OG_IMAGES.deals;
+  if (pathname === PUBLIC_SEO_PATHS.deals || pathname.startsWith(`${PUBLIC_SEO_PATHS.deals}/`)) {
+    return PUBLIC_CORE_OG_IMAGES.deals;
+  }
   if (pathname === PUBLIC_SEO_PATHS.riskMonitor) return PUBLIC_CORE_OG_IMAGES.riskMonitor;
   if (pathname === PUBLIC_SEO_PATHS.methodology) return PUBLIC_CORE_OG_IMAGES.methodology;
   if (pathname === PUBLIC_SEO_PATHS.rankingTransparency) {
@@ -724,6 +730,110 @@ export function buildDealsSeo(input?: {
         : `${PUBLIC_SITE_BRAND_NAME} 机场优惠码大全聚合机场服务商发布的活动折扣、免费试用、新用户优惠与 USDT 支付优惠。优惠信息不影响 GateRank Score。`,
     keywords: '机场优惠码大全,机场优惠码,机场折扣,机场活动优惠,机场免费试用,USDT支付优惠,GateRank活动优惠,机场榜GateRank',
   };
+}
+
+export function buildAirportDealDetailSeo(
+  view: AirportDealDetailView,
+  currentYear: number,
+): PublicSeoText {
+  const count = view.active_deals.length;
+  const statusText = count > 0
+    ? `当前汇总 ${formatCount(count)} 个有效优惠活动，包含优惠码、适用套餐、活动期限、叠加与退款规则。`
+    : '当前暂无有效优惠码，页面将持续更新该机场的活动折扣，并提供价格、试用、支付方式与测评入口。';
+  return {
+    title: `${view.airport.name}优惠码 ${currentYear}｜最新优惠、折扣活动与使用说明 | ${PUBLIC_SITE_BRAND_NAME}`,
+    description: `查询${view.airport.name}最新优惠码和折扣活动。${statusText}优惠信息不影响 GateRank Score。`,
+    keywords: `${view.airport.name}优惠码,${view.airport.name}优惠,${view.airport.name}折扣,${view.airport.name}活动,机场优惠码,${PUBLIC_SITE_BRAND_NAME}`,
+  };
+}
+
+export function buildAirportDealDetailFaqItems(view: AirportDealDetailView): PublicDealsFaqItem[] {
+  const airportName = view.airport.name;
+  const activeAnswer = view.active_deals.length > 0
+    ? `${airportName}当前有 ${view.active_deals.length} 个有效优惠活动，具体优惠码、适用套餐和截止时间以本页活动卡及服务商结算页面为准。`
+    : `${airportName}当前暂无有效优惠码。本页会保留并在新活动生效后自动更新。`;
+  return [
+    {
+      question: `${airportName}现在有可用优惠码吗？`,
+      answer: activeAnswer,
+    },
+    {
+      question: `${airportName}优惠码会影响 GateRank 排名吗？`,
+      answer: '不会。优惠活动、广告投放和优惠码不进入 GateRank Score，也不改变榜单排序。',
+    },
+    {
+      question: `${airportName}优惠码过期了怎么办？`,
+      answer: '过期优惠码不会继续展示为有效活动。购买前应再次核对服务商结算页中的价格、套餐和有效期。',
+    },
+  ];
+}
+
+export function buildAirportDealDetailStructuredData(
+  siteUrl: string,
+  view: AirportDealDetailView,
+  currentYear: number,
+): Array<Record<string, unknown>> {
+  const normalizedSiteUrl = siteUrl.replace(/\/+$/, '');
+  const path = buildAirportDealDetailPath(view.airport.slug);
+  const url = `${normalizedSiteUrl}${path}`;
+  const seo = buildAirportDealDetailSeo(view, currentYear);
+  const faqItems = buildAirportDealDetailFaqItems(view);
+  const service: Record<string, unknown> = {
+    '@context': 'https://schema.org',
+    '@type': 'Service',
+    name: `${view.airport.name}机场服务`,
+    description: view.airport.airport_intro || seo.description,
+    url,
+    provider: {
+      '@type': 'Organization',
+      name: view.airport.name,
+      url: normalizeExternalHref(view.airport.website),
+    },
+  };
+  if (view.active_deals.length > 0) {
+    service.offers = view.active_deals.map((deal) => ({
+      '@type': 'Offer',
+      name: `${view.airport.name} ${deal.discount_title}`,
+      description: deal.discount_description,
+      identifier: deal.coupon_code,
+      url,
+      validFrom: deal.starts_at,
+      validThrough: deal.ends_at,
+      availability: 'https://schema.org/InStock',
+      category: '机场优惠码',
+    }));
+  }
+  return [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'WebPage',
+      name: seo.title,
+      description: seo.description,
+      url,
+      about: {
+        '@type': 'Service',
+        name: view.airport.name,
+      },
+    },
+    buildBreadcrumbJsonLd(normalizedSiteUrl, [
+      ['今日推荐', '/'],
+      ['活动优惠', PUBLIC_SEO_PATHS.deals],
+      [view.airport.name, path],
+    ]),
+    service,
+    {
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: faqItems.map((item) => ({
+        '@type': 'Question',
+        name: item.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: item.answer,
+        },
+      })),
+    },
+  ];
 }
 
 export const DEALS_CONTENT_SECTIONS: PublicDealsContentSection[] = [
