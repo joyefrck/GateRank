@@ -51,6 +51,7 @@ test('React route mapping explicitly classifies or excludes every route kind', (
     monthly_reports: 'monthly_reports',
     monthly_report: 'monthly_report',
     deals: 'deals',
+    deal_detail: 'deals',
     risk_monitor: 'risk_monitor',
     methodology: 'methodology',
     ranking_transparency: 'ranking_transparency',

@@ -9,6 +9,7 @@ export type AppRouteKind =
   | 'monthly_reports'
   | 'monthly_report'
   | 'deals'
+  | 'deal_detail'
   | 'risk_monitor'
   | 'methodology'
   | 'ranking_transparency'
@@ -29,6 +30,7 @@ export const MARKETING_PAGE_KIND_BY_ROUTE = {
   monthly_reports: 'monthly_reports',
   monthly_report: 'monthly_report',
   deals: 'deals',
+  deal_detail: 'deals',
   risk_monitor: 'risk_monitor',
   methodology: 'methodology',
   ranking_transparency: 'ranking_transparency',

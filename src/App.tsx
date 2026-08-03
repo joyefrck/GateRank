@@ -110,6 +110,7 @@ import {
 } from '../shared/toolDownloads';
 import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import { DealsPage } from './pages/deals/DealsPage';
+import { DealDetailPage } from './pages/deals/DealDetailPage';
 import { StreamingCheckPage } from './pages/streamingCheck/StreamingCheckPage';
 import { IPCheckPage } from './pages/ipCheck/IPCheckPage';
 import { DNSLeakTestPage } from './pages/dnsLeakTest/DNSLeakTestPage';
@@ -408,7 +409,7 @@ interface ReportCapabilityItem {
   label: string;
 }
 
-type InitialPublicDataKind = 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'monthly_reports' | 'monthly_report' | 'tools_download';
+type InitialPublicDataKind = 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'deal_detail' | 'monthly_reports' | 'monthly_report' | 'tools_download';
 
 interface InitialPublicDataEnvelope<T> {
   kind: InitialPublicDataKind;
@@ -1428,6 +1429,7 @@ function parseRoute(): RouteState {
   const staticFullRankingMatch = parseFullRankingStaticPath(path);
   const monthlyReportsMatch = path.match(/^\/monthly-reports\/?$/);
   const monthlyReportMatch = path.match(/^\/monthly-reports\/([a-z0-9-]+)$/);
+  const dealDetailMatch = path.match(/^\/deals\/([a-z0-9-]+)\/?$/);
   const dealsMatch = path.match(/^\/deals\/?$/);
   const riskMonitorMatch = path.match(/^\/risk-monitor\/?$/);
   const toolsMatch = path.match(/^\/tools\/?$/);
@@ -1531,6 +1533,13 @@ function parseRoute(): RouteState {
     return {
       kind: 'monthly_report',
       monthlyReportSlug: monthlyReportMatch[1],
+    };
+  }
+
+  if (dealDetailMatch) {
+    return {
+      kind: 'deal_detail',
+      airportSlug: dealDetailMatch[1],
     };
   }
 
@@ -9371,6 +9380,10 @@ export default function App() {
 
   if (route.kind === 'deals') {
     return <DealsPage />;
+  }
+
+  if (route.kind === 'deal_detail') {
+    return <DealDetailPage slug={route.airportSlug || ''} />;
   }
 
   if (route.kind === 'risk_monitor') {

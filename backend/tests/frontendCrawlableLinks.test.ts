@@ -149,6 +149,26 @@ test('React deals page uses the shared orange list hero', async () => {
   assert.doesNotMatch(source, /function HeroMetric/);
 });
 
+test('React airport deal detail route preserves one slug page and SSR takeover', async () => {
+  const appSource = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+  const detailSource = await readFile(path.join(process.cwd(), 'src/pages/deals/DealDetailPage.tsx'), 'utf8');
+  const cardSource = await readFile(path.join(process.cwd(), 'src/pages/deals/DealCard.tsx'), 'utf8');
+  const dealsSource = await readFile(path.join(process.cwd(), 'src/pages/deals/DealsPage.tsx'), 'utf8');
+
+  const detailMatchIndex = appSource.indexOf('const dealDetailMatch');
+  const listMatchIndex = appSource.indexOf('const dealsMatch');
+  assert.ok(detailMatchIndex >= 0 && detailMatchIndex < listMatchIndex);
+  assert.match(appSource, /kind: 'deal_detail'/);
+  assert.match(appSource, /<DealDetailPage slug=\{route\.airportSlug \|\| ''\}/);
+  assert.match(detailSource, /readDealDetailInitialData\(slug\)/);
+  assert.match(detailSource, /data\.active_deals\.map/);
+  assert.match(detailSource, /当前暂无有效优惠码/);
+  assert.match(detailSource, /RiskNotice/);
+  assert.match(dealsSource, /detailHref=\{buildAirportDealDetailHref\(deal\.airport_slug\)\}/);
+  assert.match(cardSource, /sponsored nofollow noreferrer noopener/);
+  assert.doesNotMatch(cardSource, /\/deals\/\$\{deal\.campaign_id\}/);
+});
+
 test('Portal activity title helper only appears for homepage ads', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
   const modalStart = source.indexOf('function PortalAdCampaignModal');

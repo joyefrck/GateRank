@@ -6,6 +6,7 @@ import { PUBLIC_NAVIGATION_ITEMS, type PublicNavigationKind } from '../../shared
 import { PUBLIC_TOP_NAV_STYLES, renderPublicTopNav } from '../../shared/publicTopNav';
 import { getPublicOgImageForPath, type PublicOgImage } from '../../shared/publicSeo';
 import { buildFullRankingPath, EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../shared/fullRankingFilters';
+import { buildAirportDealDetailPath } from '../../shared/airportAds';
 
 export type NavigationKind = PublicNavigationKind | 'docs';
 
@@ -88,6 +89,10 @@ export function buildRiskMonitorHref(date?: string, page = 1): string {
 
 export function buildDealsHref(): string {
   return '/deals';
+}
+
+export function buildAirportDealDetailHref(slug: string): string {
+  return buildAirportDealDetailPath(slug);
 }
 
 export function buildMethodologyHref(): string {
