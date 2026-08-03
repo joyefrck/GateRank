@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Check, Copy, ExternalLink, Sparkles } from 'lucide-react';
+import { ArrowRight, Check, Copy, ExternalLink, Sparkles } from 'lucide-react';
 
 import type { AirportDealView } from '../../../shared/airportAds';
 import { navigate, normalizeExternalHref } from '../../site/publicSite';
@@ -87,12 +87,31 @@ export function DealCard({ deal, tone, pagePath, detailHref }: DealCardProps) {
         <SupportRow label="是否支持退款" ok={deal.refund_supported} yes="支持" no="不支持" />
       </ul>
 
-      <div className="mt-4 grid grid-cols-[repeat(auto-fit,minmax(112px,1fr))] gap-2.5">
-        <a href={detailHref} onClick={(event) => { event.preventDefault(); navigate(detailHref); }} className="inline-flex h-[38px] items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] font-black text-slate-900">优惠详情</a>
-        <a href={deal.report_url} onClick={(event) => { event.preventDefault(); navigate(deal.report_url); }} className="inline-flex h-[38px] items-center justify-center rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] font-black text-slate-900">查看测评</a>
+      <div className="mt-4 grid grid-cols-2 gap-y-1.5 border-t border-slate-200 pt-4 sm:grid-cols-[minmax(130px,1.15fr)_minmax(90px,.8fr)_minmax(76px,.65fr)] sm:gap-y-0">
+        <a
+          href={detailHref}
+          onClick={(event) => { event.preventDefault(); navigate(detailHref); }}
+          className="group col-span-2 inline-flex h-10 items-center justify-center gap-1.5 rounded-xl border border-stone-900 bg-stone-900 px-3 text-[13px] font-black text-white shadow-[0_8px_18px_rgba(23,23,23,0.14)] transition duration-200 hover:-translate-y-0.5 hover:bg-stone-800 hover:shadow-[0_12px_24px_rgba(23,23,23,0.18)] active:translate-y-0 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-900 focus-visible:ring-offset-2 motion-reduce:transform-none sm:col-span-1"
+        >
+          优惠详情
+          <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
+        </a>
+        <a
+          href={deal.report_url}
+          onClick={(event) => { event.preventDefault(); navigate(deal.report_url); }}
+          className="inline-flex h-10 items-center justify-center px-2 text-[13px] font-black text-slate-600 transition hover:text-slate-950 focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 sm:border-l sm:border-slate-200"
+        >
+          查看测评
+        </a>
         {websiteHref === '#' ? null : (
-          <a href={websiteHref} target="_blank" onClick={outboundClick} rel="sponsored nofollow noreferrer noopener" className="inline-flex h-[38px] items-center justify-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 text-[13px] font-black text-slate-900">
-            访问官网
+          <a
+            href={websiteHref}
+            target="_blank"
+            onClick={outboundClick}
+            rel="sponsored nofollow noreferrer noopener"
+            className="inline-flex h-10 items-center justify-center gap-1 border-l border-slate-200 px-2 text-[13px] font-black text-slate-600 transition hover:text-slate-950 focus-visible:rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2"
+          >
+            官网
             <ExternalLink className="h-3.5 w-3.5" />
           </a>
         )}

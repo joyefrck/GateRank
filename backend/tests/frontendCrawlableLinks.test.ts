@@ -169,12 +169,17 @@ test('React airport deal detail route preserves one slug page and SSR takeover',
   assert.match(dealsSource, /detailHref=\{buildAirportDealDetailHref\(deal\.airport_slug\)\}/);
   assert.match(cardSource, /sponsored nofollow noreferrer noopener/);
   assert.doesNotMatch(cardSource, /\/deals\/\$\{deal\.campaign_id\}/);
-  assert.match(cardSource, /import \{ Check, Copy, ExternalLink, Sparkles \} from 'lucide-react'/);
+  assert.match(cardSource, /import \{ ArrowRight, Check, Copy, ExternalLink, Sparkles \} from 'lucide-react'/);
   assert.match(cardSource, /aria-label=\{copied \? '优惠码已复制' : '复制优惠码'\}/);
   assert.match(cardSource, /title=\{copied \? '优惠码已复制' : '复制优惠码'\}/);
   assert.match(cardSource, /copied \? <Check[^>]*> : <Copy/);
   assert.doesNotMatch(cardSource, /bg-neutral-950/);
   assert.doesNotMatch(cardSource, /\{copied \? '已复制' : '复制优惠码'\}/);
+  assert.match(cardSource, /grid-cols-2[^"\n]*sm:grid-cols-\[minmax\(130px,1\.15fr\)_minmax\(90px,\.8fr\)_minmax\(76px,\.65fr\)\]/);
+  assert.match(cardSource, /group col-span-2[^"\n]*border-stone-900 bg-stone-900[^"\n]*sm:col-span-1/);
+  assert.match(cardSource, /group-hover:translate-x-0\.5/);
+  assert.match(cardSource, /border-l border-slate-200/);
+  assert.doesNotMatch(cardSource, /grid-cols-\[repeat\(auto-fit/);
 });
 
 test('Portal activity title helper only appears for homepage ads', async () => {
