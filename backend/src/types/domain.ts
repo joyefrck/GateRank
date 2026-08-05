@@ -119,6 +119,7 @@ export type SchedulerTaskKey =
   | 'billing_listing_sync'
   | 'stability_resample_guard';
 export type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
+export type SchedulerRunOutcome = SchedulerRunStatus | 'partial';
 export type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
 
 export interface Airport {
@@ -280,6 +281,26 @@ export interface SchedulerRun {
   message: string | null;
   detail_json: Record<string, unknown> | null;
   created_at: string;
+}
+
+export interface SchedulerRunFailureDetail {
+  airport_id: number | null;
+  airport_name: string | null;
+  error: string;
+}
+
+export interface SchedulerRunResultSummary {
+  total_count: number;
+  success_count: number;
+  failure_count: number;
+  skipped_count: number;
+  failures: SchedulerRunFailureDetail[];
+  missing_failure_detail_count: number;
+}
+
+export interface SchedulerRunView extends SchedulerRun {
+  outcome: SchedulerRunOutcome;
+  result_summary: SchedulerRunResultSummary | null;
 }
 
 export interface AirportScoreDaily extends ScoreBreakdown {
