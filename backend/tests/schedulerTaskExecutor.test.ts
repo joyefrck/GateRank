@@ -121,6 +121,39 @@ test('SchedulerTaskExecutor.runRiskInspection skips down and unlisted airports',
   const result = await executor.runRiskInspection('2026-03-30');
   assert.equal(result.status, 'succeeded');
   assert.deepEqual(inspected, [1, 3]);
+  assert.equal(result.detail.total_count, 2);
+  assert.equal(result.detail.success_count, 2);
+  assert.equal(result.detail.failure_count, 0);
+  assert.deepEqual(result.detail.failures, []);
+});
+
+test('SchedulerTaskExecutor.runRiskInspection retains every failed airport detail', async () => {
+  const executor = createSchedulerTaskExecutor({
+    airportRepository: {
+      listAll: async () => [
+        { id: 43, name: '网际快车', status: 'normal', is_listed: true },
+        { id: 72, name: '闪狐云', status: 'risk', is_listed: true },
+      ],
+    },
+    riskCheckService: {
+      inspectAirportForDate: async (airportId: number) => {
+        throw new Error(airportId === 43
+          ? 'request https://secret.example/token timed out'
+          : 'connection reset');
+      },
+    },
+  });
+
+  const result = await executor.runRiskInspection('2026-08-05');
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.detail.total_count, 2);
+  assert.equal(result.detail.success_count, 0);
+  assert.equal(result.detail.failure_count, 2);
+  assert.deepEqual(result.detail.failures, [
+    { airport_id: 43, airport_name: '网际快车', error: 'request [redacted-url] timed out' },
+    { airport_id: 72, airport_name: '闪狐云', error: 'connection reset' },
+  ]);
 });
 
 test('SchedulerTaskExecutor.runStabilityCollection surfaces script failure details from stdout', async () => {
@@ -153,6 +186,47 @@ test('SchedulerTaskExecutor.runStabilityCollection surfaces script failure detai
     result.detail.summary,
     '2/3 succeeded, 1 failed; Hangzhou #7: airport 7 has no website configured',
   );
+  assert.equal(result.detail.airport_count, 3);
+  assert.equal(result.detail.success_count, 2);
+  assert.equal(result.detail.failure_count, 1);
+  assert.deepEqual(result.detail.failures, [{
+    airport_id: 7,
+    airport_name: 'Hangzhou',
+    error: 'airport 7 has no website configured',
+  }]);
+});
+
+test('SchedulerTaskExecutor.runPerformanceCollection retains every structured script failure', async () => {
+  const executor = createSchedulerTaskExecutor({
+    execFileAsync: async () => {
+      const error = new Error('Command failed: python3 monitor_performance.py') as Error & {
+        stdout: string;
+        stderr: string;
+      };
+      error.stdout = JSON.stringify({
+        airport_count: 3,
+        success_count: 1,
+        failure_count: 2,
+        failures: [
+          { airport_id: 43, airport_name: '网际快车', error: 'timeout' },
+          { airport_id: 72, airport_name: '闪狐云', error: 'fetch https://secret.example/token failed' },
+        ],
+      });
+      error.stderr = '';
+      throw error;
+    },
+  });
+
+  const result = await executor.runPerformanceCollection('2026-08-05');
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.detail.airport_count, 3);
+  assert.equal(result.detail.success_count, 1);
+  assert.equal(result.detail.failure_count, 2);
+  assert.deepEqual(result.detail.failures, [
+    { airport_id: 43, airport_name: '网际快车', error: 'timeout' },
+    { airport_id: 72, airport_name: '闪狐云', error: 'fetch [redacted-url] failed' },
+  ]);
 });
 
 test('SchedulerTaskExecutor.runPerformanceCollection injects scheduler-safe probe defaults', async () => {

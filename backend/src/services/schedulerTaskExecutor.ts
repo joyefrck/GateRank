@@ -7,7 +7,7 @@ import {
   resolveBinaryPath,
 } from '../utils/runtimeBinary';
 import { getAdminAuthConfig } from '../utils/adminAuthConfig';
-import type { AirportScoreDaily, SchedulerTaskKey } from '../types/domain';
+import type { AirportScoreDaily, SchedulerRunFailureDetail, SchedulerTaskKey } from '../types/domain';
 import { signAdminToken } from '../utils/token';
 import type { BillingMailNotificationEvent } from '../repositories/applicantBillingRepository';
 import { sendBillingMailNotificationsSafely, type BillingMailService } from './billingMailNotificationService';
@@ -36,7 +36,7 @@ interface LoggerLike {
 
 interface SchedulerTaskExecutorDeps {
   airportRepository: {
-    listAll(): Promise<Array<{ id: number; status?: string; is_listed?: boolean }>>;
+    listAll(): Promise<Array<{ id: number; name?: string; status?: string; is_listed?: boolean }>>;
   };
   riskCheckService: {
     inspectAirportForDate(airportId: number, date: string): Promise<{ domain_ok: boolean; ssl_days_left: number | null }>;
@@ -149,6 +149,7 @@ export class SchedulerTaskExecutor {
       detail: {
         stage: 'stability',
         summary: result.detail,
+        ...(result.executionSummary || {}),
       },
     };
   }
@@ -161,6 +162,7 @@ export class SchedulerTaskExecutor {
       detail: {
         stage: 'performance',
         summary: result.detail,
+        ...(result.executionSummary || {}),
       },
     };
   }
@@ -239,6 +241,10 @@ export class SchedulerTaskExecutor {
       detail: {
         stage: 'risk',
         summary: result.detail,
+        total_count: result.totalCount,
+        success_count: result.successCount,
+        failure_count: result.failureCount,
+        failures: result.failures,
       },
     };
   }
@@ -396,7 +402,12 @@ export class SchedulerTaskExecutor {
     stage: 'stability' | 'performance',
     scriptName: 'monitor_stability.py' | 'monitor_performance.py',
     source: string,
-  ): Promise<{ stage: string; status: 'succeeded' | 'failed'; detail: string }> {
+  ): Promise<{
+    stage: string;
+    status: 'succeeded' | 'failed';
+    detail: string;
+    executionSummary?: ScriptExecutionSummary;
+  }> {
     if (!this.adminApiKey && !this.adminBearerToken) {
       return {
         stage,
@@ -432,13 +443,20 @@ export class SchedulerTaskExecutor {
         maxBuffer: 10 * 1024 * 1024,
         timeout: this.scriptTimeoutMs,
       });
-      const detail = summarizeScriptOutput(stdout, stderr);
+      const executionSummary = parseScriptExecutionSummary(stdout, stderr);
+      const detail = executionSummary
+        ? summarizeParsedScriptExecution(executionSummary)
+        : summarizeScriptOutput(stdout, stderr);
       this.logger.log(`[scheduler] ${stage} stage succeeded${detail ? `: ${detail}` : ''}`);
-      return { stage, status: 'succeeded', detail: detail || 'ok' };
+      return { stage, status: 'succeeded', detail: detail || 'ok', executionSummary: executionSummary || undefined };
     } catch (error) {
-      const detail = summarizeScriptFailure(error, this.singBoxBin, this.scriptTimeoutMs);
+      const execError = asExecFailure(error);
+      const executionSummary = parseScriptExecutionSummary(execError?.stdout, execError?.stderr);
+      const detail = executionSummary
+        ? summarizeParsedScriptExecution(executionSummary)
+        : summarizeScriptFailure(error, this.singBoxBin, this.scriptTimeoutMs);
       this.logger.error(`[scheduler] ${stage} stage failed`, error);
-      return { stage, status: 'failed', detail };
+      return { stage, status: 'failed', detail, executionSummary: executionSummary || undefined };
     }
   }
 
@@ -476,7 +494,15 @@ export class SchedulerTaskExecutor {
     }
   }
 
-  private async runRiskStage(date: string): Promise<{ stage: string; status: 'succeeded' | 'failed'; detail: string }> {
+  private async runRiskStage(date: string): Promise<{
+    stage: string;
+    status: 'succeeded' | 'failed';
+    detail: string;
+    totalCount: number;
+    successCount: number;
+    failureCount: number;
+    failures: SchedulerRunFailureDetail[];
+  }> {
     try {
       const airports = await this.deps.airportRepository.listAll();
       const filtered = airports.filter((airport) => {
@@ -487,6 +513,7 @@ export class SchedulerTaskExecutor {
       });
       let successCount = 0;
       let failureCount = 0;
+      const failures: SchedulerRunFailureDetail[] = [];
 
       for (let index = 0; index < filtered.length; index += 1) {
         const airport = filtered[index];
@@ -495,6 +522,11 @@ export class SchedulerTaskExecutor {
           successCount += 1;
         } catch (error) {
           failureCount += 1;
+          failures.push({
+            airport_id: airport.id,
+            airport_name: airport.name?.trim() || null,
+            error: sanitizeSchedulerDetail(error instanceof Error ? error.message : String(error)),
+          });
           this.logger.error(`[scheduler] risk stage failed for airport ${airport.id}`, error);
         }
 
@@ -505,14 +537,38 @@ export class SchedulerTaskExecutor {
 
       const detail = `${successCount} succeeded, ${failureCount} failed`;
       if (failureCount > 0) {
-        return { stage: 'risk', status: 'failed', detail };
+        return {
+          stage: 'risk',
+          status: 'failed',
+          detail,
+          totalCount: filtered.length,
+          successCount,
+          failureCount,
+          failures,
+        };
       }
       this.logger.log(`[scheduler] risk stage succeeded: ${detail}`);
-      return { stage: 'risk', status: 'succeeded', detail };
+      return {
+        stage: 'risk',
+        status: 'succeeded',
+        detail,
+        totalCount: filtered.length,
+        successCount,
+        failureCount,
+        failures,
+      };
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       this.logger.error('[scheduler] risk stage crashed', error);
-      return { stage: 'risk', status: 'failed', detail };
+      return {
+        stage: 'risk',
+        status: 'failed',
+        detail,
+        totalCount: 0,
+        successCount: 0,
+        failureCount: 0,
+        failures: [],
+      };
     }
   }
 
@@ -541,6 +597,83 @@ export class SchedulerTaskExecutor {
       return { stage: 'recompute', status: 'failed', detail };
     }
   }
+}
+
+interface ScriptExecutionSummary {
+  airport_count: number;
+  success_count: number;
+  failure_count: number;
+  failures: SchedulerRunFailureDetail[];
+}
+
+function parseScriptExecutionSummary(stdout?: string, stderr?: string): ScriptExecutionSummary | null {
+  const output = stdout?.trim() || stderr?.trim();
+  if (!output) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(output) as {
+      airport_count?: unknown;
+      success_count?: unknown;
+      failure_count?: unknown;
+      failures?: unknown;
+    };
+    const airportCount = toNonNegativeInteger(parsed.airport_count);
+    const successCount = toNonNegativeInteger(parsed.success_count);
+    const failureCount = toNonNegativeInteger(parsed.failure_count);
+    if (airportCount === null || successCount === null || failureCount === null) {
+      return null;
+    }
+    const failures = Array.isArray(parsed.failures)
+      ? parsed.failures.map(toSchedulerFailureDetail).filter((item): item is SchedulerRunFailureDetail => item !== null)
+      : [];
+    return {
+      airport_count: airportCount,
+      success_count: successCount,
+      failure_count: failureCount,
+      failures,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function summarizeParsedScriptExecution(summary: ScriptExecutionSummary): string {
+  const countSummary = `${summary.success_count}/${summary.airport_count} succeeded, ${summary.failure_count} failed`;
+  const firstFailure = summary.failures[0];
+  if (!firstFailure?.error) {
+    return countSummary;
+  }
+  const label = [firstFailure.airport_name, firstFailure.airport_id ? `#${firstFailure.airport_id}` : null]
+    .filter(Boolean)
+    .join(' ');
+  return `${countSummary}; ${label ? `${label}: ` : ''}${firstFailure.error}`;
+}
+
+function toSchedulerFailureDetail(value: unknown): SchedulerRunFailureDetail | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const item = value as Record<string, unknown>;
+  const error = sanitizeSchedulerDetail(String(item.error || '').trim());
+  if (!error) {
+    return null;
+  }
+  return {
+    airport_id: toNonNegativeInteger(item.airport_id),
+    airport_name: typeof item.airport_name === 'string' && item.airport_name.trim()
+      ? item.airport_name.trim()
+      : null,
+    error,
+  };
+}
+
+function toNonNegativeInteger(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : null;
 }
 
 function summarizeScriptOutput(stdout: string, stderr: string): string {

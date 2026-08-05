@@ -184,6 +184,9 @@ function validCounts(counts: BatchCounts): boolean {
 }
 
 function toNonNegativeInteger(value: unknown): number | null {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
   const number = Number(value);
   return Number.isInteger(number) && number >= 0 ? number : null;
 }
