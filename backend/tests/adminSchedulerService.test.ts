@@ -434,12 +434,15 @@ test('AdminSchedulerService presents partial outcomes consistently across schedu
   const runs = await service.listRuns({ page: 1, pageSize: 20 });
   const stats = await service.getDailyStats({ dateFrom: '2026-08-05', dateTo: '2026-08-05' });
 
-  const latestRun = tasks[0]?.latest_run as Record<string, unknown>;
-  const listedRun = runs.items[0] as Record<string, unknown>;
-  const daily = stats.items[0] as unknown as Record<string, unknown>;
+  const latestRun = tasks[0]?.latest_run;
+  const listedRun = runs.items[0];
+  const daily = stats.items[0];
+  assert.ok(latestRun);
+  assert.ok(listedRun);
+  assert.ok(daily);
   assert.equal(latestRun.outcome, 'partial');
-  assert.equal((latestRun.result_summary as Record<string, unknown>).success_count, 60);
+  assert.equal(latestRun.result_summary?.success_count, 60);
   assert.equal(listedRun.outcome, 'partial');
   assert.equal(daily.last_outcome, 'partial');
-  assert.equal((daily.last_result_summary as Record<string, unknown>).failure_count, 1);
+  assert.equal(daily.last_result_summary?.failure_count, 1);
 });

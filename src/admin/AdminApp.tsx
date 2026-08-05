@@ -124,6 +124,7 @@ type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 type PublishTokenScope = 'news:create' | 'news:update' | 'news:publish' | 'news:archive' | 'news:upload';
 type SchedulerTaskKey = 'stability' | 'subscription_node_refresh' | 'performance' | 'risk' | 'aggregate_recompute' | 'billing_listing_sync' | 'stability_resample_guard';
 type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
+type SchedulerRunOutcome = SchedulerRunStatus | 'partial';
 type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
 type ToolDownloadPlatform = 'windows' | 'macos' | 'ios' | 'android' | 'linux';
 type ToolDownloadStatus = 'draft' | 'published' | 'archived';
@@ -1122,6 +1123,23 @@ interface SchedulerRunRecord {
   message: string | null;
   detail_json: Record<string, unknown> | null;
   created_at: string;
+  outcome: SchedulerRunOutcome;
+  result_summary: SchedulerRunResultSummary | null;
+}
+
+interface SchedulerRunFailureDetail {
+  airport_id: number | null;
+  airport_name: string | null;
+  error: string;
+}
+
+interface SchedulerRunResultSummary {
+  total_count: number;
+  success_count: number;
+  failure_count: number;
+  skipped_count: number;
+  failures: SchedulerRunFailureDetail[];
+  missing_failure_detail_count: number;
 }
 
 interface SchedulerTaskView {
@@ -1162,6 +1180,8 @@ interface SchedulerDailyStat {
   last_status: SchedulerRunStatus;
   last_started_at: string | null;
   last_finished_at: string | null;
+  last_outcome: SchedulerRunOutcome;
+  last_result_summary: SchedulerRunResultSummary | null;
 }
 
 interface SchedulerDailyStatsResponse {
@@ -2923,6 +2943,76 @@ function formatUploadBytes(bytes: number): string {
   return `${bytes} B`;
 }
 
+function SchedulerOutcomeBadge({ outcome }: { outcome: SchedulerRunOutcome }) {
+  const className = outcome === 'succeeded'
+    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+    : outcome === 'partial'
+      ? 'border-amber-200 bg-amber-50 text-amber-800'
+      : outcome === 'failed'
+        ? 'border-rose-200 bg-rose-50 text-rose-700'
+        : 'border-neutral-200 bg-neutral-100 text-neutral-600';
+  return (
+    <span className={`inline-flex min-h-7 items-center rounded-lg border px-2.5 py-1 text-xs font-bold ${className}`}>
+      {formatSchedulerRunStatus(outcome)}
+    </span>
+  );
+}
+
+function SchedulerResultSummary({
+  summary,
+  compact = false,
+}: {
+  summary: SchedulerRunResultSummary | null;
+  compact?: boolean;
+}) {
+  if (!summary) return null;
+  return (
+    <div className={`flex flex-wrap items-center gap-x-3 gap-y-1 ${compact ? 'text-xs' : 'text-sm'}`}>
+      <span className="font-medium text-neutral-700">总数 {summary.total_count}</span>
+      <span className="font-semibold text-emerald-700">成功 {summary.success_count}</span>
+      <span className="font-semibold text-rose-700">失败 {summary.failure_count}</span>
+      {summary.skipped_count > 0 && (
+        <span className="font-medium text-neutral-500">跳过 {summary.skipped_count}</span>
+      )}
+    </div>
+  );
+}
+
+function SchedulerFailureDetails({ summary }: { summary: SchedulerRunResultSummary | null }) {
+  if (!summary || (summary.failure_count === 0 && summary.missing_failure_detail_count === 0)) {
+    return null;
+  }
+  return (
+    <details className="mt-3 rounded-xl border border-rose-100 bg-white px-3 py-2 text-sm">
+      <summary className="min-h-10 cursor-pointer select-none py-2 font-semibold text-rose-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300">
+        查看 {summary.failure_count} 个失败项
+      </summary>
+      <div className="space-y-2 border-t border-rose-100 pt-3">
+        {summary.failures.map((failure, index) => (
+          <div key={`${failure.airport_id ?? 'unknown'}-${index}`} className="rounded-lg bg-rose-50 px-3 py-2">
+            <div className="font-semibold text-neutral-900">{formatSchedulerFailureAirport(failure)}</div>
+            <div className="mt-1 break-words leading-5 text-neutral-600">{failure.error}</div>
+          </div>
+        ))}
+        {summary.missing_failure_detail_count > 0 && (
+          <div className="rounded-lg bg-amber-50 px-3 py-2 leading-5 text-amber-800">
+            另有 {summary.missing_failure_detail_count} 个历史失败项未保存明细
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function formatSchedulerFailureAirport(failure: SchedulerRunFailureDetail): string {
+  if (failure.airport_name && failure.airport_id !== null) {
+    return `${failure.airport_name} #${failure.airport_id}`;
+  }
+  if (failure.airport_name) return failure.airport_name;
+  if (failure.airport_id !== null) return `机场 #${failure.airport_id}`;
+  return '未知机场';
+}
+
 function SchedulerPage() {
   const defaultDateTo = today();
   const defaultDateFrom = shiftDate(defaultDateTo, -6);
@@ -3124,13 +3214,24 @@ function SchedulerPage() {
 
               <div className="rounded-3xl border border-neutral-200 bg-neutral-50 px-5 py-4 text-sm">
                 <div className="text-xs font-semibold uppercase tracking-[0.14em] text-neutral-400">最近一次执行</div>
-                <div className="mt-2 font-medium text-neutral-900">
-                  {task.latest_run
-                    ? `${formatSchedulerRunStatus(task.latest_run.status)} / ${formatSchedulerTrigger(task.latest_run.trigger_source)} / ${formatDateTimeLabel(task.latest_run.started_at)}`
-                    : '暂无执行记录'}
-                </div>
-                {task.latest_run?.message && (
-                  <div className="mt-2 leading-6 text-neutral-500">{task.latest_run.message}</div>
+                {task.latest_run ? (
+                  <div className="mt-2">
+                    <div className="flex flex-wrap items-center gap-2 text-neutral-600">
+                      <SchedulerOutcomeBadge outcome={task.latest_run.outcome} />
+                      <span>{formatSchedulerTrigger(task.latest_run.trigger_source)}</span>
+                      <span aria-hidden="true">/</span>
+                      <span>{formatDateTimeLabel(task.latest_run.started_at)}</span>
+                    </div>
+                    <div className="mt-3">
+                      <SchedulerResultSummary summary={task.latest_run.result_summary} />
+                    </div>
+                    {task.latest_run.message && (
+                      <div className="mt-2 leading-6 text-neutral-500">{task.latest_run.message}</div>
+                    )}
+                    <SchedulerFailureDetails summary={task.latest_run.result_summary} />
+                  </div>
+                ) : (
+                  <div className="mt-2 font-medium text-neutral-900">暂无执行记录</div>
                 )}
               </div>
 
@@ -3201,16 +3302,17 @@ function SchedulerPage() {
                 <th className="px-4 py-3 text-left font-medium">日期</th>
                 <th className="px-4 py-3 text-left font-medium">任务</th>
                 <th className="px-4 py-3 text-left font-medium">执行次数</th>
-                <th className="px-4 py-3 text-left font-medium">成功</th>
-                <th className="px-4 py-3 text-left font-medium">失败</th>
+                <th className="px-4 py-3 text-left font-medium">成功执行</th>
+                <th className="px-4 py-3 text-left font-medium">失败执行</th>
                 <th className="px-4 py-3 text-left font-medium">最后状态</th>
+                <th className="px-4 py-3 text-left font-medium">最近处理结果</th>
                 <th className="px-4 py-3 text-left font-medium">累计耗时</th>
               </tr>
             </thead>
             <tbody>
               {dailyStats.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-neutral-500" colSpan={7}>暂无调度统计</td>
+                  <td className="px-4 py-6 text-neutral-500" colSpan={8}>暂无调度统计</td>
                 </tr>
               )}
               {dailyStats.map((item) => (
@@ -3220,7 +3322,12 @@ function SchedulerPage() {
                   <td className="px-4 py-3">{item.total_runs}</td>
                   <td className="px-4 py-3 text-emerald-700">{item.success_count}</td>
                   <td className="px-4 py-3 text-rose-700">{item.failed_count}</td>
-                  <td className="px-4 py-3">{formatSchedulerRunStatus(item.last_status)}</td>
+                  <td className="px-4 py-3"><SchedulerOutcomeBadge outcome={item.last_outcome} /></td>
+                  <td className="px-4 py-3">
+                    {item.last_result_summary
+                      ? <SchedulerResultSummary summary={item.last_result_summary} compact />
+                      : <span className="text-neutral-400">-</span>}
+                  </td>
                   <td className="px-4 py-3">{formatDuration(item.total_duration_ms)}</td>
                 </tr>
               ))}
@@ -3239,7 +3346,7 @@ function SchedulerPage() {
             <option value="all">全部状态</option>
             <option value="running">运行中</option>
             <option value="succeeded">成功</option>
-            <option value="failed">失败</option>
+            <option value="failed">失败/部分成功</option>
           </select>
         </div>
 
@@ -3266,9 +3373,13 @@ function SchedulerPage() {
                   <td className="px-4 py-3">{formatDateTimeLabel(run.started_at || run.created_at)}</td>
                   <td className="px-4 py-3">{formatSchedulerTaskLabel(run.task_key)}</td>
                   <td className="px-4 py-3">{formatSchedulerTrigger(run.trigger_source)}</td>
-                  <td className="px-4 py-3">{formatSchedulerRunStatus(run.status)}</td>
+                  <td className="px-4 py-3"><SchedulerOutcomeBadge outcome={run.outcome} /></td>
                   <td className="px-4 py-3">{formatDuration(run.duration_ms)}</td>
-                  <td className="px-4 py-3 text-neutral-600">{run.message || '-'}</td>
+                  <td className="min-w-72 px-4 py-3 text-neutral-600">
+                    <SchedulerResultSummary summary={run.result_summary} compact />
+                    <div className={run.result_summary ? 'mt-2 leading-5' : 'leading-5'}>{run.message || '-'}</div>
+                    <SchedulerFailureDetails summary={run.result_summary} />
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -11546,9 +11657,10 @@ function formatSchedulerTaskLabel(taskKey: SchedulerTaskKey): string {
   return '聚合重算';
 }
 
-function formatSchedulerRunStatus(status: SchedulerRunStatus): string {
+function formatSchedulerRunStatus(status: SchedulerRunOutcome): string {
   if (status === 'running') return '运行中';
   if (status === 'succeeded') return '成功';
+  if (status === 'partial') return '部分成功';
   return '失败';
 }
 
