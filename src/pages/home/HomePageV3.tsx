@@ -23,7 +23,7 @@ import {
   Zap,
 } from 'lucide-react';
 
-import { HOME_FAQ_ITEMS, buildHomeSeo } from '../../../shared/publicSeo';
+import { HOME_FAQ_ITEMS, HOME_HERO_HIGHLIGHT_TEXT, buildHomeSeo } from '../../../shared/publicSeo';
 import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
 import { PUBLIC_TOOL_DEFINITIONS } from '../../../shared/publicTools';
 import { calculateObservationDays } from '../../../shared/observationDays';
@@ -33,6 +33,7 @@ import {
   buildAbsoluteUrl,
   buildFullRankingHref,
   buildHomeHref,
+  buildRankingTransparencyHref,
   navigate,
   normalizeExternalHref,
   PageFrame,
@@ -350,6 +351,20 @@ function HomeHero({ data, reportTime }: { data: HomePageData | null; reportTime:
             className="flex flex-col justify-center lg:col-span-8"
           >
             <div className="space-y-2.5">
+              <div className="flex min-w-0 flex-col items-start gap-1.5 sm:flex-row sm:items-center sm:gap-2.5">
+                <span className="inline-flex shrink-0 items-center rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1 text-[10px] font-black tracking-[0.08em] text-rose-600">
+                  {HOME_HERO_HIGHLIGHT_TEXT}
+                </span>
+                <a
+                  href={buildRankingTransparencyHref()}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="group inline-flex min-w-0 items-center gap-1.5 text-[11px] font-bold leading-5 text-gray-500 transition-colors hover:text-gray-900 focus-visible:rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-300 focus-visible:ring-offset-2 sm:text-[11.5px]"
+                >
+                  <span>关于 GateRank 评分、收费与排名独立性的声明</span>
+                  <ExternalLink className="h-3.5 w-3.5 shrink-0 text-gray-900 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+                </a>
+              </div>
               <h1 className="font-sans text-xl font-black leading-tight tracking-tight text-gray-900 sm:whitespace-nowrap sm:text-2xl md:text-3xl lg:leading-[1.15]">
                 机场榜：机场 <span className="inline-block font-extrabold text-black">VPN</span> 推荐与
                 <span className="mt-0.5 block bg-gradient-to-r from-gray-500 via-gray-400 to-gray-300 bg-clip-text font-extrabold text-transparent drop-shadow-sm sm:mt-0 sm:inline">
@@ -373,10 +388,10 @@ function HomeHero({ data, reportTime }: { data: HomePageData | null; reportTime:
             transition={{ duration: 0.6, delay: 0.2 }}
             className="flex h-full flex-col justify-end gap-3 lg:col-span-4 lg:items-end"
           >
-            <div className="flex w-full min-w-[220px] flex-col gap-2 sm:w-auto">
+            <div className="grid w-full min-w-0 grid-cols-2 gap-2 lg:w-auto lg:min-w-[220px] lg:grid-cols-1">
               <MetricCard icon={Search} label="监测机场" value={`${formatNumber(data?.hero.monitored_airports || 0)}+`} badge="LIVE" tone="emerald" />
               <MetricCard icon={Zap} label="实时测速" value={`${formatNumber(data?.hero.realtime_tests || 0)}+`} badge="AUTO" tone="blue" />
-              <div className="flex justify-end pt-1">
+              <div className="col-span-2 flex justify-end pt-1 lg:col-span-1">
                 <div className="inline-flex select-none items-center gap-2 rounded-full border border-gray-200/90 bg-white/90 px-3.5 py-1.5 shadow-sm backdrop-blur-sm">
                   <span className="relative flex h-2.5 w-2.5 shrink-0">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75 motion-reduce:animate-none" />
@@ -409,12 +424,12 @@ function MetricCard({
   tone: 'emerald' | 'blue';
 }) {
   return (
-    <div className="flex flex-1 items-center justify-between gap-2.5 rounded-xl border border-gray-100 bg-white p-3 shadow-[0_2px_8px_rgba(0,0,0,0.015)] transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)]">
+    <div className="flex min-w-0 flex-1 items-center justify-between gap-1.5 rounded-xl border border-gray-100 bg-white p-2.5 shadow-[0_2px_8px_rgba(0,0,0,0.015)] transition-all hover:shadow-[0_4px_12px_rgba(0,0,0,0.03)] sm:gap-2.5 sm:p-3">
       <div className="flex items-center gap-2.5">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-400">
+        <div className="hidden h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gray-50 text-gray-400 sm:flex">
           <Icon className="h-4 w-4" />
         </div>
-        <div className="flex flex-col">
+        <div className="flex min-w-0 flex-col">
           <span className="mb-1 text-[11px] font-bold leading-none tracking-wider text-gray-400">{label}</span>
           <span className="font-mono text-[20px] font-black leading-none text-gray-900">{value}</span>
         </div>

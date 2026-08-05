@@ -402,6 +402,26 @@ test('React homepage keeps the 3.0 Hero grid and fixed floating navigation inter
   assert.match(navSource, /\.public-top-nav-apply:hover\s*\{[^}]*background:\s*rgb\(38,38,38\);[^}]*transform:\s*translateY\(-0\.5px\) scale\(1\.02\);/);
 });
 
+test('React homepage Hero exposes trust messaging without increasing narrow-screen height', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/pages/home/HomePageV3.tsx'), 'utf8');
+  const heroStart = source.indexOf('function HomeHero');
+  const heroEnd = source.indexOf('function MetricCard', heroStart);
+  const heroSource = source.slice(heroStart, heroEnd);
+
+  assert.notEqual(heroStart, -1);
+  assert.notEqual(heroEnd, -1);
+  assert.match(source, /HOME_HERO_HIGHLIGHT_TEXT/);
+  assert.match(source, /buildRankingTransparencyHref/);
+  assert.match(heroSource, /\{HOME_HERO_HIGHLIGHT_TEXT\}/);
+  assert.match(heroSource, /关于 GateRank 评分、收费与排名独立性的声明/);
+  assert.match(heroSource, /href=\{buildRankingTransparencyHref\(\)\}/);
+  assert.match(heroSource, /target="_blank"/);
+  assert.match(heroSource, /rel="noopener noreferrer"/);
+  assert.ok(heroSource.indexOf('HOME_HERO_HIGHLIGHT_TEXT') < heroSource.indexOf('<h1'));
+  assert.match(heroSource, /grid-cols-2[^\"]*lg:grid-cols-1/);
+  assert.match(heroSource, /col-span-2[^\"]*lg:col-span-1/);
+});
+
 test('shared public navigation includes a focus-restoring mobile drawer and canonical routes', async () => {
   const navSource = await readFile(path.join(process.cwd(), 'shared/publicTopNav.ts'), 'utf8');
   const shellSource = await readFile(path.join(process.cwd(), 'src/site/publicSite.tsx'), 'utf8');

@@ -211,7 +211,10 @@ export function renderHomePublicPage(
       <main class="home-v3">
         <section class="home-v3-hero">
           <div class="home-v3-hero-copy">
-            <div class="home-v3-pill">${escapeHtml(HOME_HERO_HIGHLIGHT_TEXT)}</div>
+            <div class="home-v3-hero-eyebrow">
+              <span class="home-v3-pill">${escapeHtml(HOME_HERO_HIGHLIGHT_TEXT)}</span>
+              <a class="home-v3-transparency-link" href="${escapeAttribute(PUBLIC_SEO_PATHS.rankingTransparency)}" target="_blank" rel="noopener noreferrer">关于 GateRank 评分、收费与排名独立性的声明 <span aria-hidden="true">↗</span></a>
+            </div>
             <h1>机场榜：机场 VPN 推荐与<span>可靠性榜单</span></h1>
             <p>${escapeHtml(HOME_HERO_SUPPORTING_TEXT)}</p>
             <div class="home-v3-actions">
@@ -3543,8 +3546,14 @@ const styles = `
   .home-v3 { flex: 1; background: #fafafa; color: #262626; }
   .home-v3-hero { position: relative; display: grid; grid-template-columns: minmax(0,2fr) minmax(260px,1fr); gap: 32px; align-items: center; overflow: hidden; border-bottom: 1px solid #f1f1f1; padding: 38px max(24px, calc((100vw - 1280px) / 2)); background-color: #fff; background-image: radial-gradient(#e5e7eb 1px, transparent 1px); background-size: 20px 20px; }
   .home-v3-hero-copy { max-width: 780px; }
-  .home-v3-pill { display: inline-flex; border: 1px solid #ffe4e6; border-radius: 999px; background: #fff1f2; padding: 5px 11px; color: #e11d48; font-size: 11px; font-weight: 900; letter-spacing: .16em; text-transform: uppercase; }
-  .home-v3-hero h1 { margin: 16px 0 0; color: #0a0a0a; font-size: clamp(20px,2.4vw,30px); font-weight: 900; line-height: 1.15; letter-spacing: -.04em; }
+  .home-v3-hero-eyebrow { display: flex; min-width: 0; align-items: center; gap: 10px; }
+  .home-v3-pill { display: inline-flex; flex: 0 0 auto; border: 1px solid #fecdd3; border-radius: 999px; background: #fff1f2; padding: 4px 10px; color: #e11d48; font-size: 10px; font-weight: 900; letter-spacing: .08em; }
+  .home-v3-transparency-link { display: inline-flex; min-width: 0; align-items: center; gap: 6px; color: #737373; font-size: 11px; font-weight: 800; line-height: 1.6; text-decoration: none; transition: color .18s ease; }
+  .home-v3-transparency-link:hover { color: #171717; }
+  .home-v3-transparency-link:focus-visible { border-radius: 6px; outline: 2px solid #fda4af; outline-offset: 3px; }
+  .home-v3-transparency-link span { flex: 0 0 auto; border-radius: 5px; background: #171717; padding: 0 4px; color: #fff; transition: transform .18s ease; }
+  .home-v3-transparency-link:hover span { transform: translateX(2px); }
+  .home-v3-hero h1 { margin: 10px 0 0; color: #0a0a0a; font-size: clamp(20px,2.4vw,30px); font-weight: 900; line-height: 1.15; letter-spacing: -.04em; }
   .home-v3-hero h1 span { color: #a3a3a3; }
   .home-v3-hero-copy > p { max-width: 720px; margin: 14px 0 0; color: #737373; font-size: 14px; font-weight: 500; line-height: 1.85; }
   .home-v3-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 20px; }
@@ -3660,11 +3669,18 @@ const styles = `
   .footer small { display: block; max-width: 960px; margin: 30px auto 0; border-top: 1px solid #f1f1f1; padding-top: 24px; color: #a3a3a3; font-size: 11px; }
   @media (max-width: 900px) {
     .home-v3-hero { grid-template-columns: 1fr; padding: 28px 16px; }
+    .home-v3-hero-eyebrow { align-items: flex-start; flex-direction: column; gap: 6px; }
+    .home-v3-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .home-v3-report-time { grid-column: 1 / -1; }
+    .home-v3-metric { min-width: 0; padding-right: 54px; }
     .home-v3-main { width: min(100vw - 24px,1280px); padding-top: 28px; gap: 30px; }
     .home-v3-columns { grid-template-columns: 1fr; }
     .home-v3-deal-grid { grid-template-columns: 1fr 1fr; }
     .home-v3-summary-grid { grid-template-columns: 1fr 1fr; }
     .home-v3-trust > div:nth-child(2) { grid-template-columns: 1fr 1fr; }
+  }
+  @media (min-width: 901px) {
+    .home-v3-metrics { grid-template-columns: 1fr; }
   }
   @media (min-width: 640px) {
     .home-v3-hero h1 { white-space: nowrap; }

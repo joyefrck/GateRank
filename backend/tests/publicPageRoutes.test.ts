@@ -82,7 +82,16 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(html, /<span class="public-top-nav-brand-title">机场榜GateRank<\/span>/);
       assert.doesNotMatch(html, /<header class="topbar">/);
       if (path === '/') {
-        assert.match(html, /<div class="home-v3-pill">行业首创，每日更新<\/div>/);
+        assert.match(html, /<div class="home-v3-hero-eyebrow">/);
+        assert.match(html, /<span class="home-v3-pill">行业首创，每日更新<\/span>/);
+        assert.match(
+          html,
+          /<a class="home-v3-transparency-link" href="\/ranking-transparency" target="_blank" rel="noopener noreferrer">关于 GateRank 评分、收费与排名独立性的声明/,
+        );
+        assert.ok(html.indexOf('home-v3-hero-eyebrow') < html.indexOf('<h1>机场榜'));
+        assert.match(html, /\.home-v3-hero-eyebrow\s*\{[^}]*display:\s*flex;/);
+        assert.match(html, /@media \(max-width:\s*900px\)[\s\S]*?\.home-v3-metrics\s*\{[^}]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\);/);
+        assert.match(html, /@media \(min-width:\s*901px\)[\s\S]*?\.home-v3-metrics\s*\{[^}]*grid-template-columns:\s*1fr;/);
         assert.match(html, /\.home-v3-hero h1\s*\{[^}]*font-size:\s*clamp\(20px,\s*2\.4vw,\s*30px\)/);
         assert.match(html, /@media \(min-width:\s*640px\)\s*\{\s*\.home-v3-hero h1\s*\{\s*white-space:\s*nowrap;/);
         assert.match(html, /\.page-main h1\s*\{[^}]*font-size:\s*clamp\(36px,\s*7vw,\s*64px\)/);
