@@ -1,0 +1,11 @@
+export const NEWS_MERMAID_MODULE_PATH = '/assets/news-mermaid.js';
+
+export function hasNewsMermaidDiagram(html: string): boolean {
+  return /<code\b[^>]*\bdata-language=(?:"mermaid"|'mermaid')[^>]*>/i.test(html);
+}
+
+export function renderNewsMermaidModuleScript(html: string): string {
+  return hasNewsMermaidDiagram(html)
+    ? `<script type="module" src="${NEWS_MERMAID_MODULE_PATH}"></script>`
+    : '';
+}

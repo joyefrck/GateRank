@@ -75,12 +75,30 @@ Content-Signal: search=yes, ai-input=yes, ai-train=no
   };
 }
 
+function serveNewsMermaidEntry(): Plugin {
+  return {
+    name: 'serve-news-mermaid-entry',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.split('?', 1)[0] !== '/assets/news-mermaid.js') {
+          next();
+          return;
+        }
+        res.statusCode = 307;
+        res.setHeader('Location', '/src/news/mermaidEnhancer.ts');
+        res.end();
+      });
+    },
+  };
+}
+
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   const siteUrl = (env.VITE_SITE_URL || 'http://localhost:3000').replace(/\/+$/, '');
 
   return {
-    plugins: [react(), tailwindcss(), emitSeoAssets(siteUrl)],
+    plugins: [react(), tailwindcss(), serveNewsMermaidEntry(), emitSeoAssets(siteUrl)],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
@@ -89,6 +107,10 @@ export default defineConfig(({mode}) => {
     build: {
       manifest: true,
       rollupOptions: {
+        input: {
+          index: path.resolve(__dirname, 'index.html'),
+          'news-mermaid': path.resolve(__dirname, 'src/news/mermaidEnhancer.ts'),
+        },
         output: {
           entryFileNames: 'assets/[name].js',
           chunkFileNames: 'assets/[name].js',

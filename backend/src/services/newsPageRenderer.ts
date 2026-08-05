@@ -1,6 +1,7 @@
 import type { PublicNewsArticleView, PublicNewsListView, PublicNewsTopicPageView } from './newsPublicService';
 import { formatNewsDate, formatNewsDateTime } from '../utils/news';
 import { PUBLIC_TOP_NAV_STYLES, renderPublicTopNav } from '../../../shared/publicTopNav';
+import { renderNewsMermaidModuleScript } from './newsMermaid';
 
 interface RenderListPageOptions {
   siteUrl: string;
@@ -476,6 +477,131 @@ const sharedStyles = `
     font-size: 14px;
     line-height: 1.7;
     font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  }
+  .news-mermaid-card {
+    margin: 32px 0;
+    overflow: hidden;
+    border: 1px solid rgba(17,17,17,0.10);
+    border-radius: 24px;
+    background: #ffffff;
+    box-shadow: 0 18px 48px rgba(15,23,42,0.07);
+  }
+  .news-mermaid-header,
+  .news-mermaid-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  .news-mermaid-header {
+    padding: 14px 16px 14px 20px;
+    border-bottom: 1px solid rgba(17,17,17,0.08);
+  }
+  .news-mermaid-label {
+    color: rgba(17,17,17,0.58);
+    font-size: 12px;
+    line-height: 1.4;
+    font-weight: 900;
+    letter-spacing: 0.12em;
+  }
+  .news-mermaid-expand,
+  .news-mermaid-modal-close {
+    min-height: 40px;
+    border: 1px solid #111111;
+    border-radius: 10px;
+    padding: 9px 14px;
+    background: #111111;
+    color: #ffffff;
+    font: inherit;
+    font-size: 13px;
+    line-height: 1.2;
+    font-weight: 800;
+    cursor: pointer;
+    transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+  }
+  .news-mermaid-expand:hover,
+  .news-mermaid-modal-close:hover {
+    transform: translateY(-1px);
+    background: #2b2b2b;
+    box-shadow: 0 8px 20px rgba(17,17,17,0.16);
+  }
+  .news-mermaid-expand:focus-visible,
+  .news-mermaid-modal-close:focus-visible {
+    outline: 3px solid rgba(201,58,46,0.28);
+    outline-offset: 3px;
+  }
+  .news-mermaid-viewport {
+    overflow: auto;
+    padding: 26px 22px;
+    background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+    overscroll-behavior-inline: contain;
+  }
+  .news-mermaid-viewport svg {
+    display: block;
+    width: 100%;
+    min-width: 720px;
+    height: auto;
+    margin: 0 auto;
+  }
+  .news-mermaid-caption {
+    padding: 12px 20px 14px;
+    border-top: 1px solid rgba(17,17,17,0.06);
+    color: rgba(17,17,17,0.52);
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  .news-mermaid-error {
+    margin: -16px 0 28px;
+    color: #b42318;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+  .news-mermaid-modal {
+    width: min(1280px, calc(100vw - 32px));
+    max-width: none;
+    max-height: calc(100dvh - 32px);
+    margin: auto;
+    padding: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 24px;
+    background: #ffffff;
+    box-shadow: 0 32px 100px rgba(15,23,42,0.28);
+  }
+  .news-mermaid-modal::backdrop {
+    background: rgba(15,23,42,0.72);
+    backdrop-filter: blur(5px);
+  }
+  .news-mermaid-modal-panel {
+    display: flex;
+    max-height: calc(100dvh - 32px);
+    flex-direction: column;
+  }
+  .news-mermaid-modal-header {
+    flex: 0 0 auto;
+    padding: 16px 18px 16px 22px;
+    border-bottom: 1px solid rgba(17,17,17,0.08);
+  }
+  .news-mermaid-modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    line-height: 1.3;
+    font-weight: 900;
+  }
+  .news-mermaid-modal-content {
+    flex: 1 1 auto;
+    overflow: auto;
+    padding: 28px;
+    background: #fafafa;
+    overscroll-behavior: contain;
+  }
+  .news-mermaid-modal-content svg {
+    display: block;
+    width: 100%;
+    min-width: 920px;
+    max-width: none !important;
+    height: auto;
+    margin: 0 auto;
   }
   .news-table-wrap {
     overflow-x: auto;
@@ -1265,6 +1391,29 @@ const sharedStyles = `
     .news-blockquote {
       font-size: 16px;
     }
+    .news-mermaid-card {
+      border-radius: 20px;
+    }
+    .news-mermaid-header {
+      padding: 12px 12px 12px 16px;
+    }
+    .news-mermaid-viewport {
+      padding: 18px 14px;
+    }
+    .news-mermaid-modal {
+      width: calc(100vw - 20px);
+      max-height: calc(100dvh - 20px);
+      border-radius: 20px;
+    }
+    .news-mermaid-modal-panel {
+      max-height: calc(100dvh - 20px);
+    }
+    .news-mermaid-modal-header {
+      padding: 12px;
+    }
+    .news-mermaid-modal-content {
+      padding: 16px;
+    }
     .news-airport-profile-card {
       grid-template-columns: 1fr;
       border-radius: 24px;
@@ -1794,6 +1943,7 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
           }
         })();
       </script>
+      ${renderNewsMermaidModuleScript(articleBodyHtml)}
     `,
   });
 }

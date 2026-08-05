@@ -33,6 +33,7 @@
     "leaflet": "^1.9.4",
     "lucide-react": "^0.546.0",
     "marked": "^17.0.5",
+    "mermaid": "^11.16.1",
     "motion": "^12.23.24",
     "multer": "^2.1.1",
     "mysql2": "^3.15.3",
