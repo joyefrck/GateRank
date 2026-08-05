@@ -1,6 +1,10 @@
 import { PUBLIC_SITE_BRAND_NAME } from './publicBrand';
 import { PUBLIC_NAVIGATION_ITEMS, type PublicNavigationKind, type PublicNavigationItem } from './publicNavigation';
 
+export const PUBLIC_TOP_NAV_HEIGHT_PX = 64;
+export const PUBLIC_TOP_NAV_BORDER_PX = 1;
+export const PUBLIC_TOP_NAV_STICKY_OFFSET_PX = PUBLIC_TOP_NAV_HEIGHT_PX + PUBLIC_TOP_NAV_BORDER_PX;
+
 export const PUBLIC_TOP_NAV_STYLES = `
   html:has(.public-top-nav-mobile[open]) {
     overflow: hidden;
@@ -21,14 +25,14 @@ export const PUBLIC_TOP_NAV_STYLES = `
     z-index: 40;
     background: rgba(255,255,255,0.95);
     backdrop-filter: blur(12px);
-    border-bottom: 1px solid rgb(245,245,245);
+    border-bottom: ${PUBLIC_TOP_NAV_BORDER_PX}px solid rgb(245,245,245);
     font-family: Inter, ui-sans-serif, system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: geometricPrecision;
   }
   .public-top-nav-inner {
     width: min(1280px, 100%);
-    height: 64px;
+    height: ${PUBLIC_TOP_NAV_HEIGHT_PX}px;
     margin: 0 auto;
     padding: 0 16px;
     display: flex;
@@ -362,7 +366,7 @@ export const PUBLIC_TOP_NAV_STYLES = `
   }
   @media (max-width: 639px) {
     .public-top-nav-inner {
-      height: 64px;
+      height: ${PUBLIC_TOP_NAV_HEIGHT_PX}px;
       padding-left: 12px;
       padding-right: 12px;
     }

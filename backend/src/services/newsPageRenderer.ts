@@ -1,6 +1,10 @@
 import type { PublicNewsArticleView, PublicNewsListView, PublicNewsTopicPageView } from './newsPublicService';
 import { formatNewsDate, formatNewsDateTime } from '../utils/news';
-import { PUBLIC_TOP_NAV_STYLES, renderPublicTopNav } from '../../../shared/publicTopNav';
+import {
+  PUBLIC_TOP_NAV_STICKY_OFFSET_PX,
+  PUBLIC_TOP_NAV_STYLES,
+  renderPublicTopNav,
+} from '../../../shared/publicTopNav';
 import { renderNewsMermaidModuleScript } from './newsMermaid';
 
 interface RenderListPageOptions {
@@ -392,7 +396,7 @@ const sharedStyles = `
   }
   .article-progress {
     position: sticky;
-    top: 76px;
+    top: ${PUBLIC_TOP_NAV_STICKY_OFFSET_PX}px;
     z-index: 19;
     height: 3px;
     background: rgba(17,17,17,0.05);
