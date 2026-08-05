@@ -34,6 +34,8 @@ interface SchedulerDailyStatRow extends RowDataPacket {
   last_status: SchedulerRunStatus;
   last_started_at: unknown;
   last_finished_at: unknown;
+  last_message: string | null;
+  last_detail_json: unknown;
 }
 
 export interface SchedulerRunQuery {
@@ -55,6 +57,8 @@ export interface SchedulerDailyStat {
   last_status: SchedulerRunStatus;
   last_started_at: string | null;
   last_finished_at: string | null;
+  last_message?: string | null;
+  last_detail_json?: Record<string, unknown> | null;
 }
 
 export class SchedulerRunRepository {
@@ -245,7 +249,9 @@ export class SchedulerRunRepository {
               agg.total_duration_ms,
               latest.status AS last_status,
               latest.started_at AS last_started_at,
-              latest.finished_at AS last_finished_at
+              latest.finished_at AS last_finished_at,
+              latest.message AS last_message,
+              latest.detail_json AS last_detail_json
          FROM (
            SELECT run_date,
                   task_key,
@@ -275,6 +281,8 @@ export class SchedulerRunRepository {
       last_status: row.last_status,
       last_started_at: toDateTimeString(row.last_started_at),
       last_finished_at: toDateTimeString(row.last_finished_at),
+      last_message: row.last_message,
+      last_detail_json: parseJsonObject(row.last_detail_json),
     }));
   }
 }

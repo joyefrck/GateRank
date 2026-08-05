@@ -1,14 +1,19 @@
 import { SHANGHAI_TIMEZONE } from '../config/scoring';
 import { HttpError } from '../middleware/errorHandler';
 import type {
+  SchedulerRun,
+  SchedulerRunOutcome,
+  SchedulerRunResultSummary,
   SchedulerRunStatus,
   SchedulerTask,
   SchedulerTaskKey,
   SchedulerTriggerSource,
+  SchedulerRunView,
 } from '../types/domain';
 import { dateDaysAgo, formatDateTimeInTimezoneIso, getDateInTimezone } from '../utils/time';
 import type { SchedulerDailyStat, SchedulerRunQuery } from '../repositories/schedulerRunRepository';
 import type { SchedulerTaskExecutionResult } from './schedulerTaskExecutor';
+import { presentSchedulerRun } from './schedulerRunPresentation';
 
 interface LoggerLike {
   log(message: string, ...args: unknown[]): void;
@@ -46,8 +51,8 @@ interface AdminSchedulerServiceDeps {
       message?: string | null;
       detailJson?: Record<string, unknown> | null;
     }): Promise<void>;
-    listLatestByTaskKeys(taskKeys: SchedulerTaskKey[]): Promise<Record<SchedulerTaskKey, unknown | null>>;
-    listByQuery(query: SchedulerRunQuery): Promise<{ items: unknown[]; total: number }>;
+    listLatestByTaskKeys(taskKeys: SchedulerTaskKey[]): Promise<Record<SchedulerTaskKey, SchedulerRun | null>>;
+    listByQuery(query: SchedulerRunQuery): Promise<{ items: SchedulerRun[]; total: number }>;
     getDailyStats(query: { taskKey?: SchedulerTaskKey; dateFrom: string; dateTo: string }): Promise<SchedulerDailyStat[]>;
   };
   schedulerTaskExecutor: {
@@ -63,7 +68,12 @@ export interface SchedulerTaskView extends SchedulerTask {
   description: string;
   next_run_at: string | null;
   is_running: boolean;
-  latest_run: unknown | null;
+  latest_run: SchedulerRunView | null;
+}
+
+export interface SchedulerDailyStatView extends Omit<SchedulerDailyStat, 'last_message' | 'last_detail_json'> {
+  last_outcome: SchedulerRunOutcome;
+  last_result_summary: SchedulerRunResultSummary | null;
 }
 
 const TASK_DESCRIPTIONS: Record<SchedulerTaskKey, string> = {
@@ -189,7 +199,7 @@ export class AdminSchedulerService {
     return this.toTaskView(task, latestRuns[taskKey]);
   }
 
-  async listRuns(query: SchedulerRunQuery): Promise<{ items: unknown[]; total: number; page: number; page_size: number }> {
+  async listRuns(query: SchedulerRunQuery): Promise<{ items: SchedulerRunView[]; total: number; page: number; page_size: number }> {
     const page = query.page && query.page > 0 ? query.page : 1;
     const pageSize = query.pageSize && query.pageSize > 0 ? query.pageSize : 20;
     const result = await this.deps.schedulerRunRepository.listByQuery({
@@ -199,6 +209,7 @@ export class AdminSchedulerService {
     });
     return {
       ...result,
+      items: result.items.map(presentSchedulerRun),
       page,
       page_size: pageSize,
     };
@@ -207,15 +218,16 @@ export class AdminSchedulerService {
   async getDailyStats(query: { taskKey?: SchedulerTaskKey; dateFrom?: string; dateTo?: string }): Promise<{
     date_from: string;
     date_to: string;
-    items: SchedulerDailyStat[];
+    items: SchedulerDailyStatView[];
   }> {
     const dateTo = query.dateTo || getDateInTimezone(SHANGHAI_TIMEZONE, this.nowFn());
     const dateFrom = query.dateFrom || dateDaysAgo(dateTo, 6);
-    const items = await this.deps.schedulerRunRepository.getDailyStats({
+    const stats = await this.deps.schedulerRunRepository.getDailyStats({
       taskKey: query.taskKey,
       dateFrom,
       dateTo,
     });
+    const items = stats.map((item) => presentDailyStat(item));
     return {
       date_from: dateFrom,
       date_to: dateTo,
@@ -347,16 +359,38 @@ export class AdminSchedulerService {
     }
   }
 
-  private toTaskView(task: SchedulerTask, latestRun: unknown | null): SchedulerTaskView {
+  private toTaskView(task: SchedulerTask, latestRun: SchedulerRun | null): SchedulerTaskView {
     const state = this.runtime.get(task.task_key);
     return {
       ...task,
       description: TASK_DESCRIPTIONS[task.task_key],
       next_run_at: state?.nextRunAt ? formatDateTimeInTimezoneIso(state.nextRunAt, task.timezone || SHANGHAI_TIMEZONE) : null,
       is_running: Boolean(state?.isRunning),
-      latest_run: latestRun,
+      latest_run: latestRun ? presentSchedulerRun(latestRun) : null,
     };
   }
+}
+
+function presentDailyStat(item: SchedulerDailyStat): SchedulerDailyStatView {
+  const run = presentSchedulerRun({
+    id: 0,
+    task_key: item.task_key,
+    run_date: item.run_date,
+    trigger_source: 'schedule',
+    status: item.last_status,
+    started_at: item.last_started_at,
+    finished_at: item.last_finished_at,
+    duration_ms: null,
+    message: item.last_message || null,
+    detail_json: item.last_detail_json || null,
+    created_at: item.last_started_at || `${item.run_date}T00:00:00+08:00`,
+  });
+  const { last_message: _lastMessage, last_detail_json: _lastDetailJson, ...publicItem } = item;
+  return {
+    ...publicItem,
+    last_outcome: run.outcome,
+    last_result_summary: run.result_summary,
+  };
 }
 
 function resolveRunDate(

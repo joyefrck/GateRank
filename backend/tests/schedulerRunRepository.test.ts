@@ -48,3 +48,37 @@ test('SchedulerRunRepository.listByQuery maps rows and parses detail json', asyn
   assert.equal(result.items[0]?.task_key, 'billing_listing_sync');
   assert.equal(result.items[0]?.detail_json?.summary, 'ok');
 });
+
+test('SchedulerRunRepository.getDailyStats retains latest run presentation inputs', async () => {
+  const repository = new SchedulerRunRepository({
+    query: async () => [[{
+      run_date: '2026-08-05',
+      task_key: 'stability',
+      total_runs: 1,
+      success_count: 0,
+      failed_count: 1,
+      total_duration_ms: 1000,
+      last_status: 'failed',
+      last_started_at: '2026-08-05 04:00:00',
+      last_finished_at: '2026-08-05 04:00:01',
+      last_message: '稳定性采集失败：60/61 succeeded, 1 failed',
+      last_detail_json: JSON.stringify({
+        stage: 'stability',
+        summary: '60/61 succeeded, 1 failed',
+      }),
+    }]],
+    execute: async () => [{}],
+  } as never);
+
+  const result = await repository.getDailyStats({
+    dateFrom: '2026-08-05',
+    dateTo: '2026-08-05',
+  });
+  const item = result[0] as unknown as Record<string, unknown>;
+
+  assert.equal(item.last_message, '稳定性采集失败：60/61 succeeded, 1 failed');
+  assert.deepEqual(item.last_detail_json, {
+    stage: 'stability',
+    summary: '60/61 succeeded, 1 failed',
+  });
+});

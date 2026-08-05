@@ -379,3 +379,67 @@ test('AdminSchedulerService scheduled risk execution does not trigger aggregate_
     'finish:1:succeeded',
   ]);
 });
+
+test('AdminSchedulerService presents partial outcomes consistently across scheduler APIs', async () => {
+  const task = createTask();
+  const run: SchedulerRun = {
+    id: 31,
+    task_key: 'stability',
+    run_date: '2026-08-05',
+    trigger_source: 'schedule',
+    status: 'failed',
+    started_at: '2026-08-05T04:00:00+08:00',
+    finished_at: '2026-08-05T04:21:00+08:00',
+    duration_ms: 1_260_000,
+    message: '稳定性采集失败：60/61 succeeded, 1 failed; 网际快车 #43: timeout',
+    detail_json: {
+      stage: 'stability',
+      summary: '60/61 succeeded, 1 failed; 网际快车 #43: timeout',
+    },
+    created_at: '2026-08-05T04:00:00+08:00',
+  };
+  const service = new AdminSchedulerService({
+    schedulerTaskRepository: {
+      listAll: async () => [task],
+      getByKey: async () => task,
+      update: async () => {},
+      markRestarted: async () => {},
+    },
+    schedulerRunRepository: {
+      createRunning: async () => ({ id: 1 }),
+      markFinished: async () => {},
+      listLatestByTaskKeys: async () => ({ ...emptyLatestRuns(), stability: run }),
+      listByQuery: async () => ({ items: [run], total: 1 }),
+      getDailyStats: async () => [{
+        run_date: '2026-08-05',
+        task_key: 'stability',
+        total_runs: 1,
+        success_count: 0,
+        failed_count: 1,
+        total_duration_ms: 1_260_000,
+        last_status: 'failed',
+        last_started_at: run.started_at,
+        last_finished_at: run.finished_at,
+        last_message: run.message,
+        last_detail_json: run.detail_json,
+      }] as never,
+    },
+    schedulerTaskExecutor: {
+      runTask: async () => ({ status: 'succeeded', message: 'ok', detail: {} }),
+    },
+    now: () => new Date('2026-08-05T08:00:00.000Z'),
+  });
+
+  const tasks = await service.listTasks();
+  const runs = await service.listRuns({ page: 1, pageSize: 20 });
+  const stats = await service.getDailyStats({ dateFrom: '2026-08-05', dateTo: '2026-08-05' });
+
+  const latestRun = tasks[0]?.latest_run as Record<string, unknown>;
+  const listedRun = runs.items[0] as Record<string, unknown>;
+  const daily = stats.items[0] as unknown as Record<string, unknown>;
+  assert.equal(latestRun.outcome, 'partial');
+  assert.equal((latestRun.result_summary as Record<string, unknown>).success_count, 60);
+  assert.equal(listedRun.outcome, 'partial');
+  assert.equal(daily.last_outcome, 'partial');
+  assert.equal((daily.last_result_summary as Record<string, unknown>).failure_count, 1);
+});
