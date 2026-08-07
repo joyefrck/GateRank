@@ -929,10 +929,37 @@ export function buildDealsStructuredData(
 export function buildReportSeo(input?: PublicReportSeoView): PublicSeoText {
   const airportName = input?.airport.name;
   const statusLabel = input ? formatAirportStatusLabel(input.airport.status) : undefined;
-  const airportKeywords = airportName
-    ? `${airportName}怎么样,${airportName}测评,${airportName}跑路,${airportName}官网,${airportName}机场测评,`
-    : '';
   const searchName = airportName ? buildReportSearchName(airportName) : undefined;
+  const airportKeywords = airportName
+    ? [
+        `${airportName}怎么样`,
+        `${airportName}测评`,
+        `${airportName}跑路`,
+        `${airportName}官网`,
+        `${searchName}测评`,
+        `${airportName}价格多少`,
+        `${airportName}套餐价格`,
+        `${airportName}支持USDT吗`,
+        `${airportName}有哪些节点`,
+        `${airportName}电报群`,
+        `${airportName}Telegram群`,
+        `${airportName}是否值得使用`,
+        `${airportName}是否支持使用`,
+        `${airportName}支持哪些客户端`,
+      ]
+    : [];
+  const keywords = [
+    ...airportKeywords,
+    '机场榜GateRank',
+    '机场测评报告',
+    '机场评分',
+    '机场趋势',
+    '机场榜',
+    '机场推荐',
+    '机场官网',
+    '跑路风险',
+    'GateRank',
+  ];
   return {
     title: airportName
       ? `${searchName}怎么样？${searchName}测评、官网入口、稳定性与跑路风险分析 | ${PUBLIC_SITE_BRAND_NAME}`
@@ -941,15 +968,18 @@ export function buildReportSeo(input?: PublicReportSeoView): PublicSeoText {
       input && airportName && statusLabel
         ? buildReportDescription(input, airportName, statusLabel)
         : `${PUBLIC_SITE_BRAND_NAME} 测评报告页展示单个机场的榜单位置、评分拆解、关键指标与 30 天趋势。`,
-    keywords: `${airportKeywords}机场榜GateRank,机场测评报告,机场评分,机场趋势,机场榜,机场推荐,机场官网,跑路风险,GateRank`,
+    keywords: [...new Set(keywords)].join(','),
   };
 }
 
 function buildReportDescription(view: PublicReportSeoView, airportName: string, statusLabel: string): string {
   const score = formatPublicScoreText(view);
   const trendLabel = buildReportTrendLabel(view);
+  const priceText = view.capabilities.plan.lowest_monthly_price === null
+    ? '价格信息'
+    : `最低月付 ${formatOptionalCurrencyText(view.capabilities.plan.lowest_monthly_price)}`;
 
-  return `${buildReportSearchName(airportName)}测评包含评分${score}、状态${statusLabel}、官网入口、稳定性、下载速度${formatMetric(view.metrics.median_download_mbps)} Mbps、延迟${formatMetric(view.metrics.median_latency_ms)} ms、代理请求失败率${formatMetric(view.metrics.packet_loss_percent)}%、${trendLabel}和跑路风险分析，帮助判断是否值得使用。`;
+  return `${airportName}价格多少、支持 USDT 吗、有哪些套餐和节点、是否有电报群、支持哪些客户端？${PUBLIC_SITE_BRAND_NAME}机场测评汇总${priceText}、支付方式、节点地区和客户端，并结合评分${score}、状态${statusLabel}、官网入口、稳定性、下载速度、延迟、代理请求失败率、${trendLabel}与跑路风险分析，帮助判断是否值得使用。`;
 }
 
 export function buildReportTrendLabel(view: PublicReportSeoView): string {

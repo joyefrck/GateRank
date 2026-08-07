@@ -7,6 +7,7 @@ import { createPublicRoutes } from '../src/routes/publicRoutes';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../src/types/domain';
 import { createTimedPromiseCache } from '../src/utils/publicCache';
 import type { AirportDealDetailView, AirportDealView } from '../../shared/airportAds';
+import { buildReportSeo } from '../../shared/publicSeo';
 import { getDateInTimezone } from '../src/utils/time';
 import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG } from '../../shared/toolDownloads';
 
@@ -1472,7 +1473,30 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(description, /近 2 天趋势/);
     assert.match(description, /跑路风险分析/);
     assert.match(description, /是否值得使用/);
+    assert.match(description, /价格多少/);
+    assert.match(description, /支持 USDT 吗/);
+    assert.match(description, /套餐和节点/);
+    assert.match(description, /电报群/);
+    assert.match(description, /支持哪些客户端/);
+    assert.match(description, /最低月付 ¥18/);
     assert.doesNotMatch(description, /https:\/\/nebula\.example\.com/);
+
+    const keywords = extractMetaKeywords(okHtml);
+    for (const keyword of [
+      '星云机场价格多少',
+      '星云机场套餐价格',
+      '星云机场支持USDT吗',
+      '星云机场有哪些节点',
+      '星云机场电报群',
+      '星云机场Telegram群',
+      '星云机场是否值得使用',
+      '星云机场是否支持使用',
+      '星云机场支持哪些客户端',
+    ]) {
+      assert.ok(keywords.split(',').includes(keyword), `missing report keyword: ${keyword}`);
+    }
+    assert.equal(new Set(keywords.split(',')).size, keywords.split(',').length);
+    assert.doesNotMatch(keywords, /机场机场测评/);
 
     const legacyResponse = await fetch(`http://127.0.0.1:${port}/reports/7?date=2026-03-23`, {
       redirect: 'manual',
@@ -1488,6 +1512,27 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
+});
+
+test('report long-tail metadata does not invent missing capability facts', () => {
+  const seo = buildReportSeo({
+    ...reportView,
+    capabilities: {
+      ...reportView.capabilities,
+      plan: {
+        ...reportView.capabilities.plan,
+        lowest_monthly_price: null,
+      },
+      payment_methods: [],
+      clients: [],
+      regions: [],
+    },
+  });
+
+  assert.match(seo.description, /价格信息/);
+  assert.doesNotMatch(`${seo.description},${seo.keywords}`, /undefined|null|NaN|¥0/);
+  assert.match(seo.description, /支持 USDT 吗/);
+  assert.doesNotMatch(seo.description, /不支持 USDT/);
 });
 
 test('GET /airports/:slug labels low report score as limited rating instead of high risk', async () => {
@@ -1608,6 +1653,12 @@ function createPublicViewServiceStub() {
 function extractMetaDescription(html: string): string {
   const matched = html.match(/<meta name="description" content="([^"]+)"/);
   assert.ok(matched, 'meta description missing');
+  return matched[1];
+}
+
+function extractMetaKeywords(html: string): string {
+  const matched = html.match(/<meta name="keywords" content="([^"]+)"/);
+  assert.ok(matched, 'meta keywords missing');
   return matched[1];
 }
 
