@@ -1,5 +1,6 @@
 export const REPORT_ANCHOR_SECTIONS = [
   { id: 'report-overview', label: '概览' },
+  { id: 'report-content', label: '测评摘要' },
   { id: 'report-snapshot', label: '数据快照' },
   { id: 'report-capabilities', label: '服务能力' },
   { id: 'report-score', label: '评分拆解' },
@@ -7,7 +8,6 @@ export const REPORT_ANCHOR_SECTIONS = [
   { id: 'report-trends', label: '趋势' },
   { id: 'report-plan-telegram', label: '套餐电报' },
   { id: 'report-conclusion', label: '结论建议' },
-  { id: 'report-content', label: '详细测评' },
 ] as const;
 
 export type ReportAnchorId = (typeof REPORT_ANCHOR_SECTIONS)[number]['id'];

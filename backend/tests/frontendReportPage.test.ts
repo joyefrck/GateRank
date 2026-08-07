@@ -72,28 +72,6 @@ test('React report fixed navigation exposes scroll-aware current location state'
   assert.match(navSource, /setActiveAnchor\(section\.id\)/);
 });
 
-test('React report renders expanded structured review data after the conclusion', async () => {
-  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
-
-  const contentStart = source.indexOf('function ReportContentV2');
-  const contentEnd = source.indexOf('function ReportHeroV2', contentStart);
-  const contentSource = source.slice(contentStart, contentEnd);
-  assert.ok(contentSource.indexOf('<ReportConclusion') < contentSource.indexOf('<ReportContentNarrative'));
-
-  const narrativeStart = source.indexOf('function ReportContentNarrative');
-  const narrativeEnd = source.indexOf('function ReportComparisonLinks', narrativeStart);
-  const narrativeSource = source.slice(narrativeStart, narrativeEnd);
-  assert.match(narrativeSource, /详细测评数据/);
-  assert.match(narrativeSource, /<article/);
-  assert.match(narrativeSource, /<h3/);
-  assert.match(narrativeSource, /<dl/);
-  assert.match(narrativeSource, /<dt/);
-  assert.match(narrativeSource, /<dd/);
-  assert.doesNotMatch(narrativeSource, /<details/);
-  assert.doesNotMatch(narrativeSource, /<summary/);
-  assert.doesNotMatch(narrativeSource, /buildReportContentSummary/);
-});
-
 test('React uptime sparklines use a fixed zero to one hundred percent domain', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
 

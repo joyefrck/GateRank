@@ -193,13 +193,12 @@ export interface PublicReportFaqItem {
 export interface PublicReportContentSection {
   title: string;
   body: string;
-  facts: PublicReportContentFact[];
+  facts: string[];
 }
 
-export interface PublicReportContentFact {
-  label: string;
-  value: string;
-  href?: string;
+export interface PublicReportContentSummary {
+  body: string;
+  chips: string[];
 }
 
 export interface PublicReportComparisonLink {
@@ -1099,136 +1098,112 @@ export function buildReportContentSections(view: PublicReportSeoView): PublicRep
   const latencyTrendText = buildTrendDeltaText(view.trends.latency_30d, ' ms');
   const downloadTrendText = buildTrendDeltaText(view.trends.download_30d, ' Mbps');
   const planText = buildPlanSummaryText(view);
-  const regionText = buildCompleteRegionSummaryText(view);
-  const clientText = buildCompleteListSummary(view.capabilities.clients, '未收录');
-  const streamingText = buildCompleteListSummary(view.capabilities.streaming, '未收录');
-  const importText = buildCompleteListSummary(view.capabilities.import_methods, '未收录');
-  const paymentText = buildCompleteListSummary(view.capabilities.payment_methods, '未收录');
+  const regionText = buildRegionSummaryText(view);
+  const clientText = buildListSummary(view.capabilities.clients, '客户端未收录');
+  const streamingText = buildListSummary(view.capabilities.streaming, '解锁能力未收录');
+  const importText = buildListSummary(view.capabilities.import_methods, '导入方式未收录');
+  const paymentText = buildListSummary(view.capabilities.payment_methods, '支付方式未收录');
   const telegramText = buildTelegramSummaryText(view);
-  const regionsWithNodeCounts = view.capabilities.regions.filter((region) => region.node_count > 0);
-  const regionNodeCount = regionsWithNodeCounts.reduce((total, region) => total + region.node_count, 0);
 
   return [
     {
       title: '综合结论',
       body: `${airportName} 当前 GateRank 公开总分${score}，状态为${statusLabel}。本页把 ${airportName} 机场测评拆成评分、风险、稳定性、性能、套餐、节点和售后信息，适合在选择机场 VPN 前做事实核对。${view.summary_card.conclusion}`,
       facts: [
-        { label: '数据日期', value: view.date || '未收录' },
-        { label: '总分', value: score },
-        { label: '状态', value: statusLabel },
-        { label: '综合评级', value: buildScoreGradeText(view.summary_card.score) },
-        { label: trendLabel, value: trendText.replace(trendLabel, '') || '持平' },
-        { label: '今日推荐排名', value: formatReportRank(view.ranking.today_pick_rank) },
-        { label: '长期稳定排名', value: formatReportRank(view.ranking.most_stable_rank) },
-        { label: '性价比排名', value: formatReportRank(view.ranking.best_value_rank) },
-        { label: '新入榜排名', value: formatReportRank(view.ranking.new_entries_rank) },
-        { label: '风险预警排名', value: formatReportRank(view.ranking.risk_alerts_rank) },
+        `数据日期 ${view.date}`,
+        `${trendLabel}${trendText.replace(trendLabel, '') || '持平'}`,
+        `综合评级 ${buildScoreGradeText(view.summary_card.score)}`,
       ],
     },
     {
       title: '风险解读',
       body: `${airportName} 当前风险惩罚为 ${formatMetric(view.score_breakdown.risk_penalty)}，风险维度得分 R=${formatMetric(view.score_breakdown.r)}。细分来看，官网探测扣分 ${formatMetric(view.score_breakdown.domain_penalty)}，SSL 扣分 ${formatMetric(view.score_breakdown.ssl_penalty)}，投诉扣分 ${formatMetric(view.score_breakdown.complaint_penalty)}，历史异常扣分 ${formatMetric(view.score_breakdown.history_penalty)}；近期投诉 ${view.metrics.recent_complaints_count} 条，历史异常 ${view.metrics.history_incidents} 次。`,
       facts: [
-        { label: '风险维度得分', value: formatMetric(view.score_breakdown.r) },
-        { label: '风险惩罚', value: formatMetric(view.score_breakdown.risk_penalty) },
-        { label: '官网扣分', value: formatMetric(view.score_breakdown.domain_penalty) },
-        { label: 'SSL 扣分', value: formatMetric(view.score_breakdown.ssl_penalty) },
-        { label: '投诉扣分', value: formatMetric(view.score_breakdown.complaint_penalty) },
-        { label: '历史异常扣分', value: formatMetric(view.score_breakdown.history_penalty) },
-        { label: '近期投诉', value: `${view.metrics.recent_complaints_count} 条` },
-        { label: '历史异常', value: `${view.metrics.history_incidents} 次` },
+        `状态 ${statusLabel}`,
+        `风险惩罚 ${formatMetric(view.score_breakdown.risk_penalty)}`,
+        `官网探测扣分 ${formatMetric(view.score_breakdown.domain_penalty)}`,
+        `SSL 扣分 ${formatMetric(view.score_breakdown.ssl_penalty)}`,
       ],
     },
     {
       title: '稳定性与性能',
       body: `${airportName} 近 30 天可用率为 ${formatMetric(view.metrics.uptime_percent_30d)}%，稳定性评级为${formatStabilityTierLabel(view.metrics.stability_tier)}，健康记录 ${view.metrics.healthy_days_streak} 天。性能侧的中位延迟为 ${formatMetric(view.metrics.median_latency_ms)} ms，下载速率为 ${formatMetric(view.metrics.median_download_mbps)} Mbps，代理请求失败率为 ${formatMetric(view.metrics.packet_loss_percent)}%。趋势上，评分${scoreDeltaText}，可用率${uptimeTrendText}，延迟${latencyTrendText}，下载${downloadTrendText}。`,
       facts: [
-        { label: '稳定性评级', value: formatStabilityTierLabel(view.metrics.stability_tier) },
-        { label: '30 天可用率', value: `${formatMetric(view.metrics.uptime_percent_30d)}%` },
-        { label: '稳定连续天数', value: `${view.metrics.stable_days_streak} 天` },
-        { label: '健康记录', value: `${view.metrics.healthy_days_streak} 天` },
-        { label: '中位延迟', value: `${formatMetric(view.metrics.median_latency_ms)} ms` },
-        { label: '下载速率', value: `${formatMetric(view.metrics.median_download_mbps)} Mbps` },
-        { label: '代理请求失败率', value: `${formatMetric(view.metrics.packet_loss_percent)}%` },
-        { label: '评分趋势', value: scoreDeltaText },
-        { label: '可用率趋势', value: uptimeTrendText },
-        { label: '延迟趋势', value: latencyTrendText },
-        { label: '下载趋势', value: downloadTrendText },
+        `30 天可用率 ${formatMetric(view.metrics.uptime_percent_30d)}%`,
+        `中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms`,
+        `下载速率 ${formatMetric(view.metrics.median_download_mbps)} Mbps`,
+        `代理请求失败率 ${formatMetric(view.metrics.packet_loss_percent)}%`,
       ],
     },
     {
       title: '套餐与试用',
       body: `${airportName} 的套餐信息显示：${planText}。最低月付价格为 ${formatOptionalCurrencyText(view.capabilities.plan.lowest_monthly_price)}，最低年付折算月价为 ${formatOptionalCurrencyText(view.capabilities.plan.lowest_annual_monthly_price)}，支付方式当前记录为 ${paymentText}。`,
       facts: [
-        { label: '月付套餐', value: formatNullableSupportText(view.capabilities.plan.supports_monthly) },
-        { label: '季付套餐', value: formatNullableSupportText(view.capabilities.plan.supports_quarterly) },
-        { label: '半年付套餐', value: formatNullableSupportText(view.capabilities.plan.supports_half_yearly) },
-        { label: '年付套餐', value: formatNullableSupportText(view.capabilities.plan.supports_annual) },
-        { label: '最低月付价格', value: formatOptionalCurrencyText(view.capabilities.plan.lowest_monthly_price) },
-        { label: '最低年付折算月价', value: formatOptionalCurrencyText(view.capabilities.plan.lowest_annual_monthly_price) },
-        { label: '试用套餐', value: formatNullableSupportText(view.capabilities.plan.has_trial_plan) },
-        { label: '不限时套餐', value: formatNullableSupportText(view.capabilities.plan.has_lifetime_plan) },
-        { label: '支付方式', value: paymentText },
+        `月付 ${formatNullableSupportText(view.capabilities.plan.supports_monthly)}`,
+        `年付 ${formatNullableSupportText(view.capabilities.plan.supports_annual)}`,
+        `试用 ${formatNullableSupportText(view.capabilities.plan.has_trial_plan)}`,
+        `支付方式 ${paymentText}`,
       ],
     },
     {
       title: '节点、客户端与解锁',
       body: `${airportName} 当前节点覆盖记录为 ${regionText}。客户端支持记录为 ${clientText}，导入方式为 ${importText}，解锁能力包括 ${streamingText}。这些信息用于判断日常使用、跨区访问和新手配置成本，不代表所有节点在任意时间都保持同等表现。`,
       facts: [
-        { label: '节点地区数', value: view.capabilities.regions.length > 0 ? `${view.capabilities.regions.length} 个` : '未收录' },
-        { label: '节点总数', value: regionsWithNodeCounts.length > 0 ? String(regionNodeCount) : '未收录' },
-        ...view.capabilities.regions.map((region) => ({
-          label: `${region.label}节点`,
-          value: buildCompleteRegionDetail(region),
-        })),
-        { label: '支持客户端', value: clientText },
-        { label: '导入方式', value: importText },
-        { label: '流媒体与 AI 解锁', value: streamingText },
+        `地区 ${regionText}`,
+        `客户端 ${clientText}`,
+        `导入 ${importText}`,
+        `解锁 ${streamingText}`,
       ],
     },
     {
       title: 'Telegram 与售后',
       body: `${airportName} 的售后与社区记录显示：${telegramText}。如果准备购买或续费，建议先核对官网入口、Telegram 活跃度、订阅可用性和本页风险记录，再决定是否长期使用。`,
       facts: [
-        { label: 'Telegram 群', value: formatNullableSupportText(view.capabilities.telegram.has_group) },
-        ...(view.capabilities.telegram.group_url
-          ? [{ label: '群组链接', value: view.capabilities.telegram.group_url, href: view.capabilities.telegram.group_url }]
-          : [{ label: '群组链接', value: '未收录' }]),
-        { label: 'Telegram 频道', value: formatNullableSupportText(view.capabilities.telegram.has_channel) },
-        ...(view.capabilities.telegram.channel_url
-          ? [{ label: '频道链接', value: view.capabilities.telegram.channel_url, href: view.capabilities.telegram.channel_url }]
-          : [{ label: '频道链接', value: '未收录' }]),
-        { label: '群内发言', value: formatNullableSupportText(view.capabilities.telegram.group_allows_speaking) },
-        { label: '群人数', value: view.capabilities.telegram.group_member_count === null ? '未收录' : `${formatCount(view.capabilities.telegram.group_member_count)} 人` },
-        { label: '最近活跃', value: view.capabilities.telegram.recent_active_at || '未收录' },
-        { label: '客服 Bot', value: formatNullableSupportText(view.capabilities.telegram.has_customer_service_bot) },
-        { label: '工单系统', value: formatNullableSupportText(view.capabilities.telegram.has_ticket_system) },
+        `Telegram 群 ${formatNullableSupportText(view.capabilities.telegram.has_group)}`,
+        `Telegram 频道 ${formatNullableSupportText(view.capabilities.telegram.has_channel)}`,
+        `客服 Bot ${formatNullableSupportText(view.capabilities.telegram.has_customer_service_bot)}`,
+        `工单系统 ${formatNullableSupportText(view.capabilities.telegram.has_ticket_system)}`,
       ],
     },
     {
       title: '适合哪些用户',
       body: buildReportFitText(view),
       facts: [
-        { label: '稳定性', value: formatStabilityTierLabel(view.metrics.stability_tier) },
-        { label: '中位延迟', value: `${formatMetric(view.metrics.median_latency_ms)} ms` },
-        { label: '下载速率', value: `${formatMetric(view.metrics.median_download_mbps)} Mbps` },
-        { label: '代理请求失败率', value: `${formatMetric(view.metrics.packet_loss_percent)}%` },
-        { label: '支持客户端', value: clientText },
-        { label: '解锁能力', value: streamingText },
+        `稳定性 ${formatStabilityTierLabel(view.metrics.stability_tier)}`,
+        `延迟 ${formatMetric(view.metrics.median_latency_ms)} ms`,
+        `下载 ${formatMetric(view.metrics.median_download_mbps)} Mbps`,
+        `解锁 ${streamingText}`,
       ],
     },
     {
       title: '选择前要注意什么',
       body: `选择 ${airportName} 前，建议重点核对当前评分是否持续、${trendLabel}是否稳定、官网入口是否可访问、延迟和代理请求失败率是否异常、投诉与历史异常是否增加，以及套餐、退款、试用、USDT、流媒体和 AI 工具支持是否符合自己的使用场景。GateRank 分数只能作为辅助决策依据，不能替代用户自己的试用和判断。`,
       facts: [
-        { label: '官网入口', value: view.airport.website || '未收录', ...(view.airport.website ? { href: view.airport.website } : {}) },
-        { label: '近期投诉', value: `${view.metrics.recent_complaints_count} 条` },
-        { label: '历史异常', value: `${view.metrics.history_incidents} 次` },
-        { label: '支付方式', value: paymentText },
-        { label: '试用套餐', value: formatNullableSupportText(view.capabilities.plan.has_trial_plan) },
+        `近期投诉 ${view.metrics.recent_complaints_count} 条`,
+        `历史异常 ${view.metrics.history_incidents} 次`,
+        `支付方式 ${paymentText}`,
+        `试用 ${formatNullableSupportText(view.capabilities.plan.has_trial_plan)}`,
       ],
     },
   ];
+}
+
+export function buildReportContentSummary(view: PublicReportSeoView): PublicReportContentSummary {
+  const airportName = view.airport.name;
+  const statusLabel = formatAirportStatusLabel(view.airport.status);
+  return {
+    body: `${airportName} 当前公开总分${formatPublicScoreText(view)}，状态为${statusLabel}。本页汇总风险、稳定性、性能、套餐、节点和售后事实；详细解读已折叠保留，可展开核对。`,
+    chips: [
+      `总分 ${formatPublicScoreText(view)}`,
+      `状态 ${statusLabel}`,
+      `风险惩罚 ${formatMetric(view.score_breakdown.risk_penalty)}`,
+      `官网扣分 ${formatMetric(view.score_breakdown.domain_penalty)}`,
+      `SSL 扣分 ${formatMetric(view.score_breakdown.ssl_penalty)}`,
+      `30 天可用率 ${formatMetric(view.metrics.uptime_percent_30d)}%`,
+      `中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms`,
+      `试用 ${formatNullableSupportText(view.capabilities.plan.has_trial_plan)}`,
+    ],
+  };
 }
 
 export function buildReportComparisonLinks(view: PublicReportSeoView): PublicReportComparisonLink[] {
@@ -1543,33 +1518,6 @@ function buildListSummary(items: Array<{ label: string }>, emptyLabel: string, l
   const labels = items.slice(0, limit).map((item) => item.label);
   const suffix = items.length > limit ? `等 ${items.length} 项` : '';
   return `${labels.join('、')}${suffix}`;
-}
-
-function buildCompleteListSummary(items: Array<{ label: string }>, emptyLabel: string): string {
-  return items.length > 0 ? items.map((item) => item.label).join('、') : emptyLabel;
-}
-
-function formatReportRank(rank: number | null): string {
-  return typeof rank === 'number' ? `#${rank}` : '未上榜';
-}
-
-function buildCompleteRegionDetail(region: PublicReportSeoView['capabilities']['regions'][number]): string {
-  const facts = [
-    region.node_count > 0 ? `${region.node_count} 个节点` : '节点数量未收录',
-    region.line_types.length > 0 ? region.line_types.join('、') : '线路类型未收录',
-    `原生 IP ${formatNullableSupportText(region.has_native_ip)}`,
-    `家宽 ${formatNullableSupportText(region.has_residential)}`,
-  ];
-  return facts.join(' · ');
-}
-
-function buildCompleteRegionSummaryText(view: PublicReportSeoView): string {
-  if (view.capabilities.regions.length === 0) {
-    return '节点地区未收录';
-  }
-  return view.capabilities.regions
-    .map((region) => `${region.label}（${buildCompleteRegionDetail(region)}）`)
-    .join('、');
 }
 
 function buildPlanSummaryText(view: PublicReportSeoView): string {

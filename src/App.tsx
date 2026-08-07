@@ -67,6 +67,7 @@ import {
   buildHomeSeo,
   buildReportComparisonLinks,
   buildReportContentSections,
+  buildReportContentSummary,
   buildReportSeo,
   buildReportStructuredData,
   buildReportTrendLabel,
@@ -4835,6 +4836,7 @@ function ReportContentV2({
         <ReportHeroV2 data={data} />
       </MarketingImpressionWrapper>
 
+      <ReportContentNarrative data={data} />
       <ReportSnapshotGrid data={data} />
       <ReportCapabilitiesSection data={data} />
       <ToolDownloadCta
@@ -4848,7 +4850,6 @@ function ReportContentV2({
       <ReportTrendSection data={data} />
       <ReportPlanTelegramSection data={data} />
       <ReportConclusion data={data} rankPairs={rankPairs} />
-      <ReportContentNarrative data={data} />
     </div>
   );
 }
@@ -4929,38 +4930,34 @@ function ReportHeroV2({ data }: { data: ReportViewResponse }) {
 
 function ReportContentNarrative({ data }: { data: ReportViewResponse }) {
   const sections = buildReportContentSections(data);
+  const summary = buildReportContentSummary(data);
 
   return (
     <section id="report-content" className={`scroll-mt-36 rounded-[8px] border border-slate-200 bg-white p-5 ${reportCardInteractiveClass}`}>
-      <ReportSectionTitle title={`${data.airport.name} 详细测评数据`} />
-      <p className="mt-3 text-sm leading-7 text-slate-500">
-        以下内容直接汇总本报告已收录的排名、监测、套餐、节点、客户端与售后数据；未收录的字段会明确标记，不作推测补全。
-      </p>
-      <div className="mt-5 grid gap-3">
+      <ReportSectionTitle title={`${data.airport.name} 测评摘要`} />
+      <div className={`mt-4 rounded-[8px] border border-blue-100 bg-[#f8fbff] p-4 ${reportInnerTileInteractiveClass}`}>
+        <p className="text-sm leading-8 text-slate-600 md:text-[15px]">{summary.body}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {summary.chips.map((chip) => (
+            <span key={chip} className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">
+              {chip}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3 grid gap-2">
         {sections.map((section) => (
-          <article key={section.title} className={`min-w-0 rounded-[8px] border border-slate-200 bg-slate-50 p-4 md:p-5 ${reportInnerTileInteractiveClass}`}>
-            <h3 className="text-base font-black tracking-tight text-slate-950">{section.title}</h3>
-            <p className="mt-2 text-sm leading-7 text-slate-600">{section.body}</p>
-            <dl className="mt-4 grid gap-2 md:grid-cols-2">
+          <details key={section.title} className={`min-w-0 rounded-[8px] border border-slate-200 bg-slate-50 px-4 py-3 ${reportInnerTileInteractiveClass}`}>
+            <summary className="cursor-pointer text-sm font-black tracking-tight text-slate-950 md:text-[15px]">{section.title}</summary>
+            <p className="mt-3 text-sm leading-8 text-slate-600">{section.body}</p>
+            <div className="mt-4 flex flex-wrap gap-2">
               {section.facts.map((fact) => (
-                <div key={`${fact.label}-${fact.value}`} className="min-w-0 rounded-[8px] border border-slate-200 bg-white px-3 py-2.5">
-                  <dt className="text-xs font-bold text-slate-500">{fact.label}</dt>
-                  <dd className="mt-1 break-words text-sm font-black leading-6 text-slate-950">
-                    {fact.href ? (
-                      <a
-                        href={normalizeExternalHref(fact.href)}
-                        target="_blank"
-                        rel="nofollow noreferrer noopener"
-                        className="text-blue-700 underline decoration-blue-200 underline-offset-4 hover:text-blue-900"
-                      >
-                        {fact.value}
-                      </a>
-                    ) : fact.value}
-                  </dd>
-                </div>
+                <span key={fact} className="rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-xs font-black text-blue-700">
+                  {fact}
+                </span>
               ))}
-            </dl>
-          </article>
+            </div>
+          </details>
         ))}
       </div>
       <ReportComparisonLinks data={data} />
