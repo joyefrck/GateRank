@@ -15,29 +15,30 @@ test('resolveActiveReportAnchor follows the latest section past the reading line
   }));
 
   assert.equal(resolveActiveReportAnchor(positions, 160, false), 'report-overview');
-  assert.equal(resolveActiveReportAnchor(positions, 450, false), 'report-content');
-  assert.equal(resolveActiveReportAnchor(positions, 780, false), 'report-snapshot');
+  assert.equal(resolveActiveReportAnchor(positions, 450, false), 'report-snapshot');
+  assert.equal(resolveActiveReportAnchor(positions, 780, false), 'report-capabilities');
 });
 
 test('resolveActiveReportAnchor keeps the current section through gaps and supports rapid jumps', () => {
   const positions = [
     { id: 'report-overview' as const, top: -900 },
-    { id: 'report-content' as const, top: -420 },
-    { id: 'report-snapshot' as const, top: 80 },
-    { id: 'report-capabilities' as const, top: 680 },
+    { id: 'report-snapshot' as const, top: -420 },
+    { id: 'report-capabilities' as const, top: 80 },
+    { id: 'report-score' as const, top: 680 },
   ];
 
-  assert.equal(resolveActiveReportAnchor(positions, 160, false), 'report-snapshot');
+  assert.equal(resolveActiveReportAnchor(positions, 160, false), 'report-capabilities');
   assert.equal(resolveActiveReportAnchor(positions, -500, false), 'report-overview');
 });
 
-test('resolveActiveReportAnchor selects the conclusion at the end of the document', () => {
+test('resolveActiveReportAnchor selects detailed review data at the end of the document', () => {
   const positions = REPORT_ANCHOR_SECTIONS.map((section, index) => ({
     id: section.id,
     top: index * 300,
   }));
 
-  assert.equal(resolveActiveReportAnchor(positions, 160, true), 'report-conclusion');
+  assert.deepEqual(REPORT_ANCHOR_SECTIONS.at(-1), { id: 'report-content', label: '详细测评' });
+  assert.equal(resolveActiveReportAnchor(positions, 160, true), 'report-content');
   assert.equal(resolveActiveReportAnchor([], 160, false), 'report-overview');
 });
 

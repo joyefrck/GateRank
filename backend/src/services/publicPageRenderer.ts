@@ -37,7 +37,6 @@ import {
   buildAirportReportPath,
   buildReportComparisonLinks,
   buildReportContentSections,
-  buildReportContentSummary,
   buildReportFaqItems,
   buildReportSeo,
   buildReportStructuredData,
@@ -1128,7 +1127,6 @@ export function renderReportPublicPage(
           </div>
           ${renderReportScoreCard(view)}
         </section>
-        ${renderReportContentSections(view)}
         <section id="report-snapshot" class="report-snapshot report-anchor-target">
           ${renderSnapshotCard('状态', formatAirportStatusLabel(view.airport.status))}
           ${renderSnapshotCard('数据日期', view.date)}
@@ -1137,6 +1135,7 @@ export function renderReportPublicPage(
         </section>
         ${renderReportSummary(view)}
         ${renderReportFaq(faqItems)}
+        ${renderReportContentSections(view)}
       </main>
     `,
   });
@@ -1161,25 +1160,19 @@ function renderReportFixedNav(): string {
 
 function renderReportContentSections(view: ReportView): string {
   const sections = buildReportContentSections(view);
-  const summary = buildReportContentSummary(view);
   return `
     <section id="report-content" class="report-section report-content report-anchor-target">
-      <h2>${escapeHtml(view.airport.name)} 测评摘要</h2>
-      <div class="report-content-summary">
-        <p>${escapeHtml(summary.body)}</p>
-        <div class="report-content-chips">
-          ${summary.chips.map((chip) => `<span>${escapeHtml(chip)}</span>`).join('')}
-        </div>
-      </div>
+      <h2>${escapeHtml(view.airport.name)} 详细测评数据</h2>
+      <p class="report-content-intro">以下内容直接汇总本报告已收录的排名、监测、套餐、节点、客户端与售后数据；未收录的字段会明确标记，不作推测补全。</p>
       <div class="report-content-details">
         ${sections.map((section) => `
-          <details class="report-content-detail">
-            <summary>${escapeHtml(section.title)}</summary>
+          <article class="report-content-detail">
+            <h3>${escapeHtml(section.title)}</h3>
             <p>${escapeHtml(section.body)}</p>
-            <div class="report-content-facts">
-              ${section.facts.map((fact) => `<span>${escapeHtml(fact)}</span>`).join('')}
-            </div>
-          </details>
+            <dl class="report-content-facts">
+              ${section.facts.map((fact) => `<div><dt>${escapeHtml(fact.label)}</dt><dd>${fact.href ? `<a href="${escapeAttribute(normalizeExternalHref(fact.href))}" target="_blank" rel="nofollow noreferrer noopener">${escapeHtml(fact.value)}</a>` : escapeHtml(fact.value)}</dd></div>`).join('')}
+            </dl>
+          </article>
         `).join('')}
       </div>
       ${renderReportComparisonLinks(view)}
@@ -3381,15 +3374,16 @@ const styles = `
   .snapshot-card strong { display: block; margin-top: 8px; color: #020617; font-size: 18px; font-weight: 900; }
   .report-section { padding: 24px; }
   .report-section h2 { margin-bottom: 18px; color: #020617; font-size: 22px; letter-spacing: 0; }
-  .report-content-summary { border: 1px solid #dbeafe; border-radius: 8px; background: #f8fbff; padding: 18px; }
-  .report-content-summary p { margin: 0; color: #475569; font-size: 15px; line-height: 1.9; }
-  .report-content-chips, .report-content-facts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
-  .report-content-chips span,
-  .report-content-facts span { border: 1px solid #dbeafe; border-radius: 999px; background: #eff6ff; padding: 5px 9px; color: #1d4ed8; font-size: 12px; font-weight: 900; }
-  .report-content-details { display: grid; gap: 10px; margin-top: 14px; }
-  .report-content-detail { min-width: 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 14px 16px; }
-  .report-content-detail summary { cursor: pointer; color: #020617; font-size: 15px; font-weight: 900; }
-  .report-content-detail p { margin: 12px 0 0; color: #475569; font-size: 14px; line-height: 1.9; }
+  .report-content-intro { margin: -6px 0 0; color: #64748b; font-size: 14px; line-height: 1.8; }
+  .report-content-details { display: grid; gap: 12px; margin-top: 20px; }
+  .report-content-detail { min-width: 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; padding: 20px; }
+  .report-content-detail h3 { margin: 0; color: #020617; font-size: 16px; font-weight: 900; }
+  .report-content-detail > p { margin: 9px 0 0; color: #475569; font-size: 14px; line-height: 1.9; }
+  .report-content-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 16px 0 0; }
+  .report-content-facts > div { min-width: 0; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 10px 12px; }
+  .report-content-facts dt { color: #64748b; font-size: 12px; font-weight: 700; }
+  .report-content-facts dd { margin: 4px 0 0; overflow-wrap: anywhere; color: #020617; font-size: 14px; font-weight: 900; line-height: 1.6; }
+  .report-content-facts a { color: #1d4ed8; text-decoration-color: #bfdbfe; text-underline-offset: 4px; }
   .report-comparison-links { margin-top: 16px; border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; padding: 16px; }
   .report-comparison-links h3 { margin: 0 0 12px; color: #020617; font-size: 15px; }
   .report-comparison-links div { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -3429,7 +3423,6 @@ const styles = `
   .score-metric,
   .report-section,
   .report-info-panel,
-  .report-content-summary,
   .report-content-detail {
     transition: transform .2s ease-out, box-shadow .2s ease-out, border-color .2s ease-out, background-color .2s ease-out;
   }
@@ -3444,7 +3437,6 @@ const styles = `
     border-color: #cbd5e1;
     box-shadow: 0 18px 45px rgba(15, 23, 42, .10);
   }
-  .report-content-summary:hover,
   .report-content-detail:hover {
     border-color: #cbd5e1;
     background: #fff;
@@ -3466,7 +3458,6 @@ const styles = `
     .score-metric,
     .report-section,
     .report-info-panel,
-    .report-content-summary,
     .report-content-detail,
     .report-fixed-nav a,
     .report-fixed-nav a > span,
@@ -3538,6 +3529,8 @@ const styles = `
     .filter-chip, .filter-clear { flex: 0 0 auto; }
     .report-hero { grid-template-columns: 1fr; padding: 22px; }
     .report-snapshot, .capability-grid, .score-grid, .report-info-grid, .report-info-panel dl { grid-template-columns: 1fr; }
+    .report-content-facts { grid-template-columns: 1fr; }
+    .report-content-detail { padding: 16px; }
     .score-card { padding: 22px; }
   }
   @media (max-width: 1279px) {

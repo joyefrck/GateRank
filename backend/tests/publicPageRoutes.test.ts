@@ -7,7 +7,7 @@ import { createPublicRoutes } from '../src/routes/publicRoutes';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../src/types/domain';
 import { createTimedPromiseCache } from '../src/utils/publicCache';
 import type { AirportDealDetailView, AirportDealView } from '../../shared/airportAds';
-import { buildReportSeo } from '../../shared/publicSeo';
+import { buildReportContentSections, buildReportSeo } from '../../shared/publicSeo';
 import { getDateInTimezone } from '../src/utils/time';
 import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG } from '../../shared/toolDownloads';
 
@@ -1320,7 +1320,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /class="is-active" aria-current="location" href="#report-overview"/);
     assert.match(okHtml, /href="#report-overview"/);
     assert.match(okHtml, /href="#report-content"/);
-    assert.match(okHtml, />测评摘要<\/a>/);
+    assert.match(okHtml, />详细测评<\/a>/);
     assert.match(okHtml, /href="#report-snapshot"/);
     assert.match(okHtml, /href="#report-capabilities"/);
     assert.match(okHtml, /href="#report-score"/);
@@ -1338,31 +1338,26 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /<title id="report-score-radar-title">本报告四维评分分布<\/title>/);
     assert.match(okHtml, /points="60,12\.48 107\.04,60 60,103\.2 14\.4,60"/);
     assert.match(okHtml, /class="score-methodology-link" href="\/methodology">我们是如何测评的？/);
-    assert.match(okHtml, /星云机场 测评摘要/);
+    assert.match(okHtml, /星云机场 详细测评数据/);
     assert.doesNotMatch(okHtml, /星云机场 实际内容与 SEO 摘要/);
     assert.doesNotMatch(okHtml, /report-content-grid/);
-    assert.match(okHtml, /report-content-summary/);
-    assert.match(okHtml, /星云机场 当前公开总分98\.60\/100，状态为正常。本页汇总风险/);
-    assert.doesNotMatch(okHtml, /星云机场 当前公开分数 98\.60\/100，状态为正常，官网为/);
-    assert.match(okHtml, /<span>总分 98\.60\/100<\/span>/);
-    assert.match(okHtml, /<span>状态 正常<\/span>/);
-    assert.match(okHtml, /<span>风险惩罚 0<\/span>/);
+    assert.doesNotMatch(okHtml, /report-content-summary/);
+    assert.doesNotMatch(okHtml, /详细解读已折叠保留/);
+    assert.match(okHtml, /<article class="report-content-detail">/);
+    assert.match(okHtml, /<h3>综合结论<\/h3>/);
+    assert.match(okHtml, /<dl class="report-content-facts">/);
+    assert.match(okHtml, /<dt>总分<\/dt><dd>98\.60\/100<\/dd>/);
+    assert.match(okHtml, /<dt>状态<\/dt><dd>正常<\/dd>/);
+    assert.match(okHtml, /<dt>今日推荐排名<\/dt><dd>#1<\/dd>/);
+    assert.match(okHtml, /<dt>性价比排名<\/dt><dd>未上榜<\/dd>/);
     assert.doesNotMatch(okHtml, /<article class="snapshot-card">\s*<div>风险惩罚<\/div>\s*<strong>0<\/strong>\s*<\/article>/);
-    assert.match(okHtml, /<span>官网扣分 0<\/span>/);
-    assert.match(okHtml, /<span>SSL 扣分 0<\/span>/);
-    assert.match(okHtml, /<span>30 天可用率 99\.90%<\/span>/);
-    assert.match(okHtml, /<span>中位延迟 88 ms<\/span>/);
-    assert.match(okHtml, /<span>试用 支持<\/span>/);
-    assert.match(okHtml, /<details class="report-content-detail">/);
-    assert.doesNotMatch(okHtml, /<details class="report-content-detail" open>/);
-    assert.match(okHtml, /<summary>综合结论<\/summary>/);
-    assert.match(okHtml, /<summary>风险解读<\/summary>/);
-    assert.match(okHtml, /<summary>稳定性与性能<\/summary>/);
-    assert.match(okHtml, /<summary>套餐与试用<\/summary>/);
-    assert.match(okHtml, /<summary>节点、客户端与解锁<\/summary>/);
-    assert.match(okHtml, /<summary>Telegram 与售后<\/summary>/);
-    assert.match(okHtml, /<summary>适合哪些用户<\/summary>/);
-    assert.match(okHtml, /<summary>选择前要注意什么<\/summary>/);
+    assert.match(okHtml, /<dt>官网扣分<\/dt><dd>0<\/dd>/);
+    assert.match(okHtml, /<dt>SSL 扣分<\/dt><dd>0<\/dd>/);
+    assert.match(okHtml, /<dt>30 天可用率<\/dt><dd>99\.90%<\/dd>/);
+    assert.match(okHtml, /<dt>中位延迟<\/dt><dd>88 ms<\/dd>/);
+    assert.match(okHtml, /<dt>试用套餐<\/dt><dd>支持<\/dd>/);
+    assert.doesNotMatch(okHtml, /<details class="report-content-detail"/);
+    assert.doesNotMatch(okHtml, /<summary>/);
     assert.match(okHtml, /综合结论/);
     assert.match(okHtml, /星云机场 当前 GateRank 公开总分98\.60\/100，状态为正常。本页把 星云机场 机场测评拆成评分/);
     assert.doesNotMatch(okHtml, /星云机场 当前 GateRank 公开分数为 98\.60\/100，状态为正常，官网为/);
@@ -1382,6 +1377,8 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /Clash、Shadowrocket/);
     assert.match(okHtml, /Telegram 群支持/);
     assert.match(okHtml, /群人数 1,200 人/);
+    assert.match(okHtml, /<dt>节点总数<\/dt><dd>6<\/dd>/);
+    assert.match(okHtml, /<dt>群组链接<\/dt><dd><a href="https:\/\/t\.me\/nebula_group"/);
     assert.match(okHtml, /服务能力详情/);
     assert.doesNotMatch(okHtml, /capability-check/);
     assert.match(okHtml, /Netflix/);
@@ -1431,6 +1428,11 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okHtml, /href="\/rankings\/payment\/usdt-trc20"/);
     assert.doesNotMatch(okHtml, /GateRank Pro 数据看板/);
     assert.match(okHtml, /常见问题/);
+    const faqSectionStart = okHtml.indexOf('<h2>常见问题</h2>');
+    const detailedContentStart = okHtml.indexOf('<section id="report-content"');
+    assert.notEqual(faqSectionStart, -1);
+    assert.notEqual(detailedContentStart, -1);
+    assert.ok(faqSectionStart < detailedContentStart);
     assert.match(okHtml, /星云机场怎么样/);
     assert.match(okHtml, /星云机场测评怎么看/);
     assert.match(okHtml, /星云机场官网是什么/);
@@ -1535,6 +1537,20 @@ test('report long-tail metadata does not invent missing capability facts', () =>
   assert.doesNotMatch(seo.description, /不支持 USDT/);
 });
 
+test('report detail content treats zero node counts as unrecorded instead of zero nodes', () => {
+  const sections = buildReportContentSections({
+    ...reportView,
+    capabilities: {
+      ...reportView.capabilities,
+      regions: reportView.capabilities.regions.map((region) => ({ ...region, node_count: 0 })),
+    },
+  });
+  const nodeSection = sections.find((section) => section.title === '节点、客户端与解锁');
+
+  assert.equal(nodeSection?.facts.find((fact) => fact.label === '节点总数')?.value, '未收录');
+  assert.match(nodeSection?.facts.find((fact) => fact.label === '香港节点')?.value || '', /节点数量未收录/);
+});
+
 test('GET /airports/:slug labels low report score as limited rating instead of high risk', async () => {
   const lowScoreReportView: ReportView = {
     ...reportView,
@@ -1570,9 +1586,9 @@ test('GET /airports/:slug labels low report score as limited rating instead of h
     const html = await response.text();
 
     assert.match(html, /综合评级：评级受限/);
-    assert.match(html, /<span>综合评级 评级受限<\/span>/);
+    assert.match(html, /<dt>综合评级<\/dt><dd>评级受限<\/dd>/);
     assert.doesNotMatch(html, /综合评级：高风险/);
-    assert.doesNotMatch(html, /<span>综合评级 高风险<\/span>/);
+    assert.doesNotMatch(html, /<dt>综合评级<\/dt><dd>高风险<\/dd>/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
