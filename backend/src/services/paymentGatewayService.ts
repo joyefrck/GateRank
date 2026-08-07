@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, createHmac } from 'node:crypto';
 import { HttpError } from '../middleware/errorHandler';
 import {
   buildRsaSignPayload,
@@ -260,19 +260,26 @@ export class PaymentGatewayService {
       redirect_url: input.return_url,
       name: input.name,
     };
-    requestParams.signature = signWithMd5Secret(requestParams, usdtConfig.secret_key);
+    requestParams.signature = signWithHmacSha256Secret(requestParams, usdtConfig.secret_key);
 
     try {
-      const response = await this.fetchImpl(
-        buildEpusdtGmpayCreateUrl(usdtConfig.gateway_url),
-        {
+      const createUrl = buildEpusdtGmpayCreateUrl(usdtConfig.gateway_url);
+      const sendRequest = () => this.fetchImpl(createUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(requestParams),
-        },
-      );
+        });
+
+      let response = await sendRequest();
+      // During the rolling upgrade, an old EPUSDT rejects the v2 HMAC with
+      // HTTP 401 before creating an order. Retry only that explicit signature
+      // failure with legacy MD5; never replay transport or other HTTP errors.
+      if (response.status === 401) {
+        requestParams.signature = signWithMd5Secret(requestParams, usdtConfig.secret_key);
+        response = await sendRequest();
+      }
 
       const rawBody = await response.text();
       const data = parsePaymentGatewayJson(rawBody);
@@ -332,7 +339,9 @@ export class PaymentGatewayService {
     if (!signature || !secretKey) {
       return false;
     }
-    return signature.toLowerCase() === signWithMd5Secret(payload, secretKey);
+    const normalized = signature.toLowerCase();
+    return normalized === signWithHmacSha256Secret(payload, secretKey)
+      || normalized === signWithMd5Secret(payload, secretKey);
   }
 
   private assertVerifiedPayload(payload: Record<string, unknown>, publicKey: string): void {
@@ -377,6 +386,12 @@ export class PaymentGatewayService {
 export function signWithMd5Secret(params: Record<string, unknown>, secretKey: string): string {
   const plain = buildMd5SignPayload(params) + secretKey;
   return createHash('md5').update(plain, 'utf8').digest('hex');
+}
+
+export function signWithHmacSha256Secret(params: Record<string, unknown>, secretKey: string): string {
+  return createHmac('sha256', secretKey)
+    .update(buildMd5SignPayload(params), 'utf8')
+    .digest('hex');
 }
 
 export function buildMd5SignPayload(params: Record<string, unknown>): string {

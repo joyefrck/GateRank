@@ -6,6 +6,7 @@ import {
   buildEpusdtGmpayCreateUrl,
   normalizeEpusdtPaymentUrl,
   PaymentGatewayService,
+  signWithHmacSha256Secret,
   signWithMd5Secret,
 } from '../src/services/paymentGatewayService';
 import { buildRsaSignPayload, signWithRsaPrivateKey } from '../src/utils/rsaSignature';
@@ -306,7 +307,7 @@ test('PaymentGatewayService queries an order and verifies the RSA response', asy
   assert.match(requestedBodies[0], /sign_type=RSA/);
 });
 
-test('PaymentGatewayService creates USDT GMPay order with MD5 signature', async () => {
+test('PaymentGatewayService creates USDT GMPay order with HMAC-SHA256 signature', async () => {
   const requestedUrls: string[] = [];
   const requestedBodies: Record<string, string | number>[] = [];
   const service = new PaymentGatewayService({
@@ -350,10 +351,57 @@ test('PaymentGatewayService creates USDT GMPay order with MD5 signature', async 
   assert.equal(requestedBodies[0].notify_url, 'https://api.example.com/api/v1/portal/payment-notify');
   assert.equal(requestedBodies[0].redirect_url, 'https://www.example.com/portal');
   assert.equal(requestedBodies[0].name, 'GateRank test');
-  assert.equal(requestedBodies[0].signature, signWithMd5Secret(requestedBodies[0], 'epay-secret'));
+  assert.equal(requestedBodies[0].signature, signWithHmacSha256Secret(requestedBodies[0], 'epay-secret'));
   assert.equal(result.trade_no, 'gw-usdt-1');
   assert.equal(result.pay_type, 'usdt');
   assert.equal(result.pay_info, 'https://pay-usdt.example.com/pay/gr_9_usdt');
+});
+
+test('PaymentGatewayService retries USDT GMPay creation with legacy MD5 only after HTTP 401', async () => {
+  const requestedBodies: Record<string, string | number>[] = [];
+  const service = new PaymentGatewayService({
+    paymentGatewaySettingsService: { getConfig: async () => usdtGatewayConfig },
+    fetchImpl: (async (_url, init) => {
+      requestedBodies.push(JSON.parse(String(init?.body || '{}')) as Record<string, string | number>);
+      if (requestedBodies.length === 1) {
+        return new Response(JSON.stringify({ status_code: 401, message: 'signature verification failed' }), { status: 401 });
+      }
+      return new Response(JSON.stringify({
+        status_code: 200,
+        message: 'success',
+        data: { trade_id: 'legacy-gw-1', payment_url: 'http://8.217.193.194:8000/pay/legacy-gw-1' },
+      }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    }) as typeof fetch,
+  });
+
+  const result = await service.createOrder({
+    out_trade_no: 'gr_legacy_retry', channel: 'usdt', name: 'GateRank test', money: 12.34,
+    notify_url: 'https://api.example.com/api/v1/portal/payment-notify',
+    return_url: 'https://www.example.com/portal', clientip: '127.0.0.1',
+  });
+
+  assert.equal(requestedBodies.length, 2);
+  assert.equal(requestedBodies[0].signature, signWithHmacSha256Secret(requestedBodies[0], 'epay-secret'));
+  assert.equal(requestedBodies[1].signature, signWithMd5Secret(requestedBodies[1], 'epay-secret'));
+  assert.equal(result.trade_no, 'legacy-gw-1');
+});
+
+test('PaymentGatewayService does not retry USDT GMPay creation after non-401 HTTP error', async () => {
+  let calls = 0;
+  const service = new PaymentGatewayService({
+    paymentGatewaySettingsService: { getConfig: async () => usdtGatewayConfig },
+    fetchImpl: (async () => {
+      calls += 1;
+      return new Response(JSON.stringify({ message: 'upstream unavailable' }), { status: 503 });
+    }) as typeof fetch,
+  });
+
+  await assert.rejects(() => service.createOrder({
+    out_trade_no: 'gr_no_retry', channel: 'usdt', name: 'GateRank test', money: 12.34,
+    notify_url: 'https://api.example.com/api/v1/portal/payment-notify',
+    return_url: 'https://www.example.com/portal', clientip: '127.0.0.1',
+  }));
+  assert.equal(calls, 1);
 });
 
 test('PaymentGatewayService accepts EPUSDT gateway domain or legacy full payment endpoint', () => {
@@ -419,7 +467,7 @@ test('PaymentGatewayService surfaces USDT GMPay error responses', async () => {
   );
 });
 
-test('PaymentGatewayService verifies USDT GMPay notification signatures', async () => {
+test('PaymentGatewayService verifies current and legacy USDT GMPay notification signatures', async () => {
   const service = new PaymentGatewayService({
     paymentGatewaySettingsService: {
       getConfig: async () => usdtGatewayConfig,
@@ -435,10 +483,14 @@ test('PaymentGatewayService verifies USDT GMPay notification signatures', async 
     amount: '12.34',
     status: 'success',
   };
-  payload.signature = signWithMd5Secret(payload, 'epay-secret');
+  payload.signature = signWithHmacSha256Secret(payload, 'epay-secret');
 
   assert.equal(await service.verifyNotificationPayload(payload, 'usdt'), true);
   assert.equal(await service.verifyNotificationPayload({ ...payload, amount: '99.00' }, 'usdt'), false);
+
+  const legacyPayload = { ...payload };
+  legacyPayload.signature = signWithMd5Secret(legacyPayload, 'epay-secret');
+  assert.equal(await service.verifyNotificationPayload(legacyPayload, 'usdt'), true);
 });
 
 test('PaymentGatewayService rejects active USDT order sync with clear unsupported query error', async () => {
