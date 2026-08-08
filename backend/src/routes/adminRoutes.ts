@@ -30,6 +30,7 @@ import {
 } from '../services/userTelegramBotSettingsService';
 import type { XOAuthSettingsInput } from '../services/xOAuthSettingsService';
 import type { SchedulerDailyStat } from '../repositories/schedulerRunRepository';
+import { PerformanceProbeSettingsConflictError } from '../repositories/performanceProbeSettingRepository';
 import type {
   RechargeOrderView,
   WalletTransactionType,
@@ -52,6 +53,12 @@ import type {
   PerformanceNodePreference,
   PerformanceNodePreferenceInput,
   PerformanceNodePreferenceNode,
+  AirportPerformanceProbeSettingsInput,
+  AirportPerformanceProbeSettingsView,
+  PerformanceProbe,
+  PerformanceProbeId,
+  PerformanceRun,
+  PerformanceRunTarget,
   PerformanceRunNode,
   DailyMetricsInput,
   PerformanceRunInput,
@@ -267,6 +274,22 @@ interface AdminDeps {
     insert(input: PerformanceRunInput): Promise<number>;
     getLatestByAirportAndDate(airportId: number, date: string): Promise<unknown | null>;
     getLatestByAirportBeforeDate(airportId: number, date: string): Promise<unknown | null>;
+    getLatestByAirportProbeBeforeDate?(
+      airportId: number,
+      probeId: PerformanceProbeId,
+      date: string,
+    ): Promise<PerformanceRun | null>;
+    listByAirportAndDate?(airportId: number, date: string): Promise<PerformanceRun[]>;
+  };
+  performanceProbeRepository?: {
+    list(): Promise<PerformanceProbe[]>;
+  };
+  performanceProbeSettingRepository?: {
+    getByAirport(airportId: number): Promise<AirportPerformanceProbeSettingsView>;
+    saveAll(input: AirportPerformanceProbeSettingsInput): Promise<AirportPerformanceProbeSettingsView>;
+  };
+  performanceRunTargetRepository?: {
+    listByRun(runId: number): Promise<PerformanceRunTarget[]>;
   };
   subscriptionNodeSnapshotRepository?: {
     insert(input: SubscriptionNodeSnapshotInput): Promise<number>;
@@ -1942,6 +1965,122 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     }
   });
 
+  router.get('/airports/:id/performance-probe-settings', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const date = parseDate(req.query.date);
+      const settingRepository = getPerformanceProbeSettingRepository(deps);
+      const probeRepository = getPerformanceProbeRepository(deps);
+      const [currentView, probes, runs] = await Promise.all([
+        settingRepository.getByAirport(airportId),
+        probeRepository.list(),
+        deps.performanceRunRepository.listByAirportAndDate?.(airportId, date) ?? Promise.resolve([]),
+      ]);
+      const editable = date === getDateInTimezone();
+      const effectiveView = editable || runs.length === 0
+        ? currentView
+        : historicalPerformanceSettingsView(airportId, currentView, runs);
+      const runByProbe = new Map<PerformanceProbeId, PerformanceRun>();
+      for (const run of runs) {
+        const probeId = run.probe_id || 'legacy-control';
+        if (!runByProbe.has(probeId)) runByProbe.set(probeId, run);
+      }
+      const settingByProbe = new Map(effectiveView.settings.map((setting) => [setting.probe_id, setting]));
+      res.json({
+        airport_id: airportId,
+        date,
+        editable,
+        config_version: effectiveView.config_version,
+        settings: probes.map((probe) => ({
+          probe_id: probe.probe_id,
+          display_name: probe.display_name,
+          region_code: probe.region_code,
+          provider: probe.provider,
+          bandwidth_mbps: probe.bandwidth_mbps,
+          probe_type: probe.probe_type,
+          test_profile: probe.test_profile,
+          scoring_rule_version: probe.scoring_rule_version,
+          globally_enabled: probe.globally_enabled,
+          token_configured: probe.token_configured,
+          last_seen_at: probe.last_seen_at,
+          test_enabled: settingByProbe.get(probe.probe_id)?.test_enabled ?? false,
+          include_in_result: settingByProbe.get(probe.probe_id)?.include_in_result ?? false,
+          updated_by: settingByProbe.get(probe.probe_id)?.updated_by ?? null,
+          updated_at: settingByProbe.get(probe.probe_id)?.updated_at ?? null,
+          last_run: safePerformanceProbeRun(runByProbe.get(probe.probe_id) || null),
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch('/airports/:id/performance-probe-settings', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const payload = (req.body || {}) as Record<string, unknown>;
+      const date = parseDate(payload.date);
+      if (date !== getDateInTimezone()) {
+        throw new HttpError(409, 'HISTORICAL_PROBE_SETTINGS_READ_ONLY', '历史日期的测试地区配置只读');
+      }
+      const settingRepository = getPerformanceProbeSettingRepository(deps);
+      const before = await settingRepository.getByAirport(airportId);
+      const settings = parsePerformanceProbeSettings(payload.settings);
+      const beforeByProbe = new Map(before.settings.map((setting) => [setting.probe_id, setting]));
+      for (const setting of settings) {
+        if (
+          setting.probe_id === 'legacy-control'
+          || !setting.include_in_result
+          || beforeByProbe.get(setting.probe_id)?.include_in_result
+        ) continue;
+        const latest = await deps.performanceRunRepository.getLatestByAirportProbeBeforeDate?.(
+          airportId,
+          setting.probe_id,
+          date,
+        );
+        if (
+          !latest
+          || latest.status !== 'success'
+          || latest.calibration_status !== 'passed'
+          || Number(latest.calibration_mbps || 0) < 160
+        ) {
+          throw new HttpError(
+            409,
+            'PERFORMANCE_PROBE_CALIBRATION_REQUIRED',
+            `${setting.probe_id} 最近一次有效校准未达到 160 Mbps，暂不能并入测试结果`,
+          );
+        }
+      }
+      const expectedConfigVersion = Number(payload.expected_config_version);
+      if (!Number.isInteger(expectedConfigVersion) || expectedConfigVersion < 0) {
+        throw new HttpError(400, 'BAD_REQUEST', 'expected_config_version must be a non-negative integer');
+      }
+      let after: AirportPerformanceProbeSettingsView;
+      try {
+        after = await settingRepository.saveAll({
+          airport_id: airportId,
+          expected_config_version: expectedConfigVersion,
+          updated_by: actorFromReq(req),
+          settings,
+        });
+      } catch (error) {
+        if (error instanceof PerformanceProbeSettingsConflictError) {
+          throw new HttpError(409, 'PERFORMANCE_PROBE_SETTINGS_CONFLICT', '配置已被其他管理员更新，请重新加载');
+        }
+        throw error;
+      }
+      await deps.auditRepository.log(
+        'update_performance_probe_settings',
+        actorFromReq(req),
+        req.requestId,
+        { airport_id: airportId, before, after },
+      );
+      res.json(after);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/airports/:id/performance-node-selection', async (req, res, next) => {
     try {
       const airportId = toAirportId(req.params.id);
@@ -2085,12 +2224,13 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     try {
       const airportId = toAirportId(req.params.id);
       const date = parseDate(req.query.date);
-      const [base, metrics, score, performanceRun, latestPerformanceRun, dayProbeSamples, latestAvailableScoreDate] = await Promise.all([
+      const [base, metrics, score, performanceRun, latestPerformanceRun, performanceRuns, dayProbeSamples, latestAvailableScoreDate] = await Promise.all([
         deps.airportRepository.getById(airportId),
         deps.metricsRepository.getByAirportAndDate(airportId, date),
         deps.scoreRepository.getByAirportAndDate(airportId, date),
         deps.performanceRunRepository.getLatestByAirportAndDate(airportId, date),
         deps.performanceRunRepository.getLatestByAirportBeforeDate(airportId, date),
+        deps.performanceRunRepository.listByAirportAndDate?.(airportId, date) ?? Promise.resolve([]),
         deps.probeSampleRepository.listProbeSamples(airportId, date, undefined, 1),
         deps.scoreRepository.getLatestAvailableDate?.(date) ?? null,
       ]);
@@ -2196,6 +2336,14 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           : hasPerformanceMetrics && latestPerformanceDate
             ? '历史缓存'
             : '无性能数据';
+      const groupedPerformanceRuns = await Promise.all(
+        (performanceRuns as PerformanceRun[]).map(async (run) => {
+          const targets = deps.performanceRunTargetRepository
+            ? await deps.performanceRunTargetRepository.listByRun(run.id)
+            : [];
+          return buildAdminPerformanceProbeRun(run, targets);
+        }),
+      );
 
       res.json({
         date,
@@ -2247,6 +2395,11 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           latency_score: numberOrNull(details.latency_score),
           speed_score: numberOrNull(details.speed_score),
           loss_score: numberOrNull(details.loss_score),
+          performance_rule_summary: stringOrNull(metricsObj.performance_rule_summary),
+          included_probe_ids: toSafeStringList(metricsObj.performance_included_probe_ids),
+          pending_probe_ids: toSafeStringList(metricsObj.performance_pending_probe_ids),
+          review_status: stringOrNull(metricsObj.performance_review_status),
+          probe_runs: groupedPerformanceRuns,
           data_source_mode: performanceDataMode,
           cache_source_date: performanceRun ? null : latestPerformanceDate,
           collect_status: stringOrNull(latestPerformanceRunObj.status),
@@ -3831,6 +3984,98 @@ function getPerformanceNodePreferenceRepository(deps: AdminDeps): NonNullable<Ad
   return deps.performanceNodePreferenceRepository;
 }
 
+function getPerformanceProbeSettingRepository(
+  deps: AdminDeps,
+): NonNullable<AdminDeps['performanceProbeSettingRepository']> {
+  if (!deps.performanceProbeSettingRepository) {
+    throw new Error('performanceProbeSettingRepository is not configured');
+  }
+  return deps.performanceProbeSettingRepository;
+}
+
+function getPerformanceProbeRepository(deps: AdminDeps): NonNullable<AdminDeps['performanceProbeRepository']> {
+  if (!deps.performanceProbeRepository) {
+    throw new Error('performanceProbeRepository is not configured');
+  }
+  return deps.performanceProbeRepository;
+}
+
+function parsePerformanceProbeSettings(
+  value: unknown,
+): AirportPerformanceProbeSettingsInput['settings'] {
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'settings must be an array');
+  }
+  const allowed = new Set<PerformanceProbeId>(['legacy-control', 'cn-shanghai', 'cn-guangzhou']);
+  return value.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new HttpError(400, 'BAD_REQUEST', `settings[${index}] must be an object`);
+    }
+    const row = item as Record<string, unknown>;
+    const probeId = String(row.probe_id || '') as PerformanceProbeId;
+    if (!allowed.has(probeId)) {
+      throw new HttpError(400, 'BAD_REQUEST', `settings[${index}].probe_id is invalid`);
+    }
+    if (typeof row.test_enabled !== 'boolean' || typeof row.include_in_result !== 'boolean') {
+      throw new HttpError(400, 'BAD_REQUEST', `settings[${index}] switches must be boolean`);
+    }
+    return {
+      probe_id: probeId,
+      test_enabled: row.test_enabled,
+      include_in_result: row.include_in_result,
+    };
+  });
+}
+
+function historicalPerformanceSettingsView(
+  airportId: number,
+  fallback: AirportPerformanceProbeSettingsView,
+  runs: PerformanceRun[],
+): AirportPerformanceProbeSettingsView {
+  const latestByProbe = new Map<PerformanceProbeId, PerformanceRun>();
+  for (const run of runs) {
+    const probeId = run.probe_id || 'legacy-control';
+    if (!latestByProbe.has(probeId)) latestByProbe.set(probeId, run);
+  }
+  return {
+    airport_id: airportId,
+    config_version: Math.max(0, ...runs.map((run) => Number(run.config_version || 0))),
+    settings: fallback.settings.map((setting) => {
+      const run = latestByProbe.get(setting.probe_id);
+      return {
+        ...setting,
+        test_enabled: Boolean(run),
+        include_in_result: run?.run_mode === 'official',
+        updated_by: null,
+        updated_at: run?.sampled_at || null,
+      };
+    }),
+  };
+}
+
+function safePerformanceProbeRun(run: PerformanceRun | null): Record<string, unknown> | null {
+  if (!run) return null;
+  return {
+    id: run.id,
+    job_id: run.job_id ?? null,
+    sampled_at: run.sampled_at,
+    status: run.status,
+    run_mode: run.run_mode || 'official',
+    test_profile: run.test_profile || 'legacy_single_target_v1',
+    scoring_rule_version: run.scoring_rule_version || 'legacy_v1',
+    config_version: Number(run.config_version || 0),
+    calibration_status: run.calibration_status || 'not_required',
+    calibration_mbps: numberOrNull(run.calibration_mbps),
+    review_status: run.review_status || 'normal',
+    review_reasons: (run.review_reasons || []).map(String),
+    median_latency_ms: numberOrNull(run.median_latency_ms),
+    median_download_mbps: numberOrNull(run.median_download_mbps),
+    packet_loss_percent: numberOrNull(run.packet_loss_percent),
+    error_code: stringOrNull(run.error_code),
+    error_message: stringOrNull(run.error_message),
+  };
+}
+
 function buildPerformanceNodeSelectionCandidates(nodes: SubscriptionNodeSnapshotNode[]): PerformanceNodePreferenceNode[] {
   const seen = new Set<string>();
   const candidates: PerformanceNodePreferenceNode[] = [];
@@ -4041,6 +4286,77 @@ function performanceNodesOrEmpty(value: unknown): Array<Record<string, unknown>>
     return [];
   }
   return value.filter((item) => item && typeof item === 'object') as Array<Record<string, unknown>>;
+}
+
+function toSafeStringList(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String).filter(Boolean);
+  if (typeof value !== 'string' || !value.trim()) return [];
+  try {
+    const parsed = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildAdminPerformanceProbeRun(
+  run: PerformanceRun,
+  targets: PerformanceRunTarget[],
+): Record<string, unknown> {
+  const targetGroups = new Map<string, number[]>();
+  for (const target of targets) {
+    if (!target.valid || target.download_mbps === null || !Number.isFinite(target.download_mbps)) continue;
+    const values = targetGroups.get(target.target_key) || [];
+    values.push(target.download_mbps);
+    targetGroups.set(target.target_key, values);
+  }
+  const targetSummaries = [...targetGroups.entries()].map(([targetKey, values]) => ({
+    target_key: targetKey,
+    sample_count: values.length,
+    min_download_mbps: Math.min(...values),
+    median_download_mbps: medianOrUndefined(values) ?? null,
+    max_download_mbps: Math.max(...values),
+  }));
+  return {
+    id: run.id,
+    job_id: run.job_id ?? null,
+    probe_id: run.probe_id || 'legacy-control',
+    region_code: run.region_code ?? null,
+    provider: run.provider ?? null,
+    bandwidth_mbps: run.bandwidth_mbps ?? null,
+    sampled_at: run.sampled_at,
+    source: run.source,
+    status: run.status,
+    run_mode: run.run_mode || 'official',
+    participation_state: run.run_mode === 'shadow' ? '影子测试' : '参与评分',
+    test_profile: run.test_profile || 'legacy_single_target_v1',
+    scoring_rule_version: run.scoring_rule_version || 'legacy_v1',
+    config_version: Number(run.config_version || 0),
+    calibration_status: run.calibration_status || 'not_required',
+    calibration_mbps: numberOrNull(run.calibration_mbps),
+    review_status: run.review_status || 'normal',
+    review_reasons: (run.review_reasons || []).map(String),
+    probe_ceiling:
+      run.probe_id !== 'legacy-control'
+      && Number(run.median_download_mbps || 0) >= 180,
+    median_latency_ms: numberOrNull(run.median_latency_ms),
+    median_download_mbps: numberOrNull(run.median_download_mbps),
+    packet_loss_percent: numberOrNull(run.packet_loss_percent),
+    selected_nodes: run.selected_nodes || [],
+    tested_nodes: run.tested_nodes || [],
+    target_summaries: targetSummaries,
+    error_code: stringOrNull(run.error_code),
+    error_message: sanitizeAdminPerformanceError(run.error_message),
+  };
+}
+
+function sanitizeAdminPerformanceError(value: unknown): string | null {
+  const normalized = stringOrNull(value);
+  if (!normalized) return null;
+  return normalized
+    .replace(/https?:\/\/[^\s"']+/gi, '[redacted-url]')
+    .replace(/\b(?:vless|trojan|ss|ssr|vmess):\/\/\S+/gi, '[redacted-node-uri]')
+    .slice(0, 500);
 }
 
 function toObjectOrEmpty(value: unknown): Record<string, unknown> {

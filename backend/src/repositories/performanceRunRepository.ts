@@ -222,6 +222,24 @@ export class PerformanceRunRepository {
     return toPerformanceRun(rows[0]);
   }
 
+  async getLatestByAirportProbeBeforeDate(
+    airportId: number,
+    probeId: PerformanceProbeId,
+    date: string,
+  ): Promise<PerformanceRun | null> {
+    const [rows] = await this.pool.query<PerformanceRunRow[]>(
+      `SELECT ${SELECT_COLUMNS}
+         FROM airport_performance_runs
+        WHERE airport_id = ?
+          AND COALESCE(probe_id, 'legacy-control') = ?
+          AND sampled_at <= ?
+        ORDER BY sampled_at DESC, id DESC
+        LIMIT 1`,
+      [airportId, probeId, `${date} 23:59:59`],
+    );
+    return rows[0] ? toPerformanceRun(rows[0]) : null;
+  }
+
   async getById(runId: number): Promise<PerformanceRun | null> {
     const [rows] = await this.pool.query<PerformanceRunRow[]>(
       `SELECT ${SELECT_COLUMNS}

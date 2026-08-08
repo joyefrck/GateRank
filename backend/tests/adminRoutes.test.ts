@@ -8,7 +8,145 @@ import { SmtpSendError } from '../src/services/mailService';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
 import type { PerformanceRunInput, ProbeSampleInput, ReportView } from '../src/types/domain';
 import { buildPerformanceNodeKey, buildPerformanceNodeMatchIdentity } from '../src/utils/performanceNodeKey';
+import { getDateInTimezone } from '../src/utils/time';
 import type { AirportHomeAdSlotPrices } from '../../shared/airportAds';
+
+test('GET and PATCH performance probe settings expose sanitized per-airport switches', async () => {
+  const today = getDateInTimezone();
+  const audits: Array<{ action: string; payload: unknown }> = [];
+  let savedInput: unknown = null;
+  const currentView = {
+    airport_id: 9,
+    config_version: 1,
+    settings: [
+      { probe_id: 'legacy-control' as const, test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+      { probe_id: 'cn-shanghai' as const, test_enabled: true, include_in_result: false, updated_by: null, updated_at: null },
+      { probe_id: 'cn-guangzhou' as const, test_enabled: true, include_in_result: false, updated_by: null, updated_at: null },
+    ],
+  };
+  const app = express();
+  app.use(express.json());
+  app.use(createAdminRoutes({
+    airportRepository: stubAirportRepository(),
+    airportApplicationRepository: stubAirportApplicationRepository(),
+    probeSampleRepository: stubProbeSampleRepository(),
+    performanceRunRepository: {
+      ...stubPerformanceRunRepository(),
+      listByAirportAndDate: async () => [],
+      getLatestByAirportProbeBeforeDate: async () => ({
+        id: 9,
+        airport_id: 9,
+        sampled_at: `${today}T10:00:00+08:00`,
+        sampled_date: today,
+        source: 'shadow',
+        status: 'success',
+        job_id: 'job-9',
+        probe_id: 'cn-shanghai',
+        region_code: 'CN-SH',
+        provider: 'tencent-cloud',
+        bandwidth_mbps: 200,
+        run_mode: 'shadow',
+        test_profile: 'mainland_multi_target_v1',
+        scoring_rule_version: 'cn_dual_probe_v1',
+        config_version: 1,
+        calibration_status: 'passed',
+        calibration_mbps: 180,
+        review_status: 'normal',
+        review_reasons: [],
+        subscription_format: null,
+        parsed_nodes_count: 0,
+        supported_nodes_count: 0,
+        selected_nodes: [],
+        tested_nodes: [],
+        available_nodes_count: 0,
+        unavailable_nodes_count: 0,
+        node_availability_percent: 0,
+        node_unavailability_percent: 0,
+        median_latency_ms: 80,
+        median_download_mbps: 120,
+        packet_loss_percent: 0,
+        error_code: null,
+        error_message: null,
+        diagnostics: {},
+      }),
+    },
+    performanceProbeRepository: {
+      list: async () => [
+        adminProbe('legacy-control'),
+        adminProbe('cn-shanghai'),
+        adminProbe('cn-guangzhou'),
+      ],
+    },
+    performanceProbeSettingRepository: {
+      getByAirport: async () => currentView,
+      saveAll: async (input) => {
+        savedInput = input;
+        return { ...currentView, config_version: 2, settings: input.settings.map((row) => ({ ...row, updated_by: 'tester', updated_at: null })) };
+      },
+    },
+    metricsRepository: stubMetricsRepository(),
+    scoreRepository: { getByAirportAndDate: async () => null, getTrend: async () => [] },
+    recomputeService: stubRecomputeService(),
+    aggregationService: stubAggregationService(),
+    manualJobService: stubManualJobService(),
+    auditRepository: { log: async (action, _actor, _requestId, payload) => { audits.push({ action, payload }); } },
+    publicViewService: stubPublicViewService(),
+  }));
+  app.use(errorHandler);
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const readResponse = await fetch(`http://127.0.0.1:${port}/airports/9/performance-probe-settings?date=${today}`);
+    const readBody = await readResponse.json() as { settings: Array<Record<string, unknown>> };
+    assert.equal(readResponse.status, 200);
+    assert.deepEqual(readBody.settings.map((row) => [row.probe_id, row.test_enabled, row.include_in_result]), [
+      ['legacy-control', true, true],
+      ['cn-shanghai', true, false],
+      ['cn-guangzhou', true, false],
+    ]);
+    assert.doesNotMatch(JSON.stringify(readBody), /token_hash|raw_uri|password/i);
+
+    const patchResponse = await fetch(`http://127.0.0.1:${port}/airports/9/performance-probe-settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({
+        date: today,
+        expected_config_version: 1,
+        settings: [
+          { probe_id: 'legacy-control', test_enabled: true, include_in_result: true },
+          { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: true },
+          { probe_id: 'cn-guangzhou', test_enabled: true, include_in_result: false },
+        ],
+      }),
+    });
+    assert.equal(patchResponse.status, 200);
+    assert.ok(savedInput);
+    assert.equal(audits[0]?.action, 'update_performance_probe_settings');
+    assert.doesNotMatch(JSON.stringify(audits), /token_hash|raw_uri|password/i);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+function adminProbe(probeId: 'legacy-control' | 'cn-shanghai' | 'cn-guangzhou') {
+  const mainland = probeId !== 'legacy-control';
+  return {
+    probe_id: probeId,
+    display_name: probeId,
+    region_code: probeId,
+    provider: mainland ? 'tencent-cloud' : 'gaterank',
+    bandwidth_mbps: mainland ? 200 : null,
+    probe_type: mainland ? 'mainland' as const : 'legacy' as const,
+    test_profile: mainland ? 'mainland_multi_target_v1' : 'legacy_single_target_v1',
+    scoring_rule_version: mainland ? 'cn_dual_probe_v1' as const : 'legacy_v1' as const,
+    globally_enabled: true,
+    token_configured: mainland,
+    token_last_rotated_at: null,
+    last_seen_at: null,
+    created_at: `${getDateInTimezone()}T00:00:00+08:00`,
+    updated_at: `${getDateInTimezone()}T00:00:00+08:00`,
+  };
+}
 
 test('POST /performance-runs stores run diagnostics and performance samples', async () => {
   const insertedSamples: ProbeSampleInput[] = [];
