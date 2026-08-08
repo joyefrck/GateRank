@@ -10,6 +10,7 @@ import { getAdminAuthConfig } from '../utils/adminAuthConfig';
 import { getDateInTimezone } from '../utils/time';
 import { signAdminToken } from '../utils/token';
 import type { ManualJob, ManualJobKind } from '../types/domain';
+import type { PerformanceProbeDispatchResult } from './performanceProbeDispatchService';
 
 const execFileAsync = promisify(execFile);
 
@@ -39,6 +40,14 @@ interface ManualJobServiceDeps {
   };
   auditRepository: {
     log(action: string, actor: string, requestId: string, payload: unknown): Promise<void>;
+  };
+  performanceProbeDispatchService?: {
+    dispatchAirport(
+      airportId: number,
+      date: string,
+      source: string,
+      airportName?: string,
+    ): Promise<PerformanceProbeDispatchResult>;
   };
 }
 
@@ -142,6 +151,7 @@ export class ManualJobService {
 
     if (job.kind === 'full') {
       const stageFailures: string[] = [];
+      let regionalDispatched = 0;
       if (isToday) {
         const stabilityFailure = await this.captureStageFailure('稳定性采集', async () => {
           await this.runStabilityScript(job.airport_id);
@@ -152,6 +162,10 @@ export class ManualJobService {
 
         const performanceFailure = await this.captureStageFailure('性能采集', async () => {
           await this.runPerformanceScript(job.airport_id);
+          regionalDispatched = await this.dispatchRegionalPerformance(
+            job,
+            `manual-full:${job.id}`,
+          );
         });
         if (performanceFailure) {
           stageFailures.push(performanceFailure);
@@ -197,7 +211,10 @@ export class ManualJobService {
         throw new Error(`全链路未完全成功。${successSummary} 失败阶段：${stageFailures.join('；')}`);
       }
 
-      return `全链路完成：聚合 ${aggregatedCount ?? 0} 条，重算 ${recomputedCount ?? 0} 条`;
+      const regionalSummary = isToday && this.deps.performanceProbeDispatchService
+        ? `，区域任务已排队 ${regionalDispatched} 个`
+        : '';
+      return `全链路完成：聚合 ${aggregatedCount ?? 0} 条，重算 ${recomputedCount ?? 0} 条${regionalSummary}`;
     }
 
     if (job.kind === 'stability') {
@@ -212,13 +229,18 @@ export class ManualJobService {
     }
 
     if (job.kind === 'performance') {
+      let regionalDispatched = 0;
       if (isToday) {
         await this.runPerformanceScript(job.airport_id);
+        regionalDispatched = await this.dispatchRegionalPerformance(
+          job,
+          `manual-performance:${job.id}`,
+        );
       }
       const aggregateResult = await this.deps.aggregationService.aggregateAirportForDate(job.airport_id, job.date);
       const recomputeResult = await this.deps.recomputeService.recomputeAirportForDate(job.date, job.airport_id);
       return isToday
-        ? `性能采集完成：聚合 ${aggregateResult.aggregated} 条，重算 ${recomputeResult.recomputed} 条`
+        ? `性能采集完成：聚合 ${aggregateResult.aggregated} 条，重算 ${recomputeResult.recomputed} 条，区域任务已排队 ${regionalDispatched} 个`
         : `历史日期仅重算性能相关数据：聚合 ${aggregateResult.aggregated} 条，重算 ${recomputeResult.recomputed} 条`;
     }
 
@@ -252,6 +274,17 @@ export class ManualJobService {
 
   private async runPerformanceScript(airportId: number): Promise<void> {
     await this.runPythonScript('monitor_performance.py', airportId, 'manual-performance');
+  }
+
+  private async dispatchRegionalPerformance(job: ManualJob, source: string): Promise<number> {
+    const service = this.deps.performanceProbeDispatchService;
+    if (!service) return 0;
+    const result = await service.dispatchAirport(job.airport_id, job.date, source);
+    if (result.failures.length > 0) {
+      const codes = [...new Set(result.failures.map((failure) => failure.error_code))];
+      throw new Error(`区域性能任务派发失败：${codes.join(', ')}`);
+    }
+    return result.created;
   }
 
   private async runPythonScript(scriptName: 'monitor_stability.py' | 'monitor_performance.py', airportId: number, source: string): Promise<void> {

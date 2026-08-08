@@ -16,6 +16,7 @@ import {
   type UserTelegramBotBillingNotificationService,
 } from './userTelegramBotMessageService';
 import { dateDaysAgo } from '../utils/time';
+import type { PerformanceProbeDispatchResult } from './performanceProbeDispatchService';
 
 const execFileAsync = promisify(execFile);
 const SCHEDULER_PERFORMANCE_ENV_DEFAULTS: Readonly<Record<string, string>> = {
@@ -63,6 +64,9 @@ interface SchedulerTaskExecutorDeps {
   };
   marketingSettingsService: {
     getConfig(): Promise<{ click_charge_amount: number }>;
+  };
+  performanceProbeDispatchService?: {
+    dispatchAll(date: string, source: string): Promise<PerformanceProbeDispatchResult>;
   };
   mailService?: BillingMailService;
   userTelegramBotMessageService?: UserTelegramBotBillingNotificationService;
@@ -156,13 +160,38 @@ export class SchedulerTaskExecutor {
 
   async runPerformanceCollection(date: string): Promise<SchedulerTaskExecutionResult> {
     const result = await this.runScriptStage('performance', 'monitor_performance.py', 'scheduler-performance');
+    let regionalDispatch: PerformanceProbeDispatchResult | null = null;
+    if (this.deps.performanceProbeDispatchService) {
+      try {
+        regionalDispatch = await this.deps.performanceProbeDispatchService.dispatchAll(
+          date,
+          'scheduler-performance',
+        );
+      } catch (error) {
+        this.logger.error('Regional performance dispatch failed', error);
+        regionalDispatch = {
+          created: 0,
+          shadow: 0,
+          official: 0,
+          failures: [{ airport_id: 0, airport_name: 'system', error_code: 'dispatch_failed' }],
+        };
+      }
+    }
+    const dispatchFailed = Boolean(regionalDispatch?.failures.length);
+    const status = result.status === 'succeeded' && !dispatchFailed ? 'succeeded' : 'failed';
+    const regionalSummary = regionalDispatch
+      ? `，区域任务已排队 ${regionalDispatch.created} 个${dispatchFailed ? `，派发失败 ${regionalDispatch.failures.length} 个` : ''}`
+      : '';
     return {
-      status: result.status,
-      message: result.status === 'succeeded' ? `性能采集完成：${result.detail}` : `性能采集失败：${result.detail}`,
+      status,
+      message: status === 'succeeded'
+        ? `性能采集完成：${result.detail}${regionalSummary}`
+        : `性能采集失败：${result.detail}${regionalSummary}`,
       detail: {
         stage: 'performance',
         summary: result.detail,
         ...(result.executionSummary || {}),
+        ...(regionalDispatch ? { regional_dispatch: regionalDispatch } : {}),
       },
     };
   }

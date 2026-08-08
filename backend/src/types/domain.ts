@@ -329,6 +329,7 @@ export interface PerformanceProbeJob {
   include_in_result_snapshot: boolean;
   test_profile: string;
   scoring_rule_version: PerformanceScoringRuleVersion;
+  selected_node_keys: string[];
   source: string;
   status: PerformanceProbeJobStatus;
   lease_owner: string | null;
@@ -351,6 +352,7 @@ export interface PerformanceProbeJobInput {
   include_in_result_snapshot: boolean;
   test_profile: string;
   scoring_rule_version: PerformanceScoringRuleVersion;
+  selected_node_keys: string[];
   source: string;
   idempotency_key: string;
 }

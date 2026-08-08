@@ -62,6 +62,7 @@ import { ApplicantPortalAuthService } from './services/applicantPortalAuthServic
 import { ApplicantXOAuthService } from './services/applicantXOAuthService';
 import { AggregationService } from './services/aggregationService';
 import { PerformanceProbeJobService } from './services/performanceProbeJobService';
+import { PerformanceProbeDispatchService } from './services/performanceProbeDispatchService';
 import { ManualJobService } from './services/manualJobService';
 import { MailService } from './services/mailService';
 import { MediaLibrarySettingsService } from './services/mediaLibrarySettingsService';
@@ -191,6 +192,14 @@ export async function createApp() {
     userTelegramBotSettingsService,
     applicantTelegramBindingRepository,
   });
+  const performanceProbeDispatchService = new PerformanceProbeDispatchService({
+    airportRepository,
+    probeRepository: performanceProbeRepository,
+    settingRepository: performanceProbeSettingRepository,
+    snapshotRepository: subscriptionNodeSnapshotRepository,
+    preferenceRepository: performanceNodePreferenceRepository,
+    jobRepository: performanceProbeJobRepository,
+  });
   const schedulerTaskExecutor = new SchedulerTaskExecutor({
     airportRepository,
     aggregationService,
@@ -201,6 +210,7 @@ export async function createApp() {
     recomputeService,
     riskCheckService,
     scoreRepository,
+    performanceProbeDispatchService,
   });
   const adminSchedulerService = new AdminSchedulerService({
     schedulerTaskRepository,
@@ -213,6 +223,7 @@ export async function createApp() {
     recomputeService,
     riskCheckService,
     auditRepository,
+    performanceProbeDispatchService,
   });
   await manualJobService.initialize();
   const toolsDownloadService = new ToolsDownloadService(toolDownloadRepository, systemSettingRepository);

@@ -47,6 +47,7 @@ export class PerformanceProbeJobService {
       run_mode: job.include_in_result_snapshot ? 'official' : 'shadow',
       test_profile: job.test_profile,
       scoring_rule_version: job.scoring_rule_version,
+      selected_node_keys: job.selected_node_keys,
       lease_expires_at: job.lease_expires_at,
       snapshot: {
         id: snapshot.id,

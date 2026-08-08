@@ -101,3 +101,48 @@ test('manual job rejects non-ascii admin api key before running script', () => {
     /ADMIN_API_KEY must be ASCII because it is sent as HTTP header x-api-key/,
   );
 });
+
+test('manual performance job dispatches uniquely keyed mainland jobs and reports pending count', async () => {
+  const dispatchCalls: Array<[number, string, string]> = [];
+  const today = getDateInTimezone();
+  const service = new ManualJobService({
+    manualJobRepository: {
+      create: async () => { throw new Error('not implemented'); },
+      getById: async () => null,
+      findActive: async () => null,
+      markRunning: async () => {},
+      markFinished: async () => {},
+      failActiveJobs: async () => {},
+    },
+    aggregationService: { aggregateAirportForDate: async () => ({ aggregated: 1 }) },
+    recomputeService: { recomputeAirportForDate: async () => ({ recomputed: 1 }) },
+    riskCheckService: { inspectAirportForDate: async () => ({ domain_ok: true, ssl_days_left: 30 }) },
+    auditRepository: { log: async () => {} },
+    performanceProbeDispatchService: {
+      dispatchAirport: async (airportId: number, date: string, source: string) => {
+        dispatchCalls.push([airportId, date, source]);
+        return { created: 2, shadow: 2, official: 0, failures: [] };
+      },
+    },
+  });
+  (service as unknown as Record<string, unknown>).runPerformanceScript = async () => undefined;
+  const job: ManualJob = {
+    id: 88,
+    airport_id: 9,
+    date: today,
+    kind: 'performance',
+    status: 'queued',
+    message: null,
+    created_by: 'tester',
+    request_id: 'req-88',
+    started_at: null,
+    finished_at: null,
+    created_at: `${today}T00:00:00+08:00`,
+    updated_at: `${today}T00:00:00+08:00`,
+  };
+
+  const message = await (service as any).executeJob(job);
+
+  assert.deepEqual(dispatchCalls, [[9, today, 'manual-performance:88']]);
+  assert.match(message, /区域任务已排队 2 个/);
+});

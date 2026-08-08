@@ -12,6 +12,7 @@ const leasedJob: PerformanceProbeJob = {
   config_version: 3,
   test_enabled_snapshot: true,
   include_in_result_snapshot: false,
+  selected_node_keys: [],
   test_profile: 'mainland_multi_target_v1',
   scoring_rule_version: 'cn_dual_probe_v1',
   source: 'manual-performance',

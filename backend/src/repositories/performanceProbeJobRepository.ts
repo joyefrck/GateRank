@@ -9,9 +9,10 @@ import { sqlDateTimeToTimezoneIso } from '../utils/time';
 
 interface PerformanceProbeJobRow extends RowDataPacket, Omit<PerformanceProbeJob,
   'test_enabled_snapshot' | 'include_in_result_snapshot' | 'lease_expires_at' |
-  'created_at' | 'updated_at' | 'completed_at'> {
+  'selected_node_keys' | 'created_at' | 'updated_at' | 'completed_at'> {
   test_enabled_snapshot: number;
   include_in_result_snapshot: number;
+  selected_node_keys_json: unknown;
   lease_expires_at: string | null;
   created_at: string;
   updated_at: string;
@@ -20,6 +21,7 @@ interface PerformanceProbeJobRow extends RowDataPacket, Omit<PerformanceProbeJob
 
 const SELECT_COLUMNS = `job_id, airport_id, probe_id, node_snapshot_id, config_version,
   test_enabled_snapshot, include_in_result_snapshot, test_profile, scoring_rule_version,
+  selected_node_keys_json,
   source, status, lease_owner, lease_expires_at, attempts, idempotency_key, run_id,
   created_at, updated_at, completed_at`;
 
@@ -38,6 +40,7 @@ export class PerformanceProbeJobRepository {
         include_in_result_snapshot TINYINT(1) NOT NULL,
         test_profile VARCHAR(64) NOT NULL,
         scoring_rule_version VARCHAR(64) NOT NULL,
+        selected_node_keys_json JSON NOT NULL,
         source VARCHAR(128) NOT NULL,
         status ENUM('queued', 'leased', 'completed', 'failed', 'expired') NOT NULL DEFAULT 'queued',
         lease_owner VARCHAR(128) NULL,
@@ -57,6 +60,7 @@ export class PerformanceProbeJobRepository {
         CONSTRAINT fk_performance_probe_jobs_snapshot FOREIGN KEY (node_snapshot_id) REFERENCES airport_subscription_node_snapshots(id)
       )`,
     );
+    await this.ensureColumn('selected_node_keys_json', "JSON NULL AFTER scoring_rule_version");
   }
 
   async create(input: PerformanceProbeJobInput): Promise<boolean> {
@@ -64,8 +68,8 @@ export class PerformanceProbeJobRepository {
       `INSERT IGNORE INTO performance_probe_jobs (
          job_id, airport_id, probe_id, node_snapshot_id, config_version,
          test_enabled_snapshot, include_in_result_snapshot, test_profile,
-         scoring_rule_version, source, idempotency_key
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         scoring_rule_version, selected_node_keys_json, source, idempotency_key
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.job_id,
         input.airport_id,
@@ -76,6 +80,7 @@ export class PerformanceProbeJobRepository {
         input.include_in_result_snapshot ? 1 : 0,
         input.test_profile,
         input.scoring_rule_version,
+        JSON.stringify(input.selected_node_keys),
         input.source,
         input.idempotency_key,
       ],
@@ -153,6 +158,24 @@ export class PerformanceProbeJobRepository {
     );
     return result.affectedRows > 0;
   }
+
+  private async ensureColumn(columnName: string, definition: string): Promise<void> {
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT 1
+         FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'performance_probe_jobs'
+          AND COLUMN_NAME = ?
+        LIMIT 1`,
+      [columnName],
+    );
+    if (rows.length === 0) {
+      await this.pool.query(`ALTER TABLE performance_probe_jobs ADD COLUMN ${columnName} ${definition}`);
+      if (columnName === 'selected_node_keys_json') {
+        await this.pool.query("UPDATE performance_probe_jobs SET selected_node_keys_json = JSON_ARRAY() WHERE selected_node_keys_json IS NULL");
+      }
+    }
+  }
 }
 
 function toPerformanceProbeJob(row: PerformanceProbeJobRow): PerformanceProbeJob {
@@ -163,6 +186,7 @@ function toPerformanceProbeJob(row: PerformanceProbeJobRow): PerformanceProbeJob
     config_version: Number(row.config_version),
     test_enabled_snapshot: Boolean(row.test_enabled_snapshot),
     include_in_result_snapshot: Boolean(row.include_in_result_snapshot),
+    selected_node_keys: safeStringArray(row.selected_node_keys_json),
     attempts: Number(row.attempts),
     run_id: row.run_id == null ? null : Number(row.run_id),
     lease_expires_at: nullableDate(row.lease_expires_at),
@@ -174,4 +198,13 @@ function toPerformanceProbeJob(row: PerformanceProbeJobRow): PerformanceProbeJob
 
 function nullableDate(value: string | null): string | null {
   return value == null ? null : sqlDateTimeToTimezoneIso(value);
+}
+
+function safeStringArray(value: unknown): string[] {
+  try {
+    const parsed = typeof value === 'string' ? JSON.parse(value) : value;
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
 }

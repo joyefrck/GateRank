@@ -229,6 +229,38 @@ test('SchedulerTaskExecutor.runPerformanceCollection retains every structured sc
   ]);
 });
 
+test('SchedulerTaskExecutor.runPerformanceCollection dispatches mainland jobs and reports dispatch failures', async () => {
+  const dispatchCalls: Array<[string, string]> = [];
+  const executor = createSchedulerTaskExecutor({
+    execFileAsync: async () => ({
+      stdout: JSON.stringify({ airport_count: 1, success_count: 1, failure_count: 0 }),
+      stderr: '',
+    }),
+    performanceProbeDispatchService: {
+      dispatchAll: async (date: string, source: string) => {
+        dispatchCalls.push([date, source]);
+        return {
+          created: 1,
+          shadow: 1,
+          official: 0,
+          failures: [{ airport_id: 9, airport_name: 'Now', error_code: 'node_snapshot_missing' }],
+        };
+      },
+    },
+  });
+
+  const result = await executor.runPerformanceCollection('2026-08-08');
+
+  assert.deepEqual(dispatchCalls, [['2026-08-08', 'scheduler-performance']]);
+  assert.equal(result.status, 'failed');
+  assert.deepEqual(result.detail.regional_dispatch, {
+    created: 1,
+    shadow: 1,
+    official: 0,
+    failures: [{ airport_id: 9, airport_name: 'Now', error_code: 'node_snapshot_missing' }],
+  });
+});
+
 test('SchedulerTaskExecutor.runPerformanceCollection injects scheduler-safe probe defaults', async () => {
   await withSchedulerEnv({}, async () => {
     let capturedEnv: NodeJS.ProcessEnv | null = null;
