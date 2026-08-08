@@ -61,6 +61,10 @@ DEFAULT_TEST_URL_LATENCY = "https://www.google.com/generate_204"
 DEFAULT_TEST_URL_SPEED = "https://speed.cloudflare.com/__down?bytes=5000000"
 DEFAULT_SUBSCRIPTION_USER_AGENT = "GateRank-Performance-Monitor/1.0"
 CLASH_META_SUBSCRIPTION_USER_AGENT = "ClashMeta/1.19.8"
+PROXY_SPEED_TARGETS_V2 = (
+    {"target_key": "cachefly-50mb", "url": "https://cachefly.cachefly.net/50mb.test"},
+    {"target_key": "cloudflare-50mb", "url": "https://speed.cloudflare.com/__down?bytes=50000000"},
+)
 
 REGION_PRIORITY = ("HK", "JP", "SG", "US", "KR", "UK")
 REGION_KEYWORDS = {
@@ -123,6 +127,17 @@ class NodeProbeResult:
     error_code: str | None = None
     connect_failures: int = 0
     connect_total_attempts: int = 0
+
+
+@dataclass(frozen=True)
+class SpeedTargetResult:
+    target_key: str
+    download_mbps: float | None
+    valid: bool
+    error_code: str | None
+    bytes_downloaded: int
+    duration_ms: float
+    http_status: int | None = None
 
 
 @dataclass
@@ -1773,6 +1788,27 @@ def test_proxy_http_latency(config: Config) -> tuple[list[float], int, int]:
     return latencies, failures, config.request_loss_attempts
 
 
+def test_proxy_real_latency(config: Config) -> tuple[list[float], list[str], int, int]:
+    opener = build_proxy_opener(config)
+    samples: list[float] = []
+    sampled_at: list[str] = []
+    failures = 0
+    attempts = 2
+    request = Request(config.test_url_latency, method="GET", headers={"User-Agent": "GateRank-Performance-Monitor/1.0"})
+    for index in range(attempts):
+        started = time.perf_counter()
+        try:
+            with opener.open(request, timeout=config.http_timeout) as response:
+                response.read(1)
+            samples.append(round((time.perf_counter() - started) * 1000, 2))
+            sampled_at.append(shanghai_now_iso())
+        except Exception:
+            failures += 1
+        if index < attempts - 1:
+            time.sleep(0.1)
+    return samples, sampled_at, failures, attempts
+
+
 def test_proxy_http_once(config: Config) -> None:
     opener = build_proxy_opener(config)
     request = Request(config.test_url_latency, method="GET", headers={"User-Agent": "GateRank-Performance-Monitor/1.0"})
@@ -1783,6 +1819,43 @@ def test_proxy_http_once(config: Config) -> None:
 def test_speed(config: Config) -> float | None:
     download_mbps, _total_bytes, _duration = test_speed_detailed(config)
     return download_mbps
+
+
+def test_speed_targets(
+    config: Config,
+    targets: list[dict[str, str]] | tuple[dict[str, str], ...],
+) -> list[SpeedTargetResult]:
+    results: list[SpeedTargetResult] = []
+    for target in targets:
+        target_key = str(target.get("target_key") or "").strip()
+        url = str(target.get("url") or "").strip()
+        if not target_key or not url.startswith("https://"):
+            continue
+        try:
+            download_mbps, total_bytes, duration = test_speed_detailed(replace(config, test_url_speed=url))
+            results.append(SpeedTargetResult(
+                target_key=target_key,
+                download_mbps=download_mbps,
+                valid=download_mbps is not None,
+                error_code=None if download_mbps is not None else "empty_download",
+                bytes_downloaded=total_bytes,
+                duration_ms=round(duration * 1000, 2),
+            ))
+        except Exception:
+            results.append(SpeedTargetResult(
+                target_key=target_key,
+                download_mbps=None,
+                valid=False,
+                error_code="download_failed",
+                bytes_downloaded=0,
+                duration_ms=0,
+            ))
+    return results
+
+
+def target_download_median(results: list[SpeedTargetResult]) -> float | None:
+    values = [result.download_mbps for result in results if result.valid and result.download_mbps is not None]
+    return round(float(median(values)), 2) if values else None
 
 
 def test_speed_detailed(config: Config) -> tuple[float | None, int, float]:

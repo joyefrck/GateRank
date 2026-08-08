@@ -25,6 +25,9 @@ from scripts.monitor_performance import (
     resolve_selected_nodes,
     run_for_airport,
     select_nodes,
+    target_download_median,
+    test_proxy_real_latency,
+    test_speed_targets,
 )
 
 
@@ -443,6 +446,46 @@ proxies:
         self.assertEqual(result.total_attempts, 10)
         self.assertEqual(result.connect_failures, 0)
         self.assertEqual(result.connect_total_attempts, 3)
+
+    def test_proxy_real_latency_uses_minimum_of_two_proxy_requests(self) -> None:
+        config = self.make_config()
+        response = MagicMock()
+        response.__enter__.return_value = response
+        opener = MagicMock()
+        opener.open.return_value = response
+
+        with (
+            patch("scripts.monitor_performance.build_proxy_opener", return_value=opener),
+            patch("scripts.monitor_performance.time.perf_counter", side_effect=[0.0, 0.12, 1.0, 1.07]),
+            patch("scripts.monitor_performance.time.sleep"),
+            patch("scripts.monitor_performance.shanghai_now_iso", side_effect=["t1", "t2"]),
+        ):
+            samples, sampled_at, failures, attempts = test_proxy_real_latency(config)
+
+        self.assertEqual(samples, [120.0, 70.0])
+        self.assertEqual(sampled_at, ["t1", "t2"])
+        self.assertEqual(failures, 0)
+        self.assertEqual(attempts, 2)
+        self.assertEqual(min(samples), 70.0)
+
+    def test_speed_targets_keep_raw_evidence_and_use_valid_median(self) -> None:
+        config = self.make_config()
+        targets = [
+            {"target_key": "cachefly-50mb", "url": "https://cachefly.cachefly.net/50mb.test"},
+            {"target_key": "cloudflare-50mb", "url": "https://speed.cloudflare.com/__down?bytes=50000000"},
+        ]
+
+        with patch(
+            "scripts.monitor_performance.test_speed_detailed",
+            side_effect=[(40.0, 5_000_000, 1.0), (100.0, 12_500_000, 1.0)],
+        ):
+            results = test_speed_targets(config, targets)
+
+        self.assertEqual([row.target_key for row in results], ["cachefly-50mb", "cloudflare-50mb"])
+        self.assertEqual(results[0].bytes_downloaded, 5_000_000)
+        self.assertEqual(results[1].duration_ms, 1000.0)
+        self.assertTrue(all(row.valid for row in results))
+        self.assertEqual(target_download_median(results), 70.0)
 
     def test_build_config_accepts_tcp_node_availability_check(self) -> None:
         env = {
