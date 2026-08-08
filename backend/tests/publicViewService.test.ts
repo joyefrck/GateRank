@@ -2331,6 +2331,7 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
         median_latency_ms: 52,
         median_download_mbps: 88,
         packet_loss_percent: 0,
+        performance_review_status: 'needs_review' as const,
         stable_days_streak: 30,
         domain_ok: false,
         ssl_days_left: 1,
@@ -2431,6 +2432,11 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
   assert.equal(result.summary_card.type, 'stable');
   assert.equal(result.summary_card.stability_tier, 'stable');
   assert.equal(result.ranking.risk_alerts_rank, null);
+  assert.equal(result.performance_under_review, true);
+  assert.doesNotMatch(
+    JSON.stringify(result),
+    /performance_review_status|performance_included_probe_ids|performance_pending_probe_ids/,
+  );
   assert.deepEqual(result.trends.packet_loss_30d, [{ date: '2026-03-24', value: 20 }]);
   assert.deepEqual(
     result.capabilities.streaming.map((item) => item.label),

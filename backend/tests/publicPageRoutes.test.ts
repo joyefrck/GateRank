@@ -10,6 +10,7 @@ import type { AirportDealDetailView, AirportDealView } from '../../shared/airpor
 import { buildReportSeo } from '../../shared/publicSeo';
 import { getDateInTimezone } from '../src/utils/time';
 import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG } from '../../shared/toolDownloads';
+import { renderReportPublicPage } from '../src/services/publicPageRenderer';
 
 const TEST_FRONTEND_ASSETS = {
   script: '/assets/index-CkG9aP2q.js',
@@ -1535,6 +1536,17 @@ test('report long-tail metadata does not invent missing capability facts', () =>
   assert.doesNotMatch(seo.description, /不支持 USDT/);
 });
 
+test('report SSR shows only the public regional review notice', () => {
+  const html = renderReportPublicPage('https://gate-rank.com', {
+    ...reportView,
+    performance_under_review: true,
+  });
+
+  assert.match(html, /不同测试地区结果差异较大，正在复核/);
+  assert.doesNotMatch(html, /performance_review_status|review_reasons|probe_ids/);
+  assert.doesNotMatch(html, /作弊|造假/);
+});
+
 test('GET /airports/:slug labels low report score as limited rating instead of high risk', async () => {
   const lowScoreReportView: ReportView = {
     ...reportView,
@@ -2017,6 +2029,7 @@ const reportView: ReportView = {
   date: '2026-03-23',
   resolved_from_fallback: false,
   fallback_notice: null,
+  performance_under_review: false,
   tool_download_cta: {
     href: '/tools/download',
     title: '翻墙工具客户端下载',

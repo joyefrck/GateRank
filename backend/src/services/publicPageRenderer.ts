@@ -1223,6 +1223,7 @@ function renderReportSummary(view: ReportView): string {
         ${renderInfoCard('下载速率', `${formatMetric(view.metrics.median_download_mbps)} Mbps`)}
         ${renderInfoCard('代理请求失败率', `${formatMetric(view.metrics.packet_loss_percent)}%`)}
       </div>
+      ${view.performance_under_review ? '<p class="performance-review-note" role="status">不同测试地区结果差异较大，正在复核</p>' : ''}
     </section>
     <section id="report-trends" class="report-section report-anchor-target">
       <h2>${escapeHtml(buildReportTrendLabel(view))}</h2>
@@ -1590,7 +1591,9 @@ export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: Pu
           <p>子项评分采用阈值分段和线性插值，并截断到 0 到 100。日期越近，历史样本权重越高。</p>
           <div class="card-grid">
             ${renderInfoCard('稳定性公式', 'S = 0.5 × UptimeScore + 0.3 × StabilityScore + 0.2 × StreakScore。')}
-            ${renderInfoCard('性能公式', 'P = 0.4 × LatencyScore + 0.4 × SpeedScore + 0.2 × LossScore。')}
+            ${renderInfoCard('性能公式', 'P = 0.4 × LatencyScore + 0.4 × SpeedScore + 0.2 × LossScore。各测试地区先独立评分，再对纳入结果的地区等权平均。')}
+            ${renderInfoCard('下载速率阈值', '原有测试中心以 300 Mbps 为满分；200 Mbps 大陆探针以 10 Mbps 为 0 分、160 Mbps 为满分，达到或超过 180 Mbps 标记为达到探针带宽上限。')}
+            ${renderInfoCard('历史口径', '新区域评分规则从启用日期起生效，历史报告不回填、不改写，确保当时公开结果保持可追溯。')}
             ${renderInfoCard('价格公式', 'C = 0.8 × PriceScore + 0.2 × ValueScore；PriceScore 三档为 1-30 元 100 分、30-50 元 80 分、50 元以上 60 分。')}
             ${renderInfoCard('风险公式', 'R = 100 - RiskPenalty。风险扣分来自域名、SSL、近期投诉和历史异常。')}
           </div>
@@ -3421,6 +3424,7 @@ const styles = `
   .score-metric.orange i { background: #f97316; }
   .score-metric.purple i { background: #a855f7; }
   .score-metric.slate i { background: #94a3b8; }
+  .performance-review-note { margin: 12px 0 0; border: 1px solid #bae6fd; border-radius: 8px; background: #f0f9ff; padding: 12px 16px; color: #075985; font-size: 13px; font-weight: 800; line-height: 1.6; }
   .report-conclusion p { color: #475569; }
   .report-hero,
   .score-card,

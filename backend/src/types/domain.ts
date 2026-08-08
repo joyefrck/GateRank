@@ -675,6 +675,7 @@ export interface ReportView {
   date: string;
   resolved_from_fallback: boolean;
   fallback_notice: string | null;
+  performance_under_review: boolean;
   tool_download_cta: HomeToolDownloadCta;
   airport: Pick<Airport, 'id' | 'name' | 'website' | 'status' | 'tags'> & { slug: string };
   summary_card: Omit<PublicCardItem, 'airport_id' | 'report_url' | 'website' | 'score_delta_vs_yesterday'>;

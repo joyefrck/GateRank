@@ -6927,6 +6927,7 @@ function createMonthlyReportView(input: { date: string }): ReportView {
     date: input.date,
     resolved_from_fallback: false,
     fallback_notice: null,
+    performance_under_review: false,
     tool_download_cta: {
       href: '/tools/download',
       title: '翻墙工具客户端下载',

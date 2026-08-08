@@ -639,6 +639,7 @@ const reportView: ReportView = {
   date: '2026-03-23',
   resolved_from_fallback: false,
   fallback_notice: null,
+  performance_under_review: false,
   tool_download_cta: {
     href: '/tools/download',
     title: '翻墙工具客户端下载',

@@ -310,6 +310,7 @@ interface ReportViewResponse {
   date: string;
   resolved_from_fallback: boolean;
   fallback_notice: string | null;
+  performance_under_review: boolean;
   tool_download_cta: ToolDownloadCtaView;
   airport: {
     id: number;
@@ -5135,6 +5136,11 @@ function ReportCoreMetrics({ data }: { data: ReportViewResponse }) {
         <ReportTrendMetric title="下载速率" value={`${formatMetric(data.metrics.median_download_mbps)} Mbps`} points={data.trends.download_30d} color="#f97316" />
         <ReportTrendMetric title="代理请求失败率" value={`${formatMetric(data.metrics.packet_loss_percent)}%`} points={data.trends.packet_loss_30d} color="#8b5cf6" domain={[0, 100]} />
       </div>
+      {data.performance_under_review ? (
+        <p role="status" className="mt-3 rounded-lg border border-sky-200 bg-sky-50 px-4 py-3 text-sm font-semibold text-sky-800">
+          不同测试地区结果差异较大，正在复核
+        </p>
+      ) : null}
     </section>
   );
 }

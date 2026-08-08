@@ -11,6 +11,7 @@ import {
   type AirportDealDetailView,
   type AirportDealView,
 } from '../../shared/airportAds';
+import { renderMethodologyPublicPage } from '../src/services/publicPageRenderer';
 
 test('withPublicBrandTitle appends and normalizes the public brand suffix', () => {
   assert.equal(withPublicBrandTitle('IP 检测'), 'IP 检测 | 机场榜GateRank');
@@ -161,6 +162,16 @@ test('airport deal detail paths reuse the deals OG image', () => {
     height: 630,
     type: 'image/png',
   });
+});
+
+test('methodology page explains regional performance thresholds without rewriting history', () => {
+  const html = renderMethodologyPublicPage('https://gate-rank.com');
+
+  assert.match(html, /原有测试中心以 300 Mbps 为满分/);
+  assert.match(html, /200 Mbps 大陆探针以 10 Mbps 为 0 分、160 Mbps 为满分/);
+  assert.match(html, /达到或超过 180 Mbps 标记为达到探针带宽上限/);
+  assert.match(html, /各测试地区先独立评分，再对纳入结果的地区等权平均/);
+  assert.match(html, /历史报告不回填、不改写/);
 });
 
 function createAirportDealDetailView(activeDeals: AirportDealView[]): AirportDealDetailView {

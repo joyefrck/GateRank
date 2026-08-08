@@ -554,6 +554,8 @@ export class PublicViewService {
       date: resolvedDate,
       resolved_from_fallback: resolvedFromFallback,
       fallback_notice: resolvedFromFallback ? buildPublicFallbackNotice(date, resolvedDate) : null,
+      performance_under_review:
+        base.metrics.performance_review_status != null && base.metrics.performance_review_status !== 'normal',
       tool_download_cta: toolDownloadCta,
       airport: {
         id: base.airport.id,

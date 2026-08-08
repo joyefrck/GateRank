@@ -12,6 +12,7 @@ const SCORE_WEIGHTS = {
 const THRESHOLDS = {
   latencyMs: { good: 60, bad: 600, higherIsBetter: false },
   downloadMbps: { good: 300, bad: 10, higherIsBetter: true },
+  mainlandDownloadMbps: { good: 160, bad: 10, ceiling: 180, probeBandwidth: 200, higherIsBetter: true },
   packetLossPercent: { good: 0, bad: 5, higherIsBetter: false },
   valueRatio: { good: 50, bad: 0, higherIsBetter: true },
 } as const;
@@ -112,7 +113,10 @@ export const dimensionCards = [
     formula: 'P = 0.4 × LatencyScore + 0.4 × SpeedScore + 0.2 × LossScore',
     bullets: [
       'LatencyScore 使用中位延迟，削弱极端样本对测速结论的污染。',
-      'SpeedScore 使用中位下载速率，不把偶发峰值等同于长期性能。',
+      `SpeedScore 使用中位下载速率：原有测试中心以 ${THRESHOLDS.downloadMbps.good} Mbps 为满分；${THRESHOLDS.mainlandDownloadMbps.probeBandwidth} Mbps 大陆探针以 ${THRESHOLDS.mainlandDownloadMbps.bad} Mbps 为 0 分、${THRESHOLDS.mainlandDownloadMbps.good} Mbps 为满分。`,
+      `大陆探针达到或超过 ${THRESHOLDS.mainlandDownloadMbps.ceiling} Mbps 时标记为“达到探针带宽上限”，不把共享带宽上限误解为机场极限。`,
+      '每个测试地区先按自身阈值独立计算性能分，再对当前纳入结果的地区等权平均。',
+      '区域评分规则只影响启用后的新报告，历史报告不回填、不改写。',
       'LossScore 关注代表节点通过本地代理访问探测 URL 时的请求失败比例，不使用 ICMP ping 结果。',
     ],
     accentClass: 'from-sky-500/12 to-white',

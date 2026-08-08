@@ -91,3 +91,25 @@ test('React report renders proxy request failure history instead of an empty los
   );
   assert.doesNotMatch(source, /title="丢包率"[^\n]+points=\{\[\]\}/);
 });
+
+test('React report exposes only a restrained regional review notice', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+  const metricsStart = source.indexOf('function ReportCoreMetrics');
+  const metricsEnd = source.indexOf('function ReportTrendSection', metricsStart);
+  const metricsSource = source.slice(metricsStart, metricsEnd);
+
+  assert.match(source, /performance_under_review: boolean/);
+  assert.match(metricsSource, /data\.performance_under_review/);
+  assert.match(metricsSource, /不同测试地区结果差异较大，正在复核/);
+  assert.doesNotMatch(metricsSource, /performance_review_status|review_reasons|probe_ids/);
+  assert.doesNotMatch(metricsSource, /作弊|造假/);
+});
+
+test('React methodology content explains regional performance scoring', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/pages/methodology/content.ts'), 'utf8');
+
+  assert.match(source, /downloadMbps: \{ good: 300, bad: 10/);
+  assert.match(source, /mainlandDownloadMbps: \{ good: 160, bad: 10, ceiling: 180, probeBandwidth: 200/);
+  assert.match(source, /每个测试地区先按自身阈值独立计算性能分，再对当前纳入结果的地区等权平均/);
+  assert.match(source, /历史报告不回填、不改写/);
+});
