@@ -117,6 +117,46 @@ test('computeScore does not use trial support in the price dimension', () => {
   assert.equal(Object.prototype.hasOwnProperty.call(withTrial.details, 'trial_score'), false);
 });
 
+test('computeScore prefers complete precomputed regional performance components', () => {
+  const airport: Airport = {
+    id: 1,
+    name: 'A',
+    website: 'https://a.example.com',
+    status: 'normal',
+    is_listed: true,
+    plan_price_month: 40,
+    has_trial: false,
+    tags: [],
+    created_at: '2026-08-08',
+  };
+  const metrics: DailyMetrics = {
+    airport_id: 1,
+    date: '2026-08-08',
+    uptime_percent_30d: 100,
+    median_latency_ms: 999,
+    median_download_mbps: 1,
+    packet_loss_percent: 100,
+    performance_latency_score: 88,
+    performance_speed_score: 77,
+    performance_loss_score: 99,
+    performance_score: 85.8,
+    performance_rule_summary: 'cn_dual_probe_v1',
+    performance_included_probe_ids: ['cn-guangzhou', 'cn-shanghai'],
+    stable_days_streak: 1,
+    domain_ok: true,
+    ssl_days_left: 30,
+    recent_complaints_count: 0,
+    history_incidents: 0,
+  };
+
+  const score = computeScore(airport, metrics, 0);
+
+  assert.equal(score.p, 85.8);
+  assert.equal(score.details.latency_score, 88);
+  assert.equal(score.details.speed_score, 77);
+  assert.equal(score.details.loss_score, 99);
+});
+
 test('computeScore returns bounded and weighted output', () => {
   const airport: Airport = {
     id: 1,

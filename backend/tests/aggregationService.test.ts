@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AggregationService } from '../src/services/aggregationService';
-import type { DailyMetrics, ProbeSample } from '../src/types/domain';
+import type { DailyMetrics, PerformanceRun, ProbeSample } from '../src/types/domain';
 
 test('aggregateForDate converts samples to daily metrics', async () => {
   const written: DailyMetrics[] = [];
@@ -213,6 +213,143 @@ test('aggregateForDate prefers latest performance run metrics over stale perform
   assert.equal(written[0].packet_loss_percent, 0);
   assert.equal(written[0].packet_loss_measurement, 'proxy_http_request_failure_rate_v1');
 });
+
+test('aggregateAirportForDate equally aggregates a complete official mainland set', async () => {
+  const written: DailyMetrics[] = [];
+  const service = new AggregationService({
+    airportRepository: { listAll: async () => [{ id: 9, status: 'normal', is_listed: true }] },
+    probeSampleRepository: {
+      getProbeSamplesInRange: async () => [regionalAvailabilitySample(9, '2026-08-08')],
+      getPacketLossSamplesByDate: async () => [],
+    },
+    metricsRepository: {
+      getLatestByAirportBeforeDate: async () => null,
+      upsertDaily: async (input) => { written.push(input); },
+    },
+    performanceProbeSettingRepository: {
+      getByAirport: async () => ({
+        airport_id: 9,
+        config_version: 4,
+        settings: [
+          { probe_id: 'legacy-control', test_enabled: true, include_in_result: false, updated_by: null, updated_at: null },
+          { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+          { probe_id: 'cn-guangzhou', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+        ],
+      }),
+    },
+    performanceRunRepository: {
+      getLatestByAirportAndDate: async () => null,
+      listByAirportAndDate: async () => [
+        regionalRun('cn-shanghai', 4, 160, 80),
+        regionalRun('cn-guangzhou', 4, 100, 120),
+        { ...regionalRun('cn-shanghai', 4, 999, 1), run_mode: 'shadow' },
+      ],
+    },
+  });
+
+  const result = await service.aggregateAirportForDate(9, '2026-08-08');
+
+  assert.equal(result.aggregated, 1);
+  assert.deepEqual(result.pending_probe_ids, []);
+  assert.deepEqual(written[0].performance_included_probe_ids, ['cn-guangzhou', 'cn-shanghai']);
+  assert.equal(written[0].median_download_mbps, 130);
+  assert.equal(written[0].median_latency_ms, 100);
+  assert.equal(typeof written[0].performance_score, 'number');
+  assert.equal(written[0].performance_rule_summary, 'cn_dual_probe_v1');
+});
+
+test('aggregateAirportForDate preserves prior metrics when an official region is missing', async () => {
+  let writes = 0;
+  const service = new AggregationService({
+    airportRepository: { listAll: async () => [{ id: 9, status: 'normal', is_listed: true }] },
+    probeSampleRepository: {
+      getProbeSamplesInRange: async () => [regionalAvailabilitySample(9, '2026-08-08')],
+      getPacketLossSamplesByDate: async () => [],
+    },
+    metricsRepository: {
+      getLatestByAirportBeforeDate: async () => null,
+      upsertDaily: async () => { writes += 1; },
+    },
+    performanceProbeSettingRepository: {
+      getByAirport: async () => ({
+        airport_id: 9,
+        config_version: 4,
+        settings: [
+          { probe_id: 'legacy-control', test_enabled: true, include_in_result: false, updated_by: null, updated_at: null },
+          { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+          { probe_id: 'cn-guangzhou', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+        ],
+      }),
+    },
+    performanceRunRepository: {
+      getLatestByAirportAndDate: async () => null,
+      listByAirportAndDate: async () => [regionalRun('cn-shanghai', 4, 160, 80)],
+    },
+  });
+
+  const result = await service.aggregateAirportForDate(9, '2026-08-08');
+
+  assert.deepEqual(result, { aggregated: 0, pending_probe_ids: ['cn-guangzhou'] });
+  assert.equal(writes, 0);
+});
+
+function regionalAvailabilitySample(airportId: number, date: string): ProbeSample {
+  return {
+    id: 1,
+    airport_id: airportId,
+    sampled_at: `${date}T01:00:00.000Z`,
+    sample_type: 'availability',
+    probe_scope: 'stability',
+    latency_ms: null,
+    download_mbps: null,
+    availability: true,
+    source: 'scheduler-stability',
+  };
+}
+
+function regionalRun(
+  probeId: 'cn-shanghai' | 'cn-guangzhou',
+  configVersion: number,
+  downloadMbps: number,
+  latencyMs: number,
+): PerformanceRun {
+  return {
+    id: probeId === 'cn-shanghai' ? 91 : 92,
+    airport_id: 9,
+    sampled_at: '2026-08-08T12:00:00+08:00',
+    sampled_date: '2026-08-08',
+    source: 'scheduler-performance',
+    status: 'success',
+    job_id: `job-${probeId}`,
+    probe_id: probeId,
+    region_code: probeId,
+    provider: 'tencent-cloud',
+    bandwidth_mbps: 200,
+    run_mode: 'official',
+    test_profile: 'mainland_multi_target_v1',
+    scoring_rule_version: 'cn_dual_probe_v1',
+    config_version: configVersion,
+    calibration_status: 'passed',
+    calibration_mbps: 180,
+    review_status: 'normal',
+    review_reasons: [],
+    subscription_format: 'plain',
+    parsed_nodes_count: 2,
+    supported_nodes_count: 2,
+    selected_nodes: [],
+    tested_nodes: [{ name: 'HK', region: 'HK', type: 'vless', status: 'ok', download_mbps: downloadMbps }],
+    available_nodes_count: 2,
+    unavailable_nodes_count: 0,
+    node_availability_percent: 100,
+    node_unavailability_percent: 0,
+    median_latency_ms: latencyMs,
+    median_download_mbps: downloadMbps,
+    packet_loss_percent: 0,
+    error_code: null,
+    error_message: null,
+    diagnostics: {},
+  };
+}
 
 test('aggregateForDate keeps raw latency_cv and classifies healthy jitter separately from strict stable days', async () => {
   const written: DailyMetrics[] = [];

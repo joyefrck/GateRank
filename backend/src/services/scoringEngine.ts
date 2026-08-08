@@ -54,24 +54,36 @@ export function computeScore(
   const streakBasisDays = metrics.healthy_days_streak ?? metrics.stable_days_streak;
   const streakScore = computeStreakScore(streakBasisDays);
 
-  const latencyScore = normalizeLinear(
-    metrics.median_latency_ms,
-    THRESHOLDS.latency_ms.good,
-    THRESHOLDS.latency_ms.bad,
-    THRESHOLDS.latency_ms.higherIsBetter,
-  );
-  const speedScore = normalizeLinear(
-    metrics.median_download_mbps,
-    THRESHOLDS.download_mbps.good,
-    THRESHOLDS.download_mbps.bad,
-    THRESHOLDS.download_mbps.higherIsBetter,
-  );
-  const lossScore = normalizeLinear(
-    metrics.packet_loss_percent,
-    THRESHOLDS.packet_loss_percent.good,
-    THRESHOLDS.packet_loss_percent.bad,
-    THRESHOLDS.packet_loss_percent.higherIsBetter,
-  );
+  const hasPrecomputedPerformance = [
+    metrics.performance_latency_score,
+    metrics.performance_speed_score,
+    metrics.performance_loss_score,
+    metrics.performance_score,
+  ].every((value) => typeof value === 'number' && Number.isFinite(value));
+  const latencyScore = hasPrecomputedPerformance
+    ? Number(metrics.performance_latency_score)
+    : normalizeLinear(
+      metrics.median_latency_ms,
+      THRESHOLDS.latency_ms.good,
+      THRESHOLDS.latency_ms.bad,
+      THRESHOLDS.latency_ms.higherIsBetter,
+    );
+  const speedScore = hasPrecomputedPerformance
+    ? Number(metrics.performance_speed_score)
+    : normalizeLinear(
+      metrics.median_download_mbps,
+      THRESHOLDS.download_mbps.good,
+      THRESHOLDS.download_mbps.bad,
+      THRESHOLDS.download_mbps.higherIsBetter,
+    );
+  const lossScore = hasPrecomputedPerformance
+    ? Number(metrics.performance_loss_score)
+    : normalizeLinear(
+      metrics.packet_loss_percent,
+      THRESHOLDS.packet_loss_percent.good,
+      THRESHOLDS.packet_loss_percent.bad,
+      THRESHOLDS.packet_loss_percent.higherIsBetter,
+    );
 
   const priceScore = calcPriceScore(airport.plan_price_month);
   const valueRatio = metrics.median_download_mbps / Math.max(airport.plan_price_month, 1);
@@ -93,10 +105,11 @@ export function computeScore(
 
   const s = computeSScore(uptimeScore, stabilityScore, streakScore);
 
-  const p =
-    latencyScore * SCORE_WEIGHTS.performance.latency +
-    speedScore * SCORE_WEIGHTS.performance.speed +
-    lossScore * SCORE_WEIGHTS.performance.loss;
+  const p = hasPrecomputedPerformance
+    ? Number(metrics.performance_score)
+    : latencyScore * SCORE_WEIGHTS.performance.latency
+      + speedScore * SCORE_WEIGHTS.performance.speed
+      + lossScore * SCORE_WEIGHTS.performance.loss;
 
   const c =
     priceScore * SCORE_WEIGHTS.cost.price +
@@ -132,6 +145,12 @@ export function computeScore(
       latency_score: round2(latencyScore),
       speed_score: round2(speedScore),
       loss_score: round2(lossScore),
+      performance_rule_summary: metrics.performance_rule_summary ?? 'legacy_v1',
+      performance_included_probes: (
+        metrics.performance_included_probe_ids?.length
+          ? metrics.performance_included_probe_ids
+          : ['legacy-control']
+      ).join(','),
       price_score: round2(priceScore),
       value_score: round2(valueScore),
       value_ratio: round2(valueRatio),

@@ -234,6 +234,7 @@ export interface DailyMetrics {
   performance_rule_summary?: string | null;
   performance_included_probe_ids?: string[];
   performance_review_status?: PerformanceReviewStatus | null;
+  performance_pending_probe_ids?: string[];
   available_nodes_count?: number | null;
   unavailable_nodes_count?: number | null;
   node_availability_percent?: number | null;

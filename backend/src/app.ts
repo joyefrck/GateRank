@@ -171,6 +171,7 @@ export async function createApp() {
     probeSampleRepository,
     metricsRepository,
     performanceRunRepository,
+    performanceProbeSettingRepository,
   });
   const riskCheckService = new RiskCheckService({
     airportRepository,
@@ -302,6 +303,8 @@ export async function createApp() {
     snapshotRepository: subscriptionNodeSnapshotRepository,
     runRepository: performanceRunRepository,
     targetRepository: performanceRunTargetRepository,
+    aggregationService,
+    recomputeService,
   });
 
   const app = express();

@@ -1,5 +1,5 @@
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
-import type { DailyMetrics, DailyMetricsInput, StabilityTier } from '../types/domain';
+import type { DailyMetrics, DailyMetricsInput, PerformanceReviewStatus, StabilityTier } from '../types/domain';
 import { formatDateOnly } from '../utils/time';
 
 interface DailyMetricsRow extends RowDataPacket {
@@ -16,6 +16,14 @@ interface DailyMetricsRow extends RowDataPacket {
   median_download_mbps: number;
   packet_loss_percent: number;
   packet_loss_measurement: string | null;
+  performance_latency_score: number | null;
+  performance_speed_score: number | null;
+  performance_loss_score: number | null;
+  performance_score: number | null;
+  performance_rule_summary: string | null;
+  performance_included_probe_ids_json: unknown;
+  performance_review_status: PerformanceReviewStatus | null;
+  performance_pending_probe_ids_json: unknown;
   available_nodes_count: number | null;
   unavailable_nodes_count: number | null;
   node_availability_percent: number | null;
@@ -46,6 +54,17 @@ export class MetricsRepository {
     );
     await this.ensureColumn('available_nodes_count', 'INT UNSIGNED NULL AFTER packet_loss_percent');
     await this.ensureColumn('packet_loss_measurement', 'VARCHAR(64) NULL AFTER packet_loss_percent');
+    await this.ensureColumn('performance_latency_score', 'DECIMAL(6,2) NULL AFTER packet_loss_measurement');
+    await this.ensureColumn('performance_speed_score', 'DECIMAL(6,2) NULL AFTER performance_latency_score');
+    await this.ensureColumn('performance_loss_score', 'DECIMAL(6,2) NULL AFTER performance_speed_score');
+    await this.ensureColumn('performance_score', 'DECIMAL(6,2) NULL AFTER performance_loss_score');
+    await this.ensureColumn('performance_rule_summary', 'VARCHAR(255) NULL AFTER performance_score');
+    await this.ensureColumn('performance_included_probe_ids_json', 'JSON NULL AFTER performance_rule_summary');
+    await this.ensureColumn(
+      'performance_review_status',
+      "ENUM('normal', 'needs_review', 'suspicious') NULL AFTER performance_included_probe_ids_json",
+    );
+    await this.ensureColumn('performance_pending_probe_ids_json', 'JSON NULL AFTER performance_review_status');
     await this.ensureColumn('unavailable_nodes_count', 'INT UNSIGNED NULL AFTER available_nodes_count');
     await this.ensureColumn('node_availability_percent', 'DECIMAL(5,2) NULL AFTER unavailable_nodes_count');
     await this.ensureColumn('node_unavailability_percent', 'DECIMAL(5,2) NULL AFTER node_availability_percent');
@@ -57,10 +76,13 @@ export class MetricsRepository {
       `INSERT INTO airport_metrics_daily (
          airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
          latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps,
-         packet_loss_percent, packet_loss_measurement, available_nodes_count, unavailable_nodes_count, node_availability_percent,
+         packet_loss_percent, packet_loss_measurement, performance_latency_score, performance_speed_score,
+         performance_loss_score, performance_score, performance_rule_summary,
+         performance_included_probe_ids_json, performance_review_status, performance_pending_probe_ids_json,
+         available_nodes_count, unavailable_nodes_count, node_availability_percent,
          node_unavailability_percent, stable_days_streak, healthy_days_streak, is_stable_day, stability_tier,
          domain_ok, ssl_days_left, recent_complaints_count, history_incidents
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          uptime_percent_30d = VALUES(uptime_percent_30d),
          uptime_percent_today = VALUES(uptime_percent_today),
@@ -73,6 +95,14 @@ export class MetricsRepository {
          median_download_mbps = VALUES(median_download_mbps),
          packet_loss_percent = VALUES(packet_loss_percent),
          packet_loss_measurement = VALUES(packet_loss_measurement),
+         performance_latency_score = VALUES(performance_latency_score),
+         performance_speed_score = VALUES(performance_speed_score),
+         performance_loss_score = VALUES(performance_loss_score),
+         performance_score = VALUES(performance_score),
+         performance_rule_summary = VALUES(performance_rule_summary),
+         performance_included_probe_ids_json = VALUES(performance_included_probe_ids_json),
+         performance_review_status = VALUES(performance_review_status),
+         performance_pending_probe_ids_json = VALUES(performance_pending_probe_ids_json),
          available_nodes_count = VALUES(available_nodes_count),
          unavailable_nodes_count = VALUES(unavailable_nodes_count),
          node_availability_percent = VALUES(node_availability_percent),
@@ -99,6 +129,14 @@ export class MetricsRepository {
         JSON.stringify(input.download_samples_mbps || []),
         input.packet_loss_percent,
         input.packet_loss_measurement ?? null,
+        nullableNumber(input.performance_latency_score),
+        nullableNumber(input.performance_speed_score),
+        nullableNumber(input.performance_loss_score),
+        nullableNumber(input.performance_score),
+        input.performance_rule_summary ?? null,
+        nullableStringArrayJson(input.performance_included_probe_ids),
+        input.performance_review_status ?? null,
+        nullableStringArrayJson(input.performance_pending_probe_ids),
         nullableNumber(input.available_nodes_count),
         nullableNumber(input.unavailable_nodes_count),
         nullableNumber(input.node_availability_percent),
@@ -119,6 +157,8 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
+              performance_latency_score, performance_speed_score, performance_loss_score, performance_score,
+              performance_rule_summary, performance_included_probe_ids_json, performance_review_status, performance_pending_probe_ids_json,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -134,6 +174,8 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
+              performance_latency_score, performance_speed_score, performance_loss_score, performance_score,
+              performance_rule_summary, performance_included_probe_ids_json, performance_review_status, performance_pending_probe_ids_json,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -159,6 +201,8 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
+              performance_latency_score, performance_speed_score, performance_loss_score, performance_score,
+              performance_rule_summary, performance_included_probe_ids_json, performance_review_status, performance_pending_probe_ids_json,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -175,6 +219,8 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
+              performance_latency_score, performance_speed_score, performance_loss_score, performance_score,
+              performance_rule_summary, performance_included_probe_ids_json, performance_review_status, performance_pending_probe_ids_json,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -196,6 +242,8 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
+              performance_latency_score, performance_speed_score, performance_loss_score, performance_score,
+              performance_rule_summary, performance_included_probe_ids_json, performance_review_status, performance_pending_probe_ids_json,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -221,6 +269,8 @@ export class MetricsRepository {
     const [rows] = await this.pool.query<DailyMetricsRow[]>(
       `SELECT airport_id, date, uptime_percent_30d, uptime_percent_today, median_latency_ms, median_download_mbps,
               latency_samples_ms, latency_mean_ms, latency_std_ms, latency_cv, download_samples_mbps, packet_loss_percent, packet_loss_measurement,
+              performance_latency_score, performance_speed_score, performance_loss_score, performance_score,
+              performance_rule_summary, performance_included_probe_ids_json, performance_review_status, performance_pending_probe_ids_json,
               available_nodes_count, unavailable_nodes_count, node_availability_percent, node_unavailability_percent,
               stable_days_streak, healthy_days_streak, is_stable_day, stability_tier, domain_ok, ssl_days_left,
               recent_complaints_count, history_incidents
@@ -334,6 +384,14 @@ function toDailyMetrics(row: DailyMetricsRow): DailyMetrics {
     median_download_mbps: Number(row.median_download_mbps),
     packet_loss_percent: Number(row.packet_loss_percent),
     packet_loss_measurement: row.packet_loss_measurement == null ? null : String(row.packet_loss_measurement),
+    performance_latency_score: nullableRowNumber(row.performance_latency_score),
+    performance_speed_score: nullableRowNumber(row.performance_speed_score),
+    performance_loss_score: nullableRowNumber(row.performance_loss_score),
+    performance_score: nullableRowNumber(row.performance_score),
+    performance_rule_summary: row.performance_rule_summary == null ? null : String(row.performance_rule_summary),
+    performance_included_probe_ids: safeJsonStringArray(row.performance_included_probe_ids_json),
+    performance_review_status: row.performance_review_status ?? null,
+    performance_pending_probe_ids: safeJsonStringArray(row.performance_pending_probe_ids_json),
     available_nodes_count: nullableRowNumber(row.available_nodes_count),
     unavailable_nodes_count: nullableRowNumber(row.unavailable_nodes_count),
     node_availability_percent: nullableRowNumber(row.node_availability_percent),
@@ -365,6 +423,20 @@ function safeJsonNumberArray(value: unknown): number[] {
   } catch {
     return [];
   }
+}
+
+function safeJsonStringArray(value: unknown): string[] {
+  if (!value) return [];
+  try {
+    const parsed = Array.isArray(value) ? value : JSON.parse(String(value));
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function nullableStringArrayJson(value: string[] | undefined): string | null {
+  return value === undefined ? null : JSON.stringify(value);
 }
 
 function nullableNumber(value: number | null | undefined): number | null {

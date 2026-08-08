@@ -143,3 +143,39 @@ test('PerformanceProbeJobService returns the original run for a completed duplic
   assert.deepEqual(result, { run_id: 44, job_id: 'job-1', duplicate: true });
   assert.equal(inserts, 0);
 });
+
+test('PerformanceProbeJobService recomputes only after a complete official upload', async () => {
+  const calls: string[] = [];
+  const service = new PerformanceProbeJobService({
+    jobRepository: {
+      leaseNext: async () => null,
+      getById: async () => ({ ...leasedJob, include_in_result_snapshot: true }),
+      markCompleted: async () => true,
+    },
+    snapshotRepository: { getById: async () => null },
+    runRepository: { insert: async () => 45 },
+    targetRepository: { insertMany: async () => undefined },
+    aggregationService: {
+      aggregateAirportForDate: async (airportId, date) => {
+        calls.push(`aggregate:${airportId}:${date}`);
+        return { aggregated: 1, pending_probe_ids: [] };
+      },
+    },
+    recomputeService: {
+      recomputeAirportForDate: async (date, airportId) => {
+        calls.push(`recompute:${airportId}:${date}`);
+        return { recomputed: 1 };
+      },
+    },
+  });
+
+  await service.submitRun('cn-shanghai', {
+    job_id: 'job-1',
+    sampled_at: '2026-08-08T12:00:00+08:00',
+    status: 'success',
+    calibration_status: 'passed',
+    calibration_mbps: 180,
+  });
+
+  assert.deepEqual(calls, ['aggregate:9:2026-08-08', 'recompute:9:2026-08-08']);
+});

@@ -1,6 +1,16 @@
-import type { DailyMetrics, PerformanceRun, ProbeSample, StabilityTier } from '../types/domain';
+import type {
+  AirportPerformanceProbeSettingsView,
+  DailyMetrics,
+  PerformanceAggregate,
+  PerformanceProbeId,
+  PerformanceReviewStatus,
+  PerformanceRun,
+  ProbeSample,
+  StabilityTier,
+} from '../types/domain';
 import { dateDaysAgo } from '../utils/time';
 import { computeLatencyStats, getStabilityTier, isStableDay } from '../utils/stability';
+import { aggregatePerformanceRegions, scorePerformanceRegion } from './performanceRegionScoring';
 
 interface AggregationDeps {
   airportRepository: {
@@ -20,7 +30,16 @@ interface AggregationDeps {
   };
   performanceRunRepository?: {
     getLatestByAirportAndDate(airportId: number, date: string): Promise<PerformanceRun | null>;
+    listByAirportAndDate?(airportId: number, date: string): Promise<PerformanceRun[]>;
   };
+  performanceProbeSettingRepository?: {
+    getByAirport(airportId: number): Promise<AirportPerformanceProbeSettingsView>;
+  };
+}
+
+export interface AirportAggregationResult {
+  aggregated: number;
+  pending_probe_ids: PerformanceProbeId[];
 }
 
 export class AggregationService {
@@ -34,18 +53,22 @@ export class AggregationService {
       if (!isRunnableAirport(airport)) {
         continue;
       }
-      aggregated += await this.aggregateAirport(airport.id, date);
+      const result = await this.aggregateAirport(airport.id, date);
+      aggregated += result.aggregated;
     }
 
     return { aggregated };
   }
 
-  async aggregateAirportForDate(airportId: number, date: string): Promise<{ aggregated: number }> {
-    const aggregated = await this.aggregateAirport(airportId, date);
-    return { aggregated };
+  async aggregateAirportForDate(airportId: number, date: string): Promise<AirportAggregationResult> {
+    return this.aggregateAirport(airportId, date);
   }
 
-  private async aggregateAirport(airportId: number, date: string): Promise<number> {
+  private async aggregateAirport(airportId: number, date: string): Promise<AirportAggregationResult> {
+    const performanceSelection = await this.resolvePerformanceSelection(airportId, date);
+    if (performanceSelection.pendingProbeIds.length > 0) {
+      return { aggregated: 0, pending_probe_ids: performanceSelection.pendingProbeIds };
+    }
     const rangeStart = dateDaysAgo(date, 29);
     const samples = await this.deps.probeSampleRepository.getProbeSamplesInRange(
       airportId,
@@ -53,7 +76,7 @@ export class AggregationService {
       date,
     );
     if (samples.length === 0) {
-      return 0;
+      return { aggregated: 0, pending_probe_ids: [] };
     }
 
     const daySamples = samples.filter((s) => s.sampled_at.slice(0, 10) === date);
@@ -86,23 +109,28 @@ export class AggregationService {
     );
 
     const base = await this.deps.metricsRepository.getLatestByAirportBeforeDate(airportId, date);
-    const performanceRun =
-      (await this.deps.performanceRunRepository?.getLatestByAirportAndDate(airportId, date)) ?? null;
-    const performanceRunDownloads = performanceRun?.tested_nodes
+    const performanceRun = performanceSelection.legacyRun;
+    const performanceRuns = performanceSelection.regionalRuns.length
+      ? performanceSelection.regionalRuns
+      : performanceRun ? [performanceRun] : [];
+    const performanceRunDownloads = performanceRuns.flatMap((run) => run.tested_nodes)
       .map((node) => node.download_mbps)
       .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
-      .map((value) => round2(value)) ?? [];
+      .map((value) => round2(value));
     const effectiveDownloads = performanceRunDownloads.length ? performanceRunDownloads : downloads;
-    const medianLatency = performanceRun?.median_latency_ms ?? (performanceLatencies.length
+    const regionalAggregate = performanceSelection.aggregate;
+    const medianLatency = regionalAggregate?.median_latency_ms ?? performanceRun?.median_latency_ms ?? (performanceLatencies.length
       ? median(performanceLatencies)
       : base?.median_latency_ms ?? 999);
-    const medianDownload = performanceRun?.median_download_mbps ?? (effectiveDownloads.length
+    const medianDownload = regionalAggregate?.median_download_mbps ?? performanceRun?.median_download_mbps ?? (effectiveDownloads.length
       ? median(effectiveDownloads)
       : base?.median_download_mbps ?? 0);
-    const packetLoss = performanceRun?.packet_loss_percent ?? (packetLossSamples.length
+    const packetLoss = regionalAggregate?.packet_loss_percent ?? performanceRun?.packet_loss_percent ?? (packetLossSamples.length
       ? median(packetLossSamples)
       : base?.packet_loss_percent ?? 100);
-    const packetLossMeasurement = performanceRun
+    const packetLossMeasurement = regionalAggregate
+      ? 'multi_region_equal_weight_v1'
+      : performanceRun
       ? typeof performanceRun.diagnostics.packet_loss_measurement === 'string'
         ? performanceRun.diagnostics.packet_loss_measurement
         : null
@@ -140,12 +168,25 @@ export class AggregationService {
       median_download_mbps: medianDownload,
       packet_loss_percent: packetLoss,
       packet_loss_measurement: packetLossMeasurement,
-      available_nodes_count: performanceRun?.available_nodes_count ?? base?.available_nodes_count ?? null,
-      unavailable_nodes_count: performanceRun?.unavailable_nodes_count ?? base?.unavailable_nodes_count ?? null,
+      performance_latency_score: regionalAggregate?.latency_score ?? null,
+      performance_speed_score: regionalAggregate?.speed_score ?? null,
+      performance_loss_score: regionalAggregate?.loss_score ?? null,
+      performance_score: regionalAggregate?.p ?? null,
+      performance_rule_summary: regionalAggregate?.rule_summary ?? (performanceRun ? 'legacy_v1' : null),
+      performance_included_probe_ids: regionalAggregate?.included_probe_ids
+        ?? (performanceRun ? ['legacy-control'] : []),
+      performance_review_status: performanceSelection.reviewStatus,
+      performance_pending_probe_ids: [],
+      available_nodes_count: aggregateNullableCount(performanceRuns, 'available_nodes_count')
+        ?? base?.available_nodes_count ?? null,
+      unavailable_nodes_count: aggregateNullableCount(performanceRuns, 'unavailable_nodes_count')
+        ?? base?.unavailable_nodes_count ?? null,
       node_availability_percent:
-        performanceRun?.node_availability_percent ?? base?.node_availability_percent ?? null,
+        medianNullable(performanceRuns.map((run) => run.node_availability_percent))
+        ?? base?.node_availability_percent ?? null,
       node_unavailability_percent:
-        performanceRun?.node_unavailability_percent ?? base?.node_unavailability_percent ?? null,
+        medianNullable(performanceRuns.map((run) => run.node_unavailability_percent))
+        ?? base?.node_unavailability_percent ?? null,
       stable_days_streak: stableDaysStreak,
       healthy_days_streak: healthyDaysStreak,
       is_stable_day: stableDay,
@@ -155,8 +196,113 @@ export class AggregationService {
       recent_complaints_count: base?.recent_complaints_count ?? 0,
       history_incidents: base?.history_incidents ?? 0,
     });
-    return 1;
+    return { aggregated: 1, pending_probe_ids: [] };
   }
+
+  private async resolvePerformanceSelection(
+    airportId: number,
+    date: string,
+  ): Promise<{
+    aggregate: PerformanceAggregate | null;
+    legacyRun: PerformanceRun | null;
+    regionalRuns: PerformanceRun[];
+    pendingProbeIds: PerformanceProbeId[];
+    reviewStatus: PerformanceReviewStatus | null;
+  }> {
+    const runRepository = this.deps.performanceRunRepository;
+    const settingRepository = this.deps.performanceProbeSettingRepository;
+    if (!runRepository) return emptyPerformanceSelection();
+    if (!settingRepository || !runRepository.listByAirportAndDate) {
+      return {
+        ...emptyPerformanceSelection(),
+        legacyRun: await runRepository.getLatestByAirportAndDate(airportId, date),
+      };
+    }
+
+    const [settings, runs] = await Promise.all([
+      settingRepository.getByAirport(airportId),
+      runRepository.listByAirportAndDate(airportId, date),
+    ]);
+    const requiredProbeIds = settings.settings
+      .filter((setting) => setting.test_enabled && setting.include_in_result)
+      .map((setting) => setting.probe_id)
+      .sort();
+    const selectedRuns = new Map<PerformanceProbeId, PerformanceRun>();
+    const pendingProbeIds: PerformanceProbeId[] = [];
+    for (const probeId of requiredProbeIds) {
+      const run = runs.find((candidate) => isValidOfficialRun(candidate, probeId, settings.config_version));
+      if (run) selectedRuns.set(probeId, run);
+      else pendingProbeIds.push(probeId);
+    }
+    if (pendingProbeIds.length > 0) {
+      return { ...emptyPerformanceSelection(), pendingProbeIds };
+    }
+
+    const officialRuns = requiredProbeIds.map((probeId) => selectedRuns.get(probeId)!);
+    if (officialRuns.length === 1 && officialRuns[0].probe_id === 'legacy-control') {
+      return {
+        ...emptyPerformanceSelection(),
+        legacyRun: officialRuns[0],
+        reviewStatus: officialRuns[0].review_status ?? 'normal',
+      };
+    }
+    const scored = officialRuns.map((run) => scorePerformanceRegion({
+      probe_id: run.probe_id || 'legacy-control',
+      scoring_rule_version: run.scoring_rule_version || 'legacy_v1',
+      median_latency_ms: Number(run.median_latency_ms),
+      median_download_mbps: Number(run.median_download_mbps),
+      packet_loss_percent: Number(run.packet_loss_percent),
+    }));
+    return {
+      aggregate: aggregatePerformanceRegions(scored),
+      legacyRun: null,
+      regionalRuns: officialRuns,
+      pendingProbeIds: [],
+      reviewStatus: aggregateReviewStatus(officialRuns),
+    };
+  }
+}
+
+function emptyPerformanceSelection() {
+  return {
+    aggregate: null,
+    legacyRun: null,
+    regionalRuns: [] as PerformanceRun[],
+    pendingProbeIds: [] as PerformanceProbeId[],
+    reviewStatus: null as PerformanceReviewStatus | null,
+  };
+}
+
+function isValidOfficialRun(
+  run: PerformanceRun,
+  probeId: PerformanceProbeId,
+  configVersion: number,
+): boolean {
+  if (run.probe_id !== probeId || run.run_mode !== 'official' || run.status !== 'success') return false;
+  if (probeId !== 'legacy-control' && (run.config_version !== configVersion || run.calibration_status !== 'passed')) {
+    return false;
+  }
+  return [run.median_latency_ms, run.median_download_mbps, run.packet_loss_percent]
+    .every((value) => typeof value === 'number' && Number.isFinite(value) && value >= 0);
+}
+
+function aggregateReviewStatus(runs: PerformanceRun[]): PerformanceReviewStatus | null {
+  if (runs.some((run) => run.review_status === 'suspicious')) return 'suspicious';
+  if (runs.some((run) => run.review_status === 'needs_review')) return 'needs_review';
+  return runs.length ? 'normal' : null;
+}
+
+function aggregateNullableCount(
+  runs: PerformanceRun[],
+  key: 'available_nodes_count' | 'unavailable_nodes_count',
+): number | null {
+  const values = runs.map((run) => run[key]).filter((value): value is number => typeof value === 'number');
+  return values.length ? Math.round(average(values)) : null;
+}
+
+function medianNullable(values: Array<number | null>): number | null {
+  const finite = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  return finite.length ? median(finite) : null;
 }
 
 function median(values: number[]): number {

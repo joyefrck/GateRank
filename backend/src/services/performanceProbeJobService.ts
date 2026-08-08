@@ -26,6 +26,15 @@ interface PerformanceProbeJobServiceDeps {
   targetRepository: {
     insertMany(targets: PerformanceRunTarget[]): Promise<void>;
   };
+  aggregationService?: {
+    aggregateAirportForDate(
+      airportId: number,
+      date: string,
+    ): Promise<{ aggregated: number; pending_probe_ids?: PerformanceProbeId[] }>;
+  };
+  recomputeService?: {
+    recomputeAirportForDate(date: string, airportId: number): Promise<{ recomputed: number }>;
+  };
 }
 
 export class PerformanceProbeJobService {
@@ -125,6 +134,18 @@ export class PerformanceProbeJobService {
     const targets = targetRows(payload.target_results, runId);
     await this.deps.targetRepository.insertMany(targets);
     await this.deps.jobRepository.markCompleted(job.job_id, probeId, runId);
+    if (
+      job.include_in_result_snapshot
+      && input.status === 'success'
+      && (probeId === 'legacy-control' || calibrationStatus === 'passed')
+      && this.deps.aggregationService
+    ) {
+      const date = input.sampled_date || input.sampled_at.slice(0, 10);
+      const aggregated = await this.deps.aggregationService.aggregateAirportForDate(job.airport_id, date);
+      if (aggregated.aggregated > 0 && this.deps.recomputeService) {
+        await this.deps.recomputeService.recomputeAirportForDate(date, job.airport_id);
+      }
+    }
     return { run_id: runId, job_id: job.job_id, duplicate: false };
   }
 }
