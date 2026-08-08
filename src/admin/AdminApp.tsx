@@ -10668,6 +10668,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
           }
           setJobTone('error');
           setJobMessage(nextJob.message || '任务执行失败');
+          await load();
         } catch (err) {
           setJobTone('error');
           setJobMessage(err instanceof Error ? err.message : '任务状态查询失败');

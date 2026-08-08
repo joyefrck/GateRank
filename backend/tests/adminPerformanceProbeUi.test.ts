@@ -22,5 +22,10 @@ test('admin performance tab renders accessible per-region controls before node s
   assert.match(source, /代理测速配置/);
   assert.match(source, /代理下载目标分布/);
   assert.match(source, /有效\/总样本/);
+  assert.match(
+    source,
+    /setJobTone\('error'\);\s*setJobMessage\([\s\S]{0,180}?await load\(\);/,
+    'terminal manual-job failures must reload any regional evidence that already returned',
+  );
   assert.doesNotMatch(source, /校准速度/);
 });

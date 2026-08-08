@@ -92,6 +92,42 @@ test('PerformanceProbeJobRepository completes a job idempotently', async () => {
   assert.equal(await repository.markCompleted('job-1', 'cn-guangzhou', 44), true);
 });
 
+test('PerformanceProbeJobRepository lists only requested jobs', async () => {
+  const repository = new PerformanceProbeJobRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      assert.match(sql, /job_id IN \(\?, \?\)/);
+      assert.deepEqual(params, ['job-shanghai', 'job-guangzhou']);
+      return [[{
+        job_id: 'job-shanghai',
+        airport_id: 9,
+        probe_id: 'cn-shanghai',
+        node_snapshot_id: 12,
+        config_version: 1,
+        test_enabled_snapshot: 1,
+        include_in_result_snapshot: 0,
+        selected_node_keys_json: '[]',
+        test_profile: 'proxy_multi_target_v2',
+        scoring_rule_version: 'cn_dual_probe_v1',
+        source: 'manual-performance:88',
+        status: 'completed',
+        lease_owner: null,
+        lease_expires_at: null,
+        attempts: 1,
+        idempotency_key: 'job-shanghai',
+        run_id: 44,
+        created_at: '2026-08-08 15:56:00',
+        updated_at: '2026-08-08 15:58:00',
+        completed_at: '2026-08-08 15:58:00',
+      }]];
+    },
+  } as never);
+
+  const jobs = await repository.listByIds(['job-shanghai', 'job-guangzhou']);
+
+  assert.deepEqual(jobs.map((job) => job.job_id), ['job-shanghai']);
+  assert.equal(jobs[0]?.status, 'completed');
+});
+
 test('PerformanceProbeJobRepository commits and rolls back submission transactions', async () => {
   const events: string[] = [];
   const connection = {

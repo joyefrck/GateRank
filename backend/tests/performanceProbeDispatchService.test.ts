@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { PerformanceProbeDispatchService } from '../src/services/performanceProbeDispatchService';
-import type { PerformanceProbeJobInput } from '../src/types/domain';
+import type { PerformanceProbeJob, PerformanceProbeJobInput } from '../src/types/domain';
 import { buildPerformanceNodeKey } from '../src/utils/performanceNodeKey';
 
 const snapshotNodes = [
@@ -79,6 +79,7 @@ test('PerformanceProbeDispatchService creates enabled shadow jobs with identical
         created.push(input);
         return true;
       },
+      listByIds: async () => [],
     },
   });
 
@@ -87,6 +88,7 @@ test('PerformanceProbeDispatchService creates enabled shadow jobs with identical
   assert.equal(result.created, 2);
   assert.equal(result.shadow, 2);
   assert.equal(result.official, 0);
+  assert.deepEqual(result.job_ids, created.map((job) => job.job_id));
   assert.deepEqual(created.map((job) => [job.probe_id, job.include_in_result_snapshot]), [
     ['cn-shanghai', false],
     ['cn-guangzhou', false],
@@ -116,7 +118,7 @@ test('PerformanceProbeDispatchService skips disabled regions and reports missing
     },
     snapshotRepository: { getLatestByAirport: async () => null },
     preferenceRepository: { getByAirport: async () => null },
-    jobRepository: { create: async () => true },
+    jobRepository: { create: async () => true, listByIds: async () => [] },
   });
 
   const result = await service.dispatchAll('2026-08-08', 'scheduler-performance');
@@ -124,6 +126,98 @@ test('PerformanceProbeDispatchService skips disabled regions and reports missing
   assert.deepEqual(result.failures, [{ airport_id: 9, airport_name: 'Now', error_code: 'node_snapshot_missing' }]);
   assert.doesNotMatch(JSON.stringify(result), /raw_uri|password|subscription/i);
 });
+
+test('PerformanceProbeDispatchService waits for the exact dispatched jobs and reports progress', async () => {
+  let reads = 0;
+  const progress: Array<[number, number, number]> = [];
+  const service = new PerformanceProbeDispatchService({
+    airportRepository: { listAll: async () => [] },
+    probeRepository: { list: async () => [] },
+    settingRepository: { getByAirport: async () => ({ airport_id: 9, config_version: 1, settings: [] }) },
+    snapshotRepository: { getLatestByAirport: async () => null },
+    preferenceRepository: { getByAirport: async () => null },
+    jobRepository: {
+      create: async () => true,
+      listByIds: async (jobIds) => {
+        reads += 1;
+        return jobIds.map((jobId, index) => performanceJob(
+          jobId,
+          reads === 1 && index === 1 ? 'leased' : 'completed',
+        ));
+      },
+    },
+  });
+
+  const result = await service.waitForJobs(['job-shanghai', 'job-guangzhou'], {
+    pollIntervalMs: 0,
+    timeoutMs: 100,
+    onProgress: async (item) => {
+      progress.push([item.completed, item.pending, item.failed]);
+    },
+  });
+
+  assert.deepEqual(result, { total: 2, completed: 2, pending: 0, failed: 0 });
+  assert.deepEqual(progress, [[1, 1, 0], [2, 0, 0]]);
+});
+
+test('PerformanceProbeDispatchService rejects failed and timed out regional jobs', async () => {
+  const failedService = new PerformanceProbeDispatchService({
+    airportRepository: { listAll: async () => [] },
+    probeRepository: { list: async () => [] },
+    settingRepository: { getByAirport: async () => ({ airport_id: 9, config_version: 1, settings: [] }) },
+    snapshotRepository: { getLatestByAirport: async () => null },
+    preferenceRepository: { getByAirport: async () => null },
+    jobRepository: {
+      create: async () => true,
+      listByIds: async (jobIds) => jobIds.map((jobId) => performanceJob(jobId, 'failed')),
+    },
+  });
+  await assert.rejects(
+    failedService.waitForJobs(['job-shanghai'], { pollIntervalMs: 0, timeoutMs: 100 }),
+    /地区性能任务失败：完成 0\/1，失败 1/,
+  );
+
+  const timeoutService = new PerformanceProbeDispatchService({
+    airportRepository: { listAll: async () => [] },
+    probeRepository: { list: async () => [] },
+    settingRepository: { getByAirport: async () => ({ airport_id: 9, config_version: 1, settings: [] }) },
+    snapshotRepository: { getLatestByAirport: async () => null },
+    preferenceRepository: { getByAirport: async () => null },
+    jobRepository: {
+      create: async () => true,
+      listByIds: async (jobIds) => jobIds.map((jobId) => performanceJob(jobId, 'queued')),
+    },
+  });
+  await assert.rejects(
+    timeoutService.waitForJobs(['job-shanghai'], { pollIntervalMs: 0, timeoutMs: 0 }),
+    /地区性能任务等待超时：完成 0\/1/,
+  );
+});
+
+function performanceJob(jobId: string, status: PerformanceProbeJob['status']): PerformanceProbeJob {
+  return {
+    job_id: jobId,
+    airport_id: 9,
+    probe_id: jobId.includes('guangzhou') ? 'cn-guangzhou' : 'cn-shanghai',
+    node_snapshot_id: 12,
+    config_version: 1,
+    test_enabled_snapshot: true,
+    include_in_result_snapshot: false,
+    test_profile: 'proxy_multi_target_v2',
+    scoring_rule_version: 'cn_dual_probe_v1',
+    selected_node_keys: [],
+    source: 'manual-performance:88',
+    status,
+    lease_owner: null,
+    lease_expires_at: null,
+    attempts: 1,
+    idempotency_key: jobId,
+    run_id: status === 'completed' ? 44 : null,
+    created_at: '2026-08-08T15:56:00+08:00',
+    updated_at: '2026-08-08T15:58:00+08:00',
+    completed_at: status === 'completed' ? '2026-08-08T15:58:00+08:00' : null,
+  };
+}
 
 function probe(probeId: 'legacy-control' | 'cn-shanghai' | 'cn-guangzhou', enabled: boolean) {
   const mainland = probeId !== 'legacy-control';

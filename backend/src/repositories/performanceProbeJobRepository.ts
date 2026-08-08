@@ -163,6 +163,19 @@ export class PerformanceProbeJobRepository {
     return rows[0] ? toPerformanceProbeJob(rows[0]) : null;
   }
 
+  async listByIds(jobIds: string[]): Promise<PerformanceProbeJob[]> {
+    const uniqueJobIds = [...new Set(jobIds.map(String).filter(Boolean))];
+    if (uniqueJobIds.length === 0) return [];
+    const placeholders = uniqueJobIds.map(() => '?').join(', ');
+    const [rows] = await this.pool.query<PerformanceProbeJobRow[]>(
+      `SELECT ${SELECT_COLUMNS}
+         FROM performance_probe_jobs
+        WHERE job_id IN (${placeholders})`,
+      uniqueJobIds,
+    );
+    return rows.map(toPerformanceProbeJob);
+  }
+
   async markCompleted(
     jobId: string,
     probeId: PerformanceProbeId,

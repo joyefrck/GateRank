@@ -173,6 +173,7 @@ export class SchedulerTaskExecutor {
           created: 0,
           shadow: 0,
           official: 0,
+          job_ids: [],
           failures: [{ airport_id: 0, airport_name: 'system', error_code: 'dispatch_failed' }],
         };
       }

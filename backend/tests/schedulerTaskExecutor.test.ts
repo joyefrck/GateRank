@@ -243,6 +243,7 @@ test('SchedulerTaskExecutor.runPerformanceCollection dispatches mainland jobs an
           created: 1,
           shadow: 1,
           official: 0,
+          job_ids: ['job-shanghai'],
           failures: [{ airport_id: 9, airport_name: 'Now', error_code: 'node_snapshot_missing' }],
         };
       },
@@ -257,6 +258,7 @@ test('SchedulerTaskExecutor.runPerformanceCollection dispatches mainland jobs an
     created: 1,
     shadow: 1,
     official: 0,
+    job_ids: ['job-shanghai'],
     failures: [{ airport_id: 9, airport_name: 'Now', error_code: 'node_snapshot_missing' }],
   });
 });

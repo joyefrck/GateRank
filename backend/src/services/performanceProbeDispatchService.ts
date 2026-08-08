@@ -4,6 +4,7 @@ import type {
   AirportPerformanceProbeSettingsView,
   PerformanceNodePreference,
   PerformanceProbe,
+  PerformanceProbeJob,
   PerformanceProbeJobInput,
   SubscriptionNodeSnapshot,
   SubscriptionNodeSnapshotNode,
@@ -28,6 +29,7 @@ interface PerformanceProbeDispatchDeps {
   };
   jobRepository: {
     create(input: PerformanceProbeJobInput): Promise<boolean>;
+    listByIds(jobIds: string[]): Promise<PerformanceProbeJob[]>;
   };
 }
 
@@ -35,11 +37,50 @@ export interface PerformanceProbeDispatchResult {
   created: number;
   shadow: number;
   official: number;
+  job_ids: string[];
   failures: Array<{ airport_id: number; airport_name: string; error_code: string }>;
+}
+
+export interface PerformanceProbeJobWaitProgress {
+  total: number;
+  completed: number;
+  pending: number;
+  failed: number;
+}
+
+interface PerformanceProbeJobWaitOptions {
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+  onProgress?: (progress: PerformanceProbeJobWaitProgress) => Promise<void> | void;
 }
 
 export class PerformanceProbeDispatchService {
   constructor(private readonly deps: PerformanceProbeDispatchDeps) {}
+
+  async waitForJobs(
+    jobIds: string[],
+    options: PerformanceProbeJobWaitOptions = {},
+  ): Promise<PerformanceProbeJobWaitProgress> {
+    const uniqueJobIds = [...new Set(jobIds.map(String).filter(Boolean))];
+    if (uniqueJobIds.length === 0) return emptyWaitProgress();
+    const timeoutMs = Math.max(0, options.timeoutMs ?? 15 * 60 * 1000);
+    const pollIntervalMs = Math.max(0, options.pollIntervalMs ?? 1_000);
+    const deadline = Date.now() + timeoutMs;
+
+    while (true) {
+      const jobs = await this.deps.jobRepository.listByIds(uniqueJobIds);
+      const progress = summarizeJobProgress(uniqueJobIds, jobs);
+      await options.onProgress?.(progress);
+      if (progress.failed > 0) {
+        throw new Error(`地区性能任务失败：完成 ${progress.completed}/${progress.total}，失败 ${progress.failed}`);
+      }
+      if (progress.completed === progress.total) return progress;
+      if (Date.now() >= deadline) {
+        throw new Error(`地区性能任务等待超时：完成 ${progress.completed}/${progress.total}`);
+      }
+      await delay(pollIntervalMs);
+    }
+  }
 
   async dispatchAll(date: string, source: string): Promise<PerformanceProbeDispatchResult> {
     const airports = await this.deps.airportRepository.listAll();
@@ -104,6 +145,7 @@ export class PerformanceProbeDispatchService {
       };
       if (await this.deps.jobRepository.create(input)) {
         result.created += 1;
+        result.job_ids.push(input.job_id);
         if (setting.include_in_result) result.official += 1;
         else result.shadow += 1;
       }
@@ -140,7 +182,7 @@ function isInformationalNode(name: string): boolean {
 }
 
 function emptyResult(): PerformanceProbeDispatchResult {
-  return { created: 0, shadow: 0, official: 0, failures: [] };
+  return { created: 0, shadow: 0, official: 0, job_ids: [], failures: [] };
 }
 
 function failureResult(airportId: number, airportName: string, errorCode: string): PerformanceProbeDispatchResult {
@@ -154,5 +196,34 @@ function mergeResult(target: PerformanceProbeDispatchResult, source: Performance
   target.created += source.created;
   target.shadow += source.shadow;
   target.official += source.official;
+  target.job_ids.push(...source.job_ids);
   target.failures.push(...source.failures);
+}
+
+function emptyWaitProgress(): PerformanceProbeJobWaitProgress {
+  return { total: 0, completed: 0, pending: 0, failed: 0 };
+}
+
+function summarizeJobProgress(
+  jobIds: string[],
+  jobs: PerformanceProbeJob[],
+): PerformanceProbeJobWaitProgress {
+  const byId = new Map(jobs.map((job) => [job.job_id, job]));
+  let completed = 0;
+  let failed = 0;
+  for (const jobId of jobIds) {
+    const status = byId.get(jobId)?.status;
+    if (status === 'completed') completed += 1;
+    else if (status === 'failed' || status === 'expired' || !status) failed += 1;
+  }
+  return {
+    total: jobIds.length,
+    completed,
+    failed,
+    pending: Math.max(0, jobIds.length - completed - failed),
+  };
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }

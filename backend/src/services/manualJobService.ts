@@ -10,7 +10,10 @@ import { getAdminAuthConfig } from '../utils/adminAuthConfig';
 import { getDateInTimezone } from '../utils/time';
 import { signAdminToken } from '../utils/token';
 import type { ManualJob, ManualJobKind } from '../types/domain';
-import type { PerformanceProbeDispatchResult } from './performanceProbeDispatchService';
+import type {
+  PerformanceProbeDispatchResult,
+  PerformanceProbeJobWaitProgress,
+} from './performanceProbeDispatchService';
 
 const execFileAsync = promisify(execFile);
 
@@ -26,6 +29,7 @@ interface ManualJobServiceDeps {
     getById(id: number): Promise<ManualJob | null>;
     findActive(airportId: number, date: string, kind: ManualJobKind): Promise<ManualJob | null>;
     markRunning(id: number, message?: string | null): Promise<void>;
+    updateRunningMessage?(id: number, message: string): Promise<void>;
     markFinished(id: number, status: 'succeeded' | 'failed', message: string | null): Promise<void>;
     failActiveJobs(message: string): Promise<void>;
   };
@@ -48,6 +52,14 @@ interface ManualJobServiceDeps {
       source: string,
       airportName?: string,
     ): Promise<PerformanceProbeDispatchResult>;
+    waitForJobs(
+      jobIds: string[],
+      options?: {
+        timeoutMs?: number;
+        pollIntervalMs?: number;
+        onProgress?: (progress: PerformanceProbeJobWaitProgress) => Promise<void> | void;
+      },
+    ): Promise<PerformanceProbeJobWaitProgress>;
   };
 }
 
@@ -59,6 +71,7 @@ export class ManualJobService {
   private readonly repoRoot: string;
   private readonly singBoxBin: string;
   private readonly runtimePath: string;
+  private readonly regionalProbeWaitTimeoutMs: number;
 
   constructor(private readonly deps: ManualJobServiceDeps) {
     this.apiBase = (process.env.API_BASE || `http://127.0.0.1:${process.env.PORT || 8787}`).replace(/\/+$/, '');
@@ -71,6 +84,10 @@ export class ManualJobService {
     this.repoRoot = process.cwd();
     this.singBoxBin = resolveBinaryPath('sing-box', process.env.SING_BOX_BIN);
     this.runtimePath = augmentPathWithCommonBinaryDirs(process.env.PATH);
+    this.regionalProbeWaitTimeoutMs = positiveIntegerOrDefault(
+      process.env.MANUAL_PERFORMANCE_PROBE_WAIT_TIMEOUT_MS,
+      15 * 60 * 1000,
+    );
   }
 
   async initialize(): Promise<void> {
@@ -151,7 +168,7 @@ export class ManualJobService {
 
     if (job.kind === 'full') {
       const stageFailures: string[] = [];
-      let regionalDispatched = 0;
+      let regionalDispatch: PerformanceProbeDispatchResult | null = null;
       if (isToday) {
         const stabilityFailure = await this.captureStageFailure('稳定性采集', async () => {
           await this.runStabilityScript(job.airport_id);
@@ -162,7 +179,7 @@ export class ManualJobService {
 
         const performanceFailure = await this.captureStageFailure('性能采集', async () => {
           await this.runPerformanceScript(job.airport_id);
-          regionalDispatched = await this.dispatchRegionalPerformance(
+          regionalDispatch = await this.dispatchRegionalPerformance(
             job,
             `manual-full:${job.id}`,
           );
@@ -211,8 +228,9 @@ export class ManualJobService {
         throw new Error(`全链路未完全成功。${successSummary} 失败阶段：${stageFailures.join('；')}`);
       }
 
-      const regionalSummary = isToday && this.deps.performanceProbeDispatchService
-        ? `，区域任务已排队 ${regionalDispatched} 个`
+      const regionalProgress = await this.waitForRegionalPerformanceJobs(job, regionalDispatch);
+      const regionalSummary = regionalProgress.total > 0
+        ? `，地区测试完成 ${regionalProgress.completed}/${regionalProgress.total}`
         : '';
       return `全链路完成：聚合 ${aggregatedCount ?? 0} 条，重算 ${recomputedCount ?? 0} 条${regionalSummary}`;
     }
@@ -229,18 +247,19 @@ export class ManualJobService {
     }
 
     if (job.kind === 'performance') {
-      let regionalDispatched = 0;
+      let regionalDispatch: PerformanceProbeDispatchResult | null = null;
       if (isToday) {
         await this.runPerformanceScript(job.airport_id);
-        regionalDispatched = await this.dispatchRegionalPerformance(
+        regionalDispatch = await this.dispatchRegionalPerformance(
           job,
           `manual-performance:${job.id}`,
         );
       }
       const aggregateResult = await this.deps.aggregationService.aggregateAirportForDate(job.airport_id, job.date);
       const recomputeResult = await this.deps.recomputeService.recomputeAirportForDate(job.date, job.airport_id);
+      const regionalProgress = await this.waitForRegionalPerformanceJobs(job, regionalDispatch);
       return isToday
-        ? `性能采集完成：聚合 ${aggregateResult.aggregated} 条，重算 ${recomputeResult.recomputed} 条，区域任务已排队 ${regionalDispatched} 个`
+        ? `性能采集完成：聚合 ${aggregateResult.aggregated} 条，重算 ${recomputeResult.recomputed} 条${regionalProgress.total > 0 ? `，地区测试完成 ${regionalProgress.completed}/${regionalProgress.total}` : ''}`
         : `历史日期仅重算性能相关数据：聚合 ${aggregateResult.aggregated} 条，重算 ${recomputeResult.recomputed} 条`;
     }
 
@@ -276,15 +295,47 @@ export class ManualJobService {
     await this.runPythonScript('monitor_performance.py', airportId, 'manual-performance');
   }
 
-  private async dispatchRegionalPerformance(job: ManualJob, source: string): Promise<number> {
+  private async dispatchRegionalPerformance(
+    job: ManualJob,
+    source: string,
+  ): Promise<PerformanceProbeDispatchResult | null> {
     const service = this.deps.performanceProbeDispatchService;
-    if (!service) return 0;
+    if (!service) return null;
     const result = await service.dispatchAirport(job.airport_id, job.date, source);
     if (result.failures.length > 0) {
       const codes = [...new Set(result.failures.map((failure) => failure.error_code))];
       throw new Error(`区域性能任务派发失败：${codes.join(', ')}`);
     }
-    return result.created;
+    return result;
+  }
+
+  private async waitForRegionalPerformanceJobs(
+    job: ManualJob,
+    dispatch: PerformanceProbeDispatchResult | null,
+  ): Promise<PerformanceProbeJobWaitProgress> {
+    const service = this.deps.performanceProbeDispatchService;
+    const jobIds = dispatch?.job_ids || [];
+    if (!service || jobIds.length === 0) {
+      return { total: 0, completed: 0, pending: 0, failed: 0 };
+    }
+    await this.updateManualJobProgress(job.id, `中心性能采集完成，地区测试 0/${jobIds.length}`);
+    return service.waitForJobs(jobIds, {
+      timeoutMs: this.regionalProbeWaitTimeoutMs,
+      onProgress: async (progress) => {
+        await this.updateManualJobProgress(
+          job.id,
+          `中心性能采集完成，地区测试 ${progress.completed}/${progress.total}`,
+        );
+      },
+    });
+  }
+
+  private async updateManualJobProgress(jobId: number, message: string): Promise<void> {
+    if (this.deps.manualJobRepository.updateRunningMessage) {
+      await this.deps.manualJobRepository.updateRunningMessage(jobId, message);
+      return;
+    }
+    await this.deps.manualJobRepository.markRunning(jobId, message);
   }
 
   private async runPythonScript(scriptName: 'monitor_stability.py' | 'monitor_performance.py', airportId: number, source: string): Promise<void> {
@@ -344,6 +395,11 @@ export function summarizeManualJobScriptFailure(error: unknown): string {
     }
   }
   return error instanceof Error ? error.message : String(error);
+}
+
+function positiveIntegerOrDefault(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
 }
 
 function getExecOutput(error: unknown): string {

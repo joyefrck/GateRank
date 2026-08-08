@@ -104,13 +104,15 @@ test('manual job rejects non-ascii admin api key before running script', () => {
 
 test('manual performance job dispatches uniquely keyed mainland jobs and reports pending count', async () => {
   const dispatchCalls: Array<[number, string, string]> = [];
+  const progressMessages: string[] = [];
   const today = getDateInTimezone();
   const service = new ManualJobService({
     manualJobRepository: {
       create: async () => { throw new Error('not implemented'); },
       getById: async () => null,
       findActive: async () => null,
-      markRunning: async () => {},
+      markRunning: async (_id, message) => { if (message) progressMessages.push(message); },
+      updateRunningMessage: async (_id, message) => { progressMessages.push(message); },
       markFinished: async () => {},
       failActiveJobs: async () => {},
     },
@@ -121,7 +123,18 @@ test('manual performance job dispatches uniquely keyed mainland jobs and reports
     performanceProbeDispatchService: {
       dispatchAirport: async (airportId: number, date: string, source: string) => {
         dispatchCalls.push([airportId, date, source]);
-        return { created: 2, shadow: 2, official: 0, failures: [] };
+        return {
+          created: 2,
+          shadow: 2,
+          official: 0,
+          failures: [],
+          job_ids: ['job-shanghai', 'job-guangzhou'],
+        };
+      },
+      waitForJobs: async (_jobIds, options) => {
+        await options?.onProgress?.({ total: 2, completed: 1, pending: 1, failed: 0 });
+        await options?.onProgress?.({ total: 2, completed: 2, pending: 0, failed: 0 });
+        return { total: 2, completed: 2, pending: 0, failed: 0 };
       },
     },
   });
@@ -144,5 +157,10 @@ test('manual performance job dispatches uniquely keyed mainland jobs and reports
   const message = await (service as any).executeJob(job);
 
   assert.deepEqual(dispatchCalls, [[9, today, 'manual-performance:88']]);
-  assert.match(message, /区域任务已排队 2 个/);
+  assert.deepEqual(progressMessages, [
+    '中心性能采集完成，地区测试 0/2',
+    '中心性能采集完成，地区测试 1/2',
+    '中心性能采集完成，地区测试 2/2',
+  ]);
+  assert.match(message, /地区测试完成 2\/2/);
 });

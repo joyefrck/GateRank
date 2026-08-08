@@ -102,6 +102,15 @@ export class ManualJobRepository {
     );
   }
 
+  async updateRunningMessage(id: number, message: string): Promise<void> {
+    await this.pool.execute<ResultSetHeader>(
+      `UPDATE admin_manual_jobs
+          SET message = ?
+        WHERE id = ? AND status = 'running'`,
+      [message, id],
+    );
+  }
+
   async markFinished(id: number, status: Extract<ManualJobStatus, 'succeeded' | 'failed'>, message: string | null): Promise<void> {
     await this.pool.execute<ResultSetHeader>(
       `UPDATE admin_manual_jobs
