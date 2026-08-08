@@ -134,7 +134,7 @@ function probe(probeId: 'legacy-control' | 'cn-shanghai' | 'cn-guangzhou', enabl
     provider: mainland ? 'tencent-cloud' : 'gaterank',
     bandwidth_mbps: mainland ? 200 : null,
     probe_type: mainland ? 'mainland' as const : 'legacy' as const,
-    test_profile: mainland ? 'mainland_multi_target_v1' : 'legacy_single_target_v1',
+    test_profile: 'proxy_multi_target_v2',
     scoring_rule_version: mainland ? 'cn_dual_probe_v1' as const : 'legacy_v1' as const,
     globally_enabled: enabled,
     token_configured: mainland,

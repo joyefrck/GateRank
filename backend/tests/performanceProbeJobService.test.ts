@@ -13,7 +13,7 @@ const leasedJob: PerformanceProbeJob = {
   test_enabled_snapshot: true,
   include_in_result_snapshot: false,
   selected_node_keys: [],
-  test_profile: 'mainland_multi_target_v1',
+  test_profile: 'proxy_multi_target_v2',
   scoring_rule_version: 'cn_dual_probe_v1',
   source: 'manual-performance',
   status: 'leased',
@@ -31,8 +31,8 @@ const acceptedPayload = {
   job_id: leasedJob.job_id,
   sampled_at: '2026-08-08T12:01:00+08:00',
   status: 'success',
-  calibration_status: 'passed',
-  calibration_mbps: 188,
+  calibration_status: 'not_required',
+  calibration_mbps: null,
   target_results: [{
     node_key: 'node-a',
     target_key: 'target-a',
@@ -84,6 +84,11 @@ test('PerformanceProbeJobService leases only the reusable snapshot payload', asy
   assert.doesNotMatch(serialized, /subscription\.example/);
   assert.equal(payload?.run_mode, 'shadow');
   assert.equal(payload?.scoring_rule_version, 'cn_dual_probe_v1');
+  assert.deepEqual(payload?.calibration, { mode: 'not_required' });
+  assert.deepEqual(payload?.speed_targets, [
+    { target_key: 'cachefly-50mb', url: 'https://cachefly.cachefly.net/50mb.test' },
+    { target_key: 'cloudflare-50mb', url: 'https://speed.cloudflare.com/__down?bytes=50000000' },
+  ]);
 });
 
 test('PerformanceProbeJobService derives structured run identity from the leased job', async () => {
@@ -117,8 +122,8 @@ test('PerformanceProbeJobService derives structured run identity from the leased
     job_id: 'job-1',
     sampled_at: '2026-08-08T12:00:00+08:00',
     status: 'success',
-    calibration_status: 'passed',
-    calibration_mbps: 200,
+    calibration_status: 'not_required',
+    calibration_mbps: null,
     median_download_mbps: 120,
     target_results: [{
       node_key: 'node-a',
@@ -191,8 +196,8 @@ test('PerformanceProbeJobService recomputes only after a complete official uploa
     job_id: 'job-1',
     sampled_at: '2026-08-08T12:00:00+08:00',
     status: 'success',
-    calibration_status: 'passed',
-    calibration_mbps: 180,
+    calibration_status: 'not_required',
+    calibration_mbps: null,
   });
 
   assert.deepEqual(calls, ['aggregate:9:2026-08-08', 'recompute:9:2026-08-08']);
@@ -320,7 +325,7 @@ test('PerformanceProbeJobService resumes finalization from persisted evidence af
         status: 'success',
         sampled_at: '2026-08-08T12:01:00+08:00',
         sampled_date: '2026-08-08',
-        calibration_status: 'passed',
+        calibration_status: 'not_required',
       } as never),
       insert: async () => {
         inserted = true;

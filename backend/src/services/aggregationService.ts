@@ -279,7 +279,7 @@ function isValidOfficialRun(
   configVersion: number,
 ): boolean {
   if (run.probe_id !== probeId || run.run_mode !== 'official' || run.status !== 'success') return false;
-  if (probeId !== 'legacy-control' && (run.config_version !== configVersion || run.calibration_status !== 'passed')) {
+  if (probeId !== 'legacy-control' && (run.config_version !== configVersion || run.calibration_status === 'failed')) {
     return false;
   }
   return [run.median_latency_ms, run.median_download_mbps, run.packet_loss_percent]

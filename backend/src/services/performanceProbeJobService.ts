@@ -175,7 +175,7 @@ export class PerformanceProbeJobService {
     if (
       job.include_in_result_snapshot
       && run.status === 'success'
-      && (job.probe_id === 'legacy-control' || run.calibration_status === 'passed')
+      && run.calibration_status !== 'failed'
       && this.deps.aggregationService
     ) {
       const date = run.sampled_date || run.sampled_at.slice(0, 10);
@@ -192,29 +192,14 @@ export class PerformanceProbeJobService {
 }
 
 function buildCalibrationConfig(): Record<string, unknown> {
-  return {
-    target_key: 'mainland-calibration',
-    url: process.env.PERFORMANCE_PROBE_CALIBRATION_URL || null,
-    minimum_mbps: 160,
-  };
+  return { mode: 'not_required' };
 }
 
 function buildSpeedTargets(): Array<{ target_key: string; url: string }> {
-  const raw = process.env.PERFORMANCE_PROBE_SPEED_TARGETS_JSON;
-  if (!raw) return [];
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.flatMap((item) => {
-      if (!item || typeof item !== 'object') return [];
-      const row = item as Record<string, unknown>;
-      const targetKey = optionalString(row.target_key);
-      const url = optionalString(row.url);
-      return targetKey && url ? [{ target_key: targetKey, url }] : [];
-    });
-  } catch {
-    return [];
-  }
+  return [
+    { target_key: 'cachefly-50mb', url: 'https://cachefly.cachefly.net/50mb.test' },
+    { target_key: 'cloudflare-50mb', url: 'https://speed.cloudflare.com/__down?bytes=50000000' },
+  ];
 }
 
 function targetRows(value: unknown, runId: number): PerformanceRunTarget[] {

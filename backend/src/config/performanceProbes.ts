@@ -45,7 +45,7 @@ export const PERFORMANCE_PROBE_DEFINITIONS: readonly PerformanceProbeDefinition[
     provider: 'gaterank',
     bandwidth_mbps: null,
     probe_type: 'legacy',
-    test_profile: 'legacy_single_target_v1',
+    test_profile: 'proxy_multi_target_v2',
     scoring_rule_version: 'legacy_v1',
   },
   {
@@ -55,7 +55,7 @@ export const PERFORMANCE_PROBE_DEFINITIONS: readonly PerformanceProbeDefinition[
     provider: 'tencent-cloud',
     bandwidth_mbps: 200,
     probe_type: 'mainland',
-    test_profile: 'mainland_multi_target_v1',
+    test_profile: 'proxy_multi_target_v2',
     scoring_rule_version: 'cn_dual_probe_v1',
   },
   {
@@ -65,7 +65,7 @@ export const PERFORMANCE_PROBE_DEFINITIONS: readonly PerformanceProbeDefinition[
     provider: 'tencent-cloud',
     bandwidth_mbps: 200,
     probe_type: 'mainland',
-    test_profile: 'mainland_multi_target_v1',
+    test_profile: 'proxy_multi_target_v2',
     scoring_rule_version: 'cn_dual_probe_v1',
   },
 ] as const;

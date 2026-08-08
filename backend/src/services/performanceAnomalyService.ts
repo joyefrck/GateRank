@@ -83,7 +83,7 @@ const AIRPORT_EVIDENCE_REASONS = new Set<PerformanceReviewReason>([
 ]);
 
 export function assessPerformanceEvidence(input: PerformanceEvidenceInput): PerformanceEvidenceAssessment {
-  if (input.run.probe_id !== 'legacy-control' && input.run.calibration_status !== 'passed') {
+  if (input.run.probe_id !== 'legacy-control' && input.run.calibration_status === 'failed') {
     return { status: 'normal', reasons: [], flags: ['calibration_failed'] };
   }
 
