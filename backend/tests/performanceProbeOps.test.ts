@@ -28,6 +28,7 @@ test('probe service runs serialized as a hardened non-root oneshot', async () =>
   assert.match(service, /^PrivateTmp=true$/m);
   assert.match(service, /^ProtectSystem=strict$/m);
   assert.match(service, /^ProtectHome=true$/m);
+  assert.match(service, /^RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK$/m);
   assert.match(service, /^ReadWritePaths=\/var\/lib\/gaterank-probe$/m);
   assert.match(service, /^MemoryMax=\d+M$/m);
   assert.match(service, /^CPUQuota=\d+%$/m);
