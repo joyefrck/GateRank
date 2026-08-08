@@ -495,6 +495,41 @@ interface AirportDashboardView {
     speed_test_connections: number | null;
     node_availability_check: string | null;
     node_availability_error_summary: Array<{ error_code: string; count: number }>;
+    performance_rule_summary: string | null;
+    included_probe_ids: string[];
+    pending_probe_ids: string[];
+    review_status: string | null;
+    probe_runs: Array<{
+      id: number;
+      job_id: string | null;
+      probe_id: 'legacy-control' | 'cn-shanghai' | 'cn-guangzhou';
+      region_code: string | null;
+      provider: string | null;
+      bandwidth_mbps: number | null;
+      sampled_at: string;
+      status: string;
+      run_mode: 'shadow' | 'official';
+      participation_state: string;
+      test_profile: string;
+      scoring_rule_version: string;
+      calibration_status: string;
+      calibration_mbps: number | null;
+      review_status: string;
+      review_reasons: string[];
+      probe_ceiling: boolean;
+      median_latency_ms: number | null;
+      median_download_mbps: number | null;
+      packet_loss_percent: number | null;
+      target_summaries: Array<{
+        target_key: string;
+        sample_count: number;
+        min_download_mbps: number;
+        median_download_mbps: number | null;
+        max_download_mbps: number;
+      }>;
+      error_code: string | null;
+      error_message: string | null;
+    }>;
   };
   risk: {
     domain_ok: boolean | null;
@@ -641,6 +676,48 @@ type PerformanceNodeSelectionView = {
   updated_by: string | null;
   updated_at: string | null;
 };
+
+type PerformanceProbeId = 'legacy-control' | 'cn-shanghai' | 'cn-guangzhou';
+
+type PerformanceProbeSettingRow = {
+  probe_id: PerformanceProbeId;
+  display_name: string;
+  region_code: string;
+  provider: string;
+  bandwidth_mbps: number | null;
+  probe_type: 'legacy' | 'mainland';
+  test_profile: string;
+  scoring_rule_version: 'legacy_v1' | 'cn_dual_probe_v1';
+  globally_enabled: boolean;
+  token_configured: boolean;
+  last_seen_at: string | null;
+  test_enabled: boolean;
+  include_in_result: boolean;
+  updated_by: string | null;
+  updated_at: string | null;
+  last_run: {
+    sampled_at: string;
+    status: string;
+    calibration_status: string;
+    calibration_mbps: number | null;
+    review_status: string;
+    median_download_mbps: number | null;
+    error_code: string | null;
+  } | null;
+};
+
+type PerformanceProbeSettingsView = {
+  airport_id: number;
+  date: string;
+  editable: boolean;
+  config_version: number;
+  settings: PerformanceProbeSettingRow[];
+};
+
+type PerformanceProbeSettingDraft = Pick<
+  PerformanceProbeSettingRow,
+  'probe_id' | 'test_enabled' | 'include_in_result'
+>;
 
 interface ManualJobRecord {
   id: number;
@@ -10458,6 +10535,15 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
   const [performanceNodeSelectionOpen, setPerformanceNodeSelectionOpen] = useState(false);
   const [performanceNodeSelectionDraft, setPerformanceNodeSelectionDraft] = useState<string[]>([]);
   const [performanceNodeSelectionError, setPerformanceNodeSelectionError] = useState('');
+  const [performanceProbeSettings, setPerformanceProbeSettings] = useState<PerformanceProbeSettingsView | null>(null);
+  const [performanceProbeDraft, setPerformanceProbeDraft] = useState<PerformanceProbeSettingDraft[]>([]);
+  const [performanceProbeSettingsLoading, setPerformanceProbeSettingsLoading] = useState(false);
+  const [performanceProbeSettingsSaving, setPerformanceProbeSettingsSaving] = useState(false);
+  const [performanceProbeSettingsError, setPerformanceProbeSettingsError] = useState('');
+  const performanceProbeSettingsDirty = useMemo(() => (
+    JSON.stringify(normalizePerformanceProbeDraft(performanceProbeDraft))
+      !== JSON.stringify(normalizePerformanceProbeDraft(performanceProbeSettings?.settings || []))
+  ), [performanceProbeDraft, performanceProbeSettings]);
 
   const load = async () => {
     setLoading(true);
@@ -10471,12 +10557,15 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
       await Promise.all([
         loadSamplesOnly(),
         loadPerformanceNodeSelection(),
+        loadPerformanceProbeSettings(),
       ]);
     } catch (err) {
       setDashboard(null);
       setError(err instanceof Error ? err.message : '加载失败');
       setRecentStabilitySamples([]);
       setPerformanceNodeSelection(null);
+      setPerformanceProbeSettings(null);
+      setPerformanceProbeDraft([]);
     } finally {
       setLoading(false);
     }
@@ -10497,6 +10586,26 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
       return null;
     } finally {
       setPerformanceNodeSelectionLoading(false);
+    }
+  };
+
+  const loadPerformanceProbeSettings = async (): Promise<PerformanceProbeSettingsView | null> => {
+    setPerformanceProbeSettingsLoading(true);
+    try {
+      const data = (await apiFetch(
+        `/api/v1/admin/airports/${airportId}/performance-probe-settings?date=${date}`,
+      )) as PerformanceProbeSettingsView;
+      setPerformanceProbeSettings(data);
+      setPerformanceProbeDraft(normalizePerformanceProbeDraft(data.settings));
+      setPerformanceProbeSettingsError('');
+      return data;
+    } catch (err) {
+      setPerformanceProbeSettings(null);
+      setPerformanceProbeDraft([]);
+      setPerformanceProbeSettingsError(err instanceof Error ? err.message : '测试地区配置加载失败');
+      return null;
+    } finally {
+      setPerformanceProbeSettingsLoading(false);
     }
   };
 
@@ -10579,6 +10688,60 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
     } catch (err) {
       setJobTone('error');
       setJobMessage(err instanceof Error ? err.message : '执行失败');
+    }
+  };
+
+  const togglePerformanceProbeSetting = (
+    probeId: PerformanceProbeId,
+    field: 'test_enabled' | 'include_in_result',
+  ) => {
+    setPerformanceProbeDraft((current) => current.map((row) => {
+      if (row.probe_id !== probeId) return row;
+      if (field === 'test_enabled') {
+        const testEnabled = !row.test_enabled;
+        return { ...row, test_enabled: testEnabled, include_in_result: testEnabled && row.include_in_result };
+      }
+      if (!row.test_enabled) return row;
+      return { ...row, include_in_result: !row.include_in_result };
+    }));
+    setPerformanceProbeSettingsError('');
+  };
+
+  const savePerformanceProbeSettings = async () => {
+    if (!performanceProbeSettings || !performanceProbeSettingsDirty || !performanceProbeSettings.editable) return;
+    const before = normalizePerformanceProbeDraft(performanceProbeSettings.settings);
+    const after = normalizePerformanceProbeDraft(performanceProbeDraft);
+    const inclusionChanged = before.some((row, index) => (
+      row.probe_id !== after[index]?.probe_id
+      || row.include_in_result !== after[index]?.include_in_result
+    ));
+    if (inclusionChanged && !window.confirm(
+      '并入测试结果会改变下一轮性能评分的地区范围。\n\n从下一轮性能采集生效，不修改历史成绩。确认保存？',
+    )) return;
+
+    setPerformanceProbeSettingsSaving(true);
+    setPerformanceProbeSettingsError('');
+    setMessage('');
+    try {
+      await apiFetch(`/api/v1/admin/airports/${airportId}/performance-probe-settings`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          date,
+          expected_config_version: performanceProbeSettings.config_version,
+          settings: after,
+        }),
+      });
+      await loadPerformanceProbeSettings();
+      setMessage('测试地区配置已保存，从下一轮性能采集生效');
+    } catch (err) {
+      const nextMessage = err instanceof Error ? err.message : '测试地区配置保存失败';
+      setPerformanceProbeSettingsError(
+        nextMessage.includes('配置已被其他管理员更新')
+          ? '配置已被其他管理员更新，请重新加载后再保存'
+          : nextMessage,
+      );
+    } finally {
+      setPerformanceProbeSettingsSaving(false);
     }
   };
 
@@ -10698,21 +10861,6 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
       .some((v) => v !== null && v !== undefined);
   }, [dashboard]);
 
-  const hasPerformanceData = useMemo(() => {
-    if (!dashboard) return false;
-    const d = dashboard.performance;
-    if (d.collect_status || d.error_code || d.error_message) return true;
-    return [
-      d.median_latency_ms,
-      d.median_download_mbps,
-      d.packet_loss_percent,
-      d.p,
-      d.latency_score,
-      d.speed_score,
-      d.loss_score,
-    ].some((v) => v !== null && v !== undefined);
-  }, [dashboard]);
-
   const hasRiskData = useMemo(() => {
     if (!dashboard) return false;
     const d = dashboard.risk;
@@ -10808,6 +10956,12 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
   const performanceNodeSelectionModeLabel = performanceNodeSelectionCount > 0
     ? `已指定 ${performanceNodeSelectionCount} 个节点`
     : '默认按地区随机';
+  const performanceProbeDraftById = new Map<PerformanceProbeId, PerformanceProbeSettingDraft>(
+    performanceProbeDraft.map((row) => [row.probe_id, row]),
+  );
+  const includedPerformanceRules = (performanceProbeSettings?.settings || [])
+    .filter((row) => performanceProbeDraftById.get(row.probe_id)?.include_in_result)
+    .map((row) => `${row.display_name}（${row.scoring_rule_version}）`);
 
   return (
     <div className="space-y-4">
@@ -11021,7 +11175,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
       )}
 
       {tab === 'performance' && (
-        hasPerformanceData && dashboard ? (
+        dashboard ? (
           <div className="space-y-4">
             <div className="rounded border border-neutral-200 bg-white p-4">
               <div className="text-sm font-semibold text-neutral-900">评分公式</div>
@@ -11029,11 +11183,113 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                 {'median_latency_ms 使用“节点建连延迟”，不是代理后访问第三方网页的完整耗时。\n'}
                 {'median_download_mbps 使用多连接并发下载测速，比单连接更接近 Speedtest。\n'}
                 {'LatencyScore = clamp((600 - median_latency_ms) / (600 - 60) * 100, 0, 100)\n'}
-                {'SpeedScore = clamp((median_download_mbps - 10) / (300 - 10) * 100, 0, 100)\n'}
+                {'中心探针 legacy_v1：SpeedScore = clamp((median_download_mbps - 10) / (300 - 10) * 100, 0, 100)\n'}
+                {'大陆探针 cn_dual_probe_v1：SpeedScore = clamp((median_download_mbps - 10) / (160 - 10) * 100, 0, 100)\n'}
                 {'LossScore = clamp((5 - packet_loss_percent) / (5 - 0) * 100, 0, 100)\n'}
-                {'P = 0.4 * LatencyScore + 0.4 * SpeedScore + 0.2 * LossScore'}
+                {'每个地区先计算 P = 0.4 * LatencyScore + 0.4 * SpeedScore + 0.2 * LossScore，再对纳入地区等权平均。\n'}
+                {`当前纳入：${includedPerformanceRules.join('、') || dashboard.performance.performance_rule_summary || '等待配置'}`}
               </div>
             </div>
+
+            <section className="rounded border border-neutral-200 bg-white p-4" aria-labelledby="performance-probe-settings-title">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h3 id="performance-probe-settings-title" className="text-sm font-semibold text-neutral-900">测试地区配置</h3>
+                  <p className="mt-1 text-xs text-neutral-500">
+                    每个机场独立配置。开启测试决定是否采集，并入测试结果决定是否参与下一轮正式评分。
+                  </p>
+                </div>
+                {performanceProbeSettingsDirty && performanceProbeSettings?.editable ? (
+                  <button
+                    type="button"
+                    className="min-h-10 rounded border border-indigo-600 bg-indigo-600 px-4 text-sm font-medium text-white transition hover:bg-indigo-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={performanceProbeSettingsSaving}
+                    onClick={() => void savePerformanceProbeSettings()}
+                  >
+                    {performanceProbeSettingsSaving ? '保存中...' : '保存地区配置'}
+                  </button>
+                ) : null}
+              </div>
+
+              {!performanceProbeSettings?.editable && performanceProbeSettings ? (
+                <div className="mt-3 rounded border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+                  历史日期只读；配置从下一轮性能采集生效，不修改历史成绩。
+                </div>
+              ) : null}
+              {performanceProbeSettingsError ? (
+                <div className="mt-3 rounded border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {performanceProbeSettingsError}
+                </div>
+              ) : null}
+
+              <div className="mt-4 overflow-hidden rounded border border-neutral-200">
+                <div className="hidden grid-cols-[minmax(0,1fr)_9rem_9rem] gap-3 bg-neutral-50 px-3 py-2 text-xs font-medium text-neutral-500 sm:grid">
+                  <span>测试地区</span>
+                  <span>开启测试</span>
+                  <span>并入测试结果</span>
+                </div>
+                {performanceProbeSettingsLoading ? (
+                  <div className="px-3 py-4 text-sm text-neutral-500">配置加载中...</div>
+                ) : (performanceProbeSettings?.settings || []).map((row) => {
+                  const draft = performanceProbeDraftById.get(row.probe_id) || row;
+                  const disabled = performanceProbeSettingsSaving
+                    || !performanceProbeSettings?.editable
+                    || !row.globally_enabled;
+                  const stateLabel = performanceProbeStateLabel(row, draft);
+                  return (
+                    <div
+                      key={row.probe_id}
+                      className="grid gap-3 border-t border-neutral-200 px-3 py-3 first:border-t-0 sm:grid-cols-[minmax(0,1fr)_9rem_9rem] sm:items-center"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium text-neutral-900">{row.display_name}</span>
+                          <span className={performanceProbeStateClass(stateLabel)}>{stateLabel}</span>
+                        </div>
+                        <div className="mt-1 text-xs text-neutral-500">
+                          {row.provider} · {row.bandwidth_mbps ? `${row.bandwidth_mbps} Mbps` : '中心对照'} · {row.scoring_rule_version}
+                        </div>
+                        {row.last_run ? (
+                          <div className="mt-1 text-xs text-neutral-500">
+                            最近：{formatDateTimeInBeijing(row.last_run.sampled_at)}
+                            {row.last_run.calibration_mbps !== null ? ` · 校准 ${row.last_run.calibration_mbps} Mbps` : ''}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs font-medium text-neutral-500 sm:hidden">开启测试</div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-label={`${row.display_name} 开启测试`}
+                          aria-checked={draft.test_enabled}
+                          disabled={disabled}
+                          className={performanceProbeSwitchClass(draft.test_enabled)}
+                          onClick={() => togglePerformanceProbeSetting(row.probe_id, 'test_enabled')}
+                        >
+                          {draft.test_enabled ? '已开启' : '已关闭'}
+                        </button>
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs font-medium text-neutral-500 sm:hidden">并入测试结果</div>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-label={`${row.display_name} 并入测试结果`}
+                          aria-checked={draft.include_in_result}
+                          disabled={disabled || !draft.test_enabled}
+                          className={performanceProbeSwitchClass(draft.include_in_result)}
+                          onClick={() => togglePerformanceProbeSetting(row.probe_id, 'include_in_result')}
+                        >
+                          {draft.include_in_result ? '已并入' : '未并入'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="mt-3 text-xs text-neutral-500">从下一轮性能采集生效，不修改历史成绩。</p>
+            </section>
 
             <div className="rounded border border-neutral-200 bg-white p-4">
               <div className="flex items-center justify-between gap-4 flex-wrap">
@@ -11122,6 +11378,94 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <ReadField label="延迟评分 (latency_score)" value={valueOrDash(dashboard.performance.latency_score)} />
               <ReadField label="下载评分 (speed_score)" value={valueOrDash(dashboard.performance.speed_score)} />
               <ReadField label="代理请求失败评分 (loss_score)" value={valueOrDash(dashboard.performance.loss_score)} />
+            </div>
+
+            <div className="rounded border border-neutral-200 bg-white p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold text-neutral-900">分地区采集证据</div>
+                  <div className="mt-1 text-xs text-neutral-500">
+                    顶部指标为正式聚合；下方保留各地区原始代表值、校准和目标分布供复核。
+                  </div>
+                </div>
+                {dashboard.performance.pending_probe_ids.length > 0 ? (
+                  <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-700">
+                    等待完整地区数据
+                  </span>
+                ) : null}
+              </div>
+              {(dashboard.performance.probe_runs || []).length === 0 ? (
+                <div className="mt-3 text-sm text-neutral-500">所选日期暂无分地区运行记录</div>
+              ) : (
+                <div className="mt-4 space-y-2">
+                  {dashboard.performance.probe_runs.map((run) => (
+                    <details key={run.id} className="group rounded border border-neutral-200 bg-neutral-50">
+                      <summary className="flex min-h-10 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                          <span className="font-medium text-neutral-900">{performanceProbeDisplayName(run.probe_id)}</span>
+                          <span className={run.run_mode === 'official'
+                            ? 'rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700'
+                            : 'rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700'}
+                          >
+                            {run.participation_state}
+                          </span>
+                          <span className="text-xs text-neutral-500">{formatDateTimeInBeijing(run.sampled_at)}</span>
+                        </div>
+                        <span className="text-xs text-neutral-500 group-open:text-indigo-700">展开证据</span>
+                      </summary>
+                      <div className="border-t border-neutral-200 px-3 py-3">
+                        {run.probe_ceiling ? (
+                          <div className="mb-3 rounded border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+                            ≥180 Mbps，达到探针带宽上限
+                          </div>
+                        ) : null}
+                        {run.review_status !== 'normal' ? (
+                          <div className="mb-3 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                            不同测试证据存在较大差异，正在复核：{run.review_reasons.map(performanceReviewReasonLabel).join('、') || '待人工检查'}
+                          </div>
+                        ) : null}
+                        <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                          <ReadField label="运行状态" value={valueOrDash(run.status)} />
+                          <ReadField label="评分规则" value={valueOrDash(run.scoring_rule_version)} />
+                          <ReadField label="测试配置" value={valueOrDash(run.test_profile)} />
+                          <ReadField label="校准状态" value={valueOrDash(run.calibration_status)} />
+                          <ReadField label="校准速度" value={valueOrDash(run.calibration_mbps)} />
+                          <ReadField label="节点建连延迟中位数" value={valueOrDash(run.median_latency_ms)} />
+                          <ReadField label="下载中位数" value={valueOrDash(run.median_download_mbps)} />
+                          <ReadField label="代理请求失败率" value={valueOrDash(run.packet_loss_percent)} />
+                          <ReadField label="错误码" value={valueOrDash(run.error_code)} />
+                        </div>
+                        {run.target_summaries.length > 0 ? (
+                          <div className="mt-3 overflow-x-auto">
+                            <table className="min-w-full text-left text-xs">
+                              <thead className="text-neutral-500">
+                                <tr>
+                                  <th className="px-2 py-2 font-medium">测速目标</th>
+                                  <th className="px-2 py-2 font-medium">样本</th>
+                                  <th className="px-2 py-2 font-medium">最低 Mbps</th>
+                                  <th className="px-2 py-2 font-medium">中位 Mbps</th>
+                                  <th className="px-2 py-2 font-medium">最高 Mbps</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {run.target_summaries.map((target) => (
+                                  <tr key={target.target_key} className="border-t border-neutral-200 text-neutral-700">
+                                    <td className="px-2 py-2 font-mono">{target.target_key}</td>
+                                    <td className="px-2 py-2">{target.sample_count}</td>
+                                    <td className="px-2 py-2">{target.min_download_mbps}</td>
+                                    <td className="px-2 py-2">{valueOrDash(target.median_download_mbps)}</td>
+                                    <td className="px-2 py-2">{target.max_download_mbps}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        ) : null}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              )}
             </div>
 
             {(dashboard.performance.tested_nodes || []).length > 0 ? (
@@ -11348,6 +11692,63 @@ function ManualJobActionCard({
 function filterPerformanceNodeKeys(keys: string[], nodes: PerformanceNodeSelectionNode[]): string[] {
   const availableKeys = new Set(nodes.map((node) => node.key));
   return keys.filter((key) => availableKeys.has(key));
+}
+
+function normalizePerformanceProbeDraft(
+  rows: Array<Pick<PerformanceProbeSettingRow, 'probe_id' | 'test_enabled' | 'include_in_result'>>,
+): PerformanceProbeSettingDraft[] {
+  const order: PerformanceProbeId[] = ['legacy-control', 'cn-shanghai', 'cn-guangzhou'];
+  const byProbe = new Map(rows.map((row) => [row.probe_id, row]));
+  return order.flatMap((probeId) => {
+    const row = byProbe.get(probeId);
+    return row ? [{
+      probe_id: probeId,
+      test_enabled: Boolean(row.test_enabled),
+      include_in_result: Boolean(row.include_in_result),
+    }] : [];
+  });
+}
+
+function performanceProbeStateLabel(
+  row: PerformanceProbeSettingRow,
+  draft: PerformanceProbeSettingDraft,
+): '参与评分' | '影子测试' | '已停用' | '探针不可用' {
+  if (!row.globally_enabled) return '探针不可用';
+  if (!draft.test_enabled) return '已停用';
+  return draft.include_in_result ? '参与评分' : '影子测试';
+}
+
+function performanceProbeStateClass(state: ReturnType<typeof performanceProbeStateLabel>): string {
+  const base = 'inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium';
+  if (state === '参与评分') return `${base} border-indigo-200 bg-indigo-50 text-indigo-700`;
+  if (state === '影子测试') return `${base} border-amber-200 bg-amber-50 text-amber-700`;
+  if (state === '探针不可用') return `${base} border-rose-200 bg-rose-50 text-rose-700`;
+  return `${base} border-neutral-200 bg-neutral-50 text-neutral-600`;
+}
+
+function performanceProbeSwitchClass(checked: boolean): string {
+  return [
+    'inline-flex min-h-10 w-full items-center justify-center rounded border px-3 text-xs font-medium transition',
+    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2',
+    'disabled:cursor-not-allowed disabled:opacity-50',
+    checked
+      ? 'border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700'
+      : 'border-neutral-300 bg-white text-neutral-700 hover:bg-neutral-50',
+  ].join(' ');
+}
+
+function performanceProbeDisplayName(probeId: PerformanceProbeId): string {
+  if (probeId === 'cn-shanghai') return '上海';
+  if (probeId === 'cn-guangzhou') return '广州';
+  return '中心对照';
+}
+
+function performanceReviewReasonLabel(reason: string): string {
+  if (reason === 'target_ratio_over_3x') return '不同测速目标结果差异较大';
+  if (reason === 'region_ratio_over_3x') return '上海与广州结果差异较大';
+  if (reason === 'legacy_mainland_ratio_over_3x') return '中心对照与大陆结果差异较大';
+  if (reason === 'cohort_target_degraded') return '测速目标同期整体退化';
+  return '存在待复核证据';
 }
 
 function TotalScoreField({
