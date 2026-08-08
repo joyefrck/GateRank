@@ -1,0 +1,39 @@
+[Unit]
+Description=GateRank regional performance probe worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=gaterank-probe
+Group=gaterank-probe
+UMask=0077
+EnvironmentFile=/etc/gaterank-probe.env
+WorkingDirectory=/var/lib/gaterank-probe
+ExecStart=/opt/gaterank-probe/venv/bin/python /opt/gaterank-probe/scripts/performance_probe_runner.py
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/gaterank-probe
+RuntimeDirectory=gaterank-probe
+RuntimeDirectoryMode=0700
+StateDirectory=gaterank-probe
+StateDirectoryMode=0700
+MemoryMax=512M
+CPUQuota=80%
+TasksMax=128
+TimeoutStartSec=15min
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,13 @@
+[Unit]
+Description=Poll GateRank for one regional performance probe job
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+RandomizedDelaySec=15s
+AccuracySec=5s
+Persistent=true
+Unit=gaterank-probe.service
+
+[Install]
+WantedBy=timers.target
