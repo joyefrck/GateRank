@@ -6,12 +6,14 @@ import unittest
 from unittest.mock import MagicMock, patch
 
 from scripts.performance_probe_runner import (
+    NodeMeasurement,
     ProbeRunnerConfig,
     TargetResult,
     build_node_summary,
     request_probe_json,
     run_once,
 )
+from scripts.monitor_performance import ParsedNode
 
 
 class PerformanceProbeRunnerTests(unittest.TestCase):
@@ -73,17 +75,43 @@ class PerformanceProbeRunnerTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_failed_calibration_uploads_no_node_evidence(self) -> None:
+    def test_run_without_calibration_executes_proxy_measurements(self) -> None:
         config = self.make_config()
+        node = ParsedNode(
+            name="HK-A",
+            node_type="trojan",
+            region="HK",
+            outbound={"type": "trojan", "server": "node.example", "server_port": 443},
+            raw_uri="trojan://redacted@node.example:443#HK-A",
+        )
         job = {
             "job_id": "job-1",
             "airport_id": 9,
             "probe_id": "cn-shanghai",
-            "snapshot": {"subscription_format": "plain", "nodes": []},
-            "calibration": {"url": "https://calibration.example/file", "minimum_mbps": 160},
-            "speed_targets": [{"target_key": "a", "url": "https://target.example/file"}],
+            "test_profile": "proxy_multi_target_v2",
+            "snapshot": {"subscription_format": "plain", "parsed_nodes_count": 1, "supported_nodes_count": 1},
+            "calibration": {"mode": "not_required"},
+            "speed_targets": [
+                {"target_key": "cachefly-50mb", "url": "https://cachefly.cachefly.net/50mb.test"},
+                {"target_key": "cloudflare-50mb", "url": "https://speed.cloudflare.com/__down?bytes=50000000"},
+            ],
         }
         uploads = []
+        measurement = NodeMeasurement(
+            node=node,
+            latency_samples_ms=[45.0],
+            latency_sampled_at=["2026-08-08T12:00:00+08:00"],
+            proxy_latency_samples_ms=[45.0, 52.0],
+            proxy_failures=0,
+            proxy_attempts=2,
+            connect_failures=0,
+            connect_attempts=1,
+            targets=[
+                TargetResult("cachefly-50mb", 80.0, True, None, 10_000_000, 1000.0, None),
+                TargetResult("cloudflare-50mb", 120.0, True, None, 15_000_000, 1000.0, None),
+            ],
+            error_code=None,
+        )
 
         def fake_request(_config, method, path, payload=None, worker_id=None):
             del worker_id
@@ -92,17 +120,30 @@ class PerformanceProbeRunnerTests(unittest.TestCase):
             uploads.append((path, payload))
             return {"run_id": 44}
 
-        with patch("scripts.performance_probe_runner.request_probe_json", side_effect=fake_request), patch(
-            "scripts.performance_probe_runner.measure_direct_download",
-            return_value=120.0,
+        with (
+            patch("scripts.performance_probe_runner.request_probe_json", side_effect=fake_request),
+            patch("scripts.performance_probe_runner.nodes_from_snapshot", return_value=([node], [])),
+            patch("scripts.performance_probe_runner.resolve_job_nodes", return_value=[node]),
+            patch("scripts.performance_probe_runner.measure_node", return_value=measurement),
         ):
             result = run_once(config)
 
-        self.assertEqual(result["status"], "calibration_failed")
+        self.assertEqual(result["status"], "success")
         self.assertEqual(uploads[0][0], "/runs")
-        self.assertEqual(uploads[0][1]["calibration_status"], "failed")
-        self.assertEqual(uploads[0][1]["tested_nodes"], [])
-        self.assertEqual(uploads[0][1]["target_results"], [])
+        self.assertEqual(uploads[0][1]["calibration_status"], "not_required")
+        self.assertIsNone(uploads[0][1]["calibration_mbps"])
+        self.assertEqual(uploads[0][1]["median_download_mbps"], 100.0)
+        self.assertEqual(uploads[0][1]["diagnostics"]["test_profile"], "proxy_multi_target_v2")
+        self.assertEqual(len(uploads[0][1]["target_results"]), 2)
+
+    def test_all_target_failures_do_not_report_zero_speed(self) -> None:
+        summary = build_node_summary([
+            TargetResult("a", None, False, "download_failed", 0, 0, None),
+            TargetResult("b", None, False, "empty_download", 0, 1000.0, None),
+        ])
+
+        self.assertIsNone(summary.download_mbps)
+        self.assertEqual(summary.valid_target_count, 0)
 
 
 if __name__ == "__main__":

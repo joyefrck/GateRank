@@ -9,9 +9,7 @@ import os
 import random
 from pathlib import Path
 import sys
-import threading
-import time
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field
 from statistics import median
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -24,15 +22,18 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.monitor_performance import (
     Config,
     ParsedNode,
+    SpeedTargetResult,
     nodes_from_snapshot,
     performance_node_key,
     run_sing_box,
     select_nodes,
     shanghai_now_iso,
     stop_sing_box,
+    target_download_median,
     test_node_connect_latency,
     test_proxy_http_latency,
-    test_speed_detailed,
+    test_proxy_real_latency,
+    test_speed_targets,
 )
 
 
@@ -51,15 +52,7 @@ class ProbeRunnerConfig:
     sing_box_bin: str
 
 
-@dataclass(frozen=True)
-class TargetResult:
-    target_key: str
-    download_mbps: float | None
-    valid: bool
-    error_code: str | None
-    bytes_downloaded: int
-    duration_ms: float
-    http_status: int | None
+TargetResult = SpeedTargetResult
 
 
 @dataclass(frozen=True)
@@ -80,6 +73,7 @@ class NodeMeasurement:
     connect_attempts: int
     targets: list[TargetResult]
     error_code: str | None
+    connect_latency_samples_ms: list[float] = field(default_factory=list)
 
 
 class ProbeRunnerError(RuntimeError):
@@ -130,38 +124,12 @@ def run_once(config: ProbeRunnerConfig) -> dict[str, Any]:
     if not isinstance(job, dict):
         raise ProbeRunnerError("invalid_job_payload")
     job_id = require_string(job.get("job_id"), "job_id")
-    calibration = object_value(job.get("calibration"))
-    calibration_url = optional_string(calibration.get("url"))
-    minimum_mbps = float(calibration.get("minimum_mbps") or 160)
-    calibration_mbps = None
-    if calibration_url:
-        calibration_mbps = measure_direct_download(
-            calibration_url,
-            config.http_timeout,
-            config.speed_timeout,
-            config.speed_connections,
-        )
-
-    if calibration_mbps is None or calibration_mbps < minimum_mbps:
-        payload = base_run_payload(job, config)
-        payload.update({
-            "status": "failed",
-            "calibration_status": "failed",
-            "calibration_mbps": calibration_mbps,
-            "selected_nodes": [],
-            "tested_nodes": [],
-            "target_results": [],
-            "error_code": "calibration_failed" if calibration_url else "calibration_target_missing",
-        })
-        request_probe_json(config, "POST", "/runs", payload)
-        return {"status": "calibration_failed", "job_id": job_id}
-
     snapshot = object_value(job.get("snapshot"))
     nodes, invalid_nodes = nodes_from_snapshot(snapshot)
     selected = resolve_job_nodes(job, nodes)
     targets = speed_targets(job.get("speed_targets"))
     measurements = [measure_node(config, node, targets) for node in selected]
-    payload = build_success_payload(job, config, calibration_mbps, selected, measurements, invalid_nodes)
+    payload = build_success_payload(job, config, selected, measurements, invalid_nodes)
     request_probe_json(config, "POST", "/runs", payload)
     return {"status": payload["status"], "job_id": job_id}
 
@@ -176,24 +144,14 @@ def measure_node(
     config_path = ""
     try:
         proc, config_path = run_sing_box(config, node)
-        latency_samples, latency_sampled_at, connect_failures, connect_attempts = test_node_connect_latency(config, node)
+        connect_latencies, _connect_sampled_at, connect_failures, connect_attempts = test_node_connect_latency(config, node)
+        latency_samples, latency_sampled_at, _real_failures, _real_attempts = test_proxy_real_latency(config)
         proxy_latencies, proxy_failures, proxy_attempts = test_proxy_http_latency(config)
-        target_results: list[TargetResult] = []
-        for target in targets:
-            target_config = replace(config, test_url_speed=target["url"])
-            try:
-                mbps, total_bytes, duration = test_speed_detailed(target_config)
-                target_results.append(TargetResult(
-                    target_key=target["target_key"],
-                    download_mbps=mbps,
-                    valid=mbps is not None,
-                    error_code=None if mbps is not None else "empty_download",
-                    bytes_downloaded=total_bytes,
-                    duration_ms=round(duration * 1000, 2),
-                    http_status=None,
-                ))
-            except Exception:
-                target_results.append(TargetResult(target["target_key"], None, False, "download_failed", 0, 0, None))
+        target_results = test_speed_targets(config, targets)
+        summary = build_node_summary(target_results)
+        error_code = None
+        if not latency_samples or summary.download_mbps is None or summary.valid_target_count < len(targets):
+            error_code = "node_probe_partial"
         return NodeMeasurement(
             node=node,
             latency_samples_ms=latency_samples,
@@ -204,7 +162,8 @@ def measure_node(
             connect_failures=connect_failures,
             connect_attempts=connect_attempts,
             targets=target_results,
-            error_code=None if latency_samples and build_node_summary(target_results).download_mbps is not None else "node_probe_partial",
+            error_code=error_code,
+            connect_latency_samples_ms=connect_latencies,
         )
     except Exception:
         return NodeMeasurement(node, [], [], [], 1, 1, 1, 1, [], "node_probe_failed")
@@ -215,7 +174,6 @@ def measure_node(
 def build_success_payload(
     job: dict[str, Any],
     config: ProbeRunnerConfig,
-    calibration_mbps: float,
     selected: list[ParsedNode],
     measurements: list[NodeMeasurement],
     invalid_nodes: list[dict[str, str]],
@@ -246,12 +204,13 @@ def build_success_payload(
         for item in measurements
         for target in item.targets
     ]
-    status = "success" if downloads and len(downloads) == selected_count else "partial" if downloads else "failed"
+    complete = downloads and len(downloads) == selected_count and all(item.error_code is None for item in measurements)
+    status = "success" if complete else "partial" if downloads else "failed"
     payload = base_run_payload(job, config)
     payload.update({
         "status": status,
-        "calibration_status": "passed",
-        "calibration_mbps": round(calibration_mbps, 2),
+        "calibration_status": "not_required",
+        "calibration_mbps": None,
         "subscription_format": object_value(job.get("snapshot")).get("subscription_format"),
         "parsed_nodes_count": object_value(job.get("snapshot")).get("parsed_nodes_count") or selected_count,
         "supported_nodes_count": object_value(job.get("snapshot")).get("supported_nodes_count") or selected_count,
@@ -271,28 +230,29 @@ def build_success_payload(
         "diagnostics": {
             "invalid_snapshot_nodes_count": len(invalid_nodes),
             "target_count": len(speed_targets(job.get("speed_targets"))),
+            "test_profile": str(job.get("test_profile") or "proxy_multi_target_v2"),
+            "speed_measurement": "average_multi_connection_download_via_sing_box_proxy",
         },
     })
     return payload
 
 
 def build_node_summary(results: list[TargetResult]) -> NodeSummary:
-    valid_values = [result.download_mbps for result in results if result.valid and result.download_mbps is not None]
     return NodeSummary(
-        download_mbps=round(float(median(valid_values)), 2) if valid_values else None,
-        valid_target_count=len(valid_values),
+        download_mbps=target_download_median(results),
+        valid_target_count=sum(1 for result in results if result.valid and result.download_mbps is not None),
     )
 
 
 def measurement_to_payload(measurement: NodeMeasurement) -> dict[str, Any]:
     summary = build_node_summary(measurement.targets)
     proxy_median = round(float(median(measurement.proxy_latency_samples_ms)), 2) if measurement.proxy_latency_samples_ms else None
-    connect_median = round(float(median(measurement.latency_samples_ms)), 2) if measurement.latency_samples_ms else None
+    connect_median = round(float(median(measurement.connect_latency_samples_ms)), 2) if measurement.connect_latency_samples_ms else None
     return {
         **node_identity(measurement.node),
         "status": "ok" if measurement.error_code is None else "partial",
         "error_code": measurement.error_code,
-        "connect_latency_samples_ms": measurement.latency_samples_ms,
+        "connect_latency_samples_ms": measurement.connect_latency_samples_ms,
         "connect_latency_median_ms": connect_median,
         "proxy_http_latency_samples_ms": measurement.proxy_latency_samples_ms,
         "proxy_http_latency_median_ms": proxy_median,
@@ -324,36 +284,6 @@ def speed_targets(value: Any) -> list[dict[str, str]]:
         if target_key and url and url.startswith("https://"):
             targets.append({"target_key": target_key, "url": url})
     return targets
-
-
-def measure_direct_download(url: str, http_timeout: int, duration_seconds: int, connections: int) -> float | None:
-    total_bytes = 0
-    lock = threading.Lock()
-    deadline = time.perf_counter() + max(1, duration_seconds)
-
-    def worker() -> None:
-        nonlocal total_bytes
-        while time.perf_counter() < deadline:
-            request = Request(url, headers={"User-Agent": "GateRank-Performance-Probe/1.0"})
-            try:
-                with urlopen(request, timeout=http_timeout) as response:
-                    while time.perf_counter() < deadline:
-                        chunk = response.read(65536)
-                        if not chunk:
-                            break
-                        with lock:
-                            total_bytes += len(chunk)
-            except Exception:
-                return
-
-    started = time.perf_counter()
-    threads = [threading.Thread(target=worker, daemon=True) for _ in range(max(1, connections))]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join(timeout=max(0, deadline - time.perf_counter()) + 1)
-    elapsed = time.perf_counter() - started
-    return round(total_bytes / elapsed / 1024 / 1024 * 8, 2) if total_bytes and elapsed > 0 else None
 
 
 def request_probe_json(
