@@ -63,6 +63,7 @@ import { ApplicantXOAuthService } from './services/applicantXOAuthService';
 import { AggregationService } from './services/aggregationService';
 import { PerformanceProbeJobService } from './services/performanceProbeJobService';
 import { PerformanceProbeDispatchService } from './services/performanceProbeDispatchService';
+import { PerformanceAnomalyService } from './services/performanceAnomalyService';
 import { ManualJobService } from './services/manualJobService';
 import { MailService } from './services/mailService';
 import { MediaLibrarySettingsService } from './services/mediaLibrarySettingsService';
@@ -298,6 +299,11 @@ export async function createApp() {
     systemSettingRepository,
   });
   const publicPageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
+  const performanceAnomalyService = new PerformanceAnomalyService({
+    runRepository: performanceRunRepository,
+    targetRepository: performanceRunTargetRepository,
+    metricsRepository,
+  });
   const performanceProbeJobService = new PerformanceProbeJobService({
     jobRepository: performanceProbeJobRepository,
     snapshotRepository: subscriptionNodeSnapshotRepository,
@@ -305,6 +311,7 @@ export async function createApp() {
     targetRepository: performanceRunTargetRepository,
     aggregationService,
     recomputeService,
+    performanceAnomalyService,
   });
 
   const app = express();

@@ -35,6 +35,9 @@ interface PerformanceProbeJobServiceDeps {
   recomputeService?: {
     recomputeAirportForDate(date: string, airportId: number): Promise<{ recomputed: number }>;
   };
+  performanceAnomalyService?: {
+    assessRun(runId: number): Promise<unknown>;
+  };
 }
 
 export class PerformanceProbeJobService {
@@ -134,6 +137,7 @@ export class PerformanceProbeJobService {
     const targets = targetRows(payload.target_results, runId);
     await this.deps.targetRepository.insertMany(targets);
     await this.deps.jobRepository.markCompleted(job.job_id, probeId, runId);
+    await this.deps.performanceAnomalyService?.assessRun(runId);
     if (
       job.include_in_result_snapshot
       && input.status === 'success'

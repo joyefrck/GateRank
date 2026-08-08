@@ -222,6 +222,17 @@ export class PerformanceRunRepository {
     return toPerformanceRun(rows[0]);
   }
 
+  async getById(runId: number): Promise<PerformanceRun | null> {
+    const [rows] = await this.pool.query<PerformanceRunRow[]>(
+      `SELECT ${SELECT_COLUMNS}
+         FROM airport_performance_runs
+        WHERE id = ?
+        LIMIT 1`,
+      [runId],
+    );
+    return rows[0] ? toPerformanceRun(rows[0]) : null;
+  }
+
   async listByAirportAndDate(airportId: number, date: string): Promise<PerformanceRun[]> {
     const [rows] = await this.pool.query<PerformanceRunRow[]>(
       `SELECT ${SELECT_COLUMNS}

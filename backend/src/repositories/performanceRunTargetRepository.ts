@@ -91,6 +91,31 @@ export class PerformanceRunTargetRepository {
       created_at: sqlDateTimeToTimezoneIso(row.created_at),
     }));
   }
+
+  async listByDate(date: string): Promise<Array<PerformanceRunTarget & { airport_id: number }>> {
+    const [rows] = await this.pool.query<Array<PerformanceRunTargetRow & { airport_id: number }>>(
+      `SELECT t.run_id, r.airport_id, t.node_key, t.target_key, t.bytes_downloaded,
+              t.duration_ms, t.download_mbps, t.http_status, t.error_code, t.valid, t.created_at
+         FROM performance_run_targets t
+         JOIN airport_performance_runs r ON r.id = t.run_id
+        WHERE r.sampled_date = ?
+        ORDER BY t.target_key, r.airport_id, t.run_id, t.node_key`,
+      [date],
+    );
+    return rows.map((row) => ({
+      run_id: Number(row.run_id),
+      airport_id: Number(row.airport_id),
+      node_key: row.node_key,
+      target_key: row.target_key,
+      bytes_downloaded: Number(row.bytes_downloaded),
+      duration_ms: Number(row.duration_ms),
+      download_mbps: nullableNumber(row.download_mbps),
+      http_status: nullableNumber(row.http_status),
+      error_code: row.error_code,
+      valid: Boolean(row.valid),
+      created_at: sqlDateTimeToTimezoneIso(row.created_at),
+    }));
+  }
 }
 
 function validateTarget(target: PerformanceRunTarget): void {

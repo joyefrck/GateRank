@@ -325,6 +325,19 @@ export class MetricsRepository {
     );
   }
 
+  async patchPerformanceReviewStatus(
+    airportId: number,
+    date: string,
+    status: PerformanceReviewStatus,
+  ): Promise<void> {
+    await this.pool.execute<ResultSetHeader>(
+      `UPDATE airport_metrics_daily
+          SET performance_review_status = ?
+        WHERE airport_id = ? AND date = ?`,
+      [status, airportId, date],
+    );
+  }
+
   private async ensureColumn(columnName: string, definition: string): Promise<void> {
     const [rows] = await this.pool.query<RowDataPacket[]>(
       `SELECT 1
