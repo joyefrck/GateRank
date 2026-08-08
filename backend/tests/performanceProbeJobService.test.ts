@@ -27,6 +27,24 @@ const leasedJob: PerformanceProbeJob = {
   completed_at: null,
 };
 
+const acceptedPayload = {
+  job_id: leasedJob.job_id,
+  sampled_at: '2026-08-08T12:01:00+08:00',
+  status: 'success',
+  calibration_status: 'passed',
+  calibration_mbps: 188,
+  target_results: [{
+    node_key: 'node-a',
+    target_key: 'target-a',
+    bytes_downloaded: 1_000_000,
+    duration_ms: 1000,
+    download_mbps: 80,
+    http_status: 200,
+    error_code: null,
+    valid: true,
+  }],
+};
+
 test('PerformanceProbeJobService leases only the reusable snapshot payload', async () => {
   const service = new PerformanceProbeJobService({
     jobRepository: {
@@ -178,4 +196,152 @@ test('PerformanceProbeJobService recomputes only after a complete official uploa
   });
 
   assert.deepEqual(calls, ['aggregate:9:2026-08-08', 'recompute:9:2026-08-08']);
+});
+
+test('PerformanceProbeJobService stores run and targets atomically before finalizing', async () => {
+  const events: string[] = [];
+  const transactionConnection = { marker: 'transaction' };
+  const service = new PerformanceProbeJobService({
+    jobRepository: {
+      leaseNext: async () => null,
+      getById: async () => ({ ...leasedJob, include_in_result_snapshot: true }),
+      withTransaction: async (work) => {
+        events.push('transaction:start');
+        const result = await work(transactionConnection as never);
+        events.push('transaction:commit');
+        return result;
+      },
+      markCompleted: async (_jobId, _probeId, runId) => {
+        events.push(`job:complete:${runId}`);
+        return true;
+      },
+    },
+    snapshotRepository: { getById: async () => null },
+    runRepository: {
+      getByJobId: async () => null,
+      insert: async (_input, executor) => {
+        assert.equal(executor, transactionConnection);
+        events.push('run:insert');
+        return 44;
+      },
+    },
+    targetRepository: {
+      insertMany: async (targets, executor) => {
+        assert.equal(executor, transactionConnection);
+        assert.equal(targets[0]?.run_id, 44);
+        events.push('targets:insert');
+      },
+    },
+    performanceAnomalyService: {
+      assessRun: async () => events.push('anomaly:assess'),
+    },
+    aggregationService: {
+      aggregateAirportForDate: async () => {
+        events.push('aggregate');
+        return { aggregated: 1 };
+      },
+    },
+    recomputeService: {
+      recomputeAirportForDate: async () => {
+        events.push('recompute');
+        return { recomputed: 1 };
+      },
+    },
+  });
+
+  const result = await service.submitRun('cn-shanghai', acceptedPayload);
+
+  assert.deepEqual(result, { run_id: 44, job_id: leasedJob.job_id, duplicate: false });
+  assert.deepEqual(events, [
+    'transaction:start',
+    'run:insert',
+    'targets:insert',
+    'transaction:commit',
+    'anomaly:assess',
+    'aggregate',
+    'recompute',
+    'job:complete:44',
+  ]);
+});
+
+test('PerformanceProbeJobService leaves the leased job retryable when evidence transaction fails', async () => {
+  let completed = false;
+  let rolledBack = false;
+  const service = new PerformanceProbeJobService({
+    jobRepository: {
+      leaseNext: async () => null,
+      getById: async () => leasedJob,
+      withTransaction: async (work) => {
+        try {
+          return await work({} as never);
+        } catch (error) {
+          rolledBack = true;
+          throw error;
+        }
+      },
+      markCompleted: async () => {
+        completed = true;
+        return true;
+      },
+    },
+    snapshotRepository: { getById: async () => null },
+    runRepository: {
+      getByJobId: async () => null,
+      insert: async () => 44,
+    },
+    targetRepository: {
+      insertMany: async () => {
+        throw new Error('target_write_failed');
+      },
+    },
+  });
+
+  await assert.rejects(service.submitRun('cn-shanghai', acceptedPayload), /target_write_failed/);
+  assert.equal(rolledBack, true);
+  assert.equal(completed, false);
+});
+
+test('PerformanceProbeJobService resumes finalization from persisted evidence after retry', async () => {
+  const events: string[] = [];
+  let inserted = false;
+  const service = new PerformanceProbeJobService({
+    jobRepository: {
+      leaseNext: async () => null,
+      getById: async () => ({ ...leasedJob, include_in_result_snapshot: true }),
+      markCompleted: async () => {
+        events.push('job:complete');
+        return true;
+      },
+    },
+    snapshotRepository: { getById: async () => null },
+    runRepository: {
+      getByJobId: async () => ({
+        id: 44,
+        status: 'success',
+        sampled_at: '2026-08-08T12:01:00+08:00',
+        sampled_date: '2026-08-08',
+        calibration_status: 'passed',
+      } as never),
+      insert: async () => {
+        inserted = true;
+        return 45;
+      },
+    },
+    targetRepository: { insertMany: async () => undefined },
+    performanceAnomalyService: {
+      assessRun: async () => events.push('anomaly:assess'),
+    },
+    aggregationService: {
+      aggregateAirportForDate: async () => {
+        events.push('aggregate');
+        return { aggregated: 0, pending_probe_ids: ['cn-guangzhou'] };
+      },
+    },
+  });
+
+  const result = await service.submitRun('cn-shanghai', acceptedPayload);
+
+  assert.deepEqual(result, { run_id: 44, job_id: leasedJob.job_id, duplicate: true });
+  assert.equal(inserted, false);
+  assert.deepEqual(events, ['anomaly:assess', 'aggregate', 'job:complete']);
 });

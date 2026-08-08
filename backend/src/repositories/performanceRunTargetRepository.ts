@@ -1,4 +1,4 @@
-import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 
 import type { PerformanceRunTarget } from '../types/domain';
 import { sqlDateTimeToTimezoneIso } from '../utils/time';
@@ -39,10 +39,13 @@ export class PerformanceRunTargetRepository {
     );
   }
 
-  async insertMany(targets: PerformanceRunTarget[]): Promise<void> {
+  async insertMany(
+    targets: PerformanceRunTarget[],
+    executor: Pool | PoolConnection = this.pool,
+  ): Promise<void> {
     for (const target of targets) {
       validateTarget(target);
-      await this.pool.execute<ResultSetHeader>(
+      await executor.execute<ResultSetHeader>(
         `INSERT INTO performance_run_targets (
            run_id, node_key, target_key, bytes_downloaded, duration_ms,
            download_mbps, http_status, error_code, valid

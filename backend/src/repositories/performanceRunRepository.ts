@@ -1,4 +1,4 @@
-import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type {
   PerformanceCalibrationStatus,
   PerformanceProbeId,
@@ -134,8 +134,8 @@ export class PerformanceRunRepository {
     await this.ensureIndex('uq_perf_runs_job', '(job_id)', true);
   }
 
-  async insert(input: PerformanceRunInput): Promise<number> {
-    const [result] = await this.pool.execute<ResultSetHeader>(
+  async insert(input: PerformanceRunInput, executor: Pool | PoolConnection = this.pool): Promise<number> {
+    const [result] = await executor.execute<ResultSetHeader>(
       `INSERT INTO airport_performance_runs (
          airport_id, sampled_at, sampled_date, source, status,
          job_id, probe_id, region_code, provider, bandwidth_mbps, run_mode,
@@ -247,6 +247,17 @@ export class PerformanceRunRepository {
         WHERE id = ?
         LIMIT 1`,
       [runId],
+    );
+    return rows[0] ? toPerformanceRun(rows[0]) : null;
+  }
+
+  async getByJobId(jobId: string): Promise<PerformanceRun | null> {
+    const [rows] = await this.pool.query<PerformanceRunRow[]>(
+      `SELECT ${SELECT_COLUMNS}
+         FROM airport_performance_runs
+        WHERE job_id = ?
+        LIMIT 1`,
+      [jobId],
     );
     return rows[0] ? toPerformanceRun(rows[0]) : null;
   }

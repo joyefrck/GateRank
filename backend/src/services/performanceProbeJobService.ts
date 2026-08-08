@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import type { Pool, PoolConnection } from 'mysql2/promise';
 
 import { PERFORMANCE_PROBE_DEFINITIONS } from '../config/performanceProbes';
 import { HttpError } from '../middleware/errorHandler';
 import type {
   PerformanceProbeId,
   PerformanceProbeJob,
+  PerformanceRun,
   PerformanceRunInput,
   PerformanceRunNode,
   PerformanceRunTarget,
@@ -15,16 +17,23 @@ interface PerformanceProbeJobServiceDeps {
   jobRepository: {
     leaseNext(probeId: PerformanceProbeId, leaseOwner: string, leaseSeconds: number): Promise<PerformanceProbeJob | null>;
     getById(jobId: string): Promise<PerformanceProbeJob | null>;
-    markCompleted(jobId: string, probeId: PerformanceProbeId, runId: number): Promise<boolean>;
+    markCompleted(
+      jobId: string,
+      probeId: PerformanceProbeId,
+      runId: number,
+      executor?: Pool | PoolConnection,
+    ): Promise<boolean>;
+    withTransaction?<T>(work: (connection: PoolConnection) => Promise<T>): Promise<T>;
   };
   snapshotRepository: {
     getById(snapshotId: number): Promise<SubscriptionNodeSnapshot | null>;
   };
   runRepository: {
-    insert(input: PerformanceRunInput): Promise<number>;
+    insert(input: PerformanceRunInput, executor?: Pool | PoolConnection): Promise<number>;
+    getByJobId?(jobId: string): Promise<PerformanceRun | null>;
   };
   targetRepository: {
-    insertMany(targets: PerformanceRunTarget[]): Promise<void>;
+    insertMany(targets: PerformanceRunTarget[], executor?: Pool | PoolConnection): Promise<void>;
   };
   aggregationService?: {
     aggregateAirportForDate(
@@ -90,6 +99,12 @@ export class PerformanceProbeJobService {
       throw new HttpError(409, 'PROBE_JOB_NOT_LEASED', 'Performance probe job is not leased');
     }
 
+    const persistedRun = await this.deps.runRepository.getByJobId?.(job.job_id);
+    if (persistedRun) {
+      await this.finalizeSubmission(job, persistedRun);
+      return { run_id: persistedRun.id, job_id: job.job_id, duplicate: true };
+    }
+
     const definition = PERFORMANCE_PROBE_DEFINITIONS.find((item) => item.probe_id === probeId);
     if (!definition) throw new HttpError(400, 'PROBE_UNKNOWN', 'Unknown performance probe');
     const calibrationStatus = calibrationStatusValue(payload.calibration_status);
@@ -133,24 +148,46 @@ export class PerformanceProbeJobService {
       error_message: optionalString(payload.error_message),
       diagnostics: objectValue(payload.diagnostics),
     };
-    const runId = await this.deps.runRepository.insert(input);
-    const targets = targetRows(payload.target_results, runId);
-    await this.deps.targetRepository.insertMany(targets);
-    await this.deps.jobRepository.markCompleted(job.job_id, probeId, runId);
-    await this.deps.performanceAnomalyService?.assessRun(runId);
+    const persistEvidence = async (executor?: PoolConnection): Promise<number> => {
+      const runId = await this.deps.runRepository.insert(input, executor);
+      const targets = targetRows(payload.target_results, runId);
+      await this.deps.targetRepository.insertMany(targets, executor);
+      return runId;
+    };
+    const runId = this.deps.jobRepository.withTransaction
+      ? await this.deps.jobRepository.withTransaction(persistEvidence)
+      : await persistEvidence();
+    await this.finalizeSubmission(job, {
+      id: runId,
+      status: input.status,
+      sampled_at: input.sampled_at,
+      sampled_date: input.sampled_date,
+      calibration_status: input.calibration_status,
+    });
+    return { run_id: runId, job_id: job.job_id, duplicate: false };
+  }
+
+  private async finalizeSubmission(
+    job: PerformanceProbeJob,
+    run: Pick<PerformanceRun, 'id' | 'status' | 'sampled_at' | 'sampled_date' | 'calibration_status'>,
+  ): Promise<void> {
+    await this.deps.performanceAnomalyService?.assessRun(run.id);
     if (
       job.include_in_result_snapshot
-      && input.status === 'success'
-      && (probeId === 'legacy-control' || calibrationStatus === 'passed')
+      && run.status === 'success'
+      && (job.probe_id === 'legacy-control' || run.calibration_status === 'passed')
       && this.deps.aggregationService
     ) {
-      const date = input.sampled_date || input.sampled_at.slice(0, 10);
+      const date = run.sampled_date || run.sampled_at.slice(0, 10);
       const aggregated = await this.deps.aggregationService.aggregateAirportForDate(job.airport_id, date);
       if (aggregated.aggregated > 0 && this.deps.recomputeService) {
         await this.deps.recomputeService.recomputeAirportForDate(date, job.airport_id);
       }
     }
-    return { run_id: runId, job_id: job.job_id, duplicate: false };
+    const marked = await this.deps.jobRepository.markCompleted(job.job_id, job.probe_id, run.id);
+    if (!marked) {
+      throw new HttpError(409, 'PROBE_JOB_COMPLETION_CONFLICT', 'Performance probe job could not be completed');
+    }
   }
 }
 

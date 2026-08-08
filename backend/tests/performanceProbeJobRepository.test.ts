@@ -91,3 +91,28 @@ test('PerformanceProbeJobRepository completes a job idempotently', async () => {
 
   assert.equal(await repository.markCompleted('job-1', 'cn-guangzhou', 44), true);
 });
+
+test('PerformanceProbeJobRepository commits and rolls back submission transactions', async () => {
+  const events: string[] = [];
+  const connection = {
+    beginTransaction: async () => events.push('begin'),
+    commit: async () => events.push('commit'),
+    rollback: async () => events.push('rollback'),
+    release: () => events.push('release'),
+  };
+  const repository = new PerformanceProbeJobRepository({
+    getConnection: async () => connection,
+  } as never);
+
+  assert.equal(await repository.withTransaction(async () => 'ok'), 'ok');
+  await assert.rejects(
+    repository.withTransaction(async () => {
+      throw new Error('write_failed');
+    }),
+    /write_failed/,
+  );
+  assert.deepEqual(events, [
+    'begin', 'commit', 'release',
+    'begin', 'rollback', 'release',
+  ]);
+});

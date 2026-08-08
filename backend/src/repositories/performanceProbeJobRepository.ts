@@ -28,6 +28,21 @@ const SELECT_COLUMNS = `job_id, airport_id, probe_id, node_snapshot_id, config_v
 export class PerformanceProbeJobRepository {
   constructor(private readonly pool: Pool) {}
 
+  async withTransaction<T>(work: (connection: PoolConnection) => Promise<T>): Promise<T> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const result = await work(connection);
+      await connection.commit();
+      return result;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
   async ensureSchema(): Promise<void> {
     await this.pool.query(`
       CREATE TABLE IF NOT EXISTS performance_probe_jobs (
@@ -148,8 +163,13 @@ export class PerformanceProbeJobRepository {
     return rows[0] ? toPerformanceProbeJob(rows[0]) : null;
   }
 
-  async markCompleted(jobId: string, probeId: PerformanceProbeId, runId: number): Promise<boolean> {
-    const [result] = await this.pool.execute<ResultSetHeader>(
+  async markCompleted(
+    jobId: string,
+    probeId: PerformanceProbeId,
+    runId: number,
+    executor: Pool | PoolConnection = this.pool,
+  ): Promise<boolean> {
+    const [result] = await executor.execute<ResultSetHeader>(
       `UPDATE performance_probe_jobs
           SET status = 'completed', run_id = ?, completed_at = CURRENT_TIMESTAMP,
               lease_expires_at = NULL
