@@ -1781,6 +1781,11 @@ def test_proxy_http_once(config: Config) -> None:
 
 
 def test_speed(config: Config) -> float | None:
+    download_mbps, _total_bytes, _duration = test_speed_detailed(config)
+    return download_mbps
+
+
+def test_speed_detailed(config: Config) -> tuple[float | None, int, float]:
     total_bytes = 0
     total_bytes_lock = threading.Lock()
     deadline = time.perf_counter() + config.speed_timeout
@@ -1811,8 +1816,8 @@ def test_speed(config: Config) -> float | None:
         thread.join(timeout=max(0, remaining) + 1)
     duration = time.perf_counter() - started
     if duration <= 0 or total_bytes <= 0:
-        return None
-    return round(total_bytes / duration / 1024 / 1024 * 8, 2)
+        return None, total_bytes, duration
+    return round(total_bytes / duration / 1024 / 1024 * 8, 2), total_bytes, duration
 
 
 def build_proxy_opener(config: Config):
