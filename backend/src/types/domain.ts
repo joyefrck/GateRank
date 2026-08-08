@@ -275,6 +275,47 @@ export interface PerformanceAggregate {
   rule_summary: string;
 }
 
+export interface PerformanceProbe {
+  probe_id: PerformanceProbeId;
+  display_name: string;
+  region_code: string;
+  provider: string;
+  bandwidth_mbps: number | null;
+  probe_type: PerformanceProbeType;
+  test_profile: string;
+  scoring_rule_version: PerformanceScoringRuleVersion;
+  globally_enabled: boolean;
+  token_configured: boolean;
+  token_last_rotated_at: string | null;
+  last_seen_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AirportPerformanceProbeSetting {
+  probe_id: PerformanceProbeId;
+  test_enabled: boolean;
+  include_in_result: boolean;
+  updated_by: string | null;
+  updated_at: string | null;
+}
+
+export interface AirportPerformanceProbeSettingsView {
+  airport_id: number;
+  config_version: number;
+  settings: AirportPerformanceProbeSetting[];
+}
+
+export interface AirportPerformanceProbeSettingsInput {
+  airport_id: number;
+  expected_config_version: number;
+  updated_by: string;
+  settings: Array<Pick<
+    AirportPerformanceProbeSetting,
+    'probe_id' | 'test_enabled' | 'include_in_result'
+  >>;
+}
+
 export type ScoreDetailValue = number | string | boolean | null;
 
 export interface TimeSeriesScorePoint {

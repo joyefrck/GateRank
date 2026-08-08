@@ -23,6 +23,8 @@ import { MonthlyReportRepository } from './repositories/monthlyReportRepository'
 import { ToolDownloadRepository } from './repositories/toolDownloadRepository';
 import { MetricsRepository } from './repositories/metricsRepository';
 import { PerformanceNodePreferenceRepository } from './repositories/performanceNodePreferenceRepository';
+import { PerformanceProbeRepository } from './repositories/performanceProbeRepository';
+import { PerformanceProbeSettingRepository } from './repositories/performanceProbeSettingRepository';
 import { PerformanceRunRepository } from './repositories/performanceRunRepository';
 import { ProbeSampleRepository } from './repositories/probeSampleRepository';
 import { RankingRepository } from './repositories/rankingRepository';
@@ -114,6 +116,10 @@ export async function createApp() {
   await probeSampleRepository.ensureSchema();
   const performanceRunRepository = new PerformanceRunRepository(pool);
   await performanceRunRepository.ensureSchema();
+  const performanceProbeRepository = new PerformanceProbeRepository(pool);
+  await performanceProbeRepository.ensureSchema();
+  const performanceProbeSettingRepository = new PerformanceProbeSettingRepository(pool);
+  await performanceProbeSettingRepository.ensureSchema();
   const subscriptionNodeSnapshotRepository = new SubscriptionNodeSnapshotRepository(pool);
   await subscriptionNodeSnapshotRepository.ensureSchema();
   const subscriptionNodeCaptureService = new SubscriptionNodeCaptureService();
