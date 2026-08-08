@@ -1640,7 +1640,6 @@ async function syncApprovedAirportOperations(
     : buildSyncedAirportProfile(airport?.profile ?? createDefaultAirportProfile(), input);
 
   const patch: UpdateAirportInput = {
-    name: input.name,
     website: input.website,
     websites: input.websites,
     plan_price_month: input.plan_price_month,

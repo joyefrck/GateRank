@@ -4197,7 +4197,7 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
   };
   const approvedAirport: any = {
     id: 42,
-    name: 'Cloud Airport',
+    name: 'Cloud Airport Pro',
     website: 'https://example.com',
     websites: ['https://example.com'],
     status: 'normal',
@@ -4339,7 +4339,8 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
     assert.equal(updatedApplications[0].airport_intro, 'updated intro');
     assert.equal(updatedAirports.length, 1);
     assert.equal(updatedAirports[0].id, 42);
-    assert.equal(updatedAirports[0].name, 'Cloud Airport');
+    assert.equal(Object.hasOwn(updatedAirports[0], 'name'), false);
+    assert.equal(approvedAirport.name, 'Cloud Airport Pro');
     assert.deepEqual(updatedAirports[0].websites, ['https://new.example.com', 'https://backup.example.com']);
     assert.equal(updatedAirports[0].plan_price_month, 1888);
     assert.equal(updatedAirports[0].has_trial, false);
@@ -4379,7 +4380,7 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
         websites: string[];
       };
     };
-    assert.equal(data.application.name, 'Cloud Airport');
+    assert.equal(data.application.name, 'Cloud Airport Pro');
     assert.equal(data.application.applicant_email, 'user@example.com');
     assert.equal(data.application.plan_price_month, 1888);
     assert.equal(data.application.has_trial, false);
