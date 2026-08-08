@@ -106,6 +106,10 @@ export type RankingType = 'today' | 'stable' | 'value' | 'new' | 'risk';
 export type ProbeSampleType = 'latency' | 'download' | 'availability';
 export type ProbeScope = 'stability' | 'performance';
 export type PerformanceRunStatus = 'success' | 'partial' | 'skipped' | 'failed';
+export type PerformanceProbeId = 'legacy-control' | 'cn-shanghai' | 'cn-guangzhou';
+export type PerformanceProbeType = 'legacy' | 'mainland';
+export type PerformanceScoringRuleVersion = 'legacy_v1' | 'cn_dual_probe_v1';
+export type PerformanceReviewStatus = 'normal' | 'needs_review' | 'suspicious';
 export type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
 export type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 export type NewsStatus = 'draft' | 'published' | 'archived';
@@ -220,6 +224,13 @@ export interface DailyMetrics {
   median_download_mbps: number;
   packet_loss_percent: number;
   packet_loss_measurement?: string | null;
+  performance_latency_score?: number | null;
+  performance_speed_score?: number | null;
+  performance_loss_score?: number | null;
+  performance_score?: number | null;
+  performance_rule_summary?: string | null;
+  performance_included_probe_ids?: string[];
+  performance_review_status?: PerformanceReviewStatus | null;
   available_nodes_count?: number | null;
   unavailable_nodes_count?: number | null;
   node_availability_percent?: number | null;
@@ -235,6 +246,34 @@ export interface DailyMetrics {
 }
 
 export interface DailyMetricsInput extends DailyMetrics {}
+
+export interface PerformanceRegionMeasurement {
+  probe_id: PerformanceProbeId;
+  scoring_rule_version: PerformanceScoringRuleVersion;
+  median_latency_ms: number;
+  median_download_mbps: number;
+  packet_loss_percent: number;
+}
+
+export interface PerformanceRegionScore extends PerformanceRegionMeasurement {
+  latency_score: number;
+  speed_score: number;
+  loss_score: number;
+  p: number;
+  probe_ceiling: boolean;
+}
+
+export interface PerformanceAggregate {
+  median_latency_ms: number;
+  median_download_mbps: number;
+  packet_loss_percent: number;
+  latency_score: number;
+  speed_score: number;
+  loss_score: number;
+  p: number;
+  included_probe_ids: PerformanceProbeId[];
+  rule_summary: string;
+}
 
 export type ScoreDetailValue = number | string | boolean | null;
 
