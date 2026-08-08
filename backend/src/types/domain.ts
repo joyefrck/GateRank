@@ -110,6 +110,9 @@ export type PerformanceProbeId = 'legacy-control' | 'cn-shanghai' | 'cn-guangzho
 export type PerformanceProbeType = 'legacy' | 'mainland';
 export type PerformanceScoringRuleVersion = 'legacy_v1' | 'cn_dual_probe_v1';
 export type PerformanceReviewStatus = 'normal' | 'needs_review' | 'suspicious';
+export type PerformanceProbeJobStatus = 'queued' | 'leased' | 'completed' | 'failed' | 'expired';
+export type PerformanceRunMode = 'shadow' | 'official';
+export type PerformanceCalibrationStatus = 'not_required' | 'passed' | 'failed';
 export type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
 export type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 export type NewsStatus = 'draft' | 'published' | 'archived';
@@ -314,6 +317,55 @@ export interface AirportPerformanceProbeSettingsInput {
     AirportPerformanceProbeSetting,
     'probe_id' | 'test_enabled' | 'include_in_result'
   >>;
+}
+
+export interface PerformanceProbeJob {
+  job_id: string;
+  airport_id: number;
+  probe_id: PerformanceProbeId;
+  node_snapshot_id: number;
+  config_version: number;
+  test_enabled_snapshot: boolean;
+  include_in_result_snapshot: boolean;
+  test_profile: string;
+  scoring_rule_version: PerformanceScoringRuleVersion;
+  source: string;
+  status: PerformanceProbeJobStatus;
+  lease_owner: string | null;
+  lease_expires_at: string | null;
+  attempts: number;
+  idempotency_key: string;
+  run_id: number | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export interface PerformanceProbeJobInput {
+  job_id: string;
+  airport_id: number;
+  probe_id: PerformanceProbeId;
+  node_snapshot_id: number;
+  config_version: number;
+  test_enabled_snapshot: boolean;
+  include_in_result_snapshot: boolean;
+  test_profile: string;
+  scoring_rule_version: PerformanceScoringRuleVersion;
+  source: string;
+  idempotency_key: string;
+}
+
+export interface PerformanceRunTarget {
+  run_id: number;
+  node_key: string;
+  target_key: string;
+  bytes_downloaded: number;
+  duration_ms: number;
+  download_mbps: number | null;
+  http_status: number | null;
+  error_code: string | null;
+  valid: boolean;
+  created_at?: string;
 }
 
 export type ScoreDetailValue = number | string | boolean | null;
@@ -951,8 +1003,22 @@ export interface PerformanceRun {
   id: number;
   airport_id: number;
   sampled_at: string;
+  sampled_date?: string;
   source: string;
   status: PerformanceRunStatus;
+  job_id?: string | null;
+  probe_id?: PerformanceProbeId;
+  region_code?: string | null;
+  provider?: string | null;
+  bandwidth_mbps?: number | null;
+  run_mode?: PerformanceRunMode;
+  test_profile?: string;
+  scoring_rule_version?: PerformanceScoringRuleVersion;
+  config_version?: number;
+  calibration_status?: PerformanceCalibrationStatus;
+  calibration_mbps?: number | null;
+  review_status?: PerformanceReviewStatus;
+  review_reasons?: string[];
   subscription_format: string | null;
   parsed_nodes_count: number;
   supported_nodes_count: number;
@@ -973,8 +1039,22 @@ export interface PerformanceRun {
 export interface PerformanceRunInput {
   airport_id: number;
   sampled_at: string;
+  sampled_date?: string;
   source?: string;
   status: PerformanceRunStatus;
+  job_id?: string | null;
+  probe_id?: PerformanceProbeId;
+  region_code?: string | null;
+  provider?: string | null;
+  bandwidth_mbps?: number | null;
+  run_mode?: PerformanceRunMode;
+  test_profile?: string;
+  scoring_rule_version?: PerformanceScoringRuleVersion;
+  config_version?: number;
+  calibration_status?: PerformanceCalibrationStatus;
+  calibration_mbps?: number | null;
+  review_status?: PerformanceReviewStatus;
+  review_reasons?: string[];
   subscription_format?: string | null;
   parsed_nodes_count?: number;
   supported_nodes_count?: number;
