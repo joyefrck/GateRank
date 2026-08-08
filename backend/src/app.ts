@@ -2,10 +2,12 @@ import express from 'express';
 import helmet from 'helmet';
 import { getDbPool } from './db/mysql';
 import { adminAuth } from './middleware/adminAuth';
+import { performanceProbeAuth } from './middleware/performanceProbeAuth';
 import { corsAllowlist } from './middleware/cors';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { privateSeoGuard } from './middleware/privateSeoGuard';
 import { requestContext } from './middleware/requestContext';
+import { createPerformanceProbeRateLimit } from './middleware/rateLimit';
 import { AccessTokenRepository } from './repositories/accessTokenRepository';
 import { ApplicantAccountRepository } from './repositories/applicantAccountRepository';
 import { ApplicantEmailChangeCodeRepository } from './repositories/applicantEmailChangeCodeRepository';
@@ -40,6 +42,7 @@ import { MarketingEventRepository } from './repositories/marketingEventRepositor
 import { SystemSettingRepository } from './repositories/systemSettingRepository';
 import { createAdminAuthRoutes } from './routes/adminAuthRoutes';
 import { createAdminRoutes } from './routes/adminRoutes';
+import { createPerformanceProbeRoutes } from './routes/performanceProbeRoutes';
 import { createNewsAdminRoutes } from './routes/newsAdminRoutes';
 import { createMonthlyReportAdminRoutes } from './routes/monthlyReportAdminRoutes';
 import { createPortalRoutes } from './routes/portalRoutes';
@@ -58,6 +61,7 @@ import { AdminAuthService } from './services/adminAuthService';
 import { ApplicantPortalAuthService } from './services/applicantPortalAuthService';
 import { ApplicantXOAuthService } from './services/applicantXOAuthService';
 import { AggregationService } from './services/aggregationService';
+import { PerformanceProbeJobService } from './services/performanceProbeJobService';
 import { ManualJobService } from './services/manualJobService';
 import { MailService } from './services/mailService';
 import { MediaLibrarySettingsService } from './services/mediaLibrarySettingsService';
@@ -282,6 +286,12 @@ export async function createApp() {
     systemSettingRepository,
   });
   const publicPageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
+  const performanceProbeJobService = new PerformanceProbeJobService({
+    jobRepository: performanceProbeJobRepository,
+    snapshotRepository: subscriptionNodeSnapshotRepository,
+    runRepository: performanceRunRepository,
+    targetRepository: performanceRunTargetRepository,
+  });
 
   const app = express();
   app.disable('x-powered-by');
@@ -296,6 +306,13 @@ export async function createApp() {
   app.get('/healthz', (_req, res) => {
     res.json({ status: 'ok' });
   });
+
+  app.use(
+    '/api/v1/performance-probe',
+    createPerformanceProbeRateLimit(),
+    performanceProbeAuth(performanceProbeRepository),
+    createPerformanceProbeRoutes({ jobService: performanceProbeJobService }),
+  );
 
   app.use(
     '/api/v1',

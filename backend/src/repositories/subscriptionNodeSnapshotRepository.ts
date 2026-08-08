@@ -81,6 +81,18 @@ export class SubscriptionNodeSnapshotRepository {
 
     return rows[0] ? toSubscriptionNodeSnapshot(rows[0]) : null;
   }
+
+  async getById(snapshotId: number): Promise<SubscriptionNodeSnapshot | null> {
+    const [rows] = await this.pool.query<SubscriptionNodeSnapshotRow[]>(
+      `SELECT id, airport_id, captured_at, source, subscription_url, subscription_format,
+              parsed_nodes_count, supported_nodes_count, nodes_json, unsupported_nodes_json, created_at
+         FROM airport_subscription_node_snapshots
+        WHERE id = ?
+        LIMIT 1`,
+      [snapshotId],
+    );
+    return rows[0] ? toSubscriptionNodeSnapshot(rows[0]) : null;
+  }
 }
 
 function toSubscriptionNodeSnapshot(row: SubscriptionNodeSnapshotRow): SubscriptionNodeSnapshot {
