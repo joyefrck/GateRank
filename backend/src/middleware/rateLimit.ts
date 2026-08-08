@@ -47,6 +47,7 @@ export function createPerformanceProbeRateLimit() {
     limit: numberFromEnv('PERFORMANCE_PROBE_RATE_LIMIT_MAX', 120),
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req) => ipKeyGenerator(req.socket.remoteAddress || ''),
     handler: rateLimitHandler,
   });
 }

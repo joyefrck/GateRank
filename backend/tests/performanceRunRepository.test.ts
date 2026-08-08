@@ -11,7 +11,7 @@ test('PerformanceRunRepository maps legacy rows to explicit compatibility fields
           id: 7,
           airport_id: 9,
           sampled_at: '2026-08-08 12:00:00',
-          sampled_date: null,
+          sampled_date: new Date(2026, 7, 8),
           source: 'cron-performance',
           status: 'success',
           subscription_format: 'plain',

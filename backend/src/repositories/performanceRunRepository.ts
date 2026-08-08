@@ -10,7 +10,7 @@ import type {
   PerformanceScoringRuleVersion,
   PerformanceRunStatus,
 } from '../types/domain';
-import { sqlDateTimeToTimezoneIso } from '../utils/time';
+import { formatDateOnly, sqlDateTimeToTimezoneIso } from '../utils/time';
 
 interface PerformanceRunRow extends RowDataPacket {
   id: number;
@@ -329,7 +329,7 @@ function toPerformanceRun(row: PerformanceRunRow): PerformanceRun {
     id: row.id,
     airport_id: row.airport_id,
     sampled_at: sqlDateTimeToTimezoneIso(row.sampled_at),
-    sampled_date: row.sampled_date ? String(row.sampled_date).slice(0, 10) : String(row.sampled_at).slice(0, 10),
+    sampled_date: formatDateOnly(row.sampled_date || row.sampled_at),
     source: row.source,
     status: row.status,
     job_id: row.job_id,
