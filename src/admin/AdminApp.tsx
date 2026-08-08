@@ -523,9 +523,12 @@ interface AirportDashboardView {
       target_summaries: Array<{
         target_key: string;
         sample_count: number;
-        min_download_mbps: number;
+        valid_sample_count: number;
+        invalid_sample_count: number;
+        min_download_mbps: number | null;
         median_download_mbps: number | null;
-        max_download_mbps: number;
+        max_download_mbps: number | null;
+        error_codes: string[];
       }>;
       error_code: string | null;
       error_message: string | null;
@@ -11180,8 +11183,8 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
             <div className="rounded border border-neutral-200 bg-white p-4">
               <div className="text-sm font-semibold text-neutral-900">评分公式</div>
               <div className="mt-2 text-xs text-neutral-500 whitespace-pre-wrap">
-                {'median_latency_ms 使用“节点建连延迟”，不是代理后访问第三方网页的完整耗时。\n'}
-                {'median_download_mbps 使用多连接并发下载测速，比单连接更接近 Speedtest。\n'}
+                {'median_latency_ms 使用 sing-box 代理后真实请求延迟，每个节点请求两次并取最快成功值。\n'}
+                {'median_download_mbps 全程通过 sing-box 代理，依次测试 CacheFly 与 Cloudflare；每个目标固定窗口 2 连接，节点取有效目标中位数。\n'}
                 {'LatencyScore = clamp((600 - median_latency_ms) / (600 - 60) * 100, 0, 100)\n'}
                 {'中心探针 legacy_v1：SpeedScore = clamp((median_download_mbps - 10) / (300 - 10) * 100, 0, 100)\n'}
                 {'大陆探针 cn_dual_probe_v1：SpeedScore = clamp((median_download_mbps - 10) / (160 - 10) * 100, 0, 100)\n'}
@@ -11252,7 +11255,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                         {row.last_run ? (
                           <div className="mt-1 text-xs text-neutral-500">
                             最近：{formatDateTimeInBeijing(row.last_run.sampled_at)}
-                            {row.last_run.calibration_mbps !== null ? ` · 校准 ${row.last_run.calibration_mbps} Mbps` : ''}
+                            {row.last_run.median_download_mbps !== null ? ` · 代理下载 ${row.last_run.median_download_mbps} Mbps` : ''}
                           </div>
                         ) : null}
                       </div>
@@ -11364,7 +11367,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
             </div>
 
             <div className="grid grid-cols-2 gap-4 text-sm">
-              <ReadField label="节点建连延迟中位数 (median_latency_ms)" value={valueOrDash(dashboard.performance.median_latency_ms)} />
+              <ReadField label="代理真实延迟中位数 (median_latency_ms)" value={valueOrDash(dashboard.performance.median_latency_ms)} />
               <ReadField label="代理HTTP延迟中位数（诊断）" value={valueOrDash(dashboard.performance.proxy_http_median_latency_ms)} />
               <ReadField label="代理HTTP探测URL（诊断）" value={valueOrDash(dashboard.performance.proxy_http_test_url)} />
               <ReadField label="失败率测量口径" value={valueOrDash(dashboard.performance.packet_loss_measurement)} />
@@ -11385,7 +11388,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                 <div>
                   <div className="text-sm font-semibold text-neutral-900">分地区采集证据</div>
                   <div className="mt-1 text-xs text-neutral-500">
-                    顶部指标为正式聚合；下方保留各地区原始代表值、校准和目标分布供复核。
+                    顶部指标为正式聚合；下方保留各地区原始代理代表值和测速目标分布供复核。
                   </div>
                 </div>
                 {dashboard.performance.pending_probe_ids.length > 0 ? (
@@ -11427,21 +11430,21 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                         <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-3">
                           <ReadField label="运行状态" value={valueOrDash(run.status)} />
                           <ReadField label="评分规则" value={valueOrDash(run.scoring_rule_version)} />
-                          <ReadField label="测试配置" value={valueOrDash(run.test_profile)} />
-                          <ReadField label="校准状态" value={valueOrDash(run.calibration_status)} />
-                          <ReadField label="校准速度" value={valueOrDash(run.calibration_mbps)} />
-                          <ReadField label="节点建连延迟中位数" value={valueOrDash(run.median_latency_ms)} />
+                          <ReadField label="代理测速配置" value={valueOrDash(run.test_profile)} />
+                          <ReadField label="校准要求" value={run.calibration_status === 'not_required' ? '无需直连校准' : valueOrDash(run.calibration_status)} />
+                          <ReadField label="代理真实延迟中位数" value={valueOrDash(run.median_latency_ms)} />
                           <ReadField label="下载中位数" value={valueOrDash(run.median_download_mbps)} />
                           <ReadField label="代理请求失败率" value={valueOrDash(run.packet_loss_percent)} />
                           <ReadField label="错误码" value={valueOrDash(run.error_code)} />
                         </div>
                         {run.target_summaries.length > 0 ? (
                           <div className="mt-3 overflow-x-auto">
+                            <div className="px-2 pb-2 text-xs font-medium text-neutral-600">代理下载目标分布</div>
                             <table className="min-w-full text-left text-xs">
                               <thead className="text-neutral-500">
                                 <tr>
                                   <th className="px-2 py-2 font-medium">测速目标</th>
-                                  <th className="px-2 py-2 font-medium">样本</th>
+                                  <th className="px-2 py-2 font-medium">有效/总样本</th>
                                   <th className="px-2 py-2 font-medium">最低 Mbps</th>
                                   <th className="px-2 py-2 font-medium">中位 Mbps</th>
                                   <th className="px-2 py-2 font-medium">最高 Mbps</th>
@@ -11451,10 +11454,13 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                                 {run.target_summaries.map((target) => (
                                   <tr key={target.target_key} className="border-t border-neutral-200 text-neutral-700">
                                     <td className="px-2 py-2 font-mono">{target.target_key}</td>
-                                    <td className="px-2 py-2">{target.sample_count}</td>
-                                    <td className="px-2 py-2">{target.min_download_mbps}</td>
+                                    <td className="px-2 py-2">
+                                      {target.valid_sample_count}/{target.sample_count}
+                                      {target.error_codes.length > 0 ? ` · ${target.error_codes.join('、')}` : ''}
+                                    </td>
+                                    <td className="px-2 py-2">{valueOrDash(target.min_download_mbps)}</td>
                                     <td className="px-2 py-2">{valueOrDash(target.median_download_mbps)}</td>
-                                    <td className="px-2 py-2">{target.max_download_mbps}</td>
+                                    <td className="px-2 py-2">{valueOrDash(target.max_download_mbps)}</td>
                                   </tr>
                                 ))}
                               </tbody>

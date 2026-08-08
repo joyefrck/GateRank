@@ -290,6 +290,7 @@ interface AdminDeps {
   };
   performanceRunTargetRepository?: {
     listByRun(runId: number): Promise<PerformanceRunTarget[]>;
+    insertMany(targets: PerformanceRunTarget[]): Promise<void>;
   };
   subscriptionNodeSnapshotRepository?: {
     insert(input: SubscriptionNodeSnapshotInput): Promise<number>;
@@ -2041,13 +2042,14 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         if (
           !latest
           || latest.status !== 'success'
-          || latest.calibration_status !== 'passed'
-          || Number(latest.calibration_mbps || 0) < 160
+          || latest.test_profile !== 'proxy_multi_target_v2'
+          || !Number.isFinite(Number(latest.median_download_mbps))
+          || Number(latest.median_download_mbps) <= 0
         ) {
           throw new HttpError(
             409,
-            'PERFORMANCE_PROBE_CALIBRATION_REQUIRED',
-            `${setting.probe_id} 最近一次有效校准未达到 160 Mbps，暂不能并入测试结果`,
+            'PERFORMANCE_PROBE_PROXY_RUN_REQUIRED',
+            `${setting.probe_id} 最近一次统一代理测速没有有效下载结果，暂不能并入测试结果`,
           );
         }
       }
@@ -2722,6 +2724,13 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       }
 
       const runId = await deps.performanceRunRepository.insert(input);
+      const targets = toPerformanceRunTargets(payload.target_results, runId);
+      if (targets.length > 0) {
+        if (!deps.performanceRunTargetRepository) {
+          throw new Error('performanceRunTargetRepository is not configured');
+        }
+        await deps.performanceRunTargetRepository.insertMany(targets);
+      }
       await deps.auditRepository.log('insert_performance_run', actorFromReq(req), req.requestId, input);
       res.status(201).json({ run_id: runId, airport_id: input.airport_id, sampled_at: input.sampled_at });
     } catch (error) {
@@ -3780,6 +3789,13 @@ function toPerformanceRunInput(payload: Record<string, unknown>): PerformanceRun
     sampled_at: mustDateTime(payload.sampled_at, 'sampled_at'),
     source: optionalString(payload.source) || 'cron-performance',
     status: toPerformanceRunStatus(payload.status),
+    probe_id: toOptionalPerformanceProbeId(payload.probe_id),
+    run_mode: toOptionalPerformanceRunMode(payload.run_mode),
+    test_profile: optionalString(payload.test_profile),
+    scoring_rule_version: toOptionalPerformanceScoringRuleVersion(payload.scoring_rule_version),
+    config_version: optionalNumber(payload.config_version),
+    calibration_status: toOptionalPerformanceCalibrationStatus(payload.calibration_status),
+    calibration_mbps: optionalNumber(payload.calibration_mbps) ?? null,
     subscription_format: optionalString(payload.subscription_format) || null,
     parsed_nodes_count: optionalNumber(payload.parsed_nodes_count) ?? 0,
     supported_nodes_count: optionalNumber(payload.supported_nodes_count) ?? 0,
@@ -3799,6 +3815,71 @@ function toPerformanceRunInput(payload: Record<string, unknown>): PerformanceRun
     error_message: optionalString(payload.error_message) || null,
     diagnostics: toObjectOrEmpty(payload.diagnostics),
   };
+}
+
+function toPerformanceRunTargets(value: unknown, runId: number): PerformanceRunTarget[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'target_results must be an array');
+  }
+  return value.map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new HttpError(400, 'BAD_REQUEST', `target_results[${index}] must be an object`);
+    }
+    const row = item as Record<string, unknown>;
+    const nodeKey = optionalString(row.node_key);
+    const targetKey = optionalString(row.target_key);
+    const bytesDownloaded = optionalNumber(row.bytes_downloaded);
+    const durationMs = optionalNumber(row.duration_ms);
+    if (!nodeKey || !targetKey) {
+      throw new HttpError(400, 'BAD_REQUEST', `target_results[${index}] requires node_key and target_key`);
+    }
+    if (bytesDownloaded === undefined || bytesDownloaded < 0 || durationMs === undefined || durationMs < 0) {
+      throw new HttpError(400, 'BAD_REQUEST', `target_results[${index}] byte and duration values must be non-negative`);
+    }
+    if (typeof row.valid !== 'boolean') {
+      throw new HttpError(400, 'BAD_REQUEST', `target_results[${index}].valid must be boolean`);
+    }
+    return {
+      run_id: runId,
+      node_key: nodeKey,
+      target_key: targetKey,
+      bytes_downloaded: bytesDownloaded,
+      duration_ms: durationMs,
+      download_mbps: optionalNumber(row.download_mbps) ?? null,
+      http_status: optionalNumber(row.http_status) ?? null,
+      error_code: optionalString(row.error_code) || null,
+      valid: row.valid,
+    };
+  });
+}
+
+function toOptionalPerformanceProbeId(value: unknown): PerformanceRunInput['probe_id'] {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (value === 'legacy-control' || value === 'cn-shanghai' || value === 'cn-guangzhou') return value;
+  throw new HttpError(400, 'BAD_REQUEST', 'probe_id is invalid');
+}
+
+function toOptionalPerformanceRunMode(value: unknown): PerformanceRunInput['run_mode'] {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (value === 'official' || value === 'shadow') return value;
+  throw new HttpError(400, 'BAD_REQUEST', 'run_mode must be official|shadow');
+}
+
+function toOptionalPerformanceScoringRuleVersion(
+  value: unknown,
+): PerformanceRunInput['scoring_rule_version'] {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (value === 'legacy_v1' || value === 'cn_dual_probe_v1') return value;
+  throw new HttpError(400, 'BAD_REQUEST', 'scoring_rule_version is invalid');
+}
+
+function toOptionalPerformanceCalibrationStatus(
+  value: unknown,
+): PerformanceRunInput['calibration_status'] {
+  if (value === undefined || value === null || value === '') return undefined;
+  if (value === 'not_required' || value === 'passed' || value === 'failed') return value;
+  throw new HttpError(400, 'BAD_REQUEST', 'calibration_status is invalid');
 }
 
 function toSubscriptionNodeSnapshotInput(
@@ -4303,20 +4384,27 @@ function buildAdminPerformanceProbeRun(
   run: PerformanceRun,
   targets: PerformanceRunTarget[],
 ): Record<string, unknown> {
-  const targetGroups = new Map<string, number[]>();
+  const targetGroups = new Map<string, PerformanceRunTarget[]>();
   for (const target of targets) {
-    if (!target.valid || target.download_mbps === null || !Number.isFinite(target.download_mbps)) continue;
-    const values = targetGroups.get(target.target_key) || [];
-    values.push(target.download_mbps);
-    targetGroups.set(target.target_key, values);
+    const rows = targetGroups.get(target.target_key) || [];
+    rows.push(target);
+    targetGroups.set(target.target_key, rows);
   }
-  const targetSummaries = [...targetGroups.entries()].map(([targetKey, values]) => ({
-    target_key: targetKey,
-    sample_count: values.length,
-    min_download_mbps: Math.min(...values),
-    median_download_mbps: medianOrUndefined(values) ?? null,
-    max_download_mbps: Math.max(...values),
-  }));
+  const targetSummaries = [...targetGroups.entries()].map(([targetKey, rows]) => {
+    const values = rows
+      .filter((target) => target.valid && target.download_mbps !== null && Number.isFinite(target.download_mbps))
+      .map((target) => Number(target.download_mbps));
+    return {
+      target_key: targetKey,
+      sample_count: rows.length,
+      valid_sample_count: values.length,
+      invalid_sample_count: rows.length - values.length,
+      min_download_mbps: values.length > 0 ? Math.min(...values) : null,
+      median_download_mbps: medianOrUndefined(values) ?? null,
+      max_download_mbps: values.length > 0 ? Math.max(...values) : null,
+      error_codes: [...new Set(rows.map((target) => target.error_code).filter(Boolean))],
+    };
+  });
   return {
     id: run.id,
     job_id: run.job_id ?? null,

@@ -25,7 +25,7 @@ import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta, timezone
 from statistics import median
 from typing import Any
@@ -52,8 +52,8 @@ DEFAULT_LATENCY_ATTEMPTS = 3
 DEFAULT_LATENCY_SAMPLE_INTERVAL_SECONDS = 3
 DEFAULT_REQUEST_LOSS_ATTEMPTS = 10
 DEFAULT_REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS = 0.5
-DEFAULT_SPEED_TIMEOUT = 20
-DEFAULT_SPEED_CONNECTIONS = 4
+DEFAULT_SPEED_TIMEOUT = 10
+DEFAULT_SPEED_CONNECTIONS = 2
 DEFAULT_PERFORMANCE_CONCURRENCY = 4
 DEFAULT_NODE_AVAILABILITY_CHECK = "proxy_http"
 DEFAULT_SOURCE = "cron-performance"
@@ -127,6 +127,8 @@ class NodeProbeResult:
     error_code: str | None = None
     connect_failures: int = 0
     connect_total_attempts: int = 0
+    connect_latency_samples_ms: list[float] = field(default_factory=list)
+    target_results: list[SpeedTargetResult] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -518,6 +520,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
     latency_sampled_at: list[str] = []
     proxy_latency_samples: list[float] = []
     download_samples: list[float] = []
+    target_results: list[dict[str, Any]] = []
     total_attempts = 0
     total_failures = 0
     partial_errors: list[str] = []
@@ -562,11 +565,11 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         tested_nodes.append(
             {
                 **node_to_summary(node),
-                "status": "ok" if probe.error_code is None else "failed",
+                "status": "ok" if probe.error_code is None else ("partial" if probe.error_code == "node_probe_partial" else "failed"),
                 "error_code": probe.error_code,
-                "connect_latency_samples_ms": [round(v, 2) for v in probe.latency_samples_ms],
-                "connect_latency_median_ms": round(float(median(probe.latency_samples_ms)), 2)
-                if probe.latency_samples_ms
+                "connect_latency_samples_ms": [round(v, 2) for v in probe.connect_latency_samples_ms],
+                "connect_latency_median_ms": round(float(median(probe.connect_latency_samples_ms)), 2)
+                if probe.connect_latency_samples_ms
                 else None,
                 "proxy_http_latency_samples_ms": [round(v, 2) for v in probe.proxy_latency_samples_ms],
                 "proxy_http_latency_median_ms": round(float(median(probe.proxy_latency_samples_ms)), 2)
@@ -589,6 +592,17 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         proxy_latency_samples.extend(probe.proxy_latency_samples_ms)
         if probe.download_mbps is not None:
             download_samples.append(probe.download_mbps)
+        node_key = performance_node_key(node)
+        target_results.extend({
+            "node_key": node_key,
+            "target_key": target.target_key,
+            "bytes_downloaded": target.bytes_downloaded,
+            "duration_ms": target.duration_ms,
+            "download_mbps": target.download_mbps,
+            "http_status": target.http_status,
+            "error_code": target.error_code,
+            "valid": target.valid,
+        } for target in probe.target_results)
         total_attempts += probe.total_attempts
         total_failures += probe.failures
         if probe.error_code:
@@ -630,8 +644,9 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         diagnostics={
             **diagnostics,
             "subscription_url": subscription_url,
-            "latency_measurement": "tcp_connect_to_node_server",
-            "latency_probe_target": "node_server",
+            "latency_measurement": "proxy_http_real_ping_min_of_two_via_sing_box",
+            "latency_probe_target": config.test_url_latency,
+            "tcp_connect_latency_measurement": "tcp_connect_to_node_server_diagnostic_only",
             "proxy_http_latency_measurement": "http_get_via_local_proxy",
             "proxy_http_test_url": config.test_url_latency,
             "proxy_http_latency_samples_ms": [round(v, 2) for v in proxy_latency_samples],
@@ -643,9 +658,10 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             "packet_loss_failed_attempts": total_failures,
             "packet_loss_total_attempts": total_attempts,
             "packet_loss_attempts_per_node": config.request_loss_attempts,
-            "speed_measurement": "multi_connection_http_download_via_local_proxy",
-            "speed_test_url": config.test_url_speed,
+            "speed_measurement": "average_multi_connection_download_via_sing_box_proxy",
+            "speed_test_urls": [target["url"] for target in PROXY_SPEED_TARGETS_V2],
             "speed_test_connections": config.speed_connections,
+            "speed_test_window_seconds": config.speed_timeout,
             "node_selection_mode": selection_result.mode,
             "node_availability_check": config.node_availability_check,
             "node_availability_error_summary": availability_error_summary,
@@ -659,6 +675,16 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
             "unsupported_nodes": unsupported_nodes,
         },
     )
+    payload.update({
+        "probe_id": "legacy-control",
+        "run_mode": "official",
+        "test_profile": "proxy_multi_target_v2",
+        "scoring_rule_version": "legacy_v1",
+        "config_version": 0,
+        "calibration_status": "not_required",
+        "calibration_mbps": None,
+        "target_results": target_results,
+    })
     return {
         "payload": payload,
         "summary": summary_from_payload(payload, airport_name),
@@ -1654,12 +1680,21 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
     proc: subprocess.Popen[Any] | None = None
     try:
         proc, config_path = run_sing_box(config, node)
-        latency_samples, latency_sampled_at, connect_failures, connect_total_attempts = test_node_connect_latency(config, node)
-        proxy_latency_samples, proxy_failures, proxy_total_attempts = test_proxy_http_latency(config)
-        download_mbps = test_speed(config)
+        connect_latency_samples, _connect_sampled_at, connect_failures, connect_total_attempts = test_node_connect_latency(config, node)
+        proxy_latency_samples, proxy_latency_sampled_at, _real_failures, _real_attempts = test_proxy_real_latency(config)
+        _loss_latency_samples, proxy_failures, proxy_total_attempts = test_proxy_http_latency(config)
+        target_results = test_speed_targets(config, PROXY_SPEED_TARGETS_V2)
+        download_mbps = target_download_median(target_results)
+        latency_samples: list[float] = []
+        latency_sampled_at: list[str] = []
+        if proxy_latency_samples:
+            fastest_index = min(range(len(proxy_latency_samples)), key=proxy_latency_samples.__getitem__)
+            latency_samples = [proxy_latency_samples[fastest_index]]
+            latency_sampled_at = [proxy_latency_sampled_at[fastest_index]]
         error_code = None
-        if not latency_samples:
-            error_code = "connect_probe_failed"
+        valid_target_count = sum(1 for target in target_results if target.valid)
+        if not latency_samples or download_mbps is None or valid_target_count < len(PROXY_SPEED_TARGETS_V2):
+            error_code = "node_probe_partial"
         return NodeProbeResult(
             node=node,
             latency_samples_ms=latency_samples,
@@ -1671,6 +1706,8 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
             error_code=error_code,
             connect_failures=connect_failures,
             connect_total_attempts=connect_total_attempts,
+            connect_latency_samples_ms=connect_latency_samples,
+            target_results=target_results,
         )
     except Exception as exc:
         return NodeProbeResult(
@@ -1684,6 +1721,8 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
             error_code=str(exc),
             connect_failures=config.latency_attempts,
             connect_total_attempts=config.latency_attempts,
+            connect_latency_samples_ms=[],
+            target_results=[],
         )
     finally:
         stop_sing_box(proc, config_path)

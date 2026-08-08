@@ -17,4 +17,10 @@ test('admin performance tab renders accessible per-region controls before node s
   assert.match(source, /配置已被其他管理员更新/);
   assert.match(source, /≥180 Mbps，达到探针带宽上限/);
   assert.match(source, /probe_runs/);
+  assert.match(source, /全程通过 sing-box 代理/);
+  assert.match(source, /无需直连校准/);
+  assert.match(source, /代理测速配置/);
+  assert.match(source, /代理下载目标分布/);
+  assert.match(source, /有效\/总样本/);
+  assert.doesNotMatch(source, /校准速度/);
 });

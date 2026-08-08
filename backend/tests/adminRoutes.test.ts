@@ -6,7 +6,7 @@ import { errorHandler, HttpError } from '../src/middleware/errorHandler';
 import { createAdminRoutes } from '../src/routes/adminRoutes';
 import { SmtpSendError } from '../src/services/mailService';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
-import type { PerformanceRunInput, ProbeSampleInput, ReportView } from '../src/types/domain';
+import type { PerformanceRunInput, PerformanceRunTarget, ProbeSampleInput, ReportView } from '../src/types/domain';
 import { buildPerformanceNodeKey, buildPerformanceNodeMatchIdentity } from '../src/utils/performanceNodeKey';
 import { getDateInTimezone } from '../src/utils/time';
 import type { AirportHomeAdSlotPrices } from '../../shared/airportAds';
@@ -46,11 +46,11 @@ test('GET and PATCH performance probe settings expose sanitized per-airport swit
         provider: 'tencent-cloud',
         bandwidth_mbps: 200,
         run_mode: 'shadow',
-        test_profile: 'mainland_multi_target_v1',
+        test_profile: 'proxy_multi_target_v2',
         scoring_rule_version: 'cn_dual_probe_v1',
         config_version: 1,
-        calibration_status: 'passed',
-        calibration_mbps: 180,
+        calibration_status: 'not_required',
+        calibration_mbps: null,
         review_status: 'normal',
         review_reasons: [],
         subscription_format: null,
@@ -137,7 +137,7 @@ function adminProbe(probeId: 'legacy-control' | 'cn-shanghai' | 'cn-guangzhou') 
     provider: mainland ? 'tencent-cloud' : 'gaterank',
     bandwidth_mbps: mainland ? 200 : null,
     probe_type: mainland ? 'mainland' as const : 'legacy' as const,
-    test_profile: mainland ? 'mainland_multi_target_v1' : 'legacy_single_target_v1',
+    test_profile: 'proxy_multi_target_v2',
     scoring_rule_version: mainland ? 'cn_dual_probe_v1' as const : 'legacy_v1' as const,
     globally_enabled: true,
     token_configured: mainland,
@@ -152,6 +152,7 @@ test('POST /performance-runs stores run diagnostics and performance samples', as
   const insertedSamples: ProbeSampleInput[] = [];
   const insertedPacketLoss: ProbeSampleInput[] = [];
   const insertedRuns: PerformanceRunInput[] = [];
+  let insertedTargets: PerformanceRunTarget[] = [];
 
   const app = express();
   app.use(express.json());
@@ -178,6 +179,10 @@ test('POST /performance-runs stores run diagnostics and performance samples', as
         },
         getLatestByAirportAndDate: async () => null,
         getLatestByAirportBeforeDate: async () => null,
+      },
+      performanceRunTargetRepository: {
+        listByRun: async () => [],
+        insertMany: async (targets) => { insertedTargets = targets; },
       },
       metricsRepository: stubMetricsRepository(),
       scoreRepository: {
@@ -216,6 +221,31 @@ test('POST /performance-runs stores run diagnostics and performance samples', as
         latency_sampled_at: ['2026-03-22T12:00:03+08:00'],
         download_samples_mbps: [88.8],
         packet_loss_percent: 33.33,
+        probe_id: 'legacy-control',
+        test_profile: 'proxy_multi_target_v2',
+        calibration_status: 'not_required',
+        target_results: [
+          {
+            node_key: 'node-a',
+            target_key: 'cachefly-50mb',
+            bytes_downloaded: 5_000_000,
+            duration_ms: 1000,
+            download_mbps: 40,
+            http_status: 200,
+            error_code: null,
+            valid: true,
+          },
+          {
+            node_key: 'node-a',
+            target_key: 'cloudflare-50mb',
+            bytes_downloaded: 10_000_000,
+            duration_ms: 1000,
+            download_mbps: 80,
+            http_status: 200,
+            error_code: null,
+            valid: true,
+          },
+        ],
         diagnostics: { unsupported_nodes_count: 3 },
         error_code: 'partial_probe_failure',
         error_message: 'one node failed',
@@ -239,6 +269,10 @@ test('POST /performance-runs stores run diagnostics and performance samples', as
     assert.equal(insertedRuns[0].unavailable_nodes_count, 5);
     assert.equal(insertedRuns[0].node_availability_percent, 75);
     assert.equal(insertedRuns[0].node_unavailability_percent, 25);
+    assert.deepEqual(insertedTargets.map((target) => [target.run_id, target.target_key]), [
+      [42, 'cachefly-50mb'],
+      [42, 'cloudflare-50mb'],
+    ]);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

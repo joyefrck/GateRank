@@ -10,6 +10,7 @@ from scripts.monitor_performance import (
     Config,
     NodeAvailabilityResult,
     NodeProbeResult,
+    SpeedTargetResult,
     build_config,
     build_run_payload,
     check_nodes_availability,
@@ -421,6 +422,8 @@ proxies:
         self.assertEqual(config.request_loss_sample_interval_seconds, 0.5)
         self.assertEqual(config.performance_concurrency, 4)
         self.assertEqual(config.node_availability_check, "proxy_http")
+        self.assertEqual(config.speed_timeout, 10)
+        self.assertEqual(config.speed_connections, 2)
 
     def test_probe_node_uses_proxy_http_request_failures_for_packet_loss(self) -> None:
         config = self.make_config()
@@ -438,7 +441,17 @@ proxies:
                 "scripts.monitor_performance.test_proxy_http_latency",
                 return_value=([180.0] * 8, 2, 10),
             ),
-            patch("scripts.monitor_performance.test_speed", return_value=80.0),
+            patch(
+                "scripts.monitor_performance.test_proxy_real_latency",
+                return_value=([180.0, 150.0], ["p1", "p2"], 0, 2),
+            ),
+            patch(
+                "scripts.monitor_performance.test_speed_targets",
+                return_value=[
+                    SpeedTargetResult("cachefly-50mb", 70.0, True, None, 10_000_000, 1000),
+                    SpeedTargetResult("cloudflare-50mb", 90.0, True, None, 12_000_000, 1000),
+                ],
+            ),
         ):
             result = probe_node(config, node)
 
@@ -446,6 +459,10 @@ proxies:
         self.assertEqual(result.total_attempts, 10)
         self.assertEqual(result.connect_failures, 0)
         self.assertEqual(result.connect_total_attempts, 3)
+        self.assertEqual(result.connect_latency_samples_ms, [21.0, 22.0, 23.0])
+        self.assertEqual(result.latency_samples_ms, [150.0])
+        self.assertEqual(result.latency_sampled_at, ["p2"])
+        self.assertEqual(result.download_mbps, 80.0)
 
     def test_proxy_real_latency_uses_minimum_of_two_proxy_requests(self) -> None:
         config = self.make_config()
@@ -606,6 +623,11 @@ proxies:
                 download_mbps=50,
                 failures=0,
                 total_attempts=1,
+                connect_latency_samples_ms=[21, 22, 23],
+                target_results=[
+                    SpeedTargetResult("cachefly-50mb", 40.0, True, None, 5_000_000, 1000),
+                    SpeedTargetResult("cloudflare-50mb", 60.0, True, None, 7_500_000, 1000),
+                ],
             )
 
         with (
@@ -629,6 +651,15 @@ proxies:
         self.assertEqual(payload["diagnostics"]["node_availability_error_summary"], [])
         self.assertEqual(payload["diagnostics"]["node_availability"][0]["check"], "tcp")
         self.assertEqual(payload["diagnostics"]["node_availability"][0]["tcp_reachable"], None)
+        self.assertEqual(payload["probe_id"], "legacy-control")
+        self.assertEqual(payload["test_profile"], "proxy_multi_target_v2")
+        self.assertEqual(payload["calibration_status"], "not_required")
+        self.assertEqual(payload["median_latency_ms"], 100.0)
+        self.assertEqual(payload["target_results"][0]["node_key"], performance_node_key(nodes_from_snapshot(snapshot)[0][0]))
+        self.assertEqual(
+            [row["target_key"] for row in payload["target_results"]],
+            ["cachefly-50mb", "cloudflare-50mb"],
+        )
 
     def test_run_for_airport_records_tcp_node_availability_check_in_diagnostics(self) -> None:
         config = self.make_config()
