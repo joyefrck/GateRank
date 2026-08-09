@@ -22,6 +22,9 @@ test('admin performance tab renders accessible per-region controls before node s
   assert.match(source, /代理测速配置/);
   assert.match(source, /代理下载目标分布/);
   assert.match(source, /有效\/总样本/);
+  assert.match(source, /本次运行节点明细/);
+  assert.match(source, /run\.tested_nodes\.map\(\(node\) =>/);
+  assert.doesNotMatch(source, /dashboard\.performance\.tested_nodes\.map\(\(node\) =>/);
   assert.match(
     source,
     /setJobTone\('error'\);\s*setJobMessage\([\s\S]{0,180}?await load\(\);/,

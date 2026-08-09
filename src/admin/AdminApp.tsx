@@ -402,6 +402,24 @@ interface PaginatedResponse<T> {
   items: T[];
 }
 
+interface PerformanceTestedNode {
+  name: string;
+  region?: string | null;
+  type?: string | null;
+  status?: string | null;
+  error_code?: string | null;
+  connect_latency_samples_ms?: number[];
+  connect_latency_median_ms?: number | null;
+  proxy_http_latency_samples_ms?: number[];
+  proxy_http_latency_median_ms?: number | null;
+  proxy_http_request_failures?: number | null;
+  proxy_http_request_attempts?: number | null;
+  proxy_http_request_failure_percent?: number | null;
+  connect_failures?: number | null;
+  connect_attempts?: number | null;
+  download_mbps?: number | null;
+}
+
 interface AirportDashboardView {
   date: string;
   pipeline: {
@@ -460,23 +478,7 @@ interface AirportDashboardView {
     node_availability_percent: number | null;
     node_unavailability_percent: number | null;
     selected_nodes: Array<{ name: string; region?: string | null; type?: string | null }>;
-    tested_nodes: Array<{
-      name: string;
-      region?: string | null;
-      type?: string | null;
-      status?: string | null;
-      error_code?: string | null;
-      connect_latency_samples_ms?: number[];
-      connect_latency_median_ms?: number | null;
-      proxy_http_latency_samples_ms?: number[];
-      proxy_http_latency_median_ms?: number | null;
-      proxy_http_request_failures?: number | null;
-      proxy_http_request_attempts?: number | null;
-      proxy_http_request_failure_percent?: number | null;
-      connect_failures?: number | null;
-      connect_attempts?: number | null;
-      download_mbps?: number | null;
-    }>;
+    tested_nodes: PerformanceTestedNode[];
     tested_nodes_count: number | null;
     tested_region_count: number | null;
     error_code: string | null;
@@ -520,6 +522,7 @@ interface AirportDashboardView {
       median_latency_ms: number | null;
       median_download_mbps: number | null;
       packet_loss_percent: number | null;
+      tested_nodes: PerformanceTestedNode[];
       target_summaries: Array<{
         target_key: string;
         sample_count: number;
@@ -11468,37 +11471,36 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                             </table>
                           </div>
                         ) : null}
+                        {run.tested_nodes.length > 0 ? (
+                          <div className="mt-4 border-t border-neutral-200 pt-3">
+                            <div className="mb-3 text-xs font-medium text-neutral-600">本次运行节点明细</div>
+                            <div className="space-y-3">
+                              {run.tested_nodes.map((node) => (
+                                <div key={node.name} className="rounded border border-neutral-200 bg-white p-3">
+                                  <div className="grid grid-cols-2 gap-3 text-sm">
+                                    <ReadField label="节点" value={valueOrDash(node.name)} />
+                                    <ReadField label="区域" value={valueOrDash(node.region)} />
+                                    <ReadField label="类型" value={valueOrDash(node.type)} />
+                                    <ReadField label="状态" value={valueOrDash(node.status)} />
+                                    <ReadField label="建连延迟中位数" value={valueOrDash(node.connect_latency_median_ms)} />
+                                    <ReadField label="下载速度" value={valueOrDash(node.download_mbps)} />
+                                    <ReadField label="代理HTTP延迟中位数" value={valueOrDash(node.proxy_http_latency_median_ms)} />
+                                    <ReadField label="代理请求失败次数" value={valueOrDash(node.proxy_http_request_failures)} />
+                                    <ReadField label="代理请求尝试次数" value={valueOrDash(node.proxy_http_request_attempts)} />
+                                    <ReadField label="代理请求失败率" value={valueOrDash(node.proxy_http_request_failure_percent)} />
+                                    <ReadField label="错误码" value={valueOrDash(node.error_code)} />
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ) : null}
                       </div>
                     </details>
                   ))}
                 </div>
               )}
             </div>
-
-            {(dashboard.performance.tested_nodes || []).length > 0 ? (
-              <div className="rounded border border-neutral-200 bg-white p-4">
-                <div className="text-sm font-semibold text-neutral-900">节点明细</div>
-                <div className="mt-4 space-y-3">
-                  {dashboard.performance.tested_nodes.map((node) => (
-                    <div key={node.name} className="rounded border border-neutral-200 bg-neutral-50 p-3">
-                      <div className="grid grid-cols-2 gap-3 text-sm">
-                        <ReadField label="节点" value={valueOrDash(node.name)} />
-                        <ReadField label="区域" value={valueOrDash(node.region)} />
-                        <ReadField label="类型" value={valueOrDash(node.type)} />
-                        <ReadField label="状态" value={valueOrDash(node.status)} />
-                        <ReadField label="建连延迟中位数" value={valueOrDash(node.connect_latency_median_ms)} />
-                        <ReadField label="下载速度" value={valueOrDash(node.download_mbps)} />
-                        <ReadField label="代理HTTP延迟中位数" value={valueOrDash(node.proxy_http_latency_median_ms)} />
-                        <ReadField label="代理请求失败次数" value={valueOrDash(node.proxy_http_request_failures)} />
-                        <ReadField label="代理请求尝试次数" value={valueOrDash(node.proxy_http_request_attempts)} />
-                        <ReadField label="代理请求失败率" value={valueOrDash(node.proxy_http_request_failure_percent)} />
-                        <ReadField label="错误码" value={valueOrDash(node.error_code)} />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : null}
 
           </div>
         ) : <div className="text-sm text-neutral-500">当日暂无数据</div>
