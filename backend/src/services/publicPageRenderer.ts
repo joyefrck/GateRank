@@ -230,7 +230,6 @@ export function renderHomePublicPage(
           </div>
         </section>
         <div class="home-v3-main">
-          ${renderHomeV3SponsoredDeals(view)}
           <div class="home-v3-columns">
             ${renderHomeV3Ranking(view)}
             ${renderHomeV3Sidebar(view)}
@@ -2141,7 +2140,7 @@ function renderHomeV3SponsoredDeals(view: HomePageView): string {
   const total = view.sponsored_deals?.total || 0;
   const dealsBySlot = new Map(deals.map((deal) => [deal.home_slot, deal]));
   return `
-    <section aria-labelledby="home-v3-sponsored-title">
+    <section class="home-v3-sponsored" aria-labelledby="home-v3-sponsored-title">
       ${renderHomeV3SectionHead(
         'Sponsored discovery',
         '商业合作专区',
@@ -2221,7 +2220,14 @@ function renderHomeV3Ranking(view: HomePageView): string {
 function renderHomeV3Sidebar(view: HomePageView): string {
   const news = view.news_updates || [];
   return `
-    <aside class="home-v3-sidebar" aria-label="工具与最新动态">
+    <aside class="home-v3-sidebar" aria-label="工具、商业合作与最新动态">
+      <section class="home-v3-explore">
+        <span>EXCELLENCE IN CONSOLIDATION</span>
+        <h2>探索更多优质机场</h2>
+        <p>想快速找出适合特定需求的高阶中转网络么？寻找配有电竞游戏级别优化、4K Netflix HDR高流控或双向原生 IP 的高级套餐通道。</p>
+        <a href="/rankings/all">立即探索 <span aria-hidden="true">→</span></a>
+      </section>
+      ${renderHomeV3SponsoredDeals(view)}
       <section>
         ${renderHomeV3SectionHead('Quick tools', '网络工具箱', '从客户端安装到出口网络验证')}
         <div class="home-v3-tools">
@@ -3578,8 +3584,8 @@ const styles = `
   .home-v3-section-head h2 { margin: 5px 0 0; color: #0a0a0a; font-size: 21px; line-height: 1.2; letter-spacing: -.02em; }
   .home-v3-section-head p { margin: 5px 0 0; color: #737373; font-size: 12px; line-height: 1.6; }
   .home-v3-section-head > a { flex: 0 0 auto; color: #737373; font-size: 12px; font-weight: 900; text-decoration: none; }
-  .home-v3-deal-grid { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 12px; }
-  .home-v3-deal { display: flex; min-height: 264px; flex-direction: column; border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 14px; box-shadow: 0 4px 20px rgba(15,23,42,.04); }
+  .home-v3-deal-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  .home-v3-deal { display: flex; min-height: 196px; flex-direction: column; border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 16px; box-shadow: 0 4px 20px rgba(15,23,42,.04); }
   .home-v3-deal-top { display: flex; align-items: center; gap: 10px; }
   .home-v3-airport-mark { display: inline-flex; width: 42px; height: 42px; flex: 0 0 42px; align-items: center; justify-content: center; border-radius: 12px; background: linear-gradient(135deg,#334155,#0f172a); color: #fff; font-weight: 900; }
   .home-v3-deal-top > div { min-width: 0; flex: 1; }
@@ -3596,8 +3602,8 @@ const styles = `
   .home-v3-deal-bottom > span small, .home-v3-deal-bottom > span strong { display: block; }
   .home-v3-deal-bottom small { color: #a3a3a3; font-size: 10px; font-weight: 800; }
   .home-v3-deal-bottom strong { margin-top: 2px; color: #171717; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
-  .home-v3-deal-actions { display: grid; grid-template-columns: 1fr; gap: 7px; margin-top: 10px; }
-  .home-v3-deal-actions a { display: flex; width: 100%; min-height: 32px; box-sizing: border-box; align-items: center; justify-content: center; border: 1px solid #e5e5e5; border-radius: 8px; font-size: 10px; font-weight: 900; text-decoration: none; }
+  .home-v3-deal-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 10px; }
+  .home-v3-deal-actions a { display: flex; width: 100%; min-height: 40px; box-sizing: border-box; align-items: center; justify-content: center; border: 1px solid #e5e5e5; border-radius: 10px; font-size: 10px; font-weight: 900; text-decoration: none; }
   .home-v3-deal-report { border-color: #171717 !important; background: #171717; color: #fff; }
   .home-v3-deal-website { background: #fafafa; color: #404040; }
   .home-v3-columns { display: grid; grid-template-columns: minmax(0,2fr) minmax(280px,1fr); gap: 28px; align-items: start; }
@@ -3617,6 +3623,11 @@ const styles = `
   .home-v3-airport-name { color: #171717; font-size: 13px; font-weight: 900; text-decoration: none; }
   .home-v3-row-action { display: inline-flex; min-height: 32px; align-items: center; border: 1px solid #e5e5e5; border-radius: 8px; padding: 0 11px; color: #404040; font-size: 11px; font-weight: 900; text-decoration: none; }
   .home-v3-sidebar { display: grid; gap: 18px; }
+  .home-v3-sidebar > .home-v3-explore { position: relative; border-color: #1e1b4b; background: #1e1b4b; color: #fff; }
+  .home-v3-explore > span { color: #fcd34d; font-size: 10px; font-weight: 900; letter-spacing: .08em; }
+  .home-v3-explore h2 { margin: 10px 0 0; color: #fff; font-size: 20px; line-height: 1.2; }
+  .home-v3-explore p { margin: 10px 0 0; color: #e0e7ff; font-size: 12px; line-height: 1.7; }
+  .home-v3-explore > a { display: inline-flex; min-height: 40px; align-items: center; gap: 5px; margin-top: 14px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; background: rgba(255,255,255,.08); padding: 0 16px; color: #c7d2fe; font-size: 12px; font-weight: 900; text-decoration: none; }
   .home-v3-tools { display: grid; gap: 7px; }
   .home-v3-tools a { position: relative; display: block; border: 1px solid #f1f1f1; border-radius: 12px; background: #fafafa; padding: 10px 34px 10px 12px; text-decoration: none; }
   .home-v3-tools strong, .home-v3-tools span { display: block; }
@@ -3679,7 +3690,6 @@ const styles = `
     .home-v3-metric { min-width: 0; padding-right: 54px; }
     .home-v3-main { width: min(100vw - 24px,1280px); padding-top: 28px; gap: 30px; }
     .home-v3-columns { grid-template-columns: 1fr; }
-    .home-v3-deal-grid { grid-template-columns: 1fr 1fr; }
     .home-v3-summary-grid { grid-template-columns: 1fr 1fr; }
     .home-v3-trust > div:nth-child(2) { grid-template-columns: 1fr 1fr; }
   }
@@ -3691,7 +3701,7 @@ const styles = `
   }
   @media (max-width: 600px) {
     .home-v3-hero h1 { font-size: 28px; }
-    .home-v3-deal-grid, .home-v3-summary-grid, .home-v3-trust > div:nth-child(2), .home-v3-faq > div:last-child { grid-template-columns: 1fr; }
+    .home-v3-summary-grid, .home-v3-trust > div:nth-child(2), .home-v3-faq > div:last-child { grid-template-columns: 1fr; }
     .home-v3-section-head { align-items: flex-start; flex-direction: column; }
     .home-v3-table-wrap table { min-width: 620px; }
   }
