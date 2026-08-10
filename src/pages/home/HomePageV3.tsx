@@ -309,7 +309,6 @@ export function HomePageV3({ date }: { date?: string }) {
           {!loading && error ? <PageState message={error} tone="error" /> : null}
           {!loading && !error && data ? (
             <>
-              <SponsoredDeals deals={data.sponsored_deals?.items || []} />
               <section className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
                 <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-12">
                   <div className="lg:col-span-8">
@@ -318,7 +317,10 @@ export function HomePageV3({ date }: { date?: string }) {
                       date={data.date}
                     />
                   </div>
-                  <HomeSidebar news={data.news_updates || []} />
+                  <HomeSidebar
+                    news={data.news_updates || []}
+                    deals={data.sponsored_deals?.items || []}
+                  />
                 </div>
               </section>
               <SummaryBoards sections={data.sections} />
@@ -442,31 +444,28 @@ function MetricCard({
 function SponsoredDeals({ deals }: { deals: SponsoredDeal[] }) {
   const dealsBySlot = new Map(deals.map((deal) => [deal.home_slot, deal]));
   return (
-    <section id="today-discovery-section" aria-labelledby="sponsored-deals-title" className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
-      <div className="flex flex-col justify-between rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
-        <div className="flex flex-col justify-between gap-2 border-b border-gray-100 pb-4 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-2.5">
-            <h2 id="sponsored-deals-title" className="text-[17px] font-black tracking-tight text-gray-900 sm:text-[18px]">商业合作专区</h2>
-            <span className="flex items-center gap-1 rounded-md border border-amber-200/60 bg-amber-50 px-2 py-0.5 text-[10.5px] font-extrabold uppercase tracking-wide text-amber-700">
-              <Sparkles className="h-3 w-3 text-amber-500" /> 广告展位
-            </span>
-            <span className="hidden text-[12px] font-medium text-gray-400 md:inline-block">独立于机场评分</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11.5px] font-bold text-gray-400">官方合作招商中</span>
-            <RouteLink href="/apply" className="text-[11.5px] font-extrabold text-indigo-600 hover:text-indigo-800 hover:underline">申请入驻 &gt;</RouteLink>
-          </div>
+    <section id="today-discovery-section" aria-labelledby="sponsored-deals-title" className="space-y-4 rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+      <div className="space-y-3 border-b border-gray-100 pb-4">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <h2 id="sponsored-deals-title" className="text-[17px] font-black tracking-tight text-gray-900 sm:text-[18px]">商业合作专区</h2>
+          <span className="flex items-center gap-1 rounded-md border border-amber-200/60 bg-amber-50 px-2 py-0.5 text-[10.5px] font-extrabold uppercase tracking-wide text-amber-700">
+            <Sparkles className="h-3 w-3 text-amber-500" /> 广告展位
+          </span>
         </div>
-        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-          {AIRPORT_HOME_AD_SLOTS.map((slot) => {
-            const deal = dealsBySlot.get(slot);
-            return deal
-              ? <SponsoredDealCard key={deal.campaign_id} deal={deal} />
-              : <SponsoredEmptySlot key={`empty-deal-${slot}`} slot={slot} />;
-          })}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <span className="text-[11.5px] font-medium text-gray-400">独立于机场评分 · 官方合作招商中</span>
+          <RouteLink href="/apply" className="text-[11.5px] font-extrabold text-indigo-600 hover:text-indigo-800 hover:underline focus-visible:rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300">申请入驻 &gt;</RouteLink>
         </div>
-        {deals.length === 0 ? <span className="sr-only">当前暂无有效广告</span> : null}
       </div>
+      <div className="grid grid-cols-1 gap-3">
+        {AIRPORT_HOME_AD_SLOTS.map((slot) => {
+          const deal = dealsBySlot.get(slot);
+          return deal
+            ? <SponsoredDealCard key={deal.campaign_id} deal={deal} />
+            : <SponsoredEmptySlot key={`empty-deal-${slot}`} slot={slot} />;
+        })}
+      </div>
+      {deals.length === 0 ? <span className="sr-only">当前暂无有效广告</span> : null}
     </section>
   );
 }
@@ -485,9 +484,9 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
   return (
     <motion.article
       ref={ref}
-      whileHover={{ y: -3 }}
+      whileHover={{ y: -2 }}
       transition={{ duration: 0.2 }}
-      className="group relative flex min-h-[215px] flex-col justify-between overflow-hidden rounded-[20px] border border-gray-200 bg-gradient-to-b from-slate-50/60 to-white p-4 shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md"
+      className="group relative flex min-h-[196px] flex-col justify-between overflow-hidden rounded-[18px] border border-gray-200 bg-gradient-to-b from-slate-50/60 to-white p-4 shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md motion-reduce:transform-none"
     >
       <div className="space-y-2.5">
         <div className="flex items-start justify-between gap-2">
@@ -513,8 +512,8 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
             <span className="font-mono text-[15px] font-black text-indigo-600">¥{formatPrice(deal.plan_price_month)} <span className="text-[10.5px] font-normal text-gray-400">/起</span></span>
           </div>
         </div>
-        <div className="flex flex-col gap-1.5 pt-0.5">
-          <RouteLink href={deal.report_url} className="flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-stone-900 bg-stone-900 px-2 py-2 text-center text-[12px] font-black leading-none text-white shadow-sm hover:bg-black">
+        <div className="grid grid-cols-2 gap-2 pt-0.5">
+          <RouteLink href={deal.report_url} className="flex min-h-10 w-full items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-stone-900 bg-stone-900 px-2 py-2 text-center text-[12px] font-black leading-none text-white shadow-sm hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:ring-offset-2">
             查看报告 <span className="text-[10px]">&gt;</span>
           </RouteLink>
           <a
@@ -529,7 +528,7 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
               targetKind: 'website',
               targetUrl: websiteHref,
             })}
-            className="flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-2 py-2 text-center text-[12px] font-bold leading-none text-gray-700 shadow-sm hover:bg-gray-50"
+            className="flex min-h-10 w-full items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-2 py-2 text-center text-[12px] font-bold leading-none text-gray-700 shadow-sm hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2"
           >
             官网 <ExternalLink className="h-3 w-3 text-gray-400" />
           </a>
@@ -541,12 +540,12 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
 
 function SponsoredEmptySlot({ slot }: { slot: SponsoredDeal['home_slot']; key?: React.Key }) {
   return (
-    <RouteLink href="/apply" className="group relative flex min-h-[215px] flex-col items-center justify-between overflow-hidden rounded-[20px] border border-dashed border-gray-300 bg-gray-50/70 p-4 text-center transition-all hover:border-indigo-300 hover:bg-indigo-50/20">
+    <RouteLink href="/apply" className="group relative flex min-h-[140px] flex-col items-center justify-between overflow-hidden rounded-[18px] border border-dashed border-gray-300 bg-gray-50/70 p-4 text-center transition-all hover:border-indigo-300 hover:bg-indigo-50/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2">
       <div className="my-auto space-y-2">
         <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 transition-transform group-hover:scale-110"><Sparkles className="h-5 w-5" /></div>
         <span className="block text-[14px] font-extrabold text-gray-800">首页 {slot} 号广告位招募中</span>
       </div>
-      <span className="w-full rounded-xl border border-gray-200 bg-white py-2 text-[12px] font-bold text-gray-700 transition-colors group-hover:border-stone-900 group-hover:bg-stone-900 group-hover:text-white">联系商务合作</span>
+      <span className="flex min-h-10 w-full items-center justify-center rounded-xl border border-gray-200 bg-white py-2 text-[12px] font-bold text-gray-700 transition-colors group-hover:border-stone-900 group-hover:bg-stone-900 group-hover:text-white">联系商务合作</span>
     </RouteLink>
   );
 }
@@ -707,9 +706,9 @@ function RankingMobileCard({ item, index, date }: { item: FullRankingItem; index
   );
 }
 
-function HomeSidebar({ news }: { news: NewsUpdate[] }) {
+function HomeSidebar({ news, deals }: { news: NewsUpdate[]; deals: SponsoredDeal[] }) {
   return (
-    <aside className="space-y-6 lg:col-span-4" aria-label="工具与最新动态">
+    <aside className="space-y-6 lg:col-span-4" aria-label="工具、商业合作与最新动态">
       <section className="relative overflow-hidden rounded-[24px] bg-indigo-950 p-6 text-white shadow-md">
         <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-indigo-500/10 blur-xl" />
         <div className="absolute bottom-0 left-6 h-32 w-32 rounded-full bg-violet-500/10 blur-xl" />
@@ -720,6 +719,8 @@ function HomeSidebar({ news }: { news: NewsUpdate[] }) {
           <RouteLink href="/rankings/all" className="flex w-fit items-center gap-1 rounded-xl border border-white/10 bg-white/10 px-[18px] py-2.5 text-[13px] font-bold text-indigo-200 transition-all hover:bg-white hover:text-black">立即探索 <ChevronRight className="h-3.5 w-3.5" /></RouteLink>
         </div>
       </section>
+
+      <SponsoredDeals deals={deals} />
 
       <section className="space-y-4 rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between border-b border-gray-50 pb-3">

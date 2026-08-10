@@ -356,17 +356,34 @@ test('React homepage uses shared five-slot commercial cards and plain summary sc
   const sponsoredDealCardSource = source.slice(sponsoredDealCardStart, sponsoredEmptySlotStart);
   const sponsoredEmptySlotSource = source.slice(sponsoredEmptySlotStart, rankingPreviewStart);
   const summaryBoardItemSource = source.slice(summaryBoardItemStart, summaryRankStart);
+  const pageBodyStart = source.indexOf('return (', source.indexOf('export function HomePageV3'));
+  const homeHeroStart = source.indexOf('function HomeHero');
+  const homeSidebarStart = source.indexOf('function HomeSidebar');
+  const summaryBoardsStart = source.indexOf('function SummaryBoards', homeSidebarStart);
+  const pageBodySource = source.slice(pageBodyStart, homeHeroStart);
+  const homeSidebarSource = source.slice(homeSidebarStart, summaryBoardsStart);
 
   assert.match(source, /import \{ AIRPORT_HOME_AD_SLOTS, type AirportHomeAdSlot \} from '\.\.\/\.\.\/\.\.\/shared\/airportAds';/);
   assert.match(source, /home_slot: AirportHomeAdSlot;/);
   assert.match(sponsoredDealsSource, /AIRPORT_HOME_AD_SLOTS\.map\(\(slot\) =>/);
   assert.doesNotMatch(sponsoredDealsSource, /Array\.from\(\{ length: 4 \}\)/);
-  assert.match(sponsoredDealsSource, /grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5/);
+  assert.match(pageBodySource, /<HomeSidebar[\s\S]*news=\{data\.news_updates \|\| \[\]\}[\s\S]*deals=\{data\.sponsored_deals\?\.items \|\| \[\]\}/);
+  assert.doesNotMatch(pageBodySource, /<>\s*<SponsoredDeals deals=/);
+  assert.match(homeSidebarSource, /function HomeSidebar\(\{ news, deals \}/);
+  assert.ok(homeSidebarSource.indexOf('探索更多优质机场') < homeSidebarSource.indexOf('<SponsoredDeals deals={deals}'));
+  assert.ok(homeSidebarSource.indexOf('<SponsoredDeals deals={deals}') < homeSidebarSource.indexOf('实用工具'));
+  assert.ok(homeSidebarSource.indexOf('实用工具') < homeSidebarSource.indexOf('公告与动态'));
+  assert.match(sponsoredDealsSource, /grid grid-cols-1 gap-3/);
+  assert.doesNotMatch(sponsoredDealsSource, /sm:grid-cols-2|lg:grid-cols-5/);
+  assert.match(sponsoredDealCardSource, /min-h-\[196px\]/);
+  assert.match(sponsoredDealCardSource, /rounded-\[18px\]/);
+  assert.match(sponsoredDealCardSource, /grid grid-cols-2 gap-2/);
+  assert.match(sponsoredDealCardSource, /min-h-10/);
+  assert.match(sponsoredDealCardSource, /whileHover=\{\{ y: -2 \}\}/);
   assert.match(sponsoredDealCardSource, /p-4/);
   assert.match(sponsoredEmptySlotSource, /p-4/);
-  assert.match(sponsoredDealCardSource, /flex flex-col gap-1\.5/);
-  assert.match(sponsoredDealCardSource, /<RouteLink href=\{deal\.report_url\} className="flex w-full/);
-  assert.match(sponsoredDealCardSource, /className="flex w-full items-center justify-center[^"]*"\s*>\s*官网/);
+  assert.match(sponsoredDealCardSource, /<RouteLink[\s\S]*href=\{deal\.report_url\}[\s\S]*className="flex min-h-10 w-full/);
+  assert.match(sponsoredDealCardSource, /className="flex min-h-10 w-full items-center justify-center[^"]*"\s*>\s*官网/);
   assert.ok(sponsoredDealCardSource.indexOf('<RouteLink href={deal.report_url}') < sponsoredDealCardSource.indexOf('<a\n            href={websiteHref}'));
 
   assert.match(summaryBoardItemSource, /bg-rose-600[^>]*>风险<\/span>/);
