@@ -185,10 +185,16 @@ class NodeSelectionResult:
 def main() -> int:
     try:
         config = build_config()
-        ensure_sing_box(config.sing_box_bin)
         sampled_at = shanghai_now_iso()
         sample_date = sampled_at[:10]
-        airports = resolve_airports(config)
+        resolved_airports = resolve_airports(config)
+        airports, skipped_airports = filter_legacy_enabled_airports(
+            config,
+            resolved_airports,
+            sample_date,
+        )
+        if airports:
+            ensure_sing_box(config.sing_box_bin)
         results: list[dict[str, Any]] = []
         failures: list[dict[str, Any]] = []
         submitted_any = collect_airport_results(config, airports, sampled_at, results, failures)
@@ -208,7 +214,9 @@ def main() -> int:
 
         output = {
             "sampled_at": sampled_at,
-            "airport_count": len(airports),
+            "airport_count": len(resolved_airports),
+            "legacy_enabled_airport_count": len(airports),
+            "skipped_airports": skipped_airports,
             "success_count": len(results),
             "failure_count": len(failures),
             "results": results,
@@ -372,6 +380,37 @@ def resolve_airports(config: Config) -> list[dict[str, Any]]:
             "Set AIRPORT_ID or refine AIRPORT_KEYWORD.",
         )
     return filter_runnable_airports([items[0]])
+
+
+def filter_legacy_enabled_airports(
+    config: Config,
+    airports: list[dict[str, Any]],
+    date: str,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    enabled: list[dict[str, Any]] = []
+    skipped: list[dict[str, Any]] = []
+    for airport in airports:
+        airport_id = int(airport["id"])
+        settings_view = get_json(
+            config,
+            f"/api/v1/admin/airports/{airport_id}/performance-probe-settings?{urlencode({'date': date})}",
+        )
+        legacy_setting = next(
+            (
+                row
+                for row in settings_view.get("settings", [])
+                if row.get("probe_id") == "legacy-control"
+            ),
+            None,
+        )
+        if legacy_setting and truthy_airport_flag(legacy_setting.get("test_enabled"), default=False):
+            enabled.append(airport)
+            continue
+        skipped.append({
+            "airport_id": airport_id,
+            "airport_name": str(airport.get("name", airport_id)),
+        })
+    return enabled, skipped
 
 
 def list_airports(config: Config, status: str | None) -> list[dict[str, Any]]:

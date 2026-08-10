@@ -374,3 +374,19 @@ test('ScoreRepository.updateManualTotalScore saves and clears manual total score
   assert.match(calls[1].sql, /JSON_REMOVE/);
   assert.deepEqual(calls[1].params, [7, '2026-03-24']);
 });
+
+test('ScoreRepository.deleteDaily removes only the requested airport date', async () => {
+  const calls: Array<{ sql: string; params: unknown[] }> = [];
+  const repository = new ScoreRepository({
+    execute: async (sql: string, params: unknown[]) => {
+      calls.push({ sql, params });
+      return [{ affectedRows: 1 }];
+    },
+  } as never);
+
+  await repository.deleteDaily(9, '2026-08-10');
+
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /DELETE FROM airport_scores_daily/);
+  assert.deepEqual(calls[0].params, [9, '2026-08-10']);
+});

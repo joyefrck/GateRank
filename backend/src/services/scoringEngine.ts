@@ -149,7 +149,7 @@ export function computeScore(
       performance_included_probes: (
         metrics.performance_included_probe_ids?.length
           ? metrics.performance_included_probe_ids
-          : ['legacy-control']
+          : []
       ).join(','),
       price_score: round2(priceScore),
       value_score: round2(valueScore),

@@ -172,35 +172,20 @@ test('aggregateForDate prefers latest performance run metrics over stale perform
         written.push(input);
       },
     },
-    performanceRunRepository: {
-      getLatestByAirportAndDate: async () => ({
-        id: 9,
+    performanceProbeSettingRepository: {
+      getByAirport: async () => ({
         airport_id: 1,
-        sampled_at: '2026-05-27T01:30:52+08:00',
-        source: 'manual-performance',
-        status: 'success',
-        subscription_format: 'base64',
-        parsed_nodes_count: 23,
-        supported_nodes_count: 23,
-        selected_nodes: [],
-        tested_nodes: [
-          { name: 'US', region: 'US', type: 'vless', status: 'ok', download_mbps: 75.59 },
-          { name: 'JP', region: 'JP', type: 'vless', status: 'ok', download_mbps: 167.6 },
-          { name: 'HK', region: 'HK', type: 'vless', status: 'ok', download_mbps: 208.2 },
+        config_version: 1,
+        settings: [
+          { probe_id: 'legacy-control', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+          { probe_id: 'cn-shanghai', test_enabled: false, include_in_result: false, updated_by: null, updated_at: null },
+          { probe_id: 'cn-guangzhou', test_enabled: false, include_in_result: false, updated_by: null, updated_at: null },
         ],
-        available_nodes_count: 23,
-        unavailable_nodes_count: 0,
-        node_availability_percent: 100,
-        node_unavailability_percent: 0,
-        median_latency_ms: 62.79,
-        median_download_mbps: 167.6,
-        packet_loss_percent: 0,
-        error_code: null,
-        error_message: null,
-        diagnostics: {
-          packet_loss_measurement: 'proxy_http_request_failure_rate_v1',
-        },
       }),
+    },
+    performanceRunRepository: {
+      getLatestByAirportAndDate: async () => legacyPerformanceRun(),
+      listByAirportAndDate: async () => [legacyPerformanceRun()],
     },
   });
 
@@ -258,8 +243,8 @@ test('aggregateAirportForDate equally aggregates a complete official mainland se
   assert.equal(written[0].performance_rule_summary, 'cn_dual_probe_v1');
 });
 
-test('aggregateAirportForDate preserves prior metrics when an official region is missing', async () => {
-  let writes = 0;
+test('aggregateAirportForDate scores the successful official region when its peer is missing', async () => {
+  const written: DailyMetrics[] = [];
   const service = new AggregationService({
     airportRepository: { listAll: async () => [{ id: 9, status: 'normal', is_listed: true }] },
     probeSampleRepository: {
@@ -268,7 +253,7 @@ test('aggregateAirportForDate preserves prior metrics when an official region is
     },
     metricsRepository: {
       getLatestByAirportBeforeDate: async () => null,
-      upsertDaily: async () => { writes += 1; },
+      upsertDaily: async (input) => { written.push(input); },
     },
     performanceProbeSettingRepository: {
       getByAirport: async () => ({
@@ -283,14 +268,71 @@ test('aggregateAirportForDate preserves prior metrics when an official region is
     },
     performanceRunRepository: {
       getLatestByAirportAndDate: async () => null,
-      listByAirportAndDate: async () => [regionalRun('cn-shanghai', 4, 160, 80)],
+      listByAirportAndDate: async () => [
+        regionalRun('cn-shanghai', 4, 160, 80),
+        {
+          ...regionalRun('cn-guangzhou', 0, 999, 1),
+          id: 90,
+          probe_id: 'legacy-control',
+          region_code: null,
+          provider: null,
+          bandwidth_mbps: null,
+          scoring_rule_version: 'legacy_v1',
+        },
+      ],
     },
   });
 
   const result = await service.aggregateAirportForDate(9, '2026-08-08');
 
-  assert.deepEqual(result, { aggregated: 0, pending_probe_ids: ['cn-guangzhou'] });
-  assert.equal(writes, 0);
+  assert.deepEqual(result, { aggregated: 1, pending_probe_ids: ['cn-guangzhou'] });
+  assert.equal(written.length, 1);
+  assert.deepEqual(written[0].performance_included_probe_ids, ['cn-shanghai']);
+  assert.deepEqual(written[0].performance_pending_probe_ids, ['cn-guangzhou']);
+  assert.equal(written[0].median_download_mbps, 160);
+  assert.equal(written[0].median_latency_ms, 80);
+  assert.equal(typeof written[0].performance_score, 'number');
+});
+
+test('aggregateAirportForDate never falls back to a disabled legacy run', async () => {
+  const written: DailyMetrics[] = [];
+  const service = new AggregationService({
+    airportRepository: { listAll: async () => [{ id: 9, status: 'normal', is_listed: true }] },
+    probeSampleRepository: {
+      getProbeSamplesInRange: async () => [regionalAvailabilitySample(9, '2026-08-08')],
+      getPacketLossSamplesByDate: async () => [],
+    },
+    metricsRepository: {
+      getLatestByAirportBeforeDate: async () => null,
+      upsertDaily: async (input) => { written.push(input); },
+    },
+    performanceProbeSettingRepository: {
+      getByAirport: async () => ({
+        airport_id: 9,
+        config_version: 4,
+        settings: [
+          { probe_id: 'legacy-control', test_enabled: false, include_in_result: false, updated_by: null, updated_at: null },
+          { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+          { probe_id: 'cn-guangzhou', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+        ],
+      }),
+    },
+    performanceRunRepository: {
+      getLatestByAirportAndDate: async () => legacyPerformanceRun(),
+      listByAirportAndDate: async () => [legacyPerformanceRun()],
+    },
+  });
+
+  const result = await service.aggregateAirportForDate(9, '2026-08-08');
+
+  assert.deepEqual(result, {
+    aggregated: 1,
+    pending_probe_ids: ['cn-guangzhou', 'cn-shanghai'],
+  });
+  assert.equal(written.length, 1);
+  assert.equal(written[0].performance_score, null);
+  assert.deepEqual(written[0].performance_included_probe_ids, []);
+  assert.deepEqual(written[0].performance_pending_probe_ids, ['cn-guangzhou', 'cn-shanghai']);
 });
 
 function regionalAvailabilitySample(airportId: number, date: string): ProbeSample {
@@ -304,6 +346,49 @@ function regionalAvailabilitySample(airportId: number, date: string): ProbeSampl
     download_mbps: null,
     availability: true,
     source: 'scheduler-stability',
+  };
+}
+
+function legacyPerformanceRun(): PerformanceRun {
+  return {
+    id: 9,
+    airport_id: 1,
+    sampled_at: '2026-05-27T01:30:52+08:00',
+    sampled_date: '2026-05-27',
+    source: 'manual-performance',
+    status: 'success',
+    job_id: null,
+    probe_id: 'legacy-control',
+    region_code: null,
+    provider: null,
+    bandwidth_mbps: null,
+    run_mode: 'official',
+    test_profile: 'proxy_multi_target_v2',
+    scoring_rule_version: 'legacy_v1',
+    config_version: 0,
+    calibration_status: 'not_required',
+    calibration_mbps: null,
+    review_status: 'normal',
+    review_reasons: [],
+    subscription_format: 'base64',
+    parsed_nodes_count: 23,
+    supported_nodes_count: 23,
+    selected_nodes: [],
+    tested_nodes: [
+      { name: 'US', region: 'US', type: 'vless', status: 'ok', download_mbps: 75.59 },
+      { name: 'JP', region: 'JP', type: 'vless', status: 'ok', download_mbps: 167.6 },
+      { name: 'HK', region: 'HK', type: 'vless', status: 'ok', download_mbps: 208.2 },
+    ],
+    available_nodes_count: 23,
+    unavailable_nodes_count: 0,
+    node_availability_percent: 100,
+    node_unavailability_percent: 0,
+    median_latency_ms: 62.79,
+    median_download_mbps: 167.6,
+    packet_loss_percent: 0,
+    error_code: null,
+    error_message: null,
+    diagnostics: { packet_loss_measurement: 'proxy_http_request_failure_rate_v1' },
   };
 }
 

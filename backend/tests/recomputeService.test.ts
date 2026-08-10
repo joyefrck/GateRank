@@ -176,6 +176,9 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
       upsertDaily: async (airportId: number, date: string, score: ScoreBreakdown) => {
         storedScores.set(`${airportId}:${date}`, score);
       },
+      deleteDaily: async (airportId: number, date: string) => {
+        storedScores.delete(`${airportId}:${date}`);
+      },
     },
     rankingRepository: {
       replaceForDate: async (_date, listType, rows) => {
@@ -344,6 +347,9 @@ test('recomputeForDate preserves manual total score while refreshing formula sco
           },
         });
       },
+      deleteDaily: async (airportId: number, date: string) => {
+        storedScores.delete(`${airportId}:${date}`);
+      },
     },
     rankingRepository: {
       replaceForDate: async (_date, listType, rows) => {
@@ -490,6 +496,9 @@ test('recomputeAirportForDate only updates target airport and rebuilds rankings'
       upsertDaily: async (airportId: number, date: string, score: ScoreBreakdown) => {
         storedScores.set(`${airportId}:${date}`, score);
       },
+      deleteDaily: async (airportId: number, date: string) => {
+        storedScores.delete(`${airportId}:${date}`);
+      },
     },
     rankingRepository: {
       replaceForDate: async (_date, listType, rows) => {
@@ -506,4 +515,63 @@ test('recomputeAirportForDate only updates target airport and rebuilds rankings'
   assert.equal(storedAutoTags.has(1), true);
   assert.equal(storedAutoTags.has(2), false);
   assert.equal(replaced.size, 5);
+});
+
+test('recomputeAirportForDate removes todays score when every included performance probe is pending', async () => {
+  const airport: Airport = {
+    id: 1,
+    name: 'Pending',
+    website: 'https://pending.example.com',
+    status: 'normal',
+    is_listed: true,
+    plan_price_month: 20,
+    has_trial: false,
+    tags: [],
+    manual_tags: [],
+    auto_tags: [],
+    created_at: '2026-03-10',
+  };
+  const metrics: DailyMetrics = {
+    airport_id: 1,
+    date: '2026-08-10',
+    uptime_percent_30d: 100,
+    median_latency_ms: 10,
+    median_download_mbps: 900,
+    packet_loss_percent: 0,
+    performance_score: null,
+    performance_included_probe_ids: [],
+    performance_pending_probe_ids: ['cn-guangzhou', 'cn-shanghai'],
+    stable_days_streak: 30,
+    domain_ok: true,
+    ssl_days_left: 30,
+    recent_complaints_count: 0,
+    history_incidents: 0,
+  };
+  const deleted: Array<[number, string]> = [];
+  let upserts = 0;
+  const svc = new RecomputeService({
+    airportRepository: {
+      listAll: async () => [airport],
+      getById: async () => airport,
+      setAutoTags: async () => undefined,
+    },
+    metricsRepository: {
+      getByDate: async () => [metrics],
+      getByAirportAndDate: async () => metrics,
+    },
+    scoreRepository: {
+      getTimeSeriesBeforeDate: async () => [],
+      getTrend: async () => [],
+      getByDate: async () => [],
+      upsertDaily: async () => { upserts += 1; },
+      deleteDaily: async (airportId, date) => { deleted.push([airportId, date]); },
+    },
+    rankingRepository: { replaceForDate: async () => undefined },
+  });
+
+  const result = await svc.recomputeAirportForDate('2026-08-10', 1);
+
+  assert.deepEqual(result, { recomputed: 0 });
+  assert.deepEqual(deleted, [[1, '2026-08-10']]);
+  assert.equal(upserts, 0);
 });

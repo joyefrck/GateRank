@@ -227,6 +227,14 @@ export class ScoreRepository {
     );
   }
 
+  async deleteDaily(airportId: number, date: string): Promise<void> {
+    await this.pool.execute<ResultSetHeader>(
+      `DELETE FROM airport_scores_daily
+        WHERE airport_id = ? AND date = ?`,
+      [airportId, date],
+    );
+  }
+
   async updateManualTotalScore(
     airportId: number,
     date: string,

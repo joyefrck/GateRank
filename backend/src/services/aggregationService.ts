@@ -66,9 +66,6 @@ export class AggregationService {
 
   private async aggregateAirport(airportId: number, date: string): Promise<AirportAggregationResult> {
     const performanceSelection = await this.resolvePerformanceSelection(airportId, date);
-    if (performanceSelection.pendingProbeIds.length > 0) {
-      return { aggregated: 0, pending_probe_ids: performanceSelection.pendingProbeIds };
-    }
     const rangeStart = dateDaysAgo(date, 29);
     const samples = await this.deps.probeSampleRepository.getProbeSamplesInRange(
       airportId,
@@ -176,7 +173,7 @@ export class AggregationService {
       performance_included_probe_ids: regionalAggregate?.included_probe_ids
         ?? (performanceRun ? ['legacy-control'] : []),
       performance_review_status: performanceSelection.reviewStatus,
-      performance_pending_probe_ids: [],
+      performance_pending_probe_ids: performanceSelection.pendingProbeIds,
       available_nodes_count: aggregateNullableCount(performanceRuns, 'available_nodes_count')
         ?? base?.available_nodes_count ?? null,
       unavailable_nodes_count: aggregateNullableCount(performanceRuns, 'unavailable_nodes_count')
@@ -196,7 +193,7 @@ export class AggregationService {
       recent_complaints_count: base?.recent_complaints_count ?? 0,
       history_incidents: base?.history_incidents ?? 0,
     });
-    return { aggregated: 1, pending_probe_ids: [] };
+    return { aggregated: 1, pending_probe_ids: performanceSelection.pendingProbeIds };
   }
 
   private async resolvePerformanceSelection(
@@ -212,12 +209,7 @@ export class AggregationService {
     const runRepository = this.deps.performanceRunRepository;
     const settingRepository = this.deps.performanceProbeSettingRepository;
     if (!runRepository) return emptyPerformanceSelection();
-    if (!settingRepository || !runRepository.listByAirportAndDate) {
-      return {
-        ...emptyPerformanceSelection(),
-        legacyRun: await runRepository.getLatestByAirportAndDate(airportId, date),
-      };
-    }
+    if (!settingRepository || !runRepository.listByAirportAndDate) return emptyPerformanceSelection();
 
     const [settings, runs] = await Promise.all([
       settingRepository.getByAirport(airportId),
@@ -234,11 +226,12 @@ export class AggregationService {
       if (run) selectedRuns.set(probeId, run);
       else pendingProbeIds.push(probeId);
     }
-    if (pendingProbeIds.length > 0) {
+    const officialRuns = requiredProbeIds
+      .map((probeId) => selectedRuns.get(probeId))
+      .filter((run): run is PerformanceRun => Boolean(run));
+    if (officialRuns.length === 0) {
       return { ...emptyPerformanceSelection(), pendingProbeIds };
     }
-
-    const officialRuns = requiredProbeIds.map((probeId) => selectedRuns.get(probeId)!);
     if (officialRuns.length === 1 && officialRuns[0].probe_id === 'legacy-control') {
       return {
         ...emptyPerformanceSelection(),
@@ -257,7 +250,7 @@ export class AggregationService {
       aggregate: aggregatePerformanceRegions(scored),
       legacyRun: null,
       regionalRuns: officialRuns,
-      pendingProbeIds: [],
+      pendingProbeIds,
       reviewStatus: aggregateReviewStatus(officialRuns),
     };
   }

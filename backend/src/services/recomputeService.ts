@@ -23,6 +23,7 @@ export interface RecomputeDependencies {
     getTrend(airportId: number, startDate: string, endDate: string): Promise<AirportScoreDaily[]>;
     getByDate(date: string): Promise<AirportScoreDaily[]>;
     upsertDaily(airportId: number, date: string, score: ScoreBreakdown): Promise<void>;
+    deleteDaily(airportId: number, date: string): Promise<void>;
   };
   rankingRepository: {
     replaceForDate(
@@ -53,6 +54,10 @@ export class RecomputeService {
       const m = metricsMap.get(airport.id);
       if (!m) {
         noMetricsAirportIds.push(airport.id);
+        continue;
+      }
+      if (isPerformancePending(m)) {
+        await this.deps.scoreRepository.deleteDaily(airport.id, date);
         continue;
       }
 
@@ -121,6 +126,11 @@ export class RecomputeService {
 
     if (!metrics) {
       await this.deps.airportRepository.setAutoTags(airportId, ['不推荐']);
+      await this.rebuildRankingsForDate(date);
+      return { recomputed: 0 };
+    }
+    if (isPerformancePending(metrics)) {
+      await this.deps.scoreRepository.deleteDaily(airportId, date);
       await this.rebuildRankingsForDate(date);
       return { recomputed: 0 };
     }
@@ -210,4 +220,10 @@ function preserveManualTotalScore(score: ScoreBreakdown, scoreTrend: AirportScor
 
 function isRunnableAirport(airport: Pick<Airport, 'status' | 'is_listed'>): boolean {
   return airport.status !== 'down' && airport.is_listed !== false;
+}
+
+function isPerformancePending(metrics: DailyMetrics): boolean {
+  return Boolean(metrics.performance_pending_probe_ids?.length)
+    && !metrics.performance_included_probe_ids?.length
+    && !(typeof metrics.performance_score === 'number' && Number.isFinite(metrics.performance_score));
 }

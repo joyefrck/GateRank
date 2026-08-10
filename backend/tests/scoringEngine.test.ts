@@ -197,6 +197,7 @@ test('computeScore returns bounded and weighted output', () => {
   assert.equal(out.details.ssl_penalty, 0);
   assert.equal(out.details.complaint_penalty, 3);
   assert.equal(out.details.history_penalty, 0);
+  assert.equal(out.details.performance_included_probes, '');
   assert.equal(out.details.total_penalty, 3);
   assert.equal(out.details.risk_level, 'low');
 });

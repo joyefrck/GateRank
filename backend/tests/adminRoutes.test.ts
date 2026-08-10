@@ -6,7 +6,7 @@ import { errorHandler, HttpError } from '../src/middleware/errorHandler';
 import { createAdminRoutes } from '../src/routes/adminRoutes';
 import { SmtpSendError } from '../src/services/mailService';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
-import type { PerformanceRunInput, PerformanceRunTarget, ProbeSampleInput, ReportView } from '../src/types/domain';
+import type { PerformanceRun, PerformanceRunInput, PerformanceRunTarget, ProbeSampleInput, ReportView } from '../src/types/domain';
 import { buildPerformanceNodeKey, buildPerformanceNodeMatchIdentity } from '../src/utils/performanceNodeKey';
 import { getDateInTimezone } from '../src/utils/time';
 import type { AirportHomeAdSlotPrices } from '../../shared/airportAds';
@@ -145,6 +145,106 @@ function adminProbe(probeId: 'legacy-control' | 'cn-shanghai' | 'cn-guangzhou') 
     last_seen_at: null,
     created_at: `${getDateInTimezone()}T00:00:00+08:00`,
     updated_at: `${getDateInTimezone()}T00:00:00+08:00`,
+  };
+}
+
+test('GET dashboard labels only actually aggregated runs as participating', async () => {
+  const runs = [
+    dashboardPerformanceRun(1, 'legacy-control', 'official'),
+    dashboardPerformanceRun(2, 'cn-shanghai', 'official'),
+    dashboardPerformanceRun(3, 'cn-guangzhou', 'shadow'),
+  ];
+  const app = express();
+  app.use(express.json());
+  app.use(createAdminRoutes({
+    airportRepository: stubAirportRepository(),
+    airportApplicationRepository: stubAirportApplicationRepository(),
+    probeSampleRepository: stubProbeSampleRepository(),
+    performanceRunRepository: {
+      ...stubPerformanceRunRepository(),
+      getLatestByAirportAndDate: async () => runs[1],
+      getLatestByAirportBeforeDate: async () => runs[1],
+      listByAirportAndDate: async () => runs,
+    },
+    metricsRepository: {
+      ...stubMetricsRepository(),
+      getByAirportAndDate: async () => ({
+        airport_id: 1,
+        date: '2026-08-10',
+        performance_included_probe_ids: ['cn-shanghai'],
+        performance_pending_probe_ids: ['cn-guangzhou'],
+      }),
+    },
+    scoreRepository: { getByAirportAndDate: async () => null, getTrend: async () => [] },
+    recomputeService: stubRecomputeService(),
+    aggregationService: stubAggregationService(),
+    manualJobService: stubManualJobService(),
+    auditRepository: { log: async () => undefined },
+    publicViewService: stubPublicViewService(),
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/1/dashboard?date=2026-08-10`);
+    assert.equal(response.status, 200);
+    const data = await response.json() as {
+      performance: { probe_runs: Array<{ probe_id: string; participation_state: string }> };
+    };
+    assert.deepEqual(
+      data.performance.probe_runs.map((run) => [run.probe_id, run.participation_state]),
+      [
+        ['legacy-control', '未参与评分'],
+        ['cn-shanghai', '参与评分'],
+        ['cn-guangzhou', '影子测试'],
+      ],
+    );
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
+function dashboardPerformanceRun(
+  id: number,
+  probeId: PerformanceRun['probe_id'],
+  runMode: PerformanceRun['run_mode'],
+): PerformanceRun {
+  return {
+    id,
+    airport_id: 1,
+    sampled_at: '2026-08-10T04:30:00+08:00',
+    sampled_date: '2026-08-10',
+    source: 'scheduler-performance',
+    status: 'success',
+    job_id: null,
+    probe_id: probeId,
+    region_code: probeId === 'legacy-control' ? null : probeId,
+    provider: probeId === 'legacy-control' ? null : 'tencent-cloud',
+    bandwidth_mbps: probeId === 'legacy-control' ? null : 200,
+    run_mode: runMode,
+    test_profile: 'proxy_multi_target_v2',
+    scoring_rule_version: probeId === 'legacy-control' ? 'legacy_v1' : 'cn_dual_probe_v1',
+    config_version: probeId === 'legacy-control' ? 0 : 1,
+    calibration_status: 'not_required',
+    calibration_mbps: null,
+    review_status: 'normal',
+    review_reasons: [],
+    subscription_format: 'plain',
+    parsed_nodes_count: 1,
+    supported_nodes_count: 1,
+    selected_nodes: [],
+    tested_nodes: [],
+    available_nodes_count: 1,
+    unavailable_nodes_count: 0,
+    node_availability_percent: 100,
+    node_unavailability_percent: 0,
+    median_latency_ms: 100,
+    median_download_mbps: 100,
+    packet_loss_percent: 0,
+    error_code: null,
+    error_message: null,
+    diagnostics: {},
   };
 }
 

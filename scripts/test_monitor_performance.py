@@ -16,6 +16,7 @@ from scripts.monitor_performance import (
     check_nodes_availability,
     collect_airport_results,
     fetch_subscription,
+    filter_legacy_enabled_airports,
     list_airports,
     nodes_from_snapshot,
     normalize_subscription_text,
@@ -541,6 +542,35 @@ proxies:
             airports = list_airports(config, None)
 
         self.assertEqual([airport["id"] for airport in airports], [1, 4])
+
+    def test_filter_legacy_enabled_airports_obeys_each_airport_switch(self) -> None:
+        config = self.make_config()
+        airports = [
+            {"id": 1, "name": "Center enabled"},
+            {"id": 2, "name": "Center disabled"},
+        ]
+
+        def fake_get_json(_config, path):
+            enabled = "/airports/1/" in path
+            return {
+                "settings": [
+                    {
+                        "probe_id": "legacy-control",
+                        "test_enabled": enabled,
+                        "include_in_result": enabled,
+                    },
+                ],
+            }
+
+        with patch("scripts.monitor_performance.get_json", side_effect=fake_get_json):
+            enabled, skipped = filter_legacy_enabled_airports(
+                config,
+                airports,
+                "2026-08-10",
+            )
+
+        self.assertEqual([airport["id"] for airport in enabled], [1])
+        self.assertEqual(skipped, [{"airport_id": 2, "airport_name": "Center disabled"}])
 
     def test_collect_airport_results_uses_distinct_proxy_ports_and_keeps_going_after_failure(self) -> None:
         config = self.make_config()

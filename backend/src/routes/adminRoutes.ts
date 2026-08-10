@@ -2332,6 +2332,9 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const latestPerformanceDate =
         stringOrNull(latestPerformanceRunObj.sampled_at)?.slice(0, 10) ?? null;
       const performanceDiagnostics = toObjectOrEmpty(latestPerformanceRunObj.diagnostics);
+      const includedPerformanceProbeIds = new Set(
+        toSafeStringList(metricsObj.performance_included_probe_ids),
+      );
       const performanceDataMode =
         performanceRun
           ? '当日实测'
@@ -2343,7 +2346,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           const targets = deps.performanceRunTargetRepository
             ? await deps.performanceRunTargetRepository.listByRun(run.id)
             : [];
-          return buildAdminPerformanceProbeRun(run, targets);
+          return buildAdminPerformanceProbeRun(run, targets, includedPerformanceProbeIds);
         }),
       );
 
@@ -4383,6 +4386,7 @@ function toSafeStringList(value: unknown): string[] {
 function buildAdminPerformanceProbeRun(
   run: PerformanceRun,
   targets: PerformanceRunTarget[],
+  includedProbeIds: ReadonlySet<string>,
 ): Record<string, unknown> {
   const targetGroups = new Map<string, PerformanceRunTarget[]>();
   for (const target of targets) {
@@ -4405,10 +4409,16 @@ function buildAdminPerformanceProbeRun(
       error_codes: [...new Set(rows.map((target) => target.error_code).filter(Boolean))],
     };
   });
+  const probeId = run.probe_id || 'legacy-control';
+  const participationState = includedProbeIds.has(probeId)
+    ? '参与评分'
+    : run.run_mode === 'shadow'
+      ? '影子测试'
+      : '未参与评分';
   return {
     id: run.id,
     job_id: run.job_id ?? null,
-    probe_id: run.probe_id || 'legacy-control',
+    probe_id: probeId,
     region_code: run.region_code ?? null,
     provider: run.provider ?? null,
     bandwidth_mbps: run.bandwidth_mbps ?? null,
@@ -4416,7 +4426,7 @@ function buildAdminPerformanceProbeRun(
     source: run.source,
     status: run.status,
     run_mode: run.run_mode || 'official',
-    participation_state: run.run_mode === 'shadow' ? '影子测试' : '参与评分',
+    participation_state: participationState,
     test_profile: run.test_profile || 'legacy_single_target_v1',
     scoring_rule_version: run.scoring_rule_version || 'legacy_v1',
     config_version: Number(run.config_version || 0),

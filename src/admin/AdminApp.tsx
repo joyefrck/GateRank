@@ -11410,10 +11410,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                       <summary className="flex min-h-10 cursor-pointer list-none flex-wrap items-center justify-between gap-2 px-3 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500">
                         <div className="flex flex-wrap items-center gap-2 text-sm">
                           <span className="font-medium text-neutral-900">{performanceProbeDisplayName(run.probe_id)}</span>
-                          <span className={run.run_mode === 'official'
-                            ? 'rounded-full border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700'
-                            : 'rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-700'}
-                          >
+                          <span className={performanceRunParticipationClass(run.participation_state)}>
                             {run.participation_state}
                           </span>
                           <span className="text-xs text-neutral-500">{formatDateTimeInBeijing(run.sampled_at)}</span>
@@ -11732,6 +11729,13 @@ function performanceProbeStateClass(state: ReturnType<typeof performanceProbeSta
   if (state === '参与评分') return `${base} border-indigo-200 bg-indigo-50 text-indigo-700`;
   if (state === '影子测试') return `${base} border-amber-200 bg-amber-50 text-amber-700`;
   if (state === '探针不可用') return `${base} border-rose-200 bg-rose-50 text-rose-700`;
+  return `${base} border-neutral-200 bg-neutral-50 text-neutral-600`;
+}
+
+function performanceRunParticipationClass(state: string): string {
+  const base = 'rounded-full border px-2 py-0.5 text-[11px]';
+  if (state === '参与评分') return `${base} border-indigo-200 bg-indigo-50 text-indigo-700`;
+  if (state === '影子测试') return `${base} border-amber-200 bg-amber-50 text-amber-700`;
   return `${base} border-neutral-200 bg-neutral-50 text-neutral-600`;
 }
 
