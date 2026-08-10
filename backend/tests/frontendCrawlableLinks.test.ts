@@ -375,13 +375,15 @@ test('React homepage uses shared five-slot commercial cards and plain summary sc
   assert.ok(homeSidebarSource.indexOf('实用工具') < homeSidebarSource.indexOf('公告与动态'));
   assert.match(sponsoredDealsSource, /grid grid-cols-1 gap-3/);
   assert.doesNotMatch(sponsoredDealsSource, /sm:grid-cols-2|lg:grid-cols-5/);
-  assert.match(sponsoredDealCardSource, /min-h-\[196px\]/);
+  assert.match(sponsoredDealCardSource, /min-h-\[168px\]/);
   assert.match(sponsoredDealCardSource, /rounded-\[18px\]/);
+  assert.match(sponsoredDealCardSource, /p-3\.5/);
   assert.match(sponsoredDealCardSource, /grid grid-cols-2 gap-2/);
   assert.match(sponsoredDealCardSource, /min-h-10/);
+  assert.doesNotMatch(sponsoredDealCardSource, /deal\.plan_price_month|起步月付|\/起/);
+  assert.match(sponsoredEmptySlotSource, /min-h-\[124px\]/);
+  assert.match(sponsoredEmptySlotSource, /p-3\.5/);
   assert.match(sponsoredDealCardSource, /whileHover=\{\{ y: -2 \}\}/);
-  assert.match(sponsoredDealCardSource, /p-4/);
-  assert.match(sponsoredEmptySlotSource, /p-4/);
   assert.match(sponsoredDealCardSource, /<RouteLink[\s\S]*href=\{deal\.report_url\}[\s\S]*className="flex min-h-10 w-full/);
   assert.match(sponsoredDealCardSource, /className="flex min-h-10 w-full items-center justify-center[^"]*"\s*>\s*官网/);
   assert.ok(sponsoredDealCardSource.indexOf('<RouteLink href={deal.report_url}') < sponsoredDealCardSource.indexOf('<a\n            href={websiteHref}'));
