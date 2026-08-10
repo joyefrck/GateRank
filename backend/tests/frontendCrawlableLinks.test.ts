@@ -382,7 +382,7 @@ test('React homepage uses shared five-slot commercial cards and plain summary sc
   assert.match(sponsoredDealCardSource, /min-h-10/);
   assert.doesNotMatch(sponsoredDealCardSource, /deal\.plan_price_month|起步月付|\/起/);
   assert.match(sponsoredEmptySlotSource, /min-h-\[124px\]/);
-  assert.match(sponsoredEmptySlotSource, /p-3\.5/);
+  assert.match(sponsoredEmptySlotSource, /p-3/);
   assert.match(sponsoredDealCardSource, /whileHover=\{\{ y: -2 \}\}/);
   assert.match(sponsoredDealCardSource, /<RouteLink[\s\S]*href=\{deal\.report_url\}[\s\S]*className="flex min-h-10 w-full/);
   assert.match(sponsoredDealCardSource, /className="flex min-h-10 w-full items-center justify-center[^"]*"\s*>\s*官网/);

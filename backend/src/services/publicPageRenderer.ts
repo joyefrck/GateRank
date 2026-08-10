@@ -2158,9 +2158,8 @@ function renderHomeV3SponsoredDeals(view: HomePageView): string {
               </div>
               <div class="home-v3-deal-offer">
                 <p>${escapeHtml(deal.discount_title || '查看官网了解当前优惠活动。')}</p>
-                ${deal.coupon_code ? `<code>优惠码 ${escapeHtml(deal.coupon_code)}</code>` : ''}
               </div>
-              <div class="home-v3-tags">${deal.tags.slice(0, 3).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>
+              <div class="home-v3-tags">${deal.coupon_code ? `<code>优惠码 ${escapeHtml(deal.coupon_code)}</code>` : ''}${deal.tags.slice(0, 3).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>
               <div class="home-v3-deal-actions">
                 <a class="home-v3-deal-report" href="${escapeAttribute(deal.report_url)}">查看测评报告</a>
                 <a class="home-v3-deal-website" href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow sponsored noopener noreferrer" aria-label="访问 ${escapeAttribute(deal.name)} 官网">官网 <span aria-hidden="true">↗</span></a>
@@ -3590,13 +3589,12 @@ const styles = `
   .home-v3-deal h3 { overflow: hidden; margin: 0; color: #171717; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
   .home-v3-deal-top small { color: #a3a3a3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
   .home-v3-deal-top > b { align-self: flex-start; border: 1px solid #fde68a; border-radius: 5px; background: #fffbeb; padding: 2px 5px; color: #b45309; font-size: 9px; letter-spacing: .08em; }
-  .home-v3-deal-offer { margin-top: 12px; border-radius: 12px; background: #fafafa; padding: 10px; }
-  .home-v3-deal-offer strong { color: #171717; font-size: 14px; }
-  .home-v3-deal-offer p { min-height: 36px; margin: 4px 0 0; color: #737373; font-size: 11px; line-height: 1.65; }
-  .home-v3-deal-offer code { display: block; margin-top: 7px; color: #e11d48; font-size: 10px; font-weight: 800; }
-  .home-v3-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
+  .home-v3-deal-offer { margin-top: 8px; border-radius: 0; background: transparent; padding: 0; }
+  .home-v3-deal-offer p { margin: 0; color: #737373; font-size: 11px; line-height: 1.5; }
+  .home-v3-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
   .home-v3-tags span { border-radius: 5px; background: #f5f5f5; padding: 2px 6px; color: #737373; font-size: 9px; font-weight: 800; }
-  .home-v3-deal-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 10px; }
+  .home-v3-tags code { border-radius: 5px; background: #fff1f2; padding: 2px 6px; color: #e11d48; font-size: 9px; font-weight: 800; }
+  .home-v3-deal-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 8px; }
   .home-v3-deal-actions a { display: flex; width: 100%; min-height: 40px; box-sizing: border-box; align-items: center; justify-content: center; border: 1px solid #e5e5e5; border-radius: 10px; font-size: 10px; font-weight: 900; text-decoration: none; }
   .home-v3-deal-report { border-color: #171717 !important; background: #171717; color: #fff; }
   .home-v3-deal-website { background: #fafafa; color: #404040; }

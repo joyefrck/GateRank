@@ -488,7 +488,7 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
       transition={{ duration: 0.2 }}
       className="group relative flex min-h-[168px] flex-col justify-between overflow-hidden rounded-[18px] border border-gray-200 bg-gradient-to-b from-slate-50/60 to-white p-3.5 shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md motion-reduce:transform-none"
     >
-      <div className="space-y-2">
+      <div className="space-y-1.5">
         <div className="flex items-start justify-between gap-2">
           <div className="flex min-w-0 items-center gap-2.5">
             <AirportMark name={deal.name} />
@@ -498,14 +498,14 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
             </div>
           </div>
         </div>
-        <p className="line-clamp-2 text-[12.5px] font-medium leading-relaxed text-gray-500">
+        <p className="line-clamp-2 text-[12.5px] font-medium leading-snug text-gray-500">
           {deal.discount_title || '查看官网了解当前优惠活动。'}
         </p>
-        <div className="flex flex-wrap gap-1.5 pt-0.5">
+        <div className="flex flex-wrap gap-1.5">
           {deal.tags.slice(0, 2).map((tag) => <FeatureTag key={tag} tag={tag} bordered />)}
         </div>
       </div>
-      <div className="mt-2 border-t border-gray-100 pt-2">
+      <div className="mt-1.5 border-t border-gray-100 pt-1.5">
         <div className="grid grid-cols-2 gap-2">
           <RouteLink href={deal.report_url} className="flex min-h-10 w-full items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-stone-900 bg-stone-900 px-2 py-2 text-center text-[12px] font-black leading-none text-white shadow-sm hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:ring-offset-2">
             查看报告 <span className="text-[10px]">&gt;</span>
@@ -534,9 +534,9 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
 
 function SponsoredEmptySlot({ slot }: { slot: SponsoredDeal['home_slot']; key?: React.Key }) {
   return (
-    <RouteLink href="/apply" className="group relative flex min-h-[124px] flex-col items-center justify-between overflow-hidden rounded-[18px] border border-dashed border-gray-300 bg-gray-50/70 p-3.5 text-center transition-all hover:border-indigo-300 hover:bg-indigo-50/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2">
-      <div className="my-auto space-y-2">
-        <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 transition-transform group-hover:scale-110"><Sparkles className="h-5 w-5" /></div>
+    <RouteLink href="/apply" className="group relative flex min-h-[124px] flex-col items-center justify-between overflow-hidden rounded-[18px] border border-dashed border-gray-300 bg-gray-50/70 p-3 text-center transition-all hover:border-indigo-300 hover:bg-indigo-50/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2">
+      <div className="my-auto space-y-1.5">
+        <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 transition-transform group-hover:scale-110"><Sparkles className="h-5 w-5" /></div>
         <span className="block text-[14px] font-extrabold text-gray-800">首页 {slot} 号广告位招募中</span>
       </div>
       <span className="flex min-h-10 w-full items-center justify-center rounded-xl border border-gray-200 bg-white py-2 text-[12px] font-bold text-gray-700 transition-colors group-hover:border-stone-900 group-hover:bg-stone-900 group-hover:text-white">联系商务合作</span>

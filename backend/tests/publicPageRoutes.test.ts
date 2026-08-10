@@ -128,8 +128,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.doesNotMatch(sponsoredDealHtml, /公开分/);
         assert.doesNotMatch(sponsoredDealHtml, /91\.2/);
         assert.match(sponsoredDealHtml, /<small>180 天观察<\/small>/);
-        assert.match(sponsoredDealHtml, /<code>优惠码 GATE20<\/code>/);
-        assert.match(sponsoredDealHtml, /<div class="home-v3-tags"><span>IEPL<\/span><span>新客优惠<\/span><\/div>/);
+        assert.match(sponsoredDealHtml, /<div class="home-v3-tags"><code>优惠码 GATE20<\/code><span>IEPL<\/span><span>新客优惠<\/span><\/div>/);
         assert.doesNotMatch(sponsoredDealHtml, /月付起|home-v3-deal-bottom|¥12/);
         const dealActionsHtml = sponsoredDealHtml.match(/<div class="home-v3-deal-actions">[\s\S]*?<\/div>/)?.[0] || '';
         assert.match(dealActionsHtml, /href="\/airports\/nebula-deal">查看测评报告<\/a>[\s\S]*href="https:\/\/deal\.example\.com" target="_blank" rel="nofollow sponsored noopener noreferrer" aria-label="访问 星云优惠机场 官网">官网 <span aria-hidden="true">↗<\/span><\/a>/);
@@ -138,6 +137,8 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.match(html, /\.home-v3-deal\s*\{[^}]*min-height:\s*168px;[^}]*border-radius:\s*18px;[^}]*padding:\s*14px;/);
         assert.match(html, /\.home-v3-deal\.home-v3-empty\s*\{[^}]*min-height:\s*124px;/);
         assert.match(html, /\.home-v3-deal-actions\s*\{[^}]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\);[^}]*gap:\s*8px;/);
+        assert.match(html, /\.home-v3-deal-offer\s*\{[^}]*margin-top:\s*8px;[^}]*background:\s*transparent;[^}]*padding:\s*0;/);
+        assert.match(html, /\.home-v3-deal-actions\s*\{[^}]*margin-top:\s*8px;/);
         assert.match(html, /\.home-v3-deal-actions a\s*\{[^}]*min-height:\s*40px;/);
         assert.match(html, /\.home-v3-sidebar > \.home-v3-explore\s*\{[^}]*background:\s*#1e1b4b;[^}]*color:\s*#fff;/);
         assert.match(html, /\.home-v3-deal-report\s*\{[^}]*border-color:\s*#171717 !important;[^}]*background:\s*#171717;[^}]*color:\s*#fff;/);
