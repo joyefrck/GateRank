@@ -294,6 +294,62 @@ test('aggregateAirportForDate scores the successful official region when its pee
   assert.equal(typeof written[0].performance_score, 'number');
 });
 
+test('aggregateAirportForDate scores a partial official region with a valid target and leaves its invalid peer pending', async () => {
+  const written: DailyMetrics[] = [];
+  const service = new AggregationService({
+    airportRepository: { listAll: async () => [{ id: 9, status: 'normal', is_listed: true }] },
+    probeSampleRepository: {
+      getProbeSamplesInRange: async () => [regionalAvailabilitySample(9, '2026-08-08')],
+      getPacketLossSamplesByDate: async () => [],
+    },
+    metricsRepository: {
+      getLatestByAirportBeforeDate: async () => null,
+      upsertDaily: async (input: DailyMetrics) => { written.push(input); },
+    },
+    performanceProbeSettingRepository: {
+      getByAirport: async () => ({
+        airport_id: 9,
+        config_version: 4,
+        settings: [
+          { probe_id: 'legacy-control', test_enabled: false, include_in_result: false, updated_by: null, updated_at: null },
+          { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+          { probe_id: 'cn-guangzhou', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+        ],
+      }),
+    },
+    performanceRunRepository: {
+      getLatestByAirportAndDate: async () => null,
+      listByAirportAndDate: async () => [
+        { ...regionalRun('cn-shanghai', 4, 74.59, 105.48), status: 'partial' },
+        { ...regionalRun('cn-guangzhou', 4, 240.41, 121.2), status: 'partial' },
+      ],
+    },
+    performanceRunTargetRepository: {
+      listByRun: async (runId: number) => [{
+        run_id: runId,
+        node_key: 'node-1',
+        target_key: runId === 91 ? 'cloudflare-50mb' : 'cachefly-50mb',
+        bytes_downloaded: runId === 91 ? 50_000_000 : 0,
+        duration_ms: 5_000,
+        download_mbps: runId === 91 ? 74.59 : null,
+        http_status: runId === 91 ? 200 : null,
+        error_code: runId === 91 ? null : 'empty_download',
+        valid: runId === 91,
+      }],
+    },
+  } as never);
+
+  const result = await service.aggregateAirportForDate(9, '2026-08-08');
+
+  assert.deepEqual(result, { aggregated: 1, pending_probe_ids: ['cn-guangzhou'] });
+  assert.equal(written.length, 1);
+  assert.deepEqual(written[0].performance_included_probe_ids, ['cn-shanghai']);
+  assert.deepEqual(written[0].performance_pending_probe_ids, ['cn-guangzhou']);
+  assert.equal(written[0].median_download_mbps, 74.59);
+  assert.equal(written[0].median_latency_ms, 105.48);
+  assert.equal(typeof written[0].performance_score, 'number');
+});
+
 test('aggregateAirportForDate never falls back to a disabled legacy run', async () => {
   const written: DailyMetrics[] = [];
   const service = new AggregationService({

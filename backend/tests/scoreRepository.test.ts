@@ -3,6 +3,23 @@ import assert from 'node:assert/strict';
 import { ScoreRepository } from '../src/repositories/scoreRepository';
 import { parseFullRankingFilters } from '../../shared/fullRankingFilters';
 
+test('ScoreRepository.getLatestAvailableDateByAirport scopes the fallback date to one airport', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new ScoreRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      return [[{ latest_date: new Date('2026-03-24T00:00:00.000Z') }]];
+    },
+  } as never);
+
+  const result = await repository.getLatestAvailableDateByAirport(74, '2026-03-25');
+
+  assert.equal(result, '2026-03-24');
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /airport_id = \?/);
+  assert.deepEqual(calls[0].params, [74, '2026-03-25']);
+});
+
 test('ScoreRepository reads details_json when mysql returns object values', async () => {
   const repository = new ScoreRepository({
     query: async () => [[

@@ -172,6 +172,7 @@ export async function createApp() {
     probeSampleRepository,
     metricsRepository,
     performanceRunRepository,
+    performanceRunTargetRepository,
     performanceProbeSettingRepository,
   });
   const riskCheckService = new RiskCheckService({

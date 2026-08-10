@@ -128,6 +128,22 @@ export class ScoreRepository {
     return latestDate ? formatDateOnly(latestDate) : null;
   }
 
+  async getLatestAvailableDateByAirport(
+    airportId: number,
+    onOrBefore: string,
+  ): Promise<string | null> {
+    const [rows] = await this.pool.query<LatestDateRow[]>(
+      `SELECT MAX(date) AS latest_date
+         FROM airport_scores_daily
+        WHERE airport_id = ?
+          AND date <= ?`,
+      [airportId, onOrBefore],
+    );
+
+    const latestDate = rows[0]?.latest_date;
+    return latestDate ? formatDateOnly(latestDate) : null;
+  }
+
   async getPublicBillingRankByDate(
     airportId: number,
     date: string,

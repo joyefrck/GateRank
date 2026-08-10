@@ -5,6 +5,7 @@ import type {
   PerformanceProbeId,
   PerformanceReviewStatus,
   PerformanceRun,
+  PerformanceRunTarget,
   ProbeSample,
   StabilityTier,
 } from '../types/domain';
@@ -31,6 +32,9 @@ interface AggregationDeps {
   performanceRunRepository?: {
     getLatestByAirportAndDate(airportId: number, date: string): Promise<PerformanceRun | null>;
     listByAirportAndDate?(airportId: number, date: string): Promise<PerformanceRun[]>;
+  };
+  performanceRunTargetRepository?: {
+    listByRun(runId: number): Promise<PerformanceRunTarget[]>;
   };
   performanceProbeSettingRepository?: {
     getByAirport(airportId: number): Promise<AirportPerformanceProbeSettingsView>;
@@ -222,7 +226,13 @@ export class AggregationService {
     const selectedRuns = new Map<PerformanceProbeId, PerformanceRun>();
     const pendingProbeIds: PerformanceProbeId[] = [];
     for (const probeId of requiredProbeIds) {
-      const run = runs.find((candidate) => isValidOfficialRun(candidate, probeId, settings.config_version));
+      let run: PerformanceRun | undefined;
+      for (const candidate of runs) {
+        if (await this.isScoreableOfficialRun(candidate, probeId, settings.config_version)) {
+          run = candidate;
+          break;
+        }
+      }
       if (run) selectedRuns.set(probeId, run);
       else pendingProbeIds.push(probeId);
     }
@@ -254,6 +264,25 @@ export class AggregationService {
       reviewStatus: aggregateReviewStatus(officialRuns),
     };
   }
+
+  private async isScoreableOfficialRun(
+    run: PerformanceRun,
+    probeId: PerformanceProbeId,
+    configVersion: number,
+  ): Promise<boolean> {
+    if (!hasValidOfficialRunMetrics(run, probeId, configVersion)) return false;
+    if (run.status === 'success') return true;
+    if (run.status !== 'partial' || !this.deps.performanceRunTargetRepository) return false;
+
+    const targets = await this.deps.performanceRunTargetRepository.listByRun(run.id);
+    return targets.some(
+      (target) =>
+        target.valid &&
+        typeof target.download_mbps === 'number' &&
+        Number.isFinite(target.download_mbps) &&
+        target.download_mbps >= 0,
+    );
+  }
 }
 
 function emptyPerformanceSelection() {
@@ -266,12 +295,13 @@ function emptyPerformanceSelection() {
   };
 }
 
-function isValidOfficialRun(
+function hasValidOfficialRunMetrics(
   run: PerformanceRun,
   probeId: PerformanceProbeId,
   configVersion: number,
 ): boolean {
-  if (run.probe_id !== probeId || run.run_mode !== 'official' || run.status !== 'success') return false;
+  if (run.probe_id !== probeId || run.run_mode !== 'official') return false;
+  if (run.status !== 'success' && run.status !== 'partial') return false;
   if (probeId !== 'legacy-control' && (run.config_version !== configVersion || run.calibration_status === 'failed')) {
     return false;
   }

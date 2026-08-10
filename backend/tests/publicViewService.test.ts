@@ -2722,6 +2722,7 @@ test('PublicViewService.getReportView derives today pick rank from public full r
 });
 
 test('PublicViewService.getReportView falls back to latest score date and exposes fallback notice', async () => {
+  const latestDateCalls: Array<{ airportId: number; onOrBefore: string }> = [];
   const service = new PublicViewService({
     airportRepository: {
       getById: async () => ({
@@ -2765,7 +2766,11 @@ test('PublicViewService.getReportView falls back to latest score date and expose
       }],
     },
     scoreRepository: {
-      getLatestAvailableDate: async () => '2026-03-24',
+      getLatestAvailableDate: async () => '2026-03-25',
+      getLatestAvailableDateByAirport: async (airportId: number, onOrBefore: string) => {
+        latestDateCalls.push({ airportId, onOrBefore });
+        return '2026-03-24';
+      },
       getByAirportAndDate: async (_airportId: number, date: string) => ({
         airport_id: 1,
         date,
@@ -2835,6 +2840,7 @@ test('PublicViewService.getReportView falls back to latest score date and expose
   assert.equal(result?.resolved_from_fallback, true);
   assert.match(result?.fallback_notice || '', /2026-03-24/);
   assert.match(result?.fallback_notice || '', /非实时探测结果/);
+  assert.deepEqual(latestDateCalls, [{ airportId: 1, onOrBefore: '2026-03-25' }]);
 });
 
 test('PublicViewService.getReportView exposes detailed risk penalties and mixed-clear conclusion', async () => {

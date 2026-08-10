@@ -73,6 +73,7 @@ interface PublicViewDeps {
   };
   scoreRepository: {
     getLatestAvailableDate(onOrBefore: string): Promise<string | null>;
+    getLatestAvailableDateByAirport?(airportId: number, onOrBefore: string): Promise<string | null>;
     getByAirportAndDate(airportId: number, date: string): Promise<{
       airport_id: number;
       date: string;
@@ -520,7 +521,10 @@ export class PublicViewService {
   }
 
     async getReportView(airportId: number, date: string): Promise<ReportView | null> {
-      const resolvedDate = (await this.deps.scoreRepository.getLatestAvailableDate(date)) || date;
+      const latestAirportDate = this.deps.scoreRepository.getLatestAvailableDateByAirport
+        ? await this.deps.scoreRepository.getLatestAvailableDateByAirport(airportId, date)
+        : await this.deps.scoreRepository.getLatestAvailableDate(date);
+      const resolvedDate = latestAirportDate || date;
       const resolvedFromFallback = resolvedDate !== date;
       const marketingConfig = await this.getMarketingConfig();
       const clickChargeAmount = marketingConfig.click_charge_amount;
