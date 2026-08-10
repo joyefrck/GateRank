@@ -167,7 +167,7 @@ test('PerformanceProbeJobService returns the original run for a completed duplic
   assert.equal(inserts, 0);
 });
 
-test('PerformanceProbeJobService recomputes only after a complete official upload', async () => {
+test('PerformanceProbeJobService recomputes after a successful official upload', async () => {
   const calls: string[] = [];
   const service = new PerformanceProbeJobService({
     jobRepository: {
@@ -198,6 +198,39 @@ test('PerformanceProbeJobService recomputes only after a complete official uploa
     status: 'success',
     calibration_status: 'not_required',
     calibration_mbps: null,
+  });
+
+  assert.deepEqual(calls, ['aggregate:9:2026-08-08', 'recompute:9:2026-08-08']);
+});
+
+test('PerformanceProbeJobService lets the aggregator evaluate a partial official upload', async () => {
+  const calls: string[] = [];
+  const service = new PerformanceProbeJobService({
+    jobRepository: {
+      leaseNext: async () => null,
+      getById: async () => ({ ...leasedJob, include_in_result_snapshot: true }),
+      markCompleted: async () => true,
+    },
+    snapshotRepository: { getById: async () => null },
+    runRepository: { insert: async () => 46 },
+    targetRepository: { insertMany: async () => undefined },
+    aggregationService: {
+      aggregateAirportForDate: async (airportId, date) => {
+        calls.push(`aggregate:${airportId}:${date}`);
+        return { aggregated: 1, pending_probe_ids: [] };
+      },
+    },
+    recomputeService: {
+      recomputeAirportForDate: async (date, airportId) => {
+        calls.push(`recompute:${airportId}:${date}`);
+        return { recomputed: 1 };
+      },
+    },
+  });
+
+  await service.submitRun('cn-shanghai', {
+    ...acceptedPayload,
+    status: 'partial',
   });
 
   assert.deepEqual(calls, ['aggregate:9:2026-08-08', 'recompute:9:2026-08-08']);

@@ -29,11 +29,13 @@
 
 **Files:**
 - Modify `backend/src/services/aggregationService.ts`
+- Modify `backend/src/services/performanceProbeJobService.ts`
 - Modify `backend/src/app.ts`
 
 - [ ] Inject `PerformanceRunTargetRepository` into `AggregationService`.
 - [ ] Keep all existing official/config/calibration/core-metric checks.
 - [ ] Accept `success` immediately; accept `partial` only when a persisted valid target has a finite non-negative download speed.
+- [ ] Let official `partial` submissions trigger aggregation so the eligibility check runs immediately after target evidence is committed.
 - [ ] Preserve run status and target evidence without converting the run to success.
 
 ### Task 3: Implement airport-scoped report fallback

@@ -174,7 +174,7 @@ export class PerformanceProbeJobService {
     await this.deps.performanceAnomalyService?.assessRun(run.id);
     if (
       job.include_in_result_snapshot
-      && run.status === 'success'
+      && (run.status === 'success' || run.status === 'partial')
       && run.calibration_status !== 'failed'
       && this.deps.aggregationService
     ) {
