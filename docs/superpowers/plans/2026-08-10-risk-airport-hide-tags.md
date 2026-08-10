@@ -4,7 +4,7 @@
 
 **Goal:** Hide all bottom tag badges for airports whose status is `risk` or `down` while preserving tags for normal airports.
 
-**Architecture:** Keep the airport data and tag arrays unchanged. Add one local status predicate in `src/App.tsx` and use it at both public card call sites so the full ranking and risk monitor apply the same presentation-only rule.
+**Architecture:** Keep the airport data and tag arrays unchanged. Add one local visibility predicate in `src/App.tsx`; full ranking cards pass their status, while risk-monitor cards also pass `monitor_reason` because a risk-watch item can retain the base `normal` status.
 
 **Tech Stack:** React, TypeScript, Node test runner, Vite
 
@@ -35,9 +35,9 @@ test('React ranking cards hide tags for risk and down airports', async () => {
   const fullRankingSource = source.slice(fullRankingStart, riskMonitorStart);
   const riskMonitorSource = source.slice(riskMonitorStart, riskMonitorEnd);
 
-  assert.match(helperSource, /return status !== 'risk' && status !== 'down';/);
+  assert.match(helperSource, /return status !== 'risk' && status !== 'down' && monitorReason !== 'risk_watch' && monitorReason !== 'down';/);
   assert.match(fullRankingSource, /shouldDisplayAirportTags\(item\.status\)[\s\S]*?<TagBadgeGroup tags=\{item\.tags\}/);
-  assert.match(riskMonitorSource, /shouldDisplayAirportTags\(item\.status\)[\s\S]*?<TagBadgeGroup tags=\{item\.tags\}/);
+  assert.match(riskMonitorSource, /shouldDisplayAirportTags\(item\.status, item\.monitor_reason\)[\s\S]*?<TagBadgeGroup tags=\{item\.tags\}/);
 });
 ```
 
@@ -56,8 +56,11 @@ Expected: the new test fails because `shouldDisplayAirportTags` is not present y
 Add this local helper before `FullRankingPage`:
 
 ```ts
-function shouldDisplayAirportTags(status: AirportStatus): boolean {
-  return status !== 'risk' && status !== 'down';
+function shouldDisplayAirportTags(
+  status: AirportStatus,
+  monitorReason?: RiskMonitorItemResponse['monitor_reason'],
+): boolean {
+  return status !== 'risk' && status !== 'down' && monitorReason !== 'risk_watch' && monitorReason !== 'down';
 }
 ```
 
@@ -65,6 +68,14 @@ Wrap each of the two existing tag groups with the same condition:
 
 ```tsx
 {shouldDisplayAirportTags(item.status) && (
+  <TagBadgeGroup tags={item.tags} size="sm" className="mt-5" />
+)}
+```
+
+The risk-monitor card passes its monitor reason as the second argument:
+
+```tsx
+{shouldDisplayAirportTags(item.status, item.monitor_reason) && (
   <TagBadgeGroup tags={item.tags} size="sm" className="mt-5" />
 )}
 ```

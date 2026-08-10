@@ -3,6 +3,25 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
+test('React ranking cards hide tags for risk and down airports', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+  const fullRankingStart = source.indexOf('function FullRankingPage');
+  const riskMonitorStart = source.indexOf('function RiskMonitorPage');
+  const riskMonitorEnd = source.indexOf('function ReportPage', riskMonitorStart);
+
+  assert.notEqual(fullRankingStart, -1);
+  assert.notEqual(riskMonitorStart, -1);
+  assert.notEqual(riskMonitorEnd, -1);
+
+  const helperSource = source.slice(source.indexOf('function shouldDisplayAirportTags'), fullRankingStart);
+  const fullRankingSource = source.slice(fullRankingStart, riskMonitorStart);
+  const riskMonitorSource = source.slice(riskMonitorStart, riskMonitorEnd);
+
+  assert.match(helperSource, /return status !== 'risk' && status !== 'down' && monitorReason !== 'risk_watch' && monitorReason !== 'down';/);
+  assert.match(fullRankingSource, /shouldDisplayAirportTags\(item\.status\)[\s\S]*?<TagBadgeGroup tags=\{item\.tags\}/);
+  assert.match(riskMonitorSource, /shouldDisplayAirportTags\(item\.status, item\.monitor_reason\)[\s\S]*?<TagBadgeGroup tags=\{item\.tags\}/);
+});
+
 test('Admin homepage settings label the legacy today-pick key as ranking count', async () => {
   const adminSource = await readFile(path.join(process.cwd(), 'src/admin/AdminApp.tsx'), 'utf8');
 

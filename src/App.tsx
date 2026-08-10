@@ -3714,6 +3714,13 @@ function HomeSeoArticle({
   );
 }
 
+function shouldDisplayAirportTags(
+  status: AirportStatus,
+  monitorReason?: RiskMonitorItemResponse['monitor_reason'],
+): boolean {
+  return status !== 'risk' && status !== 'down' && monitorReason !== 'risk_watch' && monitorReason !== 'down';
+}
+
 function FullRankingPage({
   date,
   page = 1,
@@ -3976,7 +3983,9 @@ function FullRankingPage({
                             </div>
                           </dl>
 
-                          <TagBadgeGroup tags={item.tags} size="sm" className="mt-5" />
+                          {shouldDisplayAirportTags(item.status) && (
+                            <TagBadgeGroup tags={item.tags} size="sm" className="mt-5" />
+                          )}
                           <FullRankingCapabilitySummary item={item} />
                         </div>
 
@@ -4298,7 +4307,9 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
                             </div>
                           </dl>
 
-                          <TagBadgeGroup tags={item.tags} size="sm" className="mt-5" />
+                          {shouldDisplayAirportTags(item.status, item.monitor_reason) && (
+                            <TagBadgeGroup tags={item.tags} size="sm" className="mt-5" />
+                          )}
                         </div>
 
                           <div className="flex flex-col gap-3 rounded-[24px] border border-neutral-200 bg-white p-4 lg:sticky lg:top-24">
