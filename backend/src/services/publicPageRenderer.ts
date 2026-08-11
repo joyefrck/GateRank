@@ -2153,13 +2153,12 @@ function renderHomeV3SponsoredDeals(view: HomePageView): string {
             return deal ? `
             <article class="home-v3-deal" data-marketing-placement="deal_card" data-airport-id="${deal.airport_id}">
               <div class="home-v3-deal-top">
-                <span class="home-v3-airport-mark" aria-hidden="true">${escapeHtml(deal.name.slice(0, 1) || 'G')}</span>
-                <div><h3>${escapeHtml(deal.name)}</h3><small>${deal.tracking_days} 天观察</small></div>
+                <h3>${escapeHtml(deal.name)}</h3>
+                <small>${deal.tracking_days} 天观察</small>
               </div>
               <div class="home-v3-deal-offer">
                 <p>${escapeHtml(deal.discount_title || '查看官网了解当前优惠活动。')}</p>
               </div>
-              <div class="home-v3-tags">${deal.coupon_code ? `<code>优惠码 ${escapeHtml(deal.coupon_code)}</code>` : ''}${deal.tags.slice(0, 3).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div>
               <div class="home-v3-deal-actions">
                 <a class="home-v3-deal-report" href="${escapeAttribute(deal.report_url)}">查看测评报告</a>
                 <a class="home-v3-deal-website" href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow sponsored noopener noreferrer" aria-label="访问 ${escapeAttribute(deal.name)} 官网">官网 <span aria-hidden="true">↗</span></a>
@@ -3581,23 +3580,19 @@ const styles = `
   .home-v3-section-head p { margin: 5px 0 0; color: #737373; font-size: 12px; line-height: 1.6; }
   .home-v3-section-head > a { flex: 0 0 auto; color: #737373; font-size: 12px; font-weight: 900; text-decoration: none; }
   .home-v3-deal-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
-  .home-v3-deal { display: flex; min-height: 168px; flex-direction: column; border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 14px; box-shadow: 0 4px 20px rgba(15,23,42,.04); }
-  .home-v3-deal.home-v3-empty { min-height: 124px; }
-  .home-v3-deal-top { display: flex; align-items: center; gap: 10px; }
-  .home-v3-airport-mark { display: inline-flex; width: 42px; height: 42px; flex: 0 0 42px; align-items: center; justify-content: center; border-radius: 12px; background: linear-gradient(135deg,#334155,#0f172a); color: #fff; font-weight: 900; }
-  .home-v3-deal-top > div { min-width: 0; flex: 1; }
+  .home-v3-deal { display: flex; min-height: 136px; flex-direction: column; border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 12px; box-shadow: 0 4px 20px rgba(15,23,42,.04); }
+  .home-v3-deal.home-v3-empty { min-height: 104px; justify-content: center; gap: 6px; padding: 10px; }
+  .home-v3-deal-top { min-width: 0; }
   .home-v3-deal h3 { overflow: hidden; margin: 0; color: #171717; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
-  .home-v3-deal-top small { color: #a3a3a3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
-  .home-v3-deal-top > b { align-self: flex-start; border: 1px solid #fde68a; border-radius: 5px; background: #fffbeb; padding: 2px 5px; color: #b45309; font-size: 9px; letter-spacing: .08em; }
-  .home-v3-deal-offer { margin-top: 8px; border-radius: 0; background: transparent; padding: 0; }
-  .home-v3-deal-offer p { margin: 0; color: #737373; font-size: 11px; line-height: 1.5; }
+  .home-v3-deal-top small { display: block; margin-top: 4px; color: #a3a3a3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+  .home-v3-deal-offer { margin-top: 8px; }
+  .home-v3-deal-offer p { overflow: hidden; margin: 0; color: #737373; font-size: 11px; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
   .home-v3-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
   .home-v3-tags span { border-radius: 5px; background: #f5f5f5; padding: 2px 6px; color: #737373; font-size: 9px; font-weight: 800; }
-  .home-v3-tags code { border-radius: 5px; background: #fff1f2; padding: 2px 6px; color: #e11d48; font-size: 9px; font-weight: 800; }
-  .home-v3-deal-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; margin-top: 8px; }
-  .home-v3-deal-actions a { display: flex; width: 100%; min-height: 40px; box-sizing: border-box; align-items: center; justify-content: center; border: 1px solid #e5e5e5; border-radius: 10px; font-size: 10px; font-weight: 900; text-decoration: none; }
-  .home-v3-deal-report { border-color: #171717 !important; background: #171717; color: #fff; }
-  .home-v3-deal-website { background: #fafafa; color: #404040; }
+  .home-v3-deal-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); align-items: center; gap: 8px; margin-top: auto; border-top: 1px solid #f5f5f5; padding-top: 6px; }
+  .home-v3-deal-actions a { display: flex; width: 100%; box-sizing: border-box; align-items: center; justify-content: center; border: 1px solid #e5e5e5; border-radius: 12px; font-size: 11px; font-weight: 900; text-decoration: none; }
+  .home-v3-deal-report { height: 32px; border-color: #171717 !important; background: #171717; color: #fff; }
+  .home-v3-deal-website { height: 30px; background: #fafafa; color: #404040; }
   .home-v3-columns { display: grid; grid-template-columns: minmax(0,2fr) minmax(280px,1fr); gap: 28px; align-items: start; }
   .home-v3-ranking, .home-v3-sidebar > section { overflow: hidden; border: 1px solid #e5e5e5; border-radius: 18px; background: #fff; padding: 18px; box-shadow: 0 4px 22px rgba(15,23,42,.04); }
   .home-v3-table-wrap { overflow-x: auto; margin: 0 -18px -18px; }
