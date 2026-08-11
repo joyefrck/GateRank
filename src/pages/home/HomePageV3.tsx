@@ -486,28 +486,20 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
       ref={ref}
       whileHover={{ y: -2 }}
       transition={{ duration: 0.2 }}
-      className="group relative flex min-h-[168px] flex-col justify-between overflow-hidden rounded-[18px] border border-gray-200 bg-gradient-to-b from-slate-50/60 to-white p-3.5 shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md motion-reduce:transform-none"
+      className="group relative flex min-h-[136px] flex-col justify-between overflow-hidden rounded-[18px] border border-gray-200 bg-gradient-to-b from-slate-50/60 to-white p-3 shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md motion-reduce:transform-none"
     >
-      <div className="space-y-1.5">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2.5">
-            <AirportMark name={deal.name} />
-            <div className="flex min-w-0 flex-col">
-              <h3 className="truncate text-[14px] font-black leading-tight text-gray-900 transition-colors group-hover:text-indigo-600 sm:text-[15px]">{deal.name}</h3>
-              <span className="mt-1 font-mono text-[11.5px] leading-none text-gray-400">{deal.tracking_days} 天观察</span>
-            </div>
-          </div>
+      <div>
+        <div className="min-w-0">
+          <h3 className="truncate text-[14px] font-black leading-tight text-gray-900 transition-colors group-hover:text-indigo-600 sm:text-[15px]">{deal.name}</h3>
+          <span className="mt-1 block font-mono text-[11.5px] leading-none text-gray-400">{deal.tracking_days} 天观察</span>
         </div>
-        <p className="line-clamp-2 text-[12.5px] font-medium leading-snug text-gray-500">
+        <p className="mt-2 truncate text-[11.5px] font-medium leading-snug text-gray-500">
           {deal.discount_title || '查看官网了解当前优惠活动。'}
         </p>
-        <div className="flex flex-wrap gap-1.5">
-          {deal.tags.slice(0, 2).map((tag) => <FeatureTag key={tag} tag={tag} bordered />)}
-        </div>
       </div>
-      <div className="mt-1.5 border-t border-gray-100 pt-1.5">
-        <div className="grid grid-cols-2 gap-2">
-          <RouteLink href={deal.report_url} className="flex min-h-10 w-full items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-stone-900 bg-stone-900 px-2 py-2 text-center text-[12px] font-black leading-none text-white shadow-sm hover:bg-black focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500 focus-visible:ring-offset-2">
+      <div className="mt-1 border-t border-gray-100 pt-1">
+        <div className="grid grid-cols-2 items-center gap-2">
+          <RouteLink href={deal.report_url} className="flex w-full items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-stone-900 bg-stone-900 px-3 py-1.5 text-center text-[12px] font-black leading-relaxed text-white shadow-sm transition-all duration-200 ease-out hover:scale-[1.02] hover:bg-stone-800 active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-900 focus-visible:ring-offset-2 motion-reduce:transform-none">
             查看报告 <span className="text-[10px]">&gt;</span>
           </RouteLink>
           <a
@@ -522,7 +514,7 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
               targetKind: 'website',
               targetUrl: websiteHref,
             })}
-            className="flex min-h-10 w-full items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-2 py-2 text-center text-[12px] font-bold leading-none text-gray-700 shadow-sm hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2"
+            className="flex w-full self-center items-center justify-center gap-1 whitespace-nowrap rounded-xl border border-gray-200 bg-white px-3 py-1 text-center text-[12px] font-bold leading-relaxed text-gray-700 shadow-sm hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2"
           >
             官网 <ExternalLink className="h-3 w-3 text-gray-400" />
           </a>
@@ -534,12 +526,12 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
 
 function SponsoredEmptySlot({ slot }: { slot: SponsoredDeal['home_slot']; key?: React.Key }) {
   return (
-    <RouteLink href="/apply" className="group relative flex min-h-[124px] flex-col items-center justify-between overflow-hidden rounded-[18px] border border-dashed border-gray-300 bg-gray-50/70 p-3 text-center transition-all hover:border-indigo-300 hover:bg-indigo-50/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2">
-      <div className="my-auto space-y-1.5">
-        <div className="mx-auto flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 transition-transform group-hover:scale-110"><Sparkles className="h-5 w-5" /></div>
-        <span className="block text-[14px] font-extrabold text-gray-800">首页 {slot} 号广告位招募中</span>
+    <RouteLink href="/apply" className="group relative flex min-h-[104px] flex-col items-center justify-between overflow-hidden rounded-[18px] border border-dashed border-gray-300 bg-gray-50/70 p-2.5 text-center transition-all hover:border-indigo-300 hover:bg-indigo-50/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2">
+      <div className="my-auto space-y-1">
+        <div className="mx-auto flex h-8 w-8 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 transition-transform group-hover:scale-110"><Sparkles className="h-4 w-4" /></div>
+        <span className="block text-[13px] font-extrabold text-gray-800">首页 {slot} 号广告位招募中</span>
       </div>
-      <span className="flex min-h-10 w-full items-center justify-center rounded-xl border border-gray-200 bg-white py-2 text-[12px] font-bold text-gray-700 transition-colors group-hover:border-stone-900 group-hover:bg-stone-900 group-hover:text-white">联系商务合作</span>
+      <span className="flex w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-[12px] font-bold leading-relaxed text-gray-700 transition-colors group-hover:border-stone-900 group-hover:bg-stone-900 group-hover:text-white">联系商务合作</span>
     </RouteLink>
   );
 }
