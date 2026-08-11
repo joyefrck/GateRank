@@ -239,14 +239,17 @@ test('Portal activity title helper only appears for homepage ads', async () => {
   assert.ok(titleFieldSource.indexOf('显示在首页广告描述中。') < titleFieldSource.indexOf('<input'));
 });
 
-test('React methodology page uses the shared sky list hero', async () => {
+test('React methodology page reuses the compact historical sky list hero', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/pages/methodology/MethodologyPage.tsx'), 'utf8');
 
+  assert.match(source, /我们如何评估/);
+  assert.match(source, /一个机场/);
+  assert.match(source, /import \{ ListPageHero \} from '\.\.\/\.\.\/components\/ListPageHero'/);
   assert.match(source, /<ListPageHero/);
   assert.match(source, /tone="sky"/);
-  assert.match(source, /label: item\.label/);
-  assert.match(source, /value: item\.value/);
-  assert.match(source, /pt-10 md:pt-14/);
+  assert.match(source, /label: '公开范围'/);
+  assert.match(source, /模型参数、阈值与计算细节属于内部方法，不对外披露/);
+  assert.doesNotMatch(source, /py-10[^\n]*md:py-14|relative mt-10 grid gap-3 border-t/);
 });
 
 test('React homepage renders the 3.0 trust and FAQ content without a duplicated trust navigation', async () => {

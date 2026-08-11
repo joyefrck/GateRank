@@ -26,7 +26,7 @@ export class ManualJobRepository {
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         airport_id BIGINT UNSIGNED NOT NULL,
         date DATE NOT NULL,
-        kind ENUM('full', 'stability', 'performance', 'risk', 'time_decay') NOT NULL,
+        kind ENUM('full', 'stability', 'performance', 'network_coverage', 'risk', 'time_decay') NOT NULL,
         status ENUM('queued', 'running', 'succeeded', 'failed') NOT NULL DEFAULT 'queued',
         message TEXT NULL,
         created_by VARCHAR(128) NOT NULL,
@@ -40,6 +40,10 @@ export class ManualJobRepository {
         INDEX idx_admin_manual_jobs_created_at (created_at),
         CONSTRAINT fk_admin_manual_jobs_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
       )
+    `);
+    await this.pool.query(`
+      ALTER TABLE admin_manual_jobs
+        MODIFY COLUMN kind ENUM('full', 'stability', 'performance', 'network_coverage', 'risk', 'time_decay') NOT NULL
     `);
   }
 

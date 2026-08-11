@@ -75,6 +75,15 @@ export class SystemSettingRepository {
     );
   }
 
+  async insertIfAbsent(settingKey: string, value: unknown, updatedBy: string): Promise<boolean> {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      `INSERT IGNORE INTO admin_system_settings (setting_key, value_json, updated_by)
+       VALUES (?, ?, ?)`,
+      [settingKey, JSON.stringify(value ?? null), updatedBy],
+    );
+    return result.affectedRows > 0;
+  }
+
   private async ensureColumn(columnName: string, definition: string): Promise<void> {
     const [rows] = await this.pool.query<RowDataPacket[]>(
       `SELECT 1

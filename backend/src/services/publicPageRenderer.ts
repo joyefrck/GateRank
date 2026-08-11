@@ -1107,7 +1107,7 @@ export function renderReportPublicPage(
     jsonLd: buildReportStructuredData(siteUrl, canonicalPath, seo, view),
     frontendAssets,
     body: `
-      <main id="report-top" class="page-main report-page">
+      <main id="report-top" class="page-main report-page" data-score-rule-version="${escapeAttribute(view.score_rule_version)}" data-score-dimensions="${view.score_breakdown.n === null ? '4' : '5'}">
         ${renderReportFixedNav()}
         <div class="report-date-status">
           <span>报告日期：${escapeHtml(view.date)}</span>
@@ -1209,6 +1209,7 @@ function renderReportSummary(view: ReportView): string {
       <div class="score-grid">
         ${renderScoreMetric('稳定性 (S)', view.score_breakdown.s, 'emerald')}
         ${renderScoreMetric('性能 (P)', view.score_breakdown.p, 'blue')}
+        ${view.score_breakdown.n === null ? '' : renderScoreMetric('网络覆盖 (N)', view.score_breakdown.n, 'indigo')}
         ${renderScoreMetric('价格 (C)', view.score_breakdown.c, 'orange')}
         ${renderScoreMetric('风险 (R)', view.score_breakdown.r, 'purple')}
         ${renderScoreMetric('最终分', view.score_breakdown.final_score, 'emerald')}
@@ -1358,27 +1359,29 @@ function renderReportScoreCard(view: ReportView): string {
 
 function renderReportMethodologyCard(view: ReportView): string {
   const radarPoints = buildReportRadarPoints(view.score_breakdown);
+  const isV2 = view.score_rule_version === 'v2_spncr' && view.score_breakdown.n !== null;
+  const frame = isV2
+    ? '<polygon points="60,12 105.65,45.17 88.21,98.83 31.79,98.83 14.35,45.17" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"></polygon><polygon points="60,36 82.83,52.58 74.11,79.42 45.89,79.42 37.17,52.58" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="2 2"></polygon><path d="M60 60V12M60 60L105.65 45.17M60 60L88.21 98.83M60 60L31.79 98.83M60 60L14.35 45.17" fill="none" stroke="#e2e8f0" stroke-width="1"></path>'
+    : '<polygon points="60,12 108,60 60,108 12,60" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"></polygon><polygon points="60,36 84,60 60,84 36,60" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="2 2"></polygon><path d="M60 12V108M12 60H108" fill="none" stroke="#e2e8f0" stroke-width="1"></path>';
+  const labels = isV2
+    ? '<text x="60" y="7" text-anchor="middle">S</text><text x="112" y="44" text-anchor="middle">P</text><text x="94" y="107" text-anchor="middle">N</text><text x="26" y="107" text-anchor="middle">C</text><text x="8" y="44" text-anchor="middle">R</text>'
+    : '<text x="60" y="7" text-anchor="middle">S</text><text x="114" y="62" text-anchor="middle" dominant-baseline="middle">P</text><text x="60" y="117" text-anchor="middle">C</text><text x="6" y="62" text-anchor="middle" dominant-baseline="middle">R</text>';
   return `
     <div class="score-methodology">
       <div class="score-methodology-heading">
         <div>
-          <strong>四维评分模型</strong>
-          <small>S · P · C · R</small>
+          <strong>${isV2 ? '五维评分模型' : '四维评分模型'}</strong>
+          <small>${isV2 ? 'S · P · N · C · R' : 'S · P · C · R'}</small>
         </div>
         <span>每日更新</span>
       </div>
       <svg class="score-radar" viewBox="0 0 120 120" role="img" aria-labelledby="report-score-radar-title report-score-radar-description">
-        <title id="report-score-radar-title">本报告四维评分分布</title>
-        <desc id="report-score-radar-description">稳定性、性能、价格与风险四个维度的评分雷达图</desc>
-        <polygon points="60,12 108,60 60,108 12,60" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"></polygon>
-        <polygon points="60,36 84,60 60,84 36,60" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="2 2"></polygon>
-        <path d="M60 12V108M12 60H108" fill="none" stroke="#e2e8f0" stroke-width="1"></path>
+        <title id="report-score-radar-title">本报告${isV2 ? '五维' : '四维'}评分分布</title>
+        <desc id="report-score-radar-description">${isV2 ? '稳定性、性能、网络覆盖、价格与风险五个维度' : '稳定性、性能、价格与风险四个维度'}的评分雷达图</desc>
+        ${frame}
         <polygon points="${escapeAttribute(radarPoints)}" fill="#10b981" fill-opacity=".18" stroke="#059669" stroke-width="2.4" stroke-linejoin="round"></polygon>
         <circle cx="60" cy="60" r="2.25" fill="#047857"></circle>
-        <text x="60" y="7" text-anchor="middle">S</text>
-        <text x="114" y="62" text-anchor="middle" dominant-baseline="middle">P</text>
-        <text x="60" y="117" text-anchor="middle">C</text>
-        <text x="6" y="62" text-anchor="middle" dominant-baseline="middle">R</text>
+        ${labels}
       </svg>
       <p>基于持续监测，而非单次测速</p>
       <a class="score-methodology-link" href="${escapeAttribute(PUBLIC_SEO_PATHS.methodology)}">我们是如何测评的？<span aria-hidden="true">→</span></a>
@@ -1512,20 +1515,56 @@ export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: Pu
   const methodologyFaq = [
     {
       question: '低价机场一定高分吗？',
-      answer: '不会。价格只占总分 10%，并且 PriceScore 只按 1-30 元、30-50 元、50 元以上三档计算；如果稳定性、性能或风险表现较弱，低价不会单独决定推荐位置。',
+      answer: '不会。价格只是评价价值的一部分，稳定性、性能、网络覆盖和风险表现同样会影响最终判断。',
     },
     {
       question: '测速快就一定推荐吗？',
-      answer: '不会。性能占总分 30%，如果可用率、波动或风险项偏弱，最终分数仍会被拉低。',
+      answer: '不会。单次测速只能说明一个时间点的表现，GateRank 更关注真实请求、持续稳定性、多地区表现和风险变化。',
     },
     {
-      question: '为什么要保留历史分数？',
-      answer: '时间衰减让近期表现优先，同时保留长期样本，避免一次短时故障或一次活动测速过度影响榜单。',
+      question: '为什么新机场可能需要更长时间观察？',
+      answer: '新机场的有效样本和历史连续性较少。GateRank 会明确展示数据状态，并在积累足够证据前保持更谨慎的结论。',
     },
     {
       question: '风险分低代表已经跑路了吗？',
-      answer: '不一定。风险分用于提示域名、证书、投诉或历史异常等信任信号，需要结合状态和趋势继续观察。',
+      answer: '不一定。它表示域名、证书、投诉或历史异常等信号值得关注，需要结合当前状态、报告日期和后续趋势判断。',
     },
+    {
+      question: 'GateRank 的机场推荐依据是什么？',
+      answer: '推荐依据来自稳定性、性能、网络覆盖、性价比和风险五个维度，以及对应的数据日期、趋势和完整性状态。广告活动不进入公开排名。',
+    },
+    {
+      question: '数据多久更新一次？',
+      answer: '监测任务持续运行，公开榜单和报告会根据已完成的数据批次更新。页面会显示对应日期，避免把历史结果误认为实时结论。',
+    },
+  ];
+  const dimensions = [
+    ['S', '稳定性', '观察服务是否持续可用、连接是否平稳，以及健康表现能否长期保持。'],
+    ['P', '性能', '观察连接响应、传输能力和真实代理请求中的实际体验。'],
+    ['N', '网络覆盖', '观察可检测节点的地区广度、健康情况与整体分布结构。'],
+    ['C', '性价比', '观察价格、套餐能力与真实使用体验之间是否匹配。'],
+    ['R', '风险', '观察域名、证书、投诉与历史异常等独立信任信号。'],
+  ];
+  const pipeline = [
+    ['01', '持续采集', '从可检测节点、公开信息和日常监测任务中持续形成样本。'],
+    ['02', '真实性验证', '关键网络结果需要经过实际代理请求或一致性检查。'],
+    ['03', '多维聚合', '综合不同维度与时间范围，降低极端样本和单项高光的影响。'],
+    ['04', '异常复核', '采集缺失、数据突变和风险信号会被独立标记并保留复核空间。'],
+  ];
+  const guidance = [
+    ['看综合，不看单项', '速度快、价格低或节点多，都不能独立决定最终推荐。更重要的是多个维度能否共同支撑长期体验。'],
+    ['看趋势，不看截图', '近期变化会被及时记录，历史连续性也会作为判断背景。单次测速截图不能代替持续监测。'],
+    ['看数据状态', '样本不足、当日采集缺失或规则版本不同会明确提示，不会把缺少的数据伪装成确定结论。'],
+  ];
+  const publicItems = ['五个评估维度及其含义', '报告日期、趋势与历史快照', '风险来源类别与数据状态', '规则版本与榜单更新说明', '非付费排名与独立性声明'];
+  const privateItems = ['模型权重与组合方式', '判断阈值与内部参数', '风险信号的具体处理规则', '抗操纵与异常识别细节', '可用于复算结果的实现逻辑'];
+  const principles = [
+    ['持续监测', '关注长期表现与近期变化，不让一次采样代表全部体验。'],
+    ['真实请求', '关键网络判断尽量来自实际代理链路，而不是只看端口状态。'],
+    ['多维交叉', '稳定、性能、覆盖、价值与风险相互校验，降低单指标偏见。'],
+    ['风险单列', '信任风险独立呈现，用户可以区分体验下降与风险变化。'],
+    ['历史留痕', '报告保留对应日期和规则版本，避免后来规则改写当时结论。'],
+    ['非付费排名', '广告、优惠和商业合作不会直接改变 GateRank 公开排名。'],
   ];
   return renderPublicDocument({
     siteUrl,
@@ -1538,7 +1577,7 @@ export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: Pu
         '@type': 'TechArticle',
         headline: METHODOLOGY_SEO.title,
         description: METHODOLOGY_SEO.description,
-        about: ['机场测评方法', '机场测速标准', '机场评分规则', '风险扣分', '时间衰减', '机场推荐依据'],
+        about: ['机场测评方法', '五维评估框架', '数据来源', '风险监测', '历史报告', '机场推荐依据'],
       },
       buildBreadcrumbJsonLd(siteUrl, [
         ['今日推荐', '/'],
@@ -1559,72 +1598,148 @@ export function renderMethodologyPublicPage(siteUrl: string, frontendAssets?: Pu
     ],
     frontendAssets,
     body: `
-      <main class="page-main">
-        <section class="hero hero-methodology">
-          <div class="hero-surface"></div>
-          <div class="hero-content">
-            <div>
-              <div class="eyebrow">机场榜GateRank Methodology</div>
-              <h1>机场测评方法：评分规则、测速标准、风险扣分与推荐依据</h1>
-              <p>${escapeHtml(METHODOLOGY_SEO.description)}</p>
-            </div>
-            <div class="metric-grid">
-              ${renderMetric('评分维度', '4')}
-              ${renderMetric('主公式', 'S/P/C/R')}
-              ${renderMetric('更新频率', '每日重算')}
-            </div>
+      <main class="page-main methodology-page">
+        <section class="methodology-hero">
+          <div class="methodology-hero-copy">
+            <div class="methodology-eyebrow">GateRank Methodology</div>
+            <h1>我们如何评估<span>一个机场</span></h1>
+            <p>机场榜GateRank 通过持续采样、多维信号和历史记录，判断一个服务是否具备长期使用价值。本页解释评估原则、数据来源与结果解读方式；模型参数、阈值与计算细节属于内部方法，不对外披露。</p>
+          </div>
+          <div class="methodology-facts">
+            <div><strong>五维观察</strong><span>稳定、性能、覆盖、价值与风险</span></div>
+            <div><strong>持续更新</strong><span>近期变化会被及时记录</span></div>
+            <div><strong>历史可追溯</strong><span>报告保留日期与规则版本</span></div>
+            <div><strong>公开范围</strong><span>原则公开，参数与计算细节不披露</span></div>
           </div>
         </section>
-        <section class="content-card">
-          <h2>总公式与评分目标</h2>
-          <p>最终分 = 0.4 × 稳定性 S + 0.3 × 性能 P + 0.1 × 价格 C + 0.2 × 风险 R。GateRank 用这套固定权重生成每日机场推荐，目标是让稳定性、性能、价格和信任风险在同一框架内被解释。</p>
-          <div class="card-grid">
-            ${renderInfoCard('稳定性 S · 40%', '综合可用率、稳健波动值 effective_latency_cv 和连续健康天数，降低偶发测速对结论的影响。')}
-            ${renderInfoCard('性能 P · 30%', '使用中位延迟、下载速率和代理请求失败率，衡量真实连接体验而非单次峰值。')}
-            ${renderInfoCard('价格 C · 10%', '结合月付价格档位和速度价格比，校正低价与高价的价值差异。')}
-            ${renderInfoCard('风险 R · 20%', '纳入域名、SSL、投诉与历史异常，避免高性能样本掩盖信任风险。')}
+
+        <section class="methodology-section">
+          <div class="methodology-section-heading">
+            <span>Evaluation Framework</span>
+            <h2>五维评估框架</h2>
+            <p>五个维度分别回答不同问题。它们共同构成判断依据，但任何一个单项都不能独立决定推荐。</p>
+          </div>
+          <div class="methodology-dimensions">
+            ${dimensions.map(([code, title, description]) => `
+              <article>
+                <b>${escapeHtml(code)}</b>
+                <h3>${escapeHtml(title)}</h3>
+                <p>${escapeHtml(description)}</p>
+              </article>
+            `).join('')}
           </div>
         </section>
-        <section class="content-card">
-          <h2>四个维度的子项公式</h2>
-          <p>子项评分采用阈值分段和线性插值，并截断到 0 到 100。日期越近，历史样本权重越高。</p>
-          <div class="card-grid">
-            ${renderInfoCard('稳定性公式', 'S = 0.5 × UptimeScore + 0.3 × StabilityScore + 0.2 × StreakScore。')}
-            ${renderInfoCard('性能公式', 'P = 0.4 × LatencyScore + 0.4 × SpeedScore + 0.2 × LossScore。各测试地区先独立评分，再对纳入结果的地区等权平均。')}
-            ${renderInfoCard('下载速率阈值', '原有测试中心以 300 Mbps 为满分；200 Mbps 大陆探针以 10 Mbps 为 0 分、160 Mbps 为满分，达到或超过 180 Mbps 标记为达到探针带宽上限。')}
-            ${renderInfoCard('历史口径', '新区域评分规则从启用日期起生效，历史报告不回填、不改写，确保当时公开结果保持可追溯。')}
-            ${renderInfoCard('价格公式', 'C = 0.8 × PriceScore + 0.2 × ValueScore；PriceScore 三档为 1-30 元 100 分、30-50 元 80 分、50 元以上 60 分。')}
-            ${renderInfoCard('风险公式', 'R = 100 - RiskPenalty。风险扣分来自域名、SSL、近期投诉和历史异常。')}
+
+        <section class="methodology-section">
+          <div class="methodology-section-heading">
+            <span>Evidence Pipeline</span>
+            <h2>数据如何形成结果</h2>
+            <p>从采样到公开结论，每一步都有明确职责。流程公开，但不会暴露可被复制或针对性优化的内部实现。</p>
+          </div>
+          <div class="methodology-process">
+            ${pipeline.map(([index, title, description]) => `
+              <article>
+                <b>${escapeHtml(index)}</b>
+                <h3>${escapeHtml(title)}</h3>
+                <p>${escapeHtml(description)}</p>
+              </article>
+            `).join('')}
           </div>
         </section>
-        <section class="content-card">
-          <h2>风险扣分如何进入排名</h2>
-          <p>风险不是模糊印象分，而是可解释的扣分口径。域名异常记 30 分，SSL 未知或临期按 5 / 10 / 20 / 30 分分段，近期投诉每条 3 分且最高 15 分，历史异常每次 10 分且最高 30 分。</p>
-          <div class="card-grid">
-            ${renderInfoCard('域名异常', 'domain_ok = false 时直接扣 30 分，避免不可访问站点依靠历史性能维持高分。')}
-            ${renderInfoCard('SSL 风险', '证书未知、临期或过期会逐级扣分，用于提示基础设施维护风险。')}
-            ${renderInfoCard('近期投诉', 'recent_complaints_count × 3，最高扣 15 分，反映近期用户反馈。')}
-            ${renderInfoCard('历史异常', 'history_incidents × 10，最高扣 30 分，保留长期信任记录。')}
+
+        <section class="methodology-section">
+          <div class="methodology-section-heading">
+            <span>Reading The Score</span>
+            <h2>如何理解 GateRank 结果</h2>
+            <p>公开分数是决策线索，不是对未来服务的保证。阅读时应同时关注趋势、证据完整度与风险状态。</p>
+          </div>
+          <div class="methodology-guidance">
+            ${guidance.map(([title, description], index) => `
+              <article>
+                <b>${index + 1}</b>
+                <h3>${escapeHtml(title)}</h3>
+                <p>${escapeHtml(description)}</p>
+              </article>
+            `).join('')}
           </div>
         </section>
-        <section class="content-card">
-          <h2>时间衰减与每日重算</h2>
-          <p>GateRank 先计算当天综合分 CurrentScore，再用 w = exp(-0.1 × days_diff) 计算历史衰减分，最后按 FinalScore = 0.7 × CurrentScore + 0.3 × HistoricalScore 合成最终分。这样近期数据优先，但历史表现不会被瞬间清空。</p>
-          <div class="card-grid">
-            ${renderInfoCard('当前分', 'CurrentScore 直接来自稳定性、性能、价格和风险四个维度。')}
-            ${renderInfoCard('历史分', 'HistoricalScore 使用时间衰减权重，越近的历史样本影响越高。')}
-            ${renderInfoCard('最终分', 'FinalScore 按 70% 当前分和 30% 历史分合成，兼顾即时变化与长期可信度。')}
+
+        <section class="methodology-section">
+          <div class="methodology-section-heading">
+            <span>Transparency Boundary</span>
+            <h2>透明度边界</h2>
+            <p>我们公开足以帮助用户判断的证据，同时保留可能被用于复制模型、操纵数据或针对性优化的实现细节。</p>
+          </div>
+          <div class="methodology-boundary">
+            ${renderMethodologyBoundary('Public', '我们公开', '用户可以核对结果来自什么信息，以及报告对应哪个时间与规则版本。', publicItems)}
+            ${renderMethodologyBoundary('Protected', '我们保留', '这些内容只用于内部评分、质量控制与抗操纵，不进入公开页面或机器可读数据。', privateItems, true)}
+          </div>
+          <p class="methodology-boundary-note">保留内部参数并不影响结果可追溯性：用户仍可查看数据日期、趋势、风险来源类别和历史报告，但无法直接复制或反向实现评分模型。</p>
+        </section>
+
+        <section class="methodology-section">
+          <div class="methodology-section-heading">
+            <span>Trust Principles</span>
+            <h2>我们坚持的评测原则</h2>
+          </div>
+          <div class="methodology-principles">
+            ${principles.map(([title, description]) => `
+              <article>
+                <span aria-hidden="true">✓</span>
+                <div><h3>${escapeHtml(title)}</h3><p>${escapeHtml(description)}</p></div>
+              </article>
+            `).join('')}
           </div>
         </section>
-        <section class="content-card">
-          <h2>常见问题</h2>
-          <div class="card-grid">
-            ${methodologyFaq.map((item) => renderInfoCard(item.question, item.answer)).join('')}
+
+        <section class="methodology-section">
+          <div class="methodology-section-heading">
+            <span>Common Questions</span>
+            <h2>FAQ / 常见问题</h2>
+          </div>
+          <div class="methodology-faq">
+            ${methodologyFaq.map((item) => `
+              <details>
+                <summary><span>${escapeHtml(item.question)}</span><i aria-hidden="true">＋</i></summary>
+                <p>${escapeHtml(item.answer)}</p>
+              </details>
+            `).join('')}
+          </div>
+        </section>
+
+        <section class="methodology-cta">
+          <div>
+            <span>Methodology Note</span>
+            <h2>长期可信，比单次高性能样本更重要。</h2>
+            <p>先看综合排名，再结合报告日期、趋势和风险状态做判断。GateRank 提供证据，不替用户承诺未来。</p>
+          </div>
+          <div class="methodology-actions">
+            <a class="methodology-primary-action" href="/rankings/all">查看机场排行 <span aria-hidden="true">→</span></a>
+            <a class="methodology-secondary-action" href="/monthly-reports">查看最新报告 <span aria-hidden="true">→</span></a>
           </div>
         </section>
       </main>
     `,
   });
+}
+
+function renderMethodologyBoundary(
+  eyebrow: string,
+  title: string,
+  description: string,
+  items: string[],
+  protectedColumn = false,
+): string {
+  return `
+    <article class="${protectedColumn ? 'is-protected' : ''}">
+      <span>${escapeHtml(eyebrow)}</span>
+      <h3>${escapeHtml(title)}</h3>
+      <p>${escapeHtml(description)}</p>
+      <ul>
+        ${items.map((item) => `<li><i aria-hidden="true">✓</i>${escapeHtml(item)}</li>`).join('')}
+      </ul>
+    </article>
+  `;
 }
 
 export function renderRankingTransparencyPublicPage(siteUrl: string, frontendAssets?: PublicFrontendAssets): string {
@@ -3024,16 +3139,12 @@ const styles = `
   .hero-dark { background: linear-gradient(135deg, #111827, #f8fafc); color: #fff; }
   .hero-risk { background: linear-gradient(135deg, #3f0f19, #f7f2f4); color: #fff; }
   .hero-deals { position: relative; overflow: hidden; border-color: rgba(254,215,170,.2); border-radius: 32px; padding: 40px; background: linear-gradient(135deg, #241207 0%, #6F2F0B 38%, #D97706 72%, #F7D7B2 100%); color: #fff; box-shadow: 0 30px 80px rgba(120,53,15,.22); }
-  .hero-methodology { position: relative; overflow: hidden; border-color: rgba(186,230,253,.2); border-radius: 32px; padding: 40px; background: linear-gradient(135deg, #082F49 0%, #075985 38%, #0284C7 72%, #BAE6FD 100%); color: #fff; box-shadow: 0 30px 80px rgba(2,132,199,.18); }
   .hero-surface { position: absolute; inset: 0; opacity: .2; background-image: radial-gradient(circle at top left, rgba(255,237,213,.34), transparent 35%), radial-gradient(circle at bottom right, rgba(36,18,7,.28), transparent 32%); }
-  .hero-methodology .hero-surface { background-image: radial-gradient(circle at top left, rgba(186,230,253,.34), transparent 35%), radial-gradient(circle at bottom right, rgba(8,47,73,.28), transparent 32%); }
   .hero-content { position: relative; z-index: 1; display: grid; gap: 32px; grid-template-columns: minmax(0, 1fr) 320px; align-items: end; }
   .eyebrow { font-size: 12px; letter-spacing: .18em; text-transform: uppercase; font-weight: 900; color: #777; }
   .hero-dark .eyebrow, .hero-risk .eyebrow { color: rgba(255,255,255,.74); }
   .hero-deals .eyebrow { display: inline-flex; align-items: center; border: 1px solid rgba(255,237,213,.2); border-radius: 999px; background: rgba(255,237,213,.1); padding: 8px 16px; color: rgba(255,247,237,.88); backdrop-filter: blur(12px); }
-  .hero-methodology .eyebrow { display: inline-flex; align-items: center; border: 1px solid rgba(224,242,254,.2); border-radius: 999px; background: rgba(224,242,254,.1); padding: 8px 16px; color: rgba(240,249,255,.88); backdrop-filter: blur(12px); }
   .page-main h1 { margin: 16px 0 0; font-size: clamp(36px, 7vw, 64px); line-height: .96; letter-spacing: -0.02em; }
-  .hero-methodology h1 span { display: block; color: rgba(240,249,255,.46); }
   h2 { margin: 0 0 16px; font-size: 28px; }
   h3 { margin: 0 0 10px; font-size: 18px; }
   p { line-height: 1.8; }
@@ -3043,14 +3154,112 @@ const styles = `
   .metric, .mini-card { border: 1px solid #e5e5e5; border-radius: 18px; padding: 18px; background: rgba(255,255,255,.86); color: #111; }
   .hero-content .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
   .hero-deals .metric { border-color: rgba(255,255,255,.12); border-radius: 16px; background: rgba(255,255,255,.12); color: #fff; backdrop-filter: blur(12px); }
-  .hero-methodology .metric { border-color: rgba(255,255,255,.12); border-radius: 16px; background: rgba(255,255,255,.12); color: #fff; backdrop-filter: blur(12px); }
   .hero-deals .metric div { color: rgba(255,247,237,.68); }
-  .hero-methodology .metric div { color: rgba(240,249,255,.68); }
   .hero-deals .metric strong { color: #fff; }
-  .hero-methodology .metric strong { color: #fff; }
   .metric div, .muted { color: #666; font-size: 13px; }
   .metric strong, .score { display: block; margin-top: 8px; font-size: 28px; font-weight: 900; }
   .content-card { border: 1px solid #e5e5e5; border-radius: 24px; padding: 26px; background: #fff; }
+  .methodology-page { gap: 104px; padding-top: 48px; }
+  .methodology-hero { position: relative; display: grid; grid-template-columns: minmax(0,1fr) 320px; align-items: end; gap: 32px; overflow: hidden; border: 1px solid rgba(186,230,253,.2); border-radius: 32px; padding: 48px 40px; color: #fff; background: linear-gradient(135deg, #082F49 0%, #075985 38%, #0284C7 72%, #BAE6FD 100%); box-shadow: 0 30px 80px rgba(2,132,199,.18); }
+  .methodology-hero::after { content: ""; position: absolute; inset: 0; background-image: radial-gradient(circle at top left, rgba(186,230,253,.34), transparent 35%), radial-gradient(circle at bottom right, rgba(8,47,73,.28), transparent 32%); opacity: .2; pointer-events: none; }
+  .methodology-hero-copy, .methodology-facts { position: relative; z-index: 1; }
+  .methodology-eyebrow, .methodology-section-heading > span, .methodology-cta > div > span { font-size: 11px; font-weight: 900; letter-spacing: .2em; text-transform: uppercase; }
+  .methodology-eyebrow { display: inline-flex; align-items: center; border: 1px solid rgba(224,242,254,.2); border-radius: 999px; background: rgba(224,242,254,.1); padding: 8px 12px; color: rgba(240,249,255,.9); backdrop-filter: blur(10px); }
+  .methodology-section-heading > span, .methodology-cta > div > span { color: #4f46e5; }
+  .methodology-hero h1 { max-width: 820px; margin: 20px 0 0; color: #fff; font-size: clamp(36px,7vw,56px); line-height: .95; letter-spacing: -.02em; }
+  .methodology-hero h1 span { display: block; color: rgba(240,249,255,.5); }
+  .methodology-hero-copy > p { max-width: 760px; margin: 20px 0 0; color: rgba(255,255,255,.75); font-size: 16px; line-height: 1.75; }
+  .methodology-facts { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; }
+  .methodology-facts > div { border: 1px solid rgba(255,255,255,.12); border-radius: 16px; background: rgba(255,255,255,.12); padding: 16px; backdrop-filter: blur(10px); }
+  .methodology-facts strong, .methodology-facts span { display: block; }
+  .methodology-facts strong { color: #fff; font-size: 18px; }
+  .methodology-facts span { margin-top: 6px; color: rgba(240,249,255,.7); font-size: 13px; line-height: 1.6; }
+  .methodology-section { display: grid; gap: 30px; }
+  .methodology-section-heading { max-width: 760px; }
+  .methodology-section-heading h2 { margin: 12px 0 0; color: #0a0a0a; font-size: clamp(30px,4vw,42px); line-height: 1.12; letter-spacing: -.035em; }
+  .methodology-section-heading p { margin: 16px 0 0; color: #525252; font-size: 16px; line-height: 1.85; }
+  .methodology-dimensions { display: grid; grid-template-columns: repeat(5,minmax(0,1fr)); gap: 14px; }
+  .methodology-dimensions article { min-width: 0; border: 1px solid #e5e7eb; border-radius: 18px; background: #fff; padding: 22px; transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+  .methodology-dimensions article:hover { transform: translateY(-2px); border-color: #d4d4d8; box-shadow: 0 16px 36px rgba(15,23,42,.06); }
+  .methodology-dimensions b { display: inline-flex; width: 42px; height: 42px; align-items: center; justify-content: center; border: 1px solid #c7d2fe; border-radius: 12px; background: #eef2ff; color: #4338ca; }
+  .methodology-dimensions h3 { margin-top: 24px; color: #0a0a0a; font-size: 19px; }
+  .methodology-dimensions p { margin: 12px 0 0; color: #525252; font-size: 13px; line-height: 1.8; }
+  .methodology-process { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); overflow: hidden; border: 1px solid #e5e7eb; border-radius: 18px; background: #fff; }
+  .methodology-process article { position: relative; padding: 26px; }
+  .methodology-process article + article { border-left: 1px solid #e5e7eb; }
+  .methodology-process b { color: #4f46e5; font-family: ui-monospace,SFMono-Regular,Menlo,monospace; font-size: 12px; letter-spacing: .18em; }
+  .methodology-process h3 { margin-top: 22px; color: #0a0a0a; font-size: 18px; }
+  .methodology-process p { margin: 10px 0 0; color: #525252; font-size: 13px; line-height: 1.8; }
+  .methodology-guidance { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; }
+  .methodology-guidance article { border: 1px solid #e5e7eb; border-radius: 18px; background: #fafafa; padding: 24px; }
+  .methodology-guidance b { display: inline-flex; width: 36px; height: 36px; align-items: center; justify-content: center; border-radius: 9px; background: #0a0a0a; color: #fff; font-size: 12px; }
+  .methodology-guidance h3 { margin-top: 20px; color: #0a0a0a; font-size: 20px; }
+  .methodology-guidance p { margin: 10px 0 0; color: #525252; font-size: 14px; line-height: 1.8; }
+  .methodology-boundary { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); overflow: hidden; border: 1px solid #e5e7eb; border-radius: 18px; background: #fff; }
+  .methodology-boundary article { padding: 30px; }
+  .methodology-boundary article.is-protected { border-left: 1px solid #e5e7eb; background: #fafafa; }
+  .methodology-boundary article > span { color: #4f46e5; font-size: 10px; font-weight: 900; letter-spacing: .18em; text-transform: uppercase; }
+  .methodology-boundary h3 { margin-top: 8px; color: #0a0a0a; font-size: 24px; }
+  .methodology-boundary p { margin: 14px 0 0; color: #525252; font-size: 14px; line-height: 1.8; }
+  .methodology-boundary ul { display: grid; gap: 12px; margin: 22px 0 0; padding: 0; list-style: none; }
+  .methodology-boundary li { display: flex; align-items: flex-start; gap: 10px; color: #404040; font-size: 14px; line-height: 1.6; }
+  .methodology-boundary li i { display: inline-flex; width: 20px; height: 20px; flex: 0 0 auto; align-items: center; justify-content: center; border-radius: 50%; background: #e0e7ff; color: #4338ca; font-size: 11px; font-style: normal; }
+  .methodology-boundary-note { margin: -16px 0 0; border: 1px solid #c7d2fe; border-radius: 12px; background: #eef2ff; padding: 16px 18px; color: #312e81; font-size: 14px; line-height: 1.8; }
+  .methodology-principles { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
+  .methodology-principles article { display: grid; grid-template-columns: 34px minmax(0,1fr); gap: 14px; padding: 24px; }
+  .methodology-principles article:nth-child(n+4) { border-top: 1px solid #e5e7eb; }
+  .methodology-principles article > span { display: inline-flex; width: 34px; height: 34px; align-items: center; justify-content: center; border-radius: 9px; background: #f5f5f5; color: #525252; font-weight: 900; }
+  .methodology-principles h3 { color: #0a0a0a; font-size: 16px; }
+  .methodology-principles p { margin: 7px 0 0; color: #525252; font-size: 13px; line-height: 1.7; }
+  .methodology-faq { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 18px; background: #fff; }
+  .methodology-faq details + details { border-top: 1px solid #e5e7eb; }
+  .methodology-faq details[open] { background: #fafafa; }
+  .methodology-faq summary { display: flex; min-height: 68px; align-items: center; justify-content: space-between; gap: 20px; padding: 18px 22px; color: #0a0a0a; cursor: pointer; font-size: 16px; font-weight: 900; list-style: none; }
+  .methodology-faq summary::-webkit-details-marker { display: none; }
+  .methodology-faq summary:focus-visible { outline: 2px solid #4f46e5; outline-offset: -4px; }
+  .methodology-faq summary i { color: #a3a3a3; font-style: normal; transition: transform .2s ease; }
+  .methodology-faq details[open] summary i { transform: rotate(45deg); }
+  .methodology-faq details > p { max-width: 900px; margin: 0; padding: 0 22px 22px; color: #525252; font-size: 15px; line-height: 1.8; }
+  .methodology-cta { display: flex; align-items: center; justify-content: space-between; gap: 36px; border-radius: 18px; background: #0a0a0a; padding: 36px; color: #fff; }
+  .methodology-cta > div > span { color: rgba(255,255,255,.45); }
+  .methodology-cta h2 { margin: 14px 0 0; color: #fff; font-size: clamp(26px,4vw,40px); letter-spacing: -.03em; }
+  .methodology-cta p { max-width: 760px; margin: 14px 0 0; color: rgba(255,255,255,.65); font-size: 15px; line-height: 1.8; }
+  .methodology-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 12px; }
+  .methodology-actions a { display: inline-flex; min-height: 44px; align-items: center; justify-content: center; gap: 8px; border-radius: 8px; padding: 0 18px; font-size: 14px; font-weight: 900; text-decoration: none; transition: transform .2s ease, background .2s ease, color .2s ease; }
+  .methodology-actions a:hover { transform: translateY(-2px); }
+  .methodology-actions a:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }
+  .methodology-primary-action { background: #fff; color: #0a0a0a; }
+  .methodology-primary-action:hover { background: #f5f5f5; }
+  .methodology-secondary-action { color: rgba(255,255,255,.72); }
+  .methodology-secondary-action:hover { color: #fff; }
+  @media (max-width: 1024px) {
+    .methodology-page { gap: 82px; }
+    .methodology-hero { grid-template-columns: 1fr; padding: 40px; }
+    .methodology-dimensions { grid-template-columns: repeat(3,minmax(0,1fr)); }
+    .methodology-process { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .methodology-process article:nth-child(3) { border-left: 0; border-top: 1px solid #e5e7eb; }
+    .methodology-process article:nth-child(4) { border-top: 1px solid #e5e7eb; }
+    .methodology-cta { align-items: flex-start; flex-direction: column; }
+  }
+  @media (max-width: 720px) {
+    .methodology-page { gap: 68px; padding-top: 24px; }
+    .methodology-hero { gap: 28px; border-radius: 20px; padding: 32px 24px; }
+    .methodology-hero h1 { font-size: 42px; }
+    .methodology-hero-copy > p { font-size: 15px; line-height: 1.8; }
+    .methodology-facts { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    .methodology-facts > div { padding: 16px; }
+    .methodology-dimensions, .methodology-guidance, .methodology-boundary, .methodology-principles { grid-template-columns: 1fr; }
+    .methodology-process { grid-template-columns: 1fr; }
+    .methodology-process article + article, .methodology-process article:nth-child(3), .methodology-process article:nth-child(4) { border-top: 1px solid #e5e7eb; border-left: 0; }
+    .methodology-boundary article.is-protected { border-top: 1px solid #e5e7eb; border-left: 0; }
+    .methodology-principles article:nth-child(n+2) { border-top: 1px solid #e5e7eb; }
+    .methodology-cta { padding: 26px 22px; }
+    .methodology-actions { width: 100%; flex-direction: column; align-items: stretch; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .methodology-dimensions article, .methodology-faq summary i, .methodology-actions a { transition: none; }
+    .methodology-dimensions article:hover, .methodology-actions a:hover { transform: none; }
+  }
   .home-tool-download-cta { position: relative; display: flex; min-height: 88px; align-items: center; justify-content: space-between; overflow: hidden; gap: 18px; border: 1px solid #e0f2fe; border-radius: 18px; background: radial-gradient(circle at 9% 45%, rgba(14,165,233,.13), transparent 28%), linear-gradient(135deg, #fff 0%, #f8fbff 52%, #eef7ff 100%); padding: 15px 18px; color: #0f172a; text-decoration: none; box-shadow: 0 16px 44px rgba(15,23,42,.06); transition: transform .2s ease-out, box-shadow .2s ease-out, border-color .2s ease-out; }
   .home-tool-download-cta::before { content: ""; position: absolute; inset: 0 0 auto; height: 1px; background: linear-gradient(90deg, transparent, #bae6fd, transparent); pointer-events: none; }
   .home-tool-download-cta:hover { transform: translateY(-2px); border-color: #bae6fd; box-shadow: 0 20px 54px rgba(14,116,144,.12); }
@@ -3426,6 +3635,7 @@ const styles = `
   .score-metric strong { display: block; margin-top: 8px; color: #020617; font-size: 26px; font-weight: 900; }
   .score-metric i { display: block; height: 6px; margin-top: 12px; border-radius: 999px; background: #22c55e; }
   .score-metric.blue i { background: #3b82f6; }
+  .score-metric.indigo i { background: #6366f1; }
   .score-metric.orange i { background: #f97316; }
   .score-metric.purple i { background: #a855f7; }
   .score-metric.slate i { background: #94a3b8; }

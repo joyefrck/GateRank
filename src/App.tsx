@@ -308,6 +308,7 @@ interface RiskMonitorPageResponse {
 interface ReportViewResponse {
   requested_date: string;
   date: string;
+  score_rule_version: 'v1_spcr' | 'v2_spncr';
   resolved_from_fallback: boolean;
   fallback_notice: string | null;
   performance_under_review: boolean;
@@ -341,6 +342,7 @@ interface ReportViewResponse {
   score_breakdown: {
     s: number;
     p: number;
+    n: number | null;
     c: number;
     r: number;
     final_score: number | null;
@@ -350,6 +352,23 @@ interface ReportViewResponse {
     complaint_penalty: number;
     history_penalty: number;
   };
+  network_coverage: {
+    sampled_date: string;
+    rule_version: string;
+    detected_nodes_count: number;
+    healthy_nodes_count: number;
+    unsupported_nodes_count: number;
+    unknown_healthy_nodes_count: number;
+    healthy_node_rate: number;
+    core_regions: string[];
+    extended_regions: string[];
+    max_region_code: string | null;
+    max_region_share: number;
+    node_count_score: number;
+    region_score: number;
+    health_rate_score: number;
+    balance_score: number;
+  } | null;
   metrics: {
     uptime_percent_30d: number;
     median_latency_ms: number;
@@ -4894,7 +4913,9 @@ function ReportHeroV2({ data }: { data: ReportViewResponse }) {
           </span>
         </div>
         <p className="mt-4 max-w-3xl text-sm leading-7 text-slate-600 md:text-base">
-          基于 GateRank 全球节点监测数据，从稳定性、性能、价格与风险四个维度综合评估。
+          基于 GateRank 全球节点监测数据，{data.score_rule_version === 'v2_spncr'
+            ? '从稳定性、性能、网络覆盖、价格与风险五个维度综合评估。'
+            : '按历史四维规则从稳定性、性能、价格与风险综合评估。'}
           本页展示 {data.airport.name} 的综合评分、服务能力、关键指标与 {buildReportTrendLabel(data)}，帮助判断是否适合作为机场 VPN 选择。
         </p>
         <div className="mt-5 flex flex-wrap gap-2">
@@ -5036,12 +5057,13 @@ function ReportScoreCard({ data }: { data: ReportViewResponse }) {
 function ReportMethodologyCard({ data }: { data: ReportViewResponse }) {
   const methodologyHref = buildMethodologyHref();
   const radarPoints = buildReportRadarPoints(data.score_breakdown);
+  const isV2 = data.score_rule_version === 'v2_spncr' && data.score_breakdown.n !== null;
   return (
     <div className="mt-6 flex flex-1 flex-col border-t border-slate-200 pt-5 text-left">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <div className="text-sm font-black text-slate-950">四维评分模型</div>
-          <div className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">S · P · C · R</div>
+          <div className="text-sm font-black text-slate-950">{isV2 ? '五维评分模型' : '四维评分模型'}</div>
+          <div className="mt-1 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">{isV2 ? 'S · P · N · C · R' : 'S · P · C · R'}</div>
         </div>
         <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-black text-emerald-700">
           每日更新
@@ -5054,17 +5076,38 @@ function ReportMethodologyCard({ data }: { data: ReportViewResponse }) {
         className="mx-auto mt-3 h-36 w-full max-w-[220px] overflow-visible drop-shadow-[0_10px_18px_rgba(16,185,129,0.10)]"
         viewBox="0 0 120 120"
       >
-        <title id="report-score-radar-title">本报告四维评分分布</title>
-        <desc id="report-score-radar-description">稳定性、性能、价格与风险四个维度的评分雷达图</desc>
-        <polygon points="60,12 108,60 60,108 12,60" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1" />
-        <polygon points="60,36 84,60 60,84 36,60" fill="none" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="2 2" />
-        <path d="M60 12V108M12 60H108" fill="none" stroke="#e2e8f0" strokeWidth="1" />
+        <title id="report-score-radar-title">本报告{isV2 ? '五维' : '四维'}评分分布</title>
+        <desc id="report-score-radar-description">{isV2 ? '稳定性、性能、网络覆盖、价格与风险五个维度' : '稳定性、性能、价格与风险四个维度'}的评分雷达图</desc>
+        {isV2 ? (
+          <>
+            <polygon points="60,12 105.65,45.17 88.21,98.83 31.79,98.83 14.35,45.17" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1" />
+            <polygon points="60,36 82.83,52.58 74.11,79.42 45.89,79.42 37.17,52.58" fill="none" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="2 2" />
+            <path d="M60 60V12M60 60L105.65 45.17M60 60L88.21 98.83M60 60L31.79 98.83M60 60L14.35 45.17" fill="none" stroke="#e2e8f0" strokeWidth="1" />
+          </>
+        ) : (
+          <>
+            <polygon points="60,12 108,60 60,108 12,60" fill="#f8fafc" stroke="#cbd5e1" strokeWidth="1" />
+            <polygon points="60,36 84,60 60,84 36,60" fill="none" stroke="#e2e8f0" strokeWidth="1" strokeDasharray="2 2" />
+            <path d="M60 12V108M12 60H108" fill="none" stroke="#e2e8f0" strokeWidth="1" />
+          </>
+        )}
         <polygon points={radarPoints} fill="#10b981" fillOpacity="0.18" stroke="#059669" strokeWidth="2.4" strokeLinejoin="round" />
         <circle cx="60" cy="60" r="2.25" fill="#047857" />
         <text x="60" y="7" textAnchor="middle" className="fill-slate-500 text-[7px] font-black">S</text>
-        <text x="114" y="62" textAnchor="middle" dominantBaseline="middle" className="fill-slate-500 text-[7px] font-black">P</text>
-        <text x="60" y="117" textAnchor="middle" className="fill-slate-500 text-[7px] font-black">C</text>
-        <text x="6" y="62" textAnchor="middle" dominantBaseline="middle" className="fill-slate-500 text-[7px] font-black">R</text>
+        {isV2 ? (
+          <>
+            <text x="112" y="44" textAnchor="middle" className="fill-slate-500 text-[7px] font-black">P</text>
+            <text x="94" y="107" textAnchor="middle" className="fill-indigo-600 text-[7px] font-black">N</text>
+            <text x="26" y="107" textAnchor="middle" className="fill-slate-500 text-[7px] font-black">C</text>
+            <text x="8" y="44" textAnchor="middle" className="fill-slate-500 text-[7px] font-black">R</text>
+          </>
+        ) : (
+          <>
+            <text x="114" y="62" textAnchor="middle" dominantBaseline="middle" className="fill-slate-500 text-[7px] font-black">P</text>
+            <text x="60" y="117" textAnchor="middle" className="fill-slate-500 text-[7px] font-black">C</text>
+            <text x="6" y="62" textAnchor="middle" dominantBaseline="middle" className="fill-slate-500 text-[7px] font-black">R</text>
+          </>
+        )}
       </svg>
 
       <p className="text-center text-xs font-bold leading-5 text-slate-500">基于持续监测，而非单次测速</p>
@@ -5121,6 +5164,9 @@ function ReportScoreBreakdown({ data }: { data: ReportViewResponse }) {
   const scores = [
     { label: '稳定性 (S)', value: data.score_breakdown.s, color: 'bg-emerald-500', suffix: 'S' },
     { label: '性能 (P)', value: data.score_breakdown.p, color: 'bg-blue-500', suffix: 'P' },
+    ...(data.score_breakdown.n === null ? [] : [
+      { label: '网络覆盖 (N)', value: data.score_breakdown.n, color: 'bg-indigo-500', suffix: 'N' },
+    ]),
     { label: '价格 (C)', value: data.score_breakdown.c, color: 'bg-orange-500', suffix: 'C' },
     { label: '风险 (R)', value: data.score_breakdown.r, color: 'bg-purple-500', suffix: 'R' },
     { label: '最终分', value: data.score_breakdown.final_score, color: 'bg-emerald-500', suffix: '' },

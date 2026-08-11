@@ -1,6 +1,7 @@
 import {
   STABILITY_RULES,
   FINAL_ENGINE_WEIGHTS,
+  FINAL_ENGINE_WEIGHTS_V2,
   SCORE_WEIGHTS,
   THRESHOLDS,
   TIME_DECAY_LAMBDA,
@@ -15,6 +16,35 @@ import {
   computeUptimeScore,
   getStabilityTier,
 } from '../utils/stability';
+import { SCORE_RULE_V1, SCORE_RULE_V2, type GateRankScoreRuleVersion } from './networkCoverageScoring';
+
+export interface ComputeScoreOptions {
+  ruleVersion?: GateRankScoreRuleVersion;
+  networkCoverageScore?: number | null;
+}
+
+export function computeWeightedGateRankScore(
+  scores: { s: number; p: number; n?: number | null; c: number; r: number },
+  ruleVersion: GateRankScoreRuleVersion = SCORE_RULE_V1,
+): number {
+  return round2(weightedGateRankScore(scores, ruleVersion));
+}
+
+function weightedGateRankScore(
+  scores: { s: number; p: number; n?: number | null; c: number; r: number },
+  ruleVersion: GateRankScoreRuleVersion,
+): number {
+  return ruleVersion === SCORE_RULE_V2
+    ? FINAL_ENGINE_WEIGHTS_V2.s * scores.s
+      + FINAL_ENGINE_WEIGHTS_V2.p * scores.p
+      + FINAL_ENGINE_WEIGHTS_V2.n * Number(scores.n ?? 0)
+      + FINAL_ENGINE_WEIGHTS_V2.c * scores.c
+      + FINAL_ENGINE_WEIGHTS_V2.r * scores.r
+    : FINAL_ENGINE_WEIGHTS.s * scores.s
+      + FINAL_ENGINE_WEIGHTS.p * scores.p
+      + FINAL_ENGINE_WEIGHTS.c * scores.c
+      + FINAL_ENGINE_WEIGHTS.r * scores.r;
+}
 
 export function normalizeLinear(
   value: number,
@@ -41,7 +71,12 @@ export function computeScore(
   airport: Airport,
   metrics: DailyMetrics,
   historicalScore: number,
+  options: ComputeScoreOptions = {},
 ): ScoreBreakdown {
+  const ruleVersion = options.ruleVersion ?? SCORE_RULE_V1;
+  const networkCoverageScore = ruleVersion === SCORE_RULE_V2
+    ? clamp(Number(options.networkCoverageScore ?? 0), 0, 100)
+    : null;
   const uptimeBasis = metrics.uptime_percent_today ?? metrics.uptime_percent_30d;
   const latencySamples = metrics.latency_samples_ms || [];
   const latencyStats = computeLatencyStats(latencySamples);
@@ -100,7 +135,8 @@ export function computeScore(
   const historyPenalty = calcHistoryPenalty(metrics.history_incidents);
   const nodeAvailabilityPenalty = calcNodeAvailabilityPenalty(metrics.node_unavailability_percent);
   const riskPenalty = round2(
-    domainPenalty + sslPenalty + complaintPenalty + historyPenalty + nodeAvailabilityPenalty,
+    domainPenalty + sslPenalty + complaintPenalty + historyPenalty
+      + (ruleVersion === SCORE_RULE_V1 ? nodeAvailabilityPenalty : 0),
   );
 
   const s = computeSScore(uptimeScore, stabilityScore, streakScore);
@@ -117,11 +153,16 @@ export function computeScore(
 
   const r = round2(clamp(100 - riskPenalty, 0, 100));
 
-  const score =
-    s * SCORE_WEIGHTS.final.s +
-    p * SCORE_WEIGHTS.final.p +
-    c * SCORE_WEIGHTS.final.c +
-    r * SCORE_WEIGHTS.final.r;
+  const score = ruleVersion === SCORE_RULE_V2
+    ? s * SCORE_WEIGHTS.finalV2.s
+      + p * SCORE_WEIGHTS.finalV2.p
+      + Number(networkCoverageScore) * SCORE_WEIGHTS.finalV2.n
+      + c * SCORE_WEIGHTS.finalV2.c
+      + r * SCORE_WEIGHTS.finalV2.r
+    : s * SCORE_WEIGHTS.final.s
+      + p * SCORE_WEIGHTS.final.p
+      + c * SCORE_WEIGHTS.final.c
+      + r * SCORE_WEIGHTS.final.r;
 
   const recentScore = score;
   const finalScore =
@@ -131,6 +172,7 @@ export function computeScore(
   return {
     s: round2(s),
     p: round2(p),
+    n: networkCoverageScore === null ? null : round2(networkCoverageScore),
     c: round2(c),
     r: round2(r),
     risk_penalty: round2(riskPenalty),
@@ -139,6 +181,7 @@ export function computeScore(
     historical_score: round2(historicalScore),
     final_score: round2(finalScore),
     details: {
+      score_rule_version: ruleVersion,
       uptime_score: round2(uptimeScore),
       stability_score: round2(stabilityScore),
       streak_score: round2(streakScore),
@@ -221,11 +264,14 @@ export interface FinalEngineScoreInput {
   rSeries: TimeSeriesScorePoint[];
   pricePer100gb: number;
   referenceDate: string;
+  ruleVersion?: GateRankScoreRuleVersion;
+  networkCoverageScore?: number | null;
 }
 
 export interface FinalEngineScoreResult {
   s: number;
   p: number;
+  n: number | null;
   r: number;
   c: number;
   final_score: number;
@@ -255,19 +301,19 @@ export function computeFinalEngineScore(input: FinalEngineScoreInput): FinalEngi
   const p = computeWeightedScore(input.pSeries, input.referenceDate);
   const r = computeWeightedScore(input.rSeries, input.referenceDate);
   const c = calcPriceScore(input.pricePer100gb);
+  const ruleVersion = input.ruleVersion ?? SCORE_RULE_V1;
+  const n = ruleVersion === SCORE_RULE_V2
+    ? round2(clamp(Number(input.networkCoverageScore ?? 0), 0, 100))
+    : null;
   const dataDays = Math.min(input.sSeries.length, input.pSeries.length);
   const factor = coldStartFactor(dataDays);
-  const total =
-    (
-      FINAL_ENGINE_WEIGHTS.s * s +
-      FINAL_ENGINE_WEIGHTS.p * p +
-      FINAL_ENGINE_WEIGHTS.r * r +
-      FINAL_ENGINE_WEIGHTS.c * c
-    ) * factor;
+  const weightedTotal = weightedGateRankScore({ s, p, n, c, r }, ruleVersion);
+  const total = weightedTotal * factor;
 
   return {
     s,
     p,
+    n,
     r,
     c,
     final_score: round2(total),

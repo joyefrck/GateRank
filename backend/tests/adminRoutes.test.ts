@@ -6,7 +6,15 @@ import { errorHandler, HttpError } from '../src/middleware/errorHandler';
 import { createAdminRoutes } from '../src/routes/adminRoutes';
 import { SmtpSendError } from '../src/services/mailService';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
-import type { PerformanceRun, PerformanceRunInput, PerformanceRunTarget, ProbeSampleInput, ReportView } from '../src/types/domain';
+import type {
+  NetworkCoverageRun,
+  NetworkCoverageRunInput,
+  PerformanceRun,
+  PerformanceRunInput,
+  PerformanceRunTarget,
+  ProbeSampleInput,
+  ReportView,
+} from '../src/types/domain';
 import { buildPerformanceNodeKey, buildPerformanceNodeMatchIdentity } from '../src/utils/performanceNodeKey';
 import { getDateInTimezone } from '../src/utils/time';
 import type { AirportHomeAdSlotPrices } from '../../shared/airportAds';
@@ -1140,6 +1148,134 @@ test('PATCH /airports/:id/performance-node-selection rejects unknown node keys a
     assert.deepEqual(clearedAirportIds, [9]);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('POST network coverage run sanitizes persisted fields and atomically activates v2', async () => {
+  const inserted: NetworkCoverageRunInput[] = [];
+  const activations: Array<{ date: string; runId: number; activatedAt: string }> = [];
+  const audits: unknown[] = [];
+  const key = 'a'.repeat(64);
+  const app = express();
+  app.use(express.json());
+  app.use(createAdminRoutes({
+    airportRepository: stubAirportRepository(),
+    airportApplicationRepository: stubAirportApplicationRepository(),
+    probeSampleRepository: stubProbeSampleRepository(),
+    performanceRunRepository: stubPerformanceRunRepository(),
+    networkCoverageRunRepository: {
+      insert: async (input) => {
+        inserted.push(input);
+        return {
+          id: 91,
+          ...input,
+          subscription_format: input.subscription_format || null,
+          detected_nodes_count: input.nodes?.length || 0,
+          healthy_nodes_count: input.nodes?.filter((node) => node.healthy).length || 0,
+          unhealthy_nodes_count: input.nodes?.filter((node) => !node.healthy).length || 0,
+          unsupported_nodes_count: input.unsupported_nodes_count || 0,
+          unknown_healthy_nodes_count: 0,
+          healthy_node_rate: 100,
+          core_regions: ['HK'],
+          extended_regions: [],
+          region_counts: { HK: 1 },
+          max_region_code: 'HK',
+          max_region_share: 100,
+          node_count_score: 20,
+          core_coverage_score: 20,
+          extended_coverage_score: 0,
+          region_score: 12,
+          health_rate_score: 100,
+          balance_score: 20,
+          score_n: 29.4,
+          rule_version: 'network_coverage_v1',
+          nodes: (input.nodes || []).map((node) => ({
+            ...node,
+            type: node.type || null,
+            error_code: node.error_code || null,
+            region_code: 'HK',
+            region_name: '香港',
+            region_group: 'core' as const,
+          })),
+          error_code: input.error_code || null,
+          error_message: input.error_message || null,
+          diagnostics: input.diagnostics || {},
+          created_at: input.sampled_at,
+        } satisfies NetworkCoverageRun;
+      },
+      getLatestByAirportAndDate: async () => null,
+    },
+    scoreRuleService: {
+      activateV2IfAbsent: async (date, runId, activatedAt) => {
+        activations.push({ date, runId, activatedAt });
+        return { date, runId, activatedAt };
+      },
+    },
+    metricsRepository: stubMetricsRepository(),
+    scoreRepository: { getByAirportAndDate: async () => null, getTrend: async () => [] },
+    recomputeService: stubRecomputeService(),
+    aggregationService: stubAggregationService(),
+    manualJobService: stubManualJobService(),
+    auditRepository: { log: async (...args) => { audits.push(args); } },
+    publicViewService: stubPublicViewService(),
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/airports/9/network-coverage-runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        airport_id: 9,
+        sampled_at: '2026-08-11T00:20:00+08:00',
+        sampled_date: '2026-08-11',
+        source: 'network-coverage',
+        status: 'success',
+        nodes: [{
+          key,
+          name: 'HK trojan://secret@example.com 018f85db-e275-4ae6-b4c3-5c0c6a11d598',
+          type: 'trojan',
+          healthy: true,
+          error_code: 'password=do-not-store',
+          raw_uri: 'trojan://secret@example.com',
+          password: 'do-not-store',
+          outbound: { password: 'do-not-store' },
+        }],
+        error_message: 'failed https://subscription.example.com/private',
+        diagnostics: {
+          health_check: 'https://probe.example.com',
+          node_source: 'snapshot',
+          attempted_nodes_count: 1,
+          private_url: 'https://must-not-persist.example.com',
+        },
+      }),
+    });
+    const body = await response.json() as { status: string; score_n: number };
+
+    assert.equal(response.status, 201);
+    assert.equal(body.status, 'success');
+    assert.equal(inserted.length, 1);
+    assert.deepEqual(activations, [{ date: '2026-08-11', runId: 91, activatedAt: '2026-08-11 00:20:00' }]);
+    assert.doesNotMatch(JSON.stringify(inserted), /trojan:\/\/|018f85db|do-not-store|subscription\.example|must-not-persist/);
+    assert.doesNotMatch(JSON.stringify(audits), /trojan:\/\/|018f85db|do-not-store|subscription\.example|must-not-persist/);
+    assert.match(inserted[0]?.nodes?.[0]?.name || '', /\[redacted-uri\].*\[redacted-id\]/);
+    assert.equal(inserted[0]?.diagnostics?.private_url, undefined);
+
+    const invalidKeyResponse = await fetch(`http://127.0.0.1:${port}/airports/9/network-coverage-runs`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sampled_at: '2026-08-11T00:20:00+08:00',
+        sampled_date: '2026-08-11',
+        status: 'success',
+        nodes: [{ key: 'trojan://secret@example.com', name: 'HK', healthy: true }],
+      }),
+    });
+    assert.equal(invalidKeyResponse.status, 400);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }
 });
 
@@ -7059,6 +7195,8 @@ function createMonthlyReportView(input: { date: string }): ReportView {
   return {
     requested_date: input.date,
     date: input.date,
+    score_rule_version: 'v1_spcr',
+    network_coverage: null,
     resolved_from_fallback: false,
     fallback_notice: null,
     performance_under_review: false,
@@ -7101,6 +7239,7 @@ function createMonthlyReportView(input: { date: string }): ReportView {
     score_breakdown: {
       s: 92,
       p: 86,
+      n: null,
       c: 78,
       r: 96,
       final_score: 88.5,

@@ -40,10 +40,10 @@ export const HOME_SEO_CONTENT_SECTIONS: PublicHomeSeoContentSection[] = [
   },
   {
     title: 'GateRank 如何评测机场 VPN？',
-    body: 'GateRank 评测机场 VPN 时，会把稳定性、性能、价格和风险拆开观察，再汇总成公开展示分数。稳定性关注 30 天可用率、连续健康天数和延迟波动；性能关注中位延迟、下载速度、代理请求失败率与晚高峰表现；价格维度会结合月付、年付折算、试用和套餐门槛；风险维度则关注官网可访问性、SSL 状态、历史异常和投诉信号。这样做的目的不是替用户保证某个机场绝对可靠，而是让每一次机场推荐都有可追溯的指标依据。',
-    facts: ['稳定性、性能、价格、风险分开观察', '晚高峰与长期趋势比单次测速更重要', '广告活动不进入 GateRank Score'],
+    body: 'GateRank 评测机场 VPN 时，会把稳定性、性能、网络覆盖、性价比和风险拆开观察，再结合数据日期、趋势与完整性状态形成公开结论。这样做的目的不是替用户保证某个机场绝对可靠，而是让每一次机场推荐都有可追溯的指标依据。',
+    facts: ['五个维度分开观察', '持续监测与历史报告互相校验', '广告活动不进入 GateRank 公开排名'],
     links: [
-      { label: '查看测评方法', href: '/methodology', description: '理解评分规则、测速标准和风险扣分逻辑' },
+      { label: '查看测评方法', href: '/methodology', description: '理解评估维度、数据来源和推荐依据' },
       { label: '查看机场排行', href: '/rankings/all', description: '按公开展示分数对比已收录机场' },
     ],
   },
@@ -98,6 +98,7 @@ export const HOME_FAQ_ITEMS: PublicHomeFaqItem[] = [
 
 export interface PublicReportSeoView {
   date: string;
+  score_rule_version: 'v1_spcr' | 'v2_spncr';
   airport: {
     name: string;
     slug: string;
@@ -120,6 +121,7 @@ export interface PublicReportSeoView {
   score_breakdown: {
     s: number;
     p: number;
+    n: number | null;
     c: number;
     r: number;
     final_score: number | null;
@@ -129,6 +131,17 @@ export interface PublicReportSeoView {
     complaint_penalty: number;
     history_penalty: number;
   };
+  network_coverage?: {
+    detected_nodes_count: number;
+    healthy_nodes_count: number;
+    unsupported_nodes_count: number;
+    unknown_healthy_nodes_count: number;
+    healthy_node_rate: number;
+    core_regions: string[];
+    extended_regions: string[];
+    max_region_code: string | null;
+    max_region_share: number;
+  } | null;
   metrics: {
     uptime_percent_30d: number;
     median_latency_ms: number;
@@ -664,7 +677,7 @@ export function buildFullRankingTopicContent(filters: FullRankingFilters): Publi
       },
       {
         question: `GateRank 如何排序${searchName}？`,
-        answer: `GateRank 会先筛出匹配 ${baseLabel} 的机场，再按公开展示分数排序。分数会综合稳定性、性能、价格和风险维度，并保留测评报告入口供进一步核对。`,
+        answer: `GateRank 会先筛出匹配 ${baseLabel} 的机场，再按公开展示分数排序。当前分数综合稳定性、性能、网络覆盖、价格和风险五个维度，并保留测评报告入口供进一步核对。`,
       },
     ],
   };
@@ -1018,6 +1031,14 @@ function buildReportTrendText(view: PublicReportSeoView): string {
   return trendLabel;
 }
 
+function buildReportDimensionText(view: PublicReportSeoView): string {
+  const base = `稳定性 S=${formatMetric(view.score_breakdown.s)}、性能 P=${formatMetric(view.score_breakdown.p)}`;
+  const network = view.score_rule_version === 'v2_spncr' && view.score_breakdown.n !== null
+    ? `、网络覆盖 N=${formatMetric(view.score_breakdown.n)}`
+    : '';
+  return `${base}${network}、价格 C=${formatMetric(view.score_breakdown.c)}、风险 R=${formatMetric(view.score_breakdown.r)}`;
+}
+
 export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqItem[] {
   const airportName = view.airport.name;
   const statusLabel = formatAirportStatusLabel(view.airport.status);
@@ -1036,7 +1057,7 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
     },
     {
       question: `${airportName}测评怎么看？`,
-      answer: `${airportName} 测评主要看榜单位置、稳定性 S=${formatMetric(view.score_breakdown.s)}、性能 P=${formatMetric(view.score_breakdown.p)}、价格 C=${formatMetric(view.score_breakdown.c)}、风险 R=${formatMetric(view.score_breakdown.r)}，以及 30 天可用率 ${formatMetric(view.metrics.uptime_percent_30d)}%、中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms、下载速率 ${formatMetric(view.metrics.median_download_mbps)} Mbps。`,
+      answer: `${airportName} 测评主要看榜单位置、${buildReportDimensionText(view)}，以及 30 天可用率 ${formatMetric(view.metrics.uptime_percent_30d)}%、中位延迟 ${formatMetric(view.metrics.median_latency_ms)} ms、下载速率 ${formatMetric(view.metrics.median_download_mbps)} Mbps。`,
     },
     {
       question: `${airportName}官网是什么？`,
@@ -1078,7 +1099,7 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
     },
     {
       question: `${airportName}和其他机场相比有什么优势？`,
-      answer: `${airportName} 当前公开总分${formatPublicScoreText(view)}，稳定性 S=${formatMetric(view.score_breakdown.s)}、性能 P=${formatMetric(view.score_breakdown.p)}、价格 C=${formatMetric(view.score_breakdown.c)}、风险 R=${formatMetric(view.score_breakdown.r)}。它的优势需要放到机场排行、稳定榜和性价比筛选中横向比较。`,
+      answer: `${airportName} 当前公开总分${formatPublicScoreText(view)}，${buildReportDimensionText(view)}。它的优势需要放到机场排行、稳定榜和性价比筛选中横向比较。`,
     },
     {
       question: `选择${airportName}前要注意什么？`,
@@ -1252,6 +1273,8 @@ export function buildReportStructuredData(
           buildPropertyValue('公开总分', formatPublicScoreText(view)),
           buildPropertyValue('状态', formatAirportStatusLabel(view.airport.status)),
           buildPropertyValue('数据日期', view.date),
+          buildPropertyValue('评分规则版本', view.score_rule_version),
+          ...(view.score_breakdown.n === null ? [] : [buildPropertyValue('网络覆盖N', formatMetric(view.score_breakdown.n))]),
           buildPropertyValue('30天可用率', `${formatMetric(view.metrics.uptime_percent_30d)}%`),
           buildPropertyValue('风险惩罚', formatMetric(view.score_breakdown.risk_penalty)),
           buildPropertyValue('官网探测扣分', formatMetric(view.score_breakdown.domain_penalty)),
@@ -1314,8 +1337,10 @@ export function buildReportProductReviewJsonLd(
     sameAs: view.airport.website,
     additionalProperty: [
       buildPropertyValue('GateRank算法评分说明', 'GateRank Score 是公开监测算法评分，不是用户评分或付费排名。'),
+      buildPropertyValue('评分规则版本', view.score_rule_version),
       buildPropertyValue('稳定性S', formatMetric(view.score_breakdown.s)),
       buildPropertyValue('性能P', formatMetric(view.score_breakdown.p)),
+      ...(view.score_breakdown.n === null ? [] : [buildPropertyValue('网络覆盖N', formatMetric(view.score_breakdown.n))]),
       buildPropertyValue('价格C', formatMetric(view.score_breakdown.c)),
       buildPropertyValue('风险R', formatMetric(view.score_breakdown.r)),
       buildPropertyValue('风险惩罚', formatMetric(view.score_breakdown.risk_penalty)),
@@ -1328,7 +1353,7 @@ export function buildReportProductReviewJsonLd(
         name: PUBLIC_SITE_BRAND_NAME,
       },
       name: `${view.airport.name} GateRank 算法测评`,
-      reviewBody: `GateRank 算法评分基于公开监测数据生成，当前总分${formatPublicScoreText(view)}，状态${formatAirportStatusLabel(view.airport.status)}，稳定性 S=${formatMetric(view.score_breakdown.s)}，性能 P=${formatMetric(view.score_breakdown.p)}，价格 C=${formatMetric(view.score_breakdown.c)}，风险 R=${formatMetric(view.score_breakdown.r)}。该结论不是用户评价，也不是付费排名。`,
+      reviewBody: `GateRank 算法评分基于公开监测数据生成，当前总分${formatPublicScoreText(view)}，状态${formatAirportStatusLabel(view.airport.status)}，${buildReportDimensionText(view)}。该结论不是用户评价，也不是付费排名。`,
       datePublished: view.date,
       ...(ratingValue
         ? {
@@ -1345,14 +1370,14 @@ export function buildReportProductReviewJsonLd(
 }
 
 export const METHODOLOGY_SEO: PublicSeoText = {
-  title: `机场测评方法 | 评分规则、测速标准、风险扣分与推荐依据 | ${PUBLIC_SITE_BRAND_NAME}`,
-  description: `${PUBLIC_SITE_BRAND_NAME} 方法页系统说明机场测评方法、机场评分规则与机场测速标准，拆解稳定性、性能、价格、风险扣分、阈值分段、时间衰减、每日重算和机场推荐依据，帮助理解机场 VPN 排名如何生成。`,
-  keywords: '机场榜GateRank,机场测评方法,机场评分规则,机场测速标准,机场推荐依据,机场VPN排名,VPN机场测评,风险扣分,时间衰减,GateRank',
+  title: `机场测评方法 | 评估维度、数据来源与推荐依据 | ${PUBLIC_SITE_BRAND_NAME}`,
+  description: `${PUBLIC_SITE_BRAND_NAME} 说明机场评测的五个观察维度、持续采集与真实性验证流程、风险监测、历史留痕和结果解读方式，帮助用户理解 GateRank 的推荐依据，以及为什么不能只看单次测速或价格。`,
+  keywords: '机场榜GateRank,机场测评方法,机场评估维度,机场数据来源,机场风险监测,机场推荐依据,机场VPN排名,历史报告,持续监测',
 };
 
 export const RANKING_TRANSPARENCY_SEO: PublicSeoText = {
   title: `关于 GateRank 评分、收费与排名独立性的声明 | ${PUBLIC_SITE_BRAND_NAME}`,
-  description: `${PUBLIC_SITE_BRAND_NAME} 公开说明 GateRank Score 评分算法、数据采集频率、机场主充值用途、扣费边界、停费处理，以及不参与付费排名的原则。`,
+  description: `${PUBLIC_SITE_BRAND_NAME} 公开说明 GateRank 的评估原则、数据采集频率、机场主充值用途、扣费边界、停费处理，以及不参与付费排名的原则。`,
   keywords: 'GateRank声明,机场榜评分,机场排名独立性,机场付费排名,机场主充值,机场测评收费,机场榜收费,GateRank Score',
 };
 
@@ -1369,8 +1394,8 @@ export const RANKING_TRANSPARENCY_ARTICLE: {
     },
     {
       index: 2,
-      title: '评分算法看什么',
-      body: 'GateRank 评分采用固定维度：稳定性、性能、价格、风险。稳定性重点观察可用率、连续健康天数和延迟波动；性能观察中位延迟、下载速率和代理请求失败率；价格观察月付、年付折算、试用门槛和性价比；风险观察官网可访问性、证书状态、投诉、历史异常与人工复核记录。最终展示分按既定权重生成，当前口径以测评方法页公开说明为准。单次测速、临时活动、站长主观评价或商业沟通不会单独决定排名。',
+      title: '评估体系看什么',
+      body: 'GateRank 从稳定性、性能、网络覆盖、性价比和风险五个维度观察服务质量，并结合数据日期、趋势与完整性状态形成公开结论。模型参数、判断阈值和抗操纵细节不对外披露；单次测速、临时活动、站长主观评价或商业沟通不会单独决定排名。',
     },
     {
       index: 3,

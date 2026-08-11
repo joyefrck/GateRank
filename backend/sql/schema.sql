@@ -436,12 +436,51 @@ CREATE TABLE IF NOT EXISTS airport_performance_node_preferences (
   CONSTRAINT fk_performance_node_preferences_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
 );
 
+CREATE TABLE IF NOT EXISTS airport_network_coverage_runs (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  airport_id BIGINT UNSIGNED NOT NULL,
+  sampled_at DATETIME NOT NULL,
+  sampled_date DATE NOT NULL,
+  source VARCHAR(128) NOT NULL DEFAULT 'network-coverage',
+  status ENUM('success', 'partial', 'skipped', 'failed') NOT NULL,
+  subscription_format VARCHAR(64) NULL,
+  detected_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
+  healthy_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
+  unhealthy_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
+  unsupported_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
+  unknown_healthy_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
+  healthy_node_rate DECIMAL(5,2) NOT NULL DEFAULT 0,
+  core_regions_json JSON NOT NULL,
+  extended_regions_json JSON NOT NULL,
+  region_counts_json JSON NOT NULL,
+  max_region_code VARCHAR(32) NULL,
+  max_region_share DECIMAL(5,2) NOT NULL DEFAULT 0,
+  node_count_score DECIMAL(6,2) NOT NULL DEFAULT 0,
+  core_coverage_score DECIMAL(6,2) NOT NULL DEFAULT 0,
+  extended_coverage_score DECIMAL(6,2) NOT NULL DEFAULT 0,
+  region_score DECIMAL(6,2) NOT NULL DEFAULT 0,
+  health_rate_score DECIMAL(6,2) NOT NULL DEFAULT 0,
+  balance_score DECIMAL(6,2) NOT NULL DEFAULT 0,
+  score_n DECIMAL(6,2) NOT NULL DEFAULT 0,
+  rule_version VARCHAR(64) NOT NULL,
+  nodes_json JSON NOT NULL,
+  error_code VARCHAR(128) NULL,
+  error_message TEXT NULL,
+  diagnostics_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_network_coverage_airport_date (airport_id, sampled_date, sampled_at DESC),
+  INDEX idx_network_coverage_date_status (sampled_date, status),
+  CONSTRAINT fk_network_coverage_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
+);
+
 CREATE TABLE IF NOT EXISTS airport_scores_daily (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   airport_id BIGINT UNSIGNED NOT NULL,
   date DATE NOT NULL,
   score_s DECIMAL(6,2) NOT NULL,
   score_p DECIMAL(6,2) NOT NULL,
+  score_n DECIMAL(6,2) NULL,
   score_c DECIMAL(6,2) NOT NULL,
   score_r DECIMAL(6,2) NOT NULL,
   risk_penalty DECIMAL(6,2) NOT NULL,
@@ -496,7 +535,7 @@ CREATE TABLE IF NOT EXISTS admin_system_settings (
 );
 
 CREATE TABLE IF NOT EXISTS admin_scheduler_tasks (
-  task_key ENUM('stability', 'subscription_node_refresh', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard') NOT NULL,
+  task_key ENUM('stability', 'subscription_node_refresh', 'performance', 'network_coverage', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard') NOT NULL,
   name VARCHAR(128) NOT NULL,
   enabled TINYINT(1) NOT NULL DEFAULT 0,
   schedule_time CHAR(5) NOT NULL,
@@ -511,7 +550,7 @@ CREATE TABLE IF NOT EXISTS admin_scheduler_tasks (
 
 CREATE TABLE IF NOT EXISTS admin_scheduler_runs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  task_key ENUM('stability', 'subscription_node_refresh', 'performance', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard') NOT NULL,
+  task_key ENUM('stability', 'subscription_node_refresh', 'performance', 'network_coverage', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard') NOT NULL,
   run_date DATE NOT NULL,
   trigger_source ENUM('schedule', 'restart', 'bootstrap_recover') NOT NULL DEFAULT 'schedule',
   status ENUM('running', 'succeeded', 'failed') NOT NULL DEFAULT 'running',
@@ -590,7 +629,7 @@ CREATE TABLE IF NOT EXISTS admin_manual_jobs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   airport_id BIGINT UNSIGNED NOT NULL,
   date DATE NOT NULL,
-  kind ENUM('full', 'stability', 'performance', 'risk', 'time_decay') NOT NULL,
+  kind ENUM('full', 'stability', 'performance', 'network_coverage', 'risk', 'time_decay') NOT NULL,
   status ENUM('queued', 'running', 'succeeded', 'failed') NOT NULL DEFAULT 'queued',
   message TEXT NULL,
   created_by VARCHAR(128) NOT NULL,

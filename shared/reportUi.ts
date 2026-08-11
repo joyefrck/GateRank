@@ -20,6 +20,7 @@ export interface ReportAnchorPosition {
 export interface ReportRadarScores {
   s: number;
   p: number;
+  n?: number | null;
   c: number;
   r: number;
 }
@@ -49,6 +50,9 @@ export function resolveActiveReportAnchor(
 }
 
 export function buildReportRadarPoints(scores: ReportRadarScores): string {
+  if (typeof scores.n === 'number' && Number.isFinite(scores.n)) {
+    return buildPolarRadarPoints([scores.s, scores.p, scores.n, scores.c, scores.r]);
+  }
   const s = scaleRadarScore(scores.s);
   const p = scaleRadarScore(scores.p);
   const c = scaleRadarScore(scores.c);
@@ -60,6 +64,16 @@ export function buildReportRadarPoints(scores: ReportRadarScores): string {
     `${REPORT_RADAR_CENTER},${formatRadarCoordinate(REPORT_RADAR_CENTER + c)}`,
     `${formatRadarCoordinate(REPORT_RADAR_CENTER - r)},${REPORT_RADAR_CENTER}`,
   ].join(' ');
+}
+
+function buildPolarRadarPoints(values: ReadonlyArray<number>): string {
+  return values.map((value, index) => {
+    const angle = -Math.PI / 2 + (index * Math.PI * 2) / values.length;
+    const radius = scaleRadarScore(value);
+    const x = REPORT_RADAR_CENTER + Math.cos(angle) * radius;
+    const y = REPORT_RADAR_CENTER + Math.sin(angle) * radius;
+    return `${formatRadarCoordinate(x)},${formatRadarCoordinate(y)}`;
+  }).join(' ');
 }
 
 export function buildSparklineChartPoints(

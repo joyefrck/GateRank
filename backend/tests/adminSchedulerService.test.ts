@@ -23,8 +23,9 @@ function createTask(overrides: Partial<SchedulerTask> = {}): SchedulerTask {
 function emptyLatestRuns(): Record<SchedulerTaskKey, SchedulerRun | null> {
   return {
     stability: null,
-    performance: null,
-    risk: null,
+  performance: null,
+  network_coverage: null,
+  risk: null,
     aggregate_recompute: null,
     billing_listing_sync: null,
     stability_resample_guard: null,

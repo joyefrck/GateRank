@@ -133,6 +133,9 @@ export class SchedulerTaskExecutor {
     if (taskKey === 'performance') {
       return this.runPerformanceCollection(date);
     }
+    if (taskKey === 'network_coverage') {
+      return this.runNetworkCoverageCollection();
+    }
     if (taskKey === 'risk') {
       return this.runRiskInspection(date);
     }
@@ -193,6 +196,25 @@ export class SchedulerTaskExecutor {
         summary: result.detail,
         ...(result.executionSummary || {}),
         ...(regionalDispatch ? { regional_dispatch: regionalDispatch } : {}),
+      },
+    };
+  }
+
+  async runNetworkCoverageCollection(): Promise<SchedulerTaskExecutionResult> {
+    const result = await this.runScriptStage(
+      'network_coverage',
+      'monitor_network_coverage.py',
+      'scheduler-network-coverage',
+    );
+    return {
+      status: result.status,
+      message: result.status === 'succeeded'
+        ? `网络覆盖采集完成：${result.detail}`
+        : `网络覆盖采集失败：${result.detail}`,
+      detail: {
+        stage: 'network_coverage',
+        summary: result.detail,
+        ...(result.executionSummary || {}),
       },
     };
   }
@@ -429,8 +451,8 @@ export class SchedulerTaskExecutor {
   }
 
   private async runScriptStage(
-    stage: 'stability' | 'performance',
-    scriptName: 'monitor_stability.py' | 'monitor_performance.py',
+    stage: 'stability' | 'performance' | 'network_coverage',
+    scriptName: 'monitor_stability.py' | 'monitor_performance.py' | 'monitor_network_coverage.py',
     source: string,
   ): Promise<{
     stage: string;

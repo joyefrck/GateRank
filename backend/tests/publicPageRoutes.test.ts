@@ -55,7 +55,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
     const checks = [
       ['/', /<h1>机场榜：机场 VPN 推荐与<span>可靠性榜单<\/span><\/h1>/, /机场 VPN 推荐、科学上网机场测评与可靠性榜单/],
       ['/rankings/all', /<h1>机场排行榜：全量机场 VPN 评分排名<\/h1>/, /全量机场榜单 \| 全部已上线机场评分排名/],
-      ['/methodology', /<h1>机场测评方法：评分规则、测速标准、风险扣分与推荐依据<\/h1>/, /机场测评方法/],
+      ['/methodology', /<h1>我们如何评估<span>一个机场<\/span><\/h1>/, /机场测评方法/],
       ['/apply', /<h1>申请入驻 GateRank 机场测试<\/h1>/, /申请入驻测试/],
       ['/risk-monitor', /<h1>跑路机场监测：高风险机场名单与机场跑路预警<\/h1>/, /跑路监测 \| 已跑路与风险观察机场列表/],
     ] as const;
@@ -243,7 +243,7 @@ test('core SEO descriptions include expanded search context', async () => {
   try {
     const port = (server.address() as AddressInfo).port;
     const checks = [
-      ['/methodology', /机场评分规则/, /每日重算/],
+      ['/methodology', /五个观察维度/, /推荐依据/],
       ['/apply', /官网地址/, /自动测速接入/],
       ['/risk-monitor', /跑路机场监测页/, /高风险机场 VPN 服务/],
     ] as const;
@@ -984,7 +984,7 @@ test('GET /deals/:slug returns 404 for an unknown airport and 200 without active
   }
 });
 
-test('GET /methodology includes expanded methodology SEO body and FAQ structured data', async () => {
+test('GET /methodology explains public principles without leaking model parameters', async () => {
   const app = express();
   app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));
 
@@ -995,19 +995,25 @@ test('GET /methodology includes expanded methodology SEO body and FAQ structured
     assert.equal(response.status, 200);
     const html = await response.text();
 
-    assert.match(html, /<section class="hero hero-methodology">/);
-    assert.match(html, /linear-gradient\(135deg, #082F49 0%, #075985 38%, #0284C7 72%, #BAE6FD 100%\)/);
-    assert.match(html, /总公式与评分目标/);
-    assert.match(html, /0\.4 × 稳定性 S \+ 0\.3 × 性能 P \+ 0\.1 × 价格 C \+ 0\.2 × 风险 R/);
-    assert.match(html, /四个维度的子项公式/);
-    assert.match(html, /S = 0\.5 × UptimeScore \+ 0\.3 × StabilityScore \+ 0\.2 × StreakScore/);
-    assert.match(html, /风险扣分如何进入排名/);
-    assert.match(html, /recent_complaints_count × 3/);
-    assert.match(html, /时间衰减与每日重算/);
-    assert.match(html, /w = exp\(-0\.1 × days_diff\)/);
+    assert.match(html, /<main class="page-main methodology-page">/);
+    assert.match(html, /我们如何评估<span>一个机场<\/span>/);
+    assert.match(html, /五维评估框架/);
+    assert.match(html, /数据如何形成结果/);
+    assert.match(html, /如何理解 GateRank 结果/);
+    assert.match(html, /透明度边界/);
+    assert.match(html, /模型参数、阈值与计算细节属于内部方法，不对外披露/);
     assert.match(html, /低价机场一定高分吗？/);
     assert.match(html, /"@type":"FAQPage"/);
     assert.match(html, /机场推荐依据/);
+    assert.doesNotMatch(html, /0\.30S|0\.4 ×|30\/30\/20\/10\/10|30 \/ 30 \/ 20 \/ 10 \/ 10/);
+    assert.doesNotMatch(html, /UptimeScore|RiskPenalty|days_diff|recent_complaints_count/);
+    assert.doesNotMatch(html, /冷启动系数\s*=|阈值分段|Nebula Air|Worked Example/);
+    assert.match(html, /linear-gradient\(135deg, #082F49 0%, #075985 38%, #0284C7 72%, #BAE6FD 100%\)/);
+    assert.match(html, /box-shadow: 0 30px 80px rgba\(2,132,199,\.18\)/);
+    assert.match(html, /\.methodology-facts > div \{[^}]*background: rgba\(255,255,255,\.12\)/);
+    assert.match(html, /\.methodology-hero \{[^}]*padding: 48px 40px/);
+    assert.match(html, /\.methodology-facts \{[^}]*grid-template-columns: repeat\(2,minmax\(0,1fr\)\)/);
+    assert.doesNotMatch(html, /methodology-disclosure/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -2044,6 +2050,8 @@ const riskMonitorView: RiskMonitorView = {
 const reportView: ReportView = {
   requested_date: '2026-03-23',
   date: '2026-03-23',
+  score_rule_version: 'v1_spcr',
+  network_coverage: null,
   resolved_from_fallback: false,
   fallback_notice: null,
   performance_under_review: false,
@@ -2083,9 +2091,10 @@ const reportView: ReportView = {
     new_entries_rank: null,
     risk_alerts_rank: null,
   },
-  score_breakdown: {
-    s: 99,
-    p: 98,
+    score_breakdown: {
+      s: 99,
+      p: 98,
+      n: null,
     c: 90,
     r: 95,
     final_score: 98.6,
@@ -2176,3 +2185,39 @@ const reportView: ReportView = {
     ],
   },
 };
+
+test('SSR report renders v2 five-axis network coverage without changing v1 history', () => {
+  const v2View: ReportView = {
+    ...reportView,
+    score_rule_version: 'v2_spncr',
+    score_breakdown: { ...reportView.score_breakdown, n: 68.8 },
+    network_coverage: {
+      sampled_date: reportView.date,
+      rule_version: 'network_coverage_v1',
+      detected_nodes_count: 50,
+      healthy_nodes_count: 45,
+      unsupported_nodes_count: 3,
+      unknown_healthy_nodes_count: 2,
+      healthy_node_rate: 90,
+      core_regions: ['JP', 'HK', 'US'],
+      extended_regions: ['GB'],
+      max_region_code: 'JP',
+      max_region_share: 77.78,
+      node_count_score: 90,
+      region_score: 54,
+      health_rate_score: 90,
+      balance_score: 40,
+    },
+  };
+
+  const v1Html = renderReportPublicPage('https://gate-rank.com', reportView);
+  const v2Html = renderReportPublicPage('https://gate-rank.com', v2View);
+  assert.match(v1Html, /data-score-rule-version="v1_spcr" data-score-dimensions="4"/);
+  assert.match(v1Html, /本报告四维评分分布/);
+  assert.doesNotMatch(v1Html, /网络覆盖 \(N\)/);
+  assert.match(v2Html, /data-score-rule-version="v2_spncr" data-score-dimensions="5"/);
+  assert.match(v2Html, /本报告五维评分分布/);
+  assert.match(v2Html, /网络覆盖 \(N\)/);
+  assert.match(v2Html, /网络覆盖N/);
+  assert.doesNotMatch(v2Html, /network-coverage-summary|网络覆盖快照|Healthy \/ Detected/);
+});

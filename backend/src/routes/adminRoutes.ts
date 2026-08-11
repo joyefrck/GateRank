@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { STABILITY_RULES } from '../config/scoring';
 import { HttpError } from '../middleware/errorHandler';
 import { calcPriceScore, computeFinalEngineScore } from '../services/scoringEngine';
+import { SCORE_RULE_V1, SCORE_RULE_V2 } from '../services/networkCoverageScoring';
 import {
   DEFAULT_TELEGRAM_API_BASE,
   DEFAULT_TELEGRAM_NOTIFY_TIMEOUT_MS,
@@ -73,6 +74,8 @@ import type {
   SubscriptionNodeSnapshotInput,
   SubscriptionNodeSnapshotNode,
   SubscriptionNodeSnapshotUnsupportedNode,
+  NetworkCoverageRun,
+  NetworkCoverageRunInput,
 } from '../types/domain';
 import { parseAirportProfilePayload } from '../utils/airportProfile';
 import {
@@ -280,6 +283,13 @@ interface AdminDeps {
       date: string,
     ): Promise<PerformanceRun | null>;
     listByAirportAndDate?(airportId: number, date: string): Promise<PerformanceRun[]>;
+  };
+  networkCoverageRunRepository?: {
+    insert(input: NetworkCoverageRunInput): Promise<NetworkCoverageRun>;
+    getLatestByAirportAndDate(airportId: number, date: string): Promise<NetworkCoverageRun | null>;
+  };
+  scoreRuleService?: {
+    activateV2IfAbsent(date: string, runId: number, activatedAt: string): Promise<unknown>;
   };
   performanceProbeRepository?: {
     list(): Promise<PerformanceProbe[]>;
@@ -1930,6 +1940,52 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     }
   });
 
+  router.post('/airports/:id/network-coverage-runs', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const input = toNetworkCoverageRunInput(airportId, req.body ?? {});
+      const run = await getNetworkCoverageRunRepository(deps).insert(input);
+      if (run.status === 'success') {
+        await getScoreRuleService(deps).activateV2IfAbsent(run.sampled_date, run.id, run.sampled_at);
+      }
+      await deps.auditRepository.log('insert_network_coverage_run', actorFromReq(req), req.requestId, {
+        run_id: run.id,
+        airport_id: run.airport_id,
+        sampled_date: run.sampled_date,
+        status: run.status,
+        detected_nodes_count: run.detected_nodes_count,
+        healthy_nodes_count: run.healthy_nodes_count,
+        unsupported_nodes_count: run.unsupported_nodes_count,
+        score_n: run.score_n,
+        rule_version: run.rule_version,
+      });
+      res.status(201).json({
+        run_id: run.id,
+        airport_id: run.airport_id,
+        sampled_date: run.sampled_date,
+        status: run.status,
+        score_n: run.score_n,
+        rule_version: run.rule_version,
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get('/airports/:id/network-coverage-runs/latest', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const date = parseDate(req.query.date);
+      const run = await getNetworkCoverageRunRepository(deps).getLatestByAirportAndDate(airportId, date);
+      if (!run) {
+        throw new HttpError(404, 'NETWORK_COVERAGE_RUN_NOT_FOUND', 'network coverage run not found');
+      }
+      res.json(run);
+    } catch (error) {
+      next(error);
+    }
+  });
+
   router.get('/airports/:id/subscription-node-snapshots/latest', async (req, res, next) => {
     try {
       const airportId = toAirportId(req.params.id);
@@ -2226,10 +2282,11 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     try {
       const airportId = toAirportId(req.params.id);
       const date = parseDate(req.query.date);
-      const [base, metrics, score, performanceRun, latestPerformanceRun, performanceRuns, dayProbeSamples, latestAvailableScoreDate] = await Promise.all([
+      const [base, metrics, score, networkCoverageRun, performanceRun, latestPerformanceRun, performanceRuns, dayProbeSamples, latestAvailableScoreDate] = await Promise.all([
         deps.airportRepository.getById(airportId),
         deps.metricsRepository.getByAirportAndDate(airportId, date),
         deps.scoreRepository.getByAirportAndDate(airportId, date),
+        deps.networkCoverageRunRepository?.getLatestByAirportAndDate(airportId, date) ?? Promise.resolve(null),
         deps.performanceRunRepository.getLatestByAirportAndDate(airportId, date),
         deps.performanceRunRepository.getLatestByAirportBeforeDate(airportId, date),
         deps.performanceRunRepository.listByAirportAndDate?.(airportId, date) ?? Promise.resolve([]),
@@ -2246,6 +2303,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const performanceRunObj = (performanceRun || {}) as Record<string, unknown>;
       const latestPerformanceRunObj = ((latestPerformanceRun || performanceRun) || {}) as Record<string, unknown>;
       const details = ((scoreObj.details as Record<string, unknown>) || {}) as Record<string, unknown>;
+      const scoreRuleVersion = details.score_rule_version === SCORE_RULE_V2 ? SCORE_RULE_V2 : SCORE_RULE_V1;
       const latencySamples = numberArrayOrEmpty(metricsObj.latency_samples_ms);
       const latencyStats = computeLatencyStats(latencySamples);
       const effectiveLatencyStats = computeEffectiveLatencyStats(latencySamples);
@@ -2294,6 +2352,8 @@ export function createAdminRoutes(deps: AdminDeps): Router {
             .map((row) => ({ date: String(row.date), score: Number(row.r) })),
           pricePer100gb: Number(baseObj.plan_price_month || 0),
           referenceDate: date,
+          ruleVersion: scoreRuleVersion,
+          networkCoverageScore: numberOrNull(scoreObj.n),
         })
         : null;
       const formulaTotalScore = finalEngineScore?.final_score ?? null;
@@ -2363,6 +2423,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         },
         base: {
           ...baseObj,
+          score_rule_version: scoreRuleVersion,
           total_score: displayTotalScore,
           formula_total_score: formulaTotalScore,
           manual_total_score: manualTotalScore,
@@ -2455,6 +2516,19 @@ export function createAdminRoutes(deps: AdminDeps): Router {
               ? performanceDiagnostics.node_availability_error_summary
               : [],
         },
+        network_coverage: networkCoverageRun ? {
+          ...networkCoverageRun,
+          nodes: networkCoverageRun.nodes.map((node) => ({
+            key: node.key,
+            name: node.name,
+            type: node.type,
+            healthy: node.healthy,
+            error_code: node.error_code,
+            region_code: node.region_code,
+            region_name: node.region_name,
+            region_group: node.region_group,
+          })),
+        } : null,
         risk: {
           domain_ok: boolOrNull(metricsObj.domain_ok),
           ssl_days_left: numberOrNull(metricsObj.ssl_days_left),
@@ -3080,6 +3154,7 @@ function toSchedulerTaskKey(value: unknown): SchedulerTaskKey {
   if (
     taskKey === 'stability'
     || taskKey === 'subscription_node_refresh'
+    || taskKey === 'network_coverage'
     || taskKey === 'performance'
     || taskKey === 'risk'
     || taskKey === 'aggregate_recompute'
@@ -3088,7 +3163,7 @@ function toSchedulerTaskKey(value: unknown): SchedulerTaskKey {
   ) {
     return taskKey;
   }
-  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|subscription_node_refresh|performance|risk|aggregate_recompute|billing_listing_sync|stability_resample_guard');
+  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|subscription_node_refresh|performance|network_coverage|risk|aggregate_recompute|billing_listing_sync|stability_resample_guard');
 }
 
 function toSchedulerRunStatus(value: unknown): SchedulerRunStatus {
@@ -3911,6 +3986,100 @@ function toSubscriptionNodeSnapshotInput(
   };
 }
 
+function toNetworkCoverageRunInput(
+  airportId: number,
+  payload: Record<string, unknown>,
+): NetworkCoverageRunInput {
+  const payloadAirportId = payload.airport_id === undefined ? airportId : toAirportId(payload.airport_id);
+  if (payloadAirportId !== airportId) {
+    throw new HttpError(400, 'BAD_REQUEST', 'airport_id must match path airport id');
+  }
+  const status = toPerformanceRunStatus(payload.status);
+  const rawNodes = payload.nodes;
+  if (rawNodes !== undefined && !Array.isArray(rawNodes)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'nodes must be array');
+  }
+  const nodes = (Array.isArray(rawNodes) ? rawNodes : []).map((item, index) => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}] must be object`);
+    }
+    const record = item as Record<string, unknown>;
+    const key = optionalString(record.key);
+    const name = optionalString(record.name);
+    if (!key || !name) {
+      throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}] requires key and name`);
+    }
+    if (!/^[a-f0-9]{64}$/i.test(key)) {
+      throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}].key must be a sha256 hash`);
+    }
+    if (record.healthy !== true && record.healthy !== false) {
+      throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}].healthy must be boolean`);
+    }
+    return {
+      key: key.toLowerCase(),
+      name: sanitizeNetworkCoverageText(name, 512) || '[redacted-node]',
+      type: sanitizeNetworkCoverageText(optionalString(record.type), 64),
+      healthy: record.healthy,
+      error_code: sanitizeNetworkCoverageText(optionalString(record.error_code), 128),
+    };
+  });
+  const sampledAt = mustDateTime(payload.sampled_at, 'sampled_at');
+  const sampledDate = parseDate(payload.sampled_date);
+  if (sampledAt.slice(0, 10) !== sampledDate) {
+    throw new HttpError(400, 'BAD_REQUEST', 'sampled_date must match sampled_at date');
+  }
+  return {
+    airport_id: airportId,
+    sampled_at: sampledAt,
+    sampled_date: sampledDate,
+    source: sanitizeNetworkCoverageText(optionalString(payload.source), 128) || 'network-coverage',
+    status,
+    subscription_format: sanitizeNetworkCoverageText(optionalString(payload.subscription_format), 64),
+    unsupported_nodes_count: Math.max(0, Math.floor(optionalNumber(payload.unsupported_nodes_count) || 0)),
+    nodes,
+    error_code: optionalString(payload.error_code)?.slice(0, 128) || null,
+    error_message: sanitizeAdminPerformanceError(payload.error_message),
+    diagnostics: toSafeNetworkCoverageDiagnostics(payload.diagnostics),
+  };
+}
+
+function toSafeNetworkCoverageDiagnostics(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  const source = value as Record<string, unknown>;
+  const diagnostics: Record<string, unknown> = {};
+  for (const key of ['attempted_nodes_count', 'healthy_nodes_count', 'unhealthy_nodes_count', 'invalid_cached_nodes_count']) {
+    const number = numberOrNull(source[key]);
+    if (number !== null) diagnostics[key] = Math.max(0, Math.floor(number));
+  }
+  for (const key of ['health_check', 'node_source']) {
+    const text = optionalString(source[key]);
+    if (text) diagnostics[key] = sanitizeNetworkCoverageText(text, 128);
+  }
+  if (Array.isArray(source.error_summary)) {
+    diagnostics.error_summary = source.error_summary.slice(0, 100).flatMap((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return [];
+      const record = item as Record<string, unknown>;
+      const errorCode = optionalString(record.error_code);
+      const count = numberOrNull(record.count);
+      return errorCode && count !== null
+        ? [{ error_code: sanitizeNetworkCoverageText(errorCode, 128), count: Math.max(0, Math.floor(count)) }]
+        : [];
+    });
+  }
+  return diagnostics;
+}
+
+function sanitizeNetworkCoverageText(value: string | null | undefined, maxLength: number): string | null {
+  if (!value) return null;
+  const sanitized = value
+    .replace(/\b(?:https?|vless|trojan|ss|ssr|vmess|anytls|hysteria2|tuic|socks5?):\/\/[^\s"']+/gi, '[redacted-uri]')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi, '[redacted-id]')
+    .replace(/\b(?:password|passwd|token|uuid)\s*[=:]\s*[^\s,;]+/gi, '[redacted-credential]')
+    .trim()
+    .slice(0, maxLength);
+  return sanitized || null;
+}
+
 function toDateTimeArray(value: unknown, fieldName: string): string[] {
   if (value === undefined || value === null) {
     return [];
@@ -3929,10 +4098,10 @@ function toPerformanceRunStatus(value: unknown): PerformanceRunInput['status'] {
 }
 
 function toManualJobKind(value: unknown): ManualJobKind {
-  if (value === 'full' || value === 'stability' || value === 'performance' || value === 'risk' || value === 'time_decay') {
+  if (value === 'full' || value === 'stability' || value === 'performance' || value === 'network_coverage' || value === 'risk' || value === 'time_decay') {
     return value;
   }
-  throw new HttpError(400, 'BAD_REQUEST', 'kind must be full|stability|performance|risk|time_decay');
+  throw new HttpError(400, 'BAD_REQUEST', 'kind must be full|stability|performance|network_coverage|risk|time_decay');
 }
 
 function actorFromReq(req: { header(name: string): string | undefined }): string {
@@ -4040,6 +4209,20 @@ function getSubscriptionNodeSnapshotRepository(deps: AdminDeps): NonNullable<Adm
     throw new Error('subscriptionNodeSnapshotRepository is not configured');
   }
   return deps.subscriptionNodeSnapshotRepository;
+}
+
+function getNetworkCoverageRunRepository(deps: AdminDeps): NonNullable<AdminDeps['networkCoverageRunRepository']> {
+  if (!deps.networkCoverageRunRepository) {
+    throw new Error('networkCoverageRunRepository is not configured');
+  }
+  return deps.networkCoverageRunRepository;
+}
+
+function getScoreRuleService(deps: AdminDeps): NonNullable<AdminDeps['scoreRuleService']> {
+  if (!deps.scoreRuleService) {
+    throw new Error('scoreRuleService is not configured');
+  }
+  return deps.scoreRuleService;
 }
 
 function getSubscriptionNodeCaptureService(deps: AdminDeps): NonNullable<AdminDeps['subscriptionNodeCaptureService']> {

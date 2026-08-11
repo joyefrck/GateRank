@@ -119,10 +119,10 @@ type AirportProfileRegionKey =
 type AirportProfileLineType = 'iepl' | 'iplc' | 'cn2' | 'bgp' | 'relay';
 type ProbeSampleType = 'latency' | 'download' | 'availability';
 type ProbeScope = 'stability' | 'performance';
-type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
+type ManualJobKind = 'full' | 'stability' | 'performance' | 'network_coverage' | 'risk' | 'time_decay';
 type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 type PublishTokenScope = 'news:create' | 'news:update' | 'news:publish' | 'news:archive' | 'news:upload';
-type SchedulerTaskKey = 'stability' | 'subscription_node_refresh' | 'performance' | 'risk' | 'aggregate_recompute' | 'billing_listing_sync' | 'stability_resample_guard';
+type SchedulerTaskKey = 'stability' | 'subscription_node_refresh' | 'performance' | 'network_coverage' | 'risk' | 'aggregate_recompute' | 'billing_listing_sync' | 'stability_resample_guard';
 type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
 type SchedulerRunOutcome = SchedulerRunStatus | 'partial';
 type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
@@ -203,6 +203,7 @@ interface Airport {
   total_score_source?: 'manual' | 'formula' | null;
   price_score?: number | null;
   score_data_days?: number | null;
+  score_rule_version?: 'v1_spcr' | 'v2_spncr';
   wallet_id?: number | null;
   wallet_balance?: number | null;
   telegram_bot_bound?: boolean;
@@ -537,6 +538,45 @@ interface AirportDashboardView {
       error_message: string | null;
     }>;
   };
+  network_coverage: {
+    id: number;
+    sampled_at: string;
+    sampled_date: string;
+    source: string;
+    status: 'success' | 'partial' | 'skipped' | 'failed';
+    subscription_format: string | null;
+    detected_nodes_count: number;
+    healthy_nodes_count: number;
+    unhealthy_nodes_count: number;
+    unsupported_nodes_count: number;
+    unknown_healthy_nodes_count: number;
+    healthy_node_rate: number;
+    core_regions: string[];
+    extended_regions: string[];
+    region_counts: Record<string, number>;
+    max_region_code: string | null;
+    max_region_share: number;
+    node_count_score: number;
+    core_coverage_score: number;
+    extended_coverage_score: number;
+    region_score: number;
+    health_rate_score: number;
+    balance_score: number;
+    score_n: number;
+    rule_version: string;
+    error_code: string | null;
+    error_message: string | null;
+    nodes: Array<{
+      key: string;
+      name: string;
+      type: string | null;
+      healthy: boolean;
+      error_code: string | null;
+      region_code: string;
+      region_name: string;
+      region_group: 'core' | 'extended' | 'unknown';
+    }>;
+  } | null;
   risk: {
     domain_ok: boolean | null;
     ssl_days_left: number | null;
@@ -656,7 +696,7 @@ interface ProbeSample {
   source: string;
 }
 
-type DashboardTab = 'base' | 'stability' | 'performance' | 'risk' | 'time_decay';
+type DashboardTab = 'base' | 'stability' | 'performance' | 'network_coverage' | 'risk' | 'time_decay';
 
 type PerformanceNodeSelectionNode = {
   key: string;
@@ -3368,6 +3408,7 @@ function SchedulerPage() {
               <option value="stability">稳定性采集</option>
               <option value="subscription_node_refresh">订阅节点更新</option>
               <option value="performance">性能采集</option>
+              <option value="network_coverage">网络覆盖采集</option>
               <option value="risk">风险体检</option>
               <option value="aggregate_recompute">聚合重算</option>
               <option value="billing_listing_sync">余额展示同步</option>
@@ -10844,6 +10885,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
     { key: 'base', label: '基础信息' },
     { key: 'stability', label: '稳定性数据（S）' },
     { key: 'performance', label: '性能数据（P）' },
+    { key: 'network_coverage', label: '网络覆盖（N）' },
     { key: 'risk', label: '风险数据（R）' },
     { key: 'time_decay', label: '时间维度（衰减）' },
   ] as const, []);
@@ -10887,6 +10929,8 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
     ]
       .some((v) => v !== null && v !== undefined);
   }, [dashboard]);
+
+  const hasNetworkCoverageData = Boolean(dashboard?.network_coverage);
 
   const hasTimeDecayData = useMemo(() => {
     if (!dashboard) return false;
@@ -10936,6 +10980,16 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
         kind: 'performance' as const,
       };
     }
+    if (tab === 'network_coverage') {
+      return {
+        title: '网络覆盖手动执行',
+        description: isTodayDate
+          ? '逐节点执行一次真实代理 HTTP 检查，完成后写入 N 并重算当前机场。'
+          : 'N 只使用当天真实采集结果，历史日期保持原始快照，不允许补采或重算。',
+        buttonLabel: isTodayDate ? '重新采集并重算网络覆盖' : '历史 N 不可重跑',
+        kind: 'network_coverage' as const,
+      };
+    }
     if (tab === 'risk') {
       return {
         title: '风险手动执行',
@@ -10958,7 +11012,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
     : dashboard?.pipeline.stage === 'empty'
       ? 'border border-neutral-200 bg-neutral-50 text-neutral-600'
       : 'border border-amber-200 bg-amber-50 text-amber-700';
-  const manualActionsDisabled = dashboard?.base.status === 'down';
+  const manualActionsDisabled = dashboard?.base.status === 'down' || (tab === 'network_coverage' && !isTodayDate);
   const performanceNodeSelectionCount = performanceNodeSelection?.selected_keys.length || 0;
   const performanceNodeSelectionModeLabel = performanceNodeSelectionCount > 0
     ? `已指定 ${performanceNodeSelectionCount} 个节点`
@@ -11014,7 +11068,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
       {loading && <div className="text-sm text-neutral-500">加载中...</div>}
       {!isTodayDate && (
         <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
-          当前为历史日期。稳定性、性能和风险页的手动按钮会退化为仅重算已有数据，不会触发实时采集。
+          当前为历史日期。稳定性、性能和风险页只重算已有数据；网络覆盖 N 保持原始快照且不可重跑。
         </div>
       )}
       {dashboard?.pipeline.message ? (
@@ -11050,11 +11104,14 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               {'w = exp(-0.1 * days_diff)\n'}
               {'S = 时间衰减加权后的稳定性分\n'}
               {'P = 时间衰减加权后的性能分\n'}
+              {'N = 所选日期当天的网络覆盖分，不做历史衰减\n'}
               {'R = 时间衰减加权后的风险分\n'}
               {'C = PriceScore 三档分：1-30元=100，>30-50元=80，>50元=60\n'}
               {'有效数据天数 = min(S序列天数, P序列天数)\n'}
               {'冷启动系数 = min(有效数据天数 / 7, 1)\n'}
-              {'总分 = (0.4*S + 0.3*P + 0.1*C + 0.2*R) * 冷启动系数'}
+              {dashboard.base.score_rule_version === 'v2_spncr'
+                ? '总分 = (0.3*S + 0.3*P + 0.2*N + 0.1*C + 0.1*R) * 冷启动系数'
+                : '历史 v1 总分 = (0.4*S + 0.3*P + 0.1*C + 0.2*R) * 冷启动系数'}
             </div>
           </div>
 
@@ -11503,6 +11560,63 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
         ) : <div className="text-sm text-neutral-500">当日暂无数据</div>
       )}
 
+      {tab === 'network_coverage' && (
+        hasNetworkCoverageData && dashboard?.network_coverage ? (
+          <div className="space-y-4">
+            <div className="rounded border border-neutral-200 bg-white p-4">
+              <div className="text-sm font-semibold text-neutral-900">评分公式</div>
+              <div className="mt-2 text-xs text-neutral-500 whitespace-pre-wrap">
+                {'N = 节点数量分 × 30% + 地区覆盖分 × 45% + 健康率分 × 15% + 均衡度分 × 10%\n'}
+                {'Detected 只含可解析、可检测节点；每个节点必须完成真实代理 HTTP 尝试。unsupported 不参与评分。\n'}
+                {'UNKNOWN 参与节点数、健康率与保守均衡桶，但不计有效地区；N 使用当天结果且不做历史衰减。'}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <ReadField label="运行状态" value={dashboard.network_coverage.status} />
+              <ReadField label="规则版本" value={dashboard.network_coverage.rule_version} />
+              <ReadField label="采集时间" value={formatDateTimeInBeijing(dashboard.network_coverage.sampled_at)} />
+              <ReadField label="采集来源" value={dashboard.network_coverage.source} />
+              <ReadField label="网络覆盖分 (N)" value={dashboard.network_coverage.score_n} />
+              <ReadField label="Healthy / Detected" value={`${dashboard.network_coverage.healthy_nodes_count} / ${dashboard.network_coverage.detected_nodes_count}`} />
+              <ReadField label="健康率" value={`${dashboard.network_coverage.healthy_node_rate}%`} />
+              <ReadField label="unsupported" value={dashboard.network_coverage.unsupported_nodes_count} />
+              <ReadField label="核心地区" value={`${dashboard.network_coverage.core_regions.join('、') || '-'}（${dashboard.network_coverage.core_regions.length}/5）`} />
+              <ReadField label="扩展地区" value={dashboard.network_coverage.extended_regions.join('、') || '-'} />
+              <ReadField label="UNKNOWN 健康节点" value={dashboard.network_coverage.unknown_healthy_nodes_count} />
+              <ReadField label="最大地区占比" value={`${dashboard.network_coverage.max_region_share}%${dashboard.network_coverage.max_region_code ? `（${dashboard.network_coverage.max_region_code}）` : ''}`} />
+              <ReadField label="节点数量子分" value={dashboard.network_coverage.node_count_score} />
+              <ReadField label="地区覆盖子分" value={dashboard.network_coverage.region_score} />
+              <ReadField label="健康率子分" value={dashboard.network_coverage.health_rate_score} />
+              <ReadField label="均衡度子分" value={dashboard.network_coverage.balance_score} />
+              <ReadField label="错误码" value={valueOrDash(dashboard.network_coverage.error_code)} />
+              <ReadField label="脱敏错误摘要" value={valueOrDash(dashboard.network_coverage.error_message)} />
+            </div>
+
+            <div className="overflow-hidden rounded border border-neutral-200 bg-white">
+              <div className="border-b border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-900">逐节点真实代理检查</div>
+              {dashboard.network_coverage.nodes.length === 0 ? (
+                <div className="px-4 py-6 text-sm text-neutral-500">没有可检测节点</div>
+              ) : (
+                <div className="divide-y divide-neutral-200">
+                  {dashboard.network_coverage.nodes.map((node) => (
+                    <div key={node.key} className="grid gap-2 px-4 py-3 text-sm sm:grid-cols-[minmax(0,1fr)_8rem_8rem_10rem] sm:items-center">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-neutral-900">{node.name}</div>
+                        <div className="mt-1 text-xs text-neutral-500">{node.type || '-'} · {node.region_name}</div>
+                      </div>
+                      <span className={node.healthy ? 'text-emerald-700' : 'text-rose-700'}>{node.healthy ? 'Healthy' : 'Unhealthy'}</span>
+                      <span className="text-neutral-600">{node.region_code}</span>
+                      <span className="truncate font-mono text-xs text-neutral-500">{node.error_code || '-'}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        ) : <div className="text-sm text-neutral-500">当日暂无网络覆盖运行记录</div>
+      )}
+
       {tab === 'risk' && (
         hasRiskData && dashboard ? (
           <div className="space-y-4">
@@ -11513,8 +11627,9 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                 {'SslPenalty = ssl_days_left 为 null 时记 5；< 0 记 30；< 7 记 20；< 15 记 10；< 30 记 5；其余记 0\n'}
                 {'ComplaintPenalty = min(recent_complaints_count * 3, 15)\n'}
                 {'HistoryPenalty = min(history_incidents * 10, 30)\n'}
-                {'NodeAvailabilityPenalty: 不可用率 <= 5% 记 0；5%-20% 最高 10；20%-50% 最高 25；>50% 最高 30\n'}
-                {'RiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty + NodeAvailabilityPenalty\n'}
+                {dashboard.base.score_rule_version === 'v2_spncr'
+                  ? 'v2 不再计节点不可用率惩罚，避免与网络覆盖 N 重复计权。\nRiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty\n'
+                  : '历史 v1：NodeAvailabilityPenalty 按不可用率分段计入。\nRiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty + NodeAvailabilityPenalty\n'}
                 {'R = clamp(100 - RiskPenalty, 0, 100)'}
               </div>
             </div>
@@ -11524,7 +11639,9 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <ReadField label="SSL剩余天数 (ssl_days_left)" value={valueOrDash(dashboard.risk.ssl_days_left)} />
               <ReadField label="投诉数量 (recent_complaints_count)" value={valueOrDash(dashboard.risk.recent_complaints_count)} />
               <ReadField label="历史异常 (history_incidents)" value={valueOrDash(dashboard.risk.history_incidents)} />
-              <ReadField label="节点可用性惩罚 (node_availability_penalty)" value={valueOrDash(dashboard.risk.node_availability_penalty)} />
+              {dashboard.base.score_rule_version !== 'v2_spncr' && (
+                <ReadField label="节点可用性惩罚 (node_availability_penalty)" value={valueOrDash(dashboard.risk.node_availability_penalty)} />
+              )}
               <ReadField label="域名惩罚 (domain_penalty)" value={valueOrDash(dashboard.risk.domain_penalty)} />
               <ReadField label="SSL惩罚 (ssl_penalty)" value={valueOrDash(dashboard.risk.ssl_penalty)} />
               <ReadField label="投诉惩罚 (complaint_penalty)" value={valueOrDash(dashboard.risk.complaint_penalty)} />
@@ -12065,6 +12182,7 @@ function formatSchedulerTaskLabel(taskKey: SchedulerTaskKey): string {
   if (taskKey === 'stability') return '稳定性采集';
   if (taskKey === 'subscription_node_refresh') return '订阅节点更新';
   if (taskKey === 'performance') return '性能采集';
+  if (taskKey === 'network_coverage') return '网络覆盖采集';
   if (taskKey === 'risk') return '风险体检';
   if (taskKey === 'billing_listing_sync') return '余额展示同步';
   if (taskKey === 'stability_resample_guard') return '稳定性复测保护';

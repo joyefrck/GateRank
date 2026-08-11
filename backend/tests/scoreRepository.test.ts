@@ -114,6 +114,32 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
 	  assert.ok(calls.some((call) => call.sql.includes('score_hidden ASC')));
 });
 
+test('ScoreRepository.getPublicFullRankingByDate excludes missing same-day v2 scores', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new ScoreRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql.includes('COUNT(*) AS total')) return [[{ total: 0 }]];
+      return [[]];
+    },
+  } as never);
+
+  const result = await repository.getPublicFullRankingByDate(
+    '2026-08-11',
+    1,
+    20,
+    undefined,
+    0.6,
+    'v2_spncr',
+  );
+
+  assert.equal(result.total, 0);
+  assert.match(calls[0].sql, /EXISTS/);
+  assert.match(calls[1].sql, /WHERE date = \?/);
+  assert.deepEqual(calls[0].params?.slice(0, 2), ['2026-08-11', 'v2_spncr']);
+  assert.deepEqual(calls[1].params?.slice(0, 3), [0.6, '2026-08-11', 'v2_spncr']);
+});
+
 test('ScoreRepository.getPublicBillingRankByDate returns only scored airports in the public top six', async () => {
   const calls: Array<{ sql: string; params?: unknown[] }> = [];
   const rows = Array.from({ length: 6 }, (_, index) => ({
@@ -309,7 +335,7 @@ test('ScoreRepository.getPublicFullRankingByDate applies search and structured f
   assert.match(rankingCall.sql, /JSON_UNQUOTE\(JSON_EXTRACT\(a\.airport_profile_json, '\$\.clients\.clash'\)\) = 'true'/);
   assert.match(rankingCall.sql, /\$\.regions\.hong_kong\.has_native_ip/);
   assert.match(rankingCall.sql, /\$\.regions\.hong_kong\.line_types/);
-	  assert.deepEqual(rankingCall.params?.slice(2, 7), ['%filtered%', '%filtered%', '%filtered%', '%filtered%', 'alipay']);
+	  assert.deepEqual(rankingCall.params?.slice(3, 8), ['%filtered%', '%filtered%', '%filtered%', '%filtered%', 'alipay']);
   assert.ok(rankingCall.params?.includes('paypal'));
   assert.ok(rankingCall.params?.includes('iepl'));
   assert.ok(rankingCall.params?.includes(10));

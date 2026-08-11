@@ -8,6 +8,7 @@ import {
   calcSslPenalty,
   coldStartFactor,
   computeFinalEngineScore,
+  computeWeightedGateRankScore,
   computeWeightedScore,
   computeScore,
   normalizeLinear,
@@ -59,10 +60,58 @@ test('computeFinalEngineScore combines S/P/R and price with cold start factor', 
   assert.equal(coldStartFactor(1), 0.14);
   assert.equal(out.s, 80);
   assert.equal(out.p, 70);
+  assert.equal(out.n, null);
   assert.equal(out.r, 90);
   assert.equal(out.c, 100);
   assert.equal(out.data_days, 1);
   assert.equal(out.final_score, 11.34);
+});
+
+test('computeFinalEngineScore applies v2 weights with current-day N and unchanged cold start days', () => {
+  const sevenDays = Array.from({ length: 7 }, (_, index) => ({
+    date: `2026-08-${String(index + 5).padStart(2, '0')}`,
+    score: 0,
+  }));
+  const out = computeFinalEngineScore({
+    sSeries: sevenDays.map((item) => ({ ...item, score: 80 })),
+    pSeries: sevenDays.map((item) => ({ ...item, score: 70 })),
+    rSeries: sevenDays.map((item) => ({ ...item, score: 50 })),
+    pricePer100gb: 20,
+    referenceDate: '2026-08-11',
+    ruleVersion: 'v2_spncr',
+    networkCoverageScore: 60,
+  });
+  assert.equal(out.n, 60);
+  assert.equal(out.data_days, 7);
+  assert.equal(out.cold_start_factor, 1);
+  assert.equal(out.final_score, 72);
+});
+
+test('v2 weighted example S80 P70 N60 C90 R50 equals 71', () => {
+  assert.equal(
+    computeWeightedGateRankScore({ s: 80, p: 70, n: 60, c: 90, r: 50 }, 'v2_spncr'),
+    71,
+  );
+});
+
+test('computeScore v2 removes node availability from R and includes N in daily score', () => {
+  const airport: Airport = {
+    id: 1, name: 'A', website: 'https://a.example.com', status: 'normal', is_listed: true,
+    plan_price_month: 20, has_trial: false, tags: [], created_at: '2026-08-11',
+  };
+  const metrics: DailyMetrics = {
+    airport_id: 1, date: '2026-08-11', uptime_percent_30d: 99, uptime_percent_today: 99,
+    latency_samples_ms: [100, 120], median_latency_ms: 110, median_download_mbps: 100,
+    packet_loss_percent: 1, node_unavailability_percent: 100, stable_days_streak: 15,
+    healthy_days_streak: 15, domain_ok: true, ssl_days_left: 30,
+    recent_complaints_count: 0, history_incidents: 0,
+  };
+  const out = computeScore(airport, metrics, 0, { ruleVersion: 'v2_spncr', networkCoverageScore: 60 });
+  assert.equal(out.n, 60);
+  assert.equal(out.r, 100);
+  assert.equal(out.risk_penalty, 0);
+  assert.equal(out.details.node_availability_penalty, 30);
+  assert.equal(out.details.score_rule_version, 'v2_spncr');
 });
 
 test('calcPriceScore uses three monthly price bands', () => {

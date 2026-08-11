@@ -1,7 +1,7 @@
 # GateRank
 
 GateRank 是一个「机场测评与榜单」系统。  
-目标是基于稳定性、性能、价格、风险四个维度，生成可解释、可追踪的每日评分与榜单。
+目标是基于稳定性、性能、网络覆盖、价格、风险五个维度，生成可解释、可追踪的每日评分与榜单。
 
 ## 产品逻辑
 
@@ -14,7 +14,7 @@ GateRank 是一个「机场测评与榜单」系统。
 
 1. 维护机场基础信息（名称、站点、价格、试用、订阅链接）
 2. 接入自动化采样（延迟/下载/可用性/代理请求失败率）并按日聚合
-3. 系统按统一公式计算 `S/P/C/R`
+3. 系统按统一公式计算 `S/P/N/C/R`
 4. 生成当日综合分与时间衰减分 `FinalScore`
 5. 生成 5 类榜单（今日推荐、最稳定、性价比、新机场、风险榜）
 
@@ -22,9 +22,11 @@ GateRank 是一个「机场测评与榜单」系统。
 
 - 稳定性：`S = 0.5*UptimeScore + 0.3*StabilityScore + 0.2*StreakScore`
 - 性能：`P = 0.4*LatencyScore + 0.4*SpeedScore + 0.2*LossScore`
+- 网络覆盖：`N = 0.30*NodeCountScore + 0.45*RegionScore + 0.15*HealthyRateScore + 0.10*BalanceScore`
 - 价格：`C = 0.6*PriceScore + 0.2*TrialScore + 0.2*ValueScore`
 - 风险：`R = 100 - RiskPenalty`
-- 综合：`Score = 0.4*S + 0.3*P + 0.2*C + 0.1*R`
+- v2 综合：`GateRank Score = (0.30*S + 0.30*P + 0.20*N + 0.10*C + 0.10*R) * ColdStartFactor`
+- 冷启动：`ColdStartFactor = min(min(S有效天数, P有效天数) / 7, 1)`
 - 衰减权重：`w = exp(-lambda * days_diff)`，默认 `lambda = 0.1`
 - 历史衰减分：`HistoricalScore = Σ(score_i * w_i) / Σ(w_i)`，仅统计当前日期之前的每日 `score`
 - 最终衰减分：`FinalScore = Σ(score_i * w_i) / Σ(w_i)`，统计历史序列与当日 `score`
@@ -38,7 +40,7 @@ GateRank 是一个「机场测评与榜单」系统。
 - 稳定日判定：`uptime >= 99%` 且 `effective_latency_cv <= 0.20`，并且当日存在有效延迟样本
 
 原始 `latency_mean_ms`、`latency_std_ms`、`latency_cv` 仍会保留，主要用于后台诊断和核对采样质量。
-风险项例外：`RiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty`，其中域名异常记 `30`，SSL 未知记 `5`，证书即将过期按 `5/10/20/30` 分段，投诉按 `3` 分每条封顶 `15`，历史异常按 `10` 分每次封顶 `30`。
+N 只使用报告当天完整成功的网络覆盖运行，不做历史衰减、不沿用旧值；同日缺少成功 N 时不生成 v2 当天分。v2 风险项为 `RiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty`，不再重复计入节点不可用率；历史 v1 快照保持原规则。
 
 ## 技术方案
 
@@ -450,16 +452,17 @@ npm run test:ops
 
 ## 午夜自动维护
 
-后端支持一个按上海时间串行执行的午夜维护流水线，用来覆盖管理后台里的四个模块：
+后端支持一个按上海时间串行执行的午夜维护流水线：
 
 - 稳定性数据（S）：调用 `scripts/monitor_stability.py`
 - 性能数据（P）：调用 `scripts/monitor_performance.py`
+- 网络覆盖（N）：调用 `scripts/monitor_network_coverage.py`，逐可检测节点执行真实代理 HTTP 检查
 - 风险数据（R）：逐机场执行风险体检
 - 时间维度（衰减）：最后统一执行一次 `aggregate + recompute`
 
 这样做的目的是控制服务器负载：
 
-- `S / P` 阶段只采样，不各自重复触发聚合和重算
+- `S / P / N` 阶段只采样，不各自重复触发聚合和重算
 - `R` 阶段按机场串行执行，并可配置每个机场之间的间隔
 - 全量聚合与时间衰减重算只在最后执行一次
 
@@ -482,7 +485,7 @@ NIGHTLY_PIPELINE_AIRPORT_STATUS=normal
 
 说明：
 
-- `00:00` 指上海时间每日零点开始整条流水线，不代表四个模块同时并发启动。
+- `00:00` 指上海时间每日零点开始整条流水线，不代表各模块同时并发启动。
 - 任务只会在设定时间后的一个短窗口内触发一次，避免服务白天重启后补跑整条午夜流水线。
 - “时间维度（衰减）”没有单独脚本，它包含在最后一次 `recomputeForDate` 里。
 - 管理后台“任务调度”里的性能采集会默认使用更轻量的调度参数：`LATENCY_ATTEMPTS=3`、`LATENCY_SAMPLE_INTERVAL_SECONDS=1`、`REQUEST_LOSS_ATTEMPTS=10`、`REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS=0.5`、`SPEED_TIMEOUT=10`、`SPEED_CONNECTIONS=2`、`NODE_AVAILABILITY_CHECK=tcp`。这些默认值只在环境变量未显式配置时生效，生产需要深度测速时可自行覆盖。
@@ -621,14 +624,27 @@ SING_BOX_BIN=sing-box \
 - `TEST_URL_LATENCY` 用于代理 HTTP 诊断耗时，也用于默认 `proxy_http` 节点可用性探测；不直接参与 `P` 评分。
 - `median_download_mbps` 现在按“多连接并发下载”计算，比之前的单连接下载更接近 Speedtest 的测速口径。
 - `packet_loss_percent` 为兼容旧 API 保留字段名；实际口径是代表节点通过本地 `sing-box` 代理访问 `TEST_URL_LATENCY` 的请求失败比例，不是 ICMP/UDP 包级丢包率。
-- 节点可用性作为风险维度参与 `R` 评分：默认口径为完整代理 HTTP 探测，不可用率越高，`node_availability_penalty` 越高，最高扣 30 分。需要回退旧口径时可设 `NODE_AVAILABILITY_CHECK=tcp`。
+- 性能采集保留节点可用率作为诊断；v2 不再把该值计入 `R`，节点健康与覆盖由独立 N 采集评分。
+
+## 网络覆盖 N 采集与切换
+
+[`scripts/monitor_network_coverage.py`](scripts/monitor_network_coverage.py) 复用订阅快照解析和 `sing-box` 代理检查能力，但不执行延迟或下载测速。Detected 仅包含可检测节点；unsupported 单列。UNKNOWN 不计有效地区，但参与节点健康率和保守均衡。
+
+首次写入 `success` N 运行时，后台会原子创建 `gaterank_score_v2_activation`，记录切换日期、来源运行 ID 和启用时间。切换日前保持 `v1_spcr`，切换日起只生成完整 `v2_spncr`。紧急回退可设置：
+
+```bash
+SCORE_V2_FORCE_DISABLED=1
+```
+
+该开关不会删除 N 运行数据，只恢复 v1 计算与展示。生产首次启用建议先执行全机场 N 批次，核对成功覆盖后再运行统一聚合重算。
 
 ## 当前 MVP 边界
 
 - 管理后台为单管理员模型（密码换短期 token）
-- 数据台固定 5 Tab：
+- 数据台包含 6 Tab：
   - 基础信息（人工维护）
   - 稳定性数据（S）
   - 性能数据（P）
+  - 网络覆盖（N）
   - 风险数据（R）
   - 时间维度（衰减）

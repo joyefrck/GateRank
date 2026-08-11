@@ -637,6 +637,8 @@ const riskMonitorView: RiskMonitorView = {
 const reportView: ReportView = {
   requested_date: '2026-03-23',
   date: '2026-03-23',
+  score_rule_version: 'v1_spcr',
+  network_coverage: null,
   resolved_from_fallback: false,
   fallback_notice: null,
   performance_under_review: false,
@@ -674,9 +676,10 @@ const reportView: ReportView = {
     new_entries_rank: null,
     risk_alerts_rank: null,
   },
-  score_breakdown: {
-    s: 99,
-    p: 98,
+    score_breakdown: {
+      s: 99,
+      p: 98,
+      n: null,
     c: 90,
     r: 95,
     final_score: 98.6,

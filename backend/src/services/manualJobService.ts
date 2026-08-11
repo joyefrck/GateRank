@@ -188,6 +188,13 @@ export class ManualJobService {
           stageFailures.push(performanceFailure);
         }
 
+        const networkCoverageFailure = await this.captureStageFailure('网络覆盖采集', async () => {
+          await this.runNetworkCoverageScript(job.airport_id, `manual-network-coverage:${job.id}`);
+        });
+        if (networkCoverageFailure) {
+          stageFailures.push(networkCoverageFailure);
+        }
+
         const riskFailure = await this.captureStageFailure('风险体检', async () => {
           await this.deps.riskCheckService.inspectAirportForDate(job.airport_id, job.date);
         });
@@ -263,6 +270,15 @@ export class ManualJobService {
         : `历史日期仅重算性能相关数据：聚合 ${aggregateResult.aggregated} 条，重算 ${recomputeResult.recomputed} 条`;
     }
 
+    if (job.kind === 'network_coverage') {
+      if (!isToday) {
+        throw new Error('网络覆盖 N 只允许采集当天数据，历史日期保持原始评分快照');
+      }
+      await this.runNetworkCoverageScript(job.airport_id, `manual-network-coverage:${job.id}`);
+      const recomputeResult = await this.deps.recomputeService.recomputeAirportForDate(job.date, job.airport_id);
+      return `网络覆盖采集完成：重算 ${recomputeResult.recomputed} 条`;
+    }
+
     if (job.kind === 'risk') {
       if (isToday) {
         const result = await this.deps.riskCheckService.inspectAirportForDate(job.airport_id, job.date);
@@ -293,6 +309,10 @@ export class ManualJobService {
 
   private async runPerformanceScript(airportId: number): Promise<void> {
     await this.runPythonScript('monitor_performance.py', airportId, 'manual-performance');
+  }
+
+  private async runNetworkCoverageScript(airportId: number, source: string): Promise<void> {
+    await this.runPythonScript('monitor_network_coverage.py', airportId, source);
   }
 
   private async dispatchRegionalPerformance(
@@ -338,7 +358,11 @@ export class ManualJobService {
     await this.deps.manualJobRepository.markRunning(jobId, message);
   }
 
-  private async runPythonScript(scriptName: 'monitor_stability.py' | 'monitor_performance.py', airportId: number, source: string): Promise<void> {
+  private async runPythonScript(
+    scriptName: 'monitor_stability.py' | 'monitor_performance.py' | 'monitor_network_coverage.py',
+    airportId: number,
+    source: string,
+  ): Promise<void> {
     if (!this.adminApiKey) {
       throw new Error('ADMIN_API_KEY 未配置，无法执行手动采集任务');
     }

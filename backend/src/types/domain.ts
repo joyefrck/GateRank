@@ -113,7 +113,7 @@ export type PerformanceReviewStatus = 'normal' | 'needs_review' | 'suspicious';
 export type PerformanceProbeJobStatus = 'queued' | 'leased' | 'completed' | 'failed' | 'expired';
 export type PerformanceRunMode = 'shadow' | 'official';
 export type PerformanceCalibrationStatus = 'not_required' | 'passed' | 'failed';
-export type ManualJobKind = 'full' | 'stability' | 'performance' | 'risk' | 'time_decay';
+export type ManualJobKind = 'full' | 'stability' | 'performance' | 'network_coverage' | 'risk' | 'time_decay';
 export type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 export type NewsStatus = 'draft' | 'published' | 'archived';
 export type MonthlyReportStatus = 'draft' | 'published' | 'archived';
@@ -121,6 +121,7 @@ export type SchedulerTaskKey =
   | 'stability'
   | 'subscription_node_refresh'
   | 'performance'
+  | 'network_coverage'
   | 'risk'
   | 'aggregate_recompute'
   | 'billing_listing_sync'
@@ -381,6 +382,7 @@ export interface TimeSeriesScorePoint {
 export interface ScoreBreakdown {
   s: number;
   p: number;
+  n?: number | null;
   c: number;
   r: number;
   risk_penalty: number;
@@ -389,6 +391,73 @@ export interface ScoreBreakdown {
   historical_score: number;
   final_score: number;
   details: Record<string, ScoreDetailValue>;
+}
+
+export type NetworkCoverageRunStatus = 'success' | 'partial' | 'skipped' | 'failed';
+
+export interface NetworkCoverageRunNode {
+  key: string;
+  name: string;
+  type: string | null;
+  healthy: boolean;
+  error_code: string | null;
+  region_code: string;
+  region_name: string;
+  region_group: 'core' | 'extended' | 'unknown';
+}
+
+export interface NetworkCoverageRun {
+  id: number;
+  airport_id: number;
+  sampled_at: string;
+  sampled_date: string;
+  source: string;
+  status: NetworkCoverageRunStatus;
+  subscription_format: string | null;
+  detected_nodes_count: number;
+  healthy_nodes_count: number;
+  unhealthy_nodes_count: number;
+  unsupported_nodes_count: number;
+  unknown_healthy_nodes_count: number;
+  healthy_node_rate: number;
+  core_regions: string[];
+  extended_regions: string[];
+  region_counts: Record<string, number>;
+  max_region_code: string | null;
+  max_region_share: number;
+  node_count_score: number;
+  core_coverage_score: number;
+  extended_coverage_score: number;
+  region_score: number;
+  health_rate_score: number;
+  balance_score: number;
+  score_n: number;
+  rule_version: string;
+  nodes: NetworkCoverageRunNode[];
+  error_code: string | null;
+  error_message: string | null;
+  diagnostics: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface NetworkCoverageRunInput {
+  airport_id: number;
+  sampled_at: string;
+  sampled_date: string;
+  source: string;
+  status: NetworkCoverageRunStatus;
+  subscription_format?: string | null;
+  unsupported_nodes_count?: number;
+  nodes?: Array<{
+    key: string;
+    name: string;
+    type?: string | null;
+    healthy: boolean;
+    error_code?: string | null;
+  }>;
+  error_code?: string | null;
+  error_message?: string | null;
+  diagnostics?: Record<string, unknown>;
 }
 
 export interface SchedulerTask {
@@ -594,6 +663,7 @@ export interface FullRankingItem {
 
 export interface FullRankingView {
   date: string;
+  score_rule_version?: 'v1_spcr' | 'v2_spncr';
   generated_at: string;
   filters?: FullRankingFilters;
   page: number;
@@ -673,6 +743,7 @@ export interface ReportCapabilities {
 export interface ReportView {
   requested_date: string;
   date: string;
+  score_rule_version: 'v1_spcr' | 'v2_spncr';
   resolved_from_fallback: boolean;
   fallback_notice: string | null;
   performance_under_review: boolean;
@@ -689,6 +760,7 @@ export interface ReportView {
   score_breakdown: {
     s: number;
     p: number;
+    n: number | null;
     c: number;
     r: number;
     final_score: number | null;
@@ -698,6 +770,23 @@ export interface ReportView {
     complaint_penalty: number;
     history_penalty: number;
   };
+  network_coverage: {
+    sampled_date: string;
+    rule_version: string;
+    detected_nodes_count: number;
+    healthy_nodes_count: number;
+    unsupported_nodes_count: number;
+    unknown_healthy_nodes_count: number;
+    healthy_node_rate: number;
+    core_regions: string[];
+    extended_regions: string[];
+    max_region_code: string | null;
+    max_region_share: number;
+    node_count_score: number;
+    region_score: number;
+    health_rate_score: number;
+    balance_score: number;
+  } | null;
   metrics: {
     uptime_percent_30d: number;
     median_latency_ms: number;

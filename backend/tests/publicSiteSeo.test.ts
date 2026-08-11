@@ -164,14 +164,14 @@ test('airport deal detail paths reuse the deals OG image', () => {
   });
 });
 
-test('methodology page explains regional performance thresholds without rewriting history', () => {
+test('methodology page keeps regional scoring implementation private', () => {
   const html = renderMethodologyPublicPage('https://gate-rank.com');
 
-  assert.match(html, /原有测试中心以 300 Mbps 为满分/);
-  assert.match(html, /200 Mbps 大陆探针以 10 Mbps 为 0 分、160 Mbps 为满分/);
-  assert.match(html, /达到或超过 180 Mbps 标记为达到探针带宽上限/);
-  assert.match(html, /各测试地区先独立评分，再对纳入结果的地区等权平均/);
-  assert.match(html, /历史报告不回填、不改写/);
+  assert.match(html, /五维评估框架/);
+  assert.match(html, /数据如何形成结果/);
+  assert.match(html, /报告保留日期与规则版本/);
+  assert.match(html, /模型参数、阈值与计算细节属于内部方法，不对外披露/);
+  assert.doesNotMatch(html, /300 Mbps|160 Mbps|180 Mbps|UptimeScore|RiskPenalty|days_diff/);
 });
 
 function createAirportDealDetailView(activeDeals: AirportDealView[]): AirportDealDetailView {

@@ -1,59 +1,53 @@
 import React, { useMemo } from 'react';
 import {
   ArrowRight,
-  ChartColumnBig,
-  Clock3,
-  Gauge,
+  Check,
+  Database,
+  Eye,
+  FileClock,
   HelpCircle,
-  ShieldAlert,
+  LockKeyhole,
   ShieldCheck,
-  Wallet,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
+import { ListPageHero } from '../../components/ListPageHero';
 import {
   buildAbsoluteUrl,
+  buildFullRankingHref,
   buildHomeHref,
   buildMethodologyHref,
-  navigate,
+  buildMonthlyReportsHref,
   PageFrame,
   usePageSeo,
 } from '../../site/publicSite';
-import { ListPageHero } from '../../components/ListPageHero';
+import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
 import {
-  decayTimeline,
+  dataPipeline,
   dimensionCards,
-  exampleCase,
-  heroStats,
+  methodologyFacts,
   methodologyFaq,
   methodologySeo,
   methodologyStructuredData,
-  riskPenaltyFlow,
-  totalScoreParts,
+  resultGuidance,
+  transparencyBoundary,
   trustPrinciples,
 } from './content';
-import { PUBLIC_SITE_BRAND_NAME } from '../../../shared/publicBrand';
 
 const sectionMotion = {
-  initial: { opacity: 0, y: 24 },
+  initial: { opacity: 0, y: 18 },
   whileInView: { opacity: 1, y: 0 },
-  viewport: { once: true, margin: '-80px' },
-  transition: { duration: 0.45, ease: 'easeOut' as const },
+  viewport: { once: true, margin: '-72px' },
+  transition: { duration: 0.4, ease: 'easeOut' as const },
 };
 
-const sectionTitles = {
-  formula: { index: '01', title: '先看总公式', subtitle: 'Final Score Framework' },
-  dimensions: { index: '02', title: '四个维度怎么来', subtitle: 'S / P / C / R Breakdown' },
-  risk: { index: '03', title: '风险为什么会拉低分', subtitle: 'Risk Penalty Logic' },
-  decay: { index: '04', title: '为什么要做时间衰减', subtitle: 'Recency Weighted Score' },
-  example: { index: '05', title: '一眼看懂的案例', subtitle: 'Worked Example' },
-  trust: { index: '06', title: '为什么这套方法更可信', subtitle: 'Why This Is Convincing' },
-  faq: { index: '07', title: 'FAQ / 误解澄清', subtitle: 'Common Questions' },
+const dimensionTone = {
+  emerald: 'border-emerald-200 bg-emerald-50/55 text-emerald-700',
+  sky: 'border-sky-200 bg-sky-50/55 text-sky-700',
+  indigo: 'border-indigo-200 bg-indigo-50/55 text-indigo-700',
+  amber: 'border-amber-200 bg-amber-50/55 text-amber-700',
+  rose: 'border-rose-200 bg-rose-50/55 text-rose-700',
 } as const;
-
-function formatNumber(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
-}
 
 function buildStructuredData() {
   return methodologyStructuredData.map((item) => {
@@ -87,21 +81,19 @@ function buildStructuredData() {
 }
 
 function SectionHeading({
-  index,
+  eyebrow,
   title,
-  subtitle,
+  description,
 }: {
-  index: string;
+  eyebrow: string;
   title: string;
-  subtitle: string;
+  description?: string;
 }) {
   return (
-    <div className="mb-6 md:mb-8">
-      <div className="inline-flex items-center gap-3 rounded-full border border-neutral-200 bg-white px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-500">
-        <span className="text-neutral-300">{index}</span>
-        <span>{subtitle}</span>
-      </div>
-      <h2 className="mt-4 text-3xl md:text-4xl font-black text-neutral-900">{title}</h2>
+    <div className="max-w-3xl">
+      <div className="text-[11px] font-black uppercase tracking-[0.2em] text-indigo-600">{eyebrow}</div>
+      <h2 className="mt-3 text-3xl font-black tracking-[-0.03em] text-neutral-950 md:text-4xl">{title}</h2>
+      {description ? <p className="mt-4 text-sm leading-7 text-neutral-600 md:text-base">{description}</p> : null}
     </div>
   );
 }
@@ -119,342 +111,188 @@ export function MethodologyPage() {
 
   return (
     <PageFrame active="methodology">
-      <main className="max-w-7xl mx-auto px-4 pt-10 md:pt-14 pb-14 md:pb-20 space-y-16 md:space-y-24">
+      <main className="mx-auto max-w-7xl space-y-20 px-4 pb-20 pt-8 md:space-y-28 md:pb-28 md:pt-12">
         <ListPageHero
-          eyebrow={`${PUBLIC_SITE_BRAND_NAME} Methodology`}
-          title="机场测评方法：评分规则、测速标准、风险扣分与推荐依据"
-          subtitle=""
-          description={`本页系统说明 ${PUBLIC_SITE_BRAND_NAME} 的机场测评方法、评分规则、测速标准和风险扣分逻辑。你可以直接看到总分如何拆解、风险如何压分、历史数据为什么保留，以及每日榜单为什么会变化。`}
+          eyebrow="GateRank Methodology"
+          title="我们如何评估"
+          subtitle="一个机场"
+          description={`${PUBLIC_SITE_BRAND_NAME} 通过持续采样、多维信号和历史记录，判断一个服务是否具备长期使用价值。本页解释评估原则、数据来源与结果解读方式；模型参数、阈值与计算细节属于内部方法，不对外披露。`}
           tone="sky"
-          stats={heroStats.map((item) => ({ label: item.label, value: item.value }))}
+          stats={[
+            ...methodologyFacts.map((item) => ({
+              label: item.value,
+              value: <div className="text-sm font-semibold leading-6 text-white/78">{item.label}</div>,
+            })),
+            {
+              label: '公开范围',
+              value: <div className="text-sm font-semibold leading-6 text-white/78">原则公开 · 参数保留</div>,
+            },
+          ]}
         />
 
         <motion.section {...sectionMotion}>
-          <SectionHeading {...sectionTitles.formula} />
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="rounded-3xl border border-neutral-200 bg-white p-6 md:p-8 shadow-[0_16px_48px_rgba(0,0,0,0.04)]">
-              <div className="text-sm md:text-base leading-8 text-neutral-600">
-                {PUBLIC_SITE_BRAND_NAME} 的机场评分不是“谁跑得快谁第一”，而是把
-                <span className="font-black text-neutral-900">稳定性、性能、价格、风险</span>
-                四个维度放进同一套可解释模型。
-              </div>
-              <div className="mt-6 grid gap-4 md:grid-cols-4">
-                {totalScoreParts.map((item) => (
-                  <div key={item.key} className={`rounded-2xl border p-4 ${item.softClass}`}>
-                    <div className="text-[11px] uppercase tracking-[0.18em] font-black">{item.label}</div>
-                    <div className="mt-2 whitespace-nowrap text-xl font-black">{item.title}</div>
-                    <div className="mt-3 whitespace-nowrap text-sm leading-6">占总分 {item.percent}%</div>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-6 rounded-3xl bg-neutral-950 px-5 py-6 text-white">
-                <div className="text-[11px] uppercase tracking-[0.18em] font-black text-white/50">公开主公式</div>
-                <div className="mt-3 break-words text-2xl md:text-[32px] font-black leading-tight sm:whitespace-nowrap">
-                  FinalScore = 0.4S + 0.3P + 0.1C + 0.2R
-                </div>
-                <p className="mt-4 text-sm leading-7 text-white/68">
-                  前三项衡量表现与价值，风险项作为独立约束进入总分。这样可以避免高性能或低价格掩盖基础信任问题。
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-6 md:p-8">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-neutral-900 text-white">
-                  <ChartColumnBig className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-sm font-black text-neutral-900">不是单一测速分</div>
-                  <div className="text-[11px] uppercase tracking-[0.18em] font-black text-neutral-400">Why It Matters</div>
-                </div>
-              </div>
-              <div className="mt-6 space-y-4">
-                <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                  <div className="text-sm font-black text-neutral-900">单次高速截图不能代表长期表现</div>
-                  <p className="mt-2 text-sm leading-6 text-neutral-600">中位值、波动系数和稳定天数会把短期高光与持续质量区分开。</p>
-                </div>
-                <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                  <div className="text-sm font-black text-neutral-900">低价不能绕过质量约束</div>
-                  <p className="mt-2 text-sm leading-6 text-neutral-600">价格只占一部分，还要看月付价格档位、速度价格比和基础风险。</p>
-                </div>
-                <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                  <div className="text-sm font-black text-neutral-900">风险必须显式进入模型</div>
-                  <p className="mt-2 text-sm leading-6 text-neutral-600">域名异常、证书问题、投诉和历史异常都会形成可解释的惩罚项。</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.section>
-
-        <motion.section {...sectionMotion}>
-          <SectionHeading {...sectionTitles.dimensions} />
-          <div className="grid gap-6 md:grid-cols-2">
+          <SectionHeading
+            eyebrow="Evaluation Framework"
+            title="五维评估框架"
+            description="五个维度分别回答不同问题。它们共同构成判断依据，但任何一个单项都不能独立决定推荐。"
+          />
+          <div className="mt-8 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             {dimensionCards.map((item) => (
-              <section
-                key={item.code}
-                className={`rounded-3xl border bg-[linear-gradient(180deg,var(--tw-gradient-from),var(--tw-gradient-to))] p-6 md:p-8 ${item.borderClass} ${item.accentClass}`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className={`inline-flex rounded-full px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] ${item.badgeClass}`}>
-                      {item.code}
-                    </div>
-                    <h3 className="mt-4 text-2xl font-black text-neutral-900">{item.title}</h3>
-                    <p className="mt-3 text-sm leading-7 text-neutral-600">{item.summary}</p>
+              <article key={item.code} className="group rounded-2xl border border-neutral-200 bg-white p-5 transition hover:-translate-y-0.5 hover:border-neutral-300 hover:shadow-[0_16px_36px_rgba(15,23,42,0.06)]">
+                <div className="flex items-center justify-between gap-3">
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-xl border text-base font-black ${dimensionTone[item.tone]}`}>
+                    {item.code}
                   </div>
+                  <span className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-300">{item.eyebrow}</span>
                 </div>
-                <div className="mt-5 break-words rounded-2xl border border-neutral-200 bg-white px-4 py-4 text-sm font-black leading-7 text-neutral-900 lg:whitespace-nowrap">
-                  {item.formula}
-                </div>
-                <div className="mt-5 space-y-3">
-                  {item.bullets.map((bullet) => (
-                    <div key={bullet} className="rounded-2xl border border-neutral-200 bg-white/85 px-4 py-3 text-sm leading-6 text-neutral-600">
-                      {bullet}
-                    </div>
-                  ))}
-                </div>
-              </section>
-            ))}
-          </div>
-        </motion.section>
-
-        <motion.section {...sectionMotion}>
-          <SectionHeading {...sectionTitles.risk} />
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="rounded-3xl border border-rose-200 bg-[linear-gradient(180deg,rgba(244,63,94,0.06),rgba(255,255,255,1))] p-6 md:p-8">
-              <div className="grid gap-4 md:grid-cols-4">
-                {riskPenaltyFlow.map((item, index) => (
-                  <div key={item.label} className="relative rounded-3xl border border-rose-100 bg-white p-4">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-rose-500">Step {index + 1}</div>
-                    <div className="mt-2 whitespace-nowrap text-lg font-black text-neutral-900">{item.label}</div>
-                    <div className="mt-3 text-sm leading-6 text-neutral-600">{item.detail}</div>
-                    <div className="mt-4 inline-flex rounded-full bg-rose-500 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-white">
-                      扣 {item.penalty}
-                    </div>
-                    {index < riskPenaltyFlow.length - 1 && (
-                      <div className="hidden md:block absolute right-[-14px] top-1/2 -translate-y-1/2 text-rose-300">
-                        <ArrowRight className="h-5 w-5" />
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="mt-6 rounded-3xl border border-rose-200 bg-neutral-950 p-5 text-white">
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/50">Risk Output</div>
-                <div className="mt-3 break-words text-2xl md:text-3xl font-black sm:whitespace-nowrap">R = 100 - RiskPenalty</div>
-                <p className="mt-3 text-sm leading-7 text-white/70">
-                  风险项不是模糊印象分，而是把可解释的异常转换为明确扣分，便于追踪风险来源。
-                </p>
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-6 md:p-8">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-rose-500 text-white">
-                  <ShieldAlert className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-sm font-black text-neutral-900">为什么单列风险</div>
-                  <div className="text-[11px] uppercase tracking-[0.18em] font-black text-neutral-400">Independent Penalty</div>
-                </div>
-              </div>
-              <div className="mt-6 space-y-4 text-sm leading-7 text-neutral-600">
-                <p>如果把风险揉进其他维度，用户会很难分辨“是慢，还是不可信”。</p>
-                <p>单列风险分后，一眼就能知道某个机场是因为速度掉分，还是因为域名、证书、投诉或历史异常掉分。</p>
-                <p className="rounded-2xl border border-neutral-200 bg-white px-4 py-4 font-medium text-neutral-900">
-                  这让分数具备可追溯性：用户可以区分速度下降、价格不匹配和信任风险。
-                </p>
-              </div>
-            </div>
-          </div>
-        </motion.section>
-
-        <motion.section {...sectionMotion}>
-          <SectionHeading {...sectionTitles.decay} />
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-            <div className="rounded-3xl border border-neutral-200 bg-white p-6 md:p-8">
-              <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-5 md:p-6">
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">先看关系，再看公式</div>
-                <div className="mt-4 grid gap-3 md:grid-cols-3">
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-300">Step 1</div>
-                    <div className="mt-2 whitespace-nowrap text-lg font-black text-neutral-900">先算当天综合分</div>
-                    <div className="mt-2 text-sm leading-6 text-neutral-600">
-                      CurrentScore = 0.4S + 0.3P + 0.1C + 0.2R
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-300">Step 2</div>
-                    <div className="mt-2 whitespace-nowrap text-lg font-black text-neutral-900">再用 w 算历史分</div>
-                    <div className="mt-2 text-sm leading-6 text-neutral-600">
-                      `w` 只参与 HistoricalScore，越近的历史分权重越高。
-                    </div>
-                  </div>
-                  <div className="rounded-2xl border border-neutral-200 bg-white p-4">
-                    <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-300">Step 3</div>
-                    <div className="mt-2 whitespace-nowrap text-lg font-black text-neutral-900">最后合成最终分</div>
-                    <div className="mt-2 text-sm leading-6 text-neutral-600">
-                      FinalScore = 0.7 × CurrentScore + 0.3 × HistoricalScore
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="rounded-3xl border border-neutral-200 bg-neutral-950 p-5 text-white">
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/50">Decay Formula</div>
-                <div className="mt-3 break-words text-2xl md:text-3xl font-black sm:whitespace-nowrap">w = exp(-0.1 × days_diff)</div>
-                <p className="mt-3 text-sm leading-7 text-white/70">
-                  越新的数据权重越高，但历史分数不会被瞬间清零。这里的 `w` 只用于计算 HistoricalScore，不会直接乘在当天综合分外面。
-                </p>
-              </div>
-              <div className="mt-6 rounded-3xl border border-neutral-200 bg-neutral-50 p-5">
-                <div className="text-sm font-black text-neutral-900">桥接关系</div>
-                <p className="mt-3 text-sm leading-7 text-neutral-600">
-                  很多人第一次看会误以为 `w` 是直接修正总分。不是。{PUBLIC_SITE_BRAND_NAME} 的做法是：
-                  <span className="font-black text-neutral-900">先算当天总分</span>，
-                  <span className="font-black text-neutral-900">再用 `w` 计算历史衰减分</span>，
-                  最后再把这两部分按 70% / 30% 合成最终分。
-                </p>
-              </div>
-              <div className="mt-6 space-y-4">
-                {decayTimeline.map((item) => (
-                  <div key={item.days} className="grid gap-3 md:grid-cols-[120px_minmax(0,1fr)_80px] md:items-center">
-                    <div className="text-sm font-black text-neutral-900">{item.days} 天前</div>
-                    <div className="h-3 overflow-hidden rounded-full bg-neutral-100">
-                      <div className="h-full rounded-full bg-neutral-900 transition-all" style={{ width: `${Math.max(item.weight * 100, 4)}%` }} />
-                    </div>
-                    <div className="text-sm font-medium text-neutral-500">权重 {item.weight.toFixed(2)}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="rounded-3xl border border-neutral-200 bg-neutral-50 p-6 md:p-8">
-              <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-neutral-900 text-white">
-                  <Clock3 className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-sm font-black text-neutral-900">为什么要保留历史</div>
-                  <div className="text-[11px] uppercase tracking-[0.18em] font-black text-neutral-400">Historical Memory</div>
-                </div>
-              </div>
-              <div className="mt-6 space-y-4 text-sm leading-7 text-neutral-600">
-                <p>只看当天，会让一次活动测速或一次短时故障把榜单拉得过于极端。</p>
-                <p>引入时间衰减后，最近表现最重要，但长期表现仍然会保留“记忆”，更接近真实使用体验。</p>
-                <p className="rounded-2xl border border-neutral-200 bg-white px-4 py-4 font-medium text-neutral-900">
-                  这让每日推荐更接近长期使用体验，而不是单日跑分展示。
-                </p>
-              </div>
-            </div>
-          </div>
-        </motion.section>
-
-        <motion.section {...sectionMotion}>
-          <SectionHeading {...sectionTitles.example} />
-          <div className="grid gap-6 lg:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
-            <div className="rounded-[32px] border border-neutral-200 bg-neutral-50 p-6 md:p-8">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">Demo Airport</div>
-                  <div className="mt-2 text-2xl font-black text-neutral-900">{exampleCase.input.airportName}</div>
-                </div>
-                <div className="rounded-full bg-neutral-900 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white">
-                  虚拟案例
-                </div>
-              </div>
-              <div className="mt-6 grid gap-3 sm:grid-cols-2">
-                <MetricTile label="可用率" value={`${formatNumber(exampleCase.input.uptimePercent)}%`} />
-                <MetricTile label="延迟波动 CV" value={formatNumber(exampleCase.input.latencyCv)} />
-                <MetricTile label="单日分档" value={exampleCase.breakdown.stabilityTier} />
-                <MetricTile label="连续健康天数" value={`${exampleCase.input.healthyDaysStreak} 天`} />
-                <MetricTile label="中位延迟" value={`${exampleCase.input.medianLatencyMs} ms`} />
-                <MetricTile label="下载速率" value={`${exampleCase.input.medianDownloadMbps} Mbps`} />
-                <MetricTile label="代理请求失败率" value={`${exampleCase.input.packetLossPercent}%`} />
-                <MetricTile label="月付价格" value={`¥${exampleCase.input.priceMonth}`} />
-                <MetricTile label="历史衰减分" value={formatNumber(exampleCase.input.historicalScore)} />
-              </div>
-            </div>
-
-            <div className="rounded-[32px] border border-neutral-200 bg-white p-6 md:p-8">
-              <div className="grid gap-4 md:grid-cols-2">
-                <ScoreTile label="S 稳定性" value={exampleCase.breakdown.s} detail={`92 / 96 / 80 -> ${formatNumber(exampleCase.breakdown.s)}`} tone="emerald" />
-                <ScoreTile label="P 性能" value={exampleCase.breakdown.p} detail={`95.93 / 72.41 / 88 -> ${formatNumber(exampleCase.breakdown.p)}`} tone="sky" />
-                <ScoreTile label="C 价格" value={exampleCase.breakdown.c} detail={`100 / 24.44 -> ${formatNumber(exampleCase.breakdown.c)}`} tone="amber" />
-                <ScoreTile label="R 风险" value={exampleCase.breakdown.r} detail={`风险罚分 ${formatNumber(exampleCase.breakdown.riskPenalty)} -> ${formatNumber(exampleCase.breakdown.r)}`} tone="rose" />
-              </div>
-              <div className="mt-6 rounded-[28px] border border-neutral-200 bg-neutral-950 p-5 text-white">
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-white/50">How The Numbers Close</div>
-                <div className="mt-3 space-y-3 text-sm leading-7 text-white/72">
-                  <p>当日综合分 = 0.4 × {formatNumber(exampleCase.breakdown.s)} + 0.3 × {formatNumber(exampleCase.breakdown.p)} + 0.1 × {formatNumber(exampleCase.breakdown.c)} + 0.2 × {formatNumber(exampleCase.breakdown.r)} = <span className="font-black text-white">{formatNumber(exampleCase.breakdown.currentScore)}</span></p>
-                  <p>最终分 = 0.7 × {formatNumber(exampleCase.breakdown.currentScore)} + 0.3 × {formatNumber(exampleCase.input.historicalScore)} = <span className="font-black text-white">{formatNumber(exampleCase.breakdown.finalScore)}</span></p>
-                </div>
-              </div>
-              <div className="mt-6 rounded-[28px] border border-neutral-200 bg-neutral-50 p-5">
-                <div className="text-sm font-black text-neutral-900">案例说明</div>
-                <p className="mt-3 text-sm leading-7 text-neutral-600">
-                  这个虚拟机场的性能和稳定性都不错，但因为存在 1 条近期投诉，风险分不是满分；同时历史衰减分只有 80.4，所以最终分也不会被当日表现直接推到极高位置。
-                </p>
-              </div>
-            </div>
-          </div>
-        </motion.section>
-
-        <motion.section {...sectionMotion}>
-          <SectionHeading {...sectionTitles.trust} />
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-4">
-            {trustPrinciples.map((item, index) => (
-              <div key={item.title} className="rounded-[30px] border border-neutral-200 bg-white p-6 shadow-[0_18px_60px_rgba(0,0,0,0.04)]">
-                <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-300">0{index + 1}</div>
-                <div className="mt-4 text-xl font-black text-neutral-900">{item.title}</div>
+                <h3 className="mt-6 text-xl font-black text-neutral-950">{item.title}</h3>
                 <p className="mt-3 text-sm leading-7 text-neutral-600">{item.description}</p>
-              </div>
+                <p className="mt-5 border-t border-neutral-100 pt-4 text-xs leading-6 text-neutral-500">{item.detail}</p>
+              </article>
             ))}
           </div>
         </motion.section>
 
         <motion.section {...sectionMotion}>
-          <SectionHeading {...sectionTitles.faq} />
-          <div className="grid gap-5">
+          <SectionHeading
+            eyebrow="Evidence Pipeline"
+            title="数据如何形成结果"
+            description="从采样到公开结论，每一步都有明确职责。流程公开，但不会暴露可被复制或针对性优化的内部实现。"
+          />
+          <div className="mt-8 grid gap-0 overflow-hidden rounded-2xl border border-neutral-200 bg-white md:grid-cols-4">
+            {dataPipeline.map((item, index) => (
+              <article
+                key={item.index}
+                className={`relative p-6 ${index === 0 ? '' : 'border-t border-neutral-200 md:border-l md:border-t-0'}`}
+              >
+                <div className="font-mono text-xs font-black tracking-[0.18em] text-indigo-600">{item.index}</div>
+                <h3 className="mt-5 text-lg font-black text-neutral-950">{item.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-neutral-600">{item.description}</p>
+                {index < dataPipeline.length - 1 ? (
+                  <ArrowRight className="absolute -right-3 top-7 z-10 hidden h-6 w-6 rounded-full border border-neutral-200 bg-white p-1 text-neutral-400 md:block" />
+                ) : null}
+              </article>
+            ))}
+          </div>
+        </motion.section>
+
+        <motion.section {...sectionMotion}>
+          <SectionHeading
+            eyebrow="Reading The Score"
+            title="如何理解 GateRank 结果"
+            description="公开分数是决策线索，不是对未来服务的保证。阅读时应同时关注趋势、证据完整度与风险状态。"
+          />
+          <div className="mt-8 grid gap-5 lg:grid-cols-3">
+            {resultGuidance.map((item, index) => (
+              <article key={item.title} className="rounded-2xl border border-neutral-200 bg-neutral-50 p-6">
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-950 text-xs font-black text-white">
+                  {index + 1}
+                </div>
+                <h3 className="mt-5 text-xl font-black text-neutral-950">{item.title}</h3>
+                <p className="mt-3 text-sm leading-7 text-neutral-600">{item.description}</p>
+              </article>
+            ))}
+          </div>
+        </motion.section>
+
+        <motion.section {...sectionMotion}>
+          <SectionHeading
+            eyebrow="Transparency Boundary"
+            title="透明度边界"
+            description="我们公开足以帮助用户判断的证据，同时保留可能被用于复制模型、操纵数据或针对性优化的实现细节。"
+          />
+          <div className="mt-8 grid overflow-hidden rounded-2xl border border-neutral-200 bg-white lg:grid-cols-2">
+            <BoundaryColumn
+              icon={Eye}
+              eyebrow="Public"
+              title="我们公开"
+              description="用户可以核对结果来自什么信息，以及报告对应哪个时间与规则版本。"
+              items={transparencyBoundary.publicItems}
+            />
+            <BoundaryColumn
+              icon={LockKeyhole}
+              eyebrow="Protected"
+              title="我们保留"
+              description="这些内容只用于内部评分、质量控制与抗操纵，不进入公开页面或机器可读数据。"
+              items={transparencyBoundary.privateItems}
+              protectedColumn
+            />
+          </div>
+          <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50/70 px-5 py-4 text-sm leading-7 text-indigo-950">
+            保留内部参数并不影响结果可追溯性：用户仍可查看数据日期、趋势、风险来源类别和历史报告，
+            但无法直接复制或反向实现评分模型。
+          </div>
+        </motion.section>
+
+        <motion.section {...sectionMotion}>
+          <SectionHeading
+            eyebrow="Trust Principles"
+            title="我们坚持的评测原则"
+          />
+          <div className="mt-8 grid gap-x-8 gap-y-0 border-y border-neutral-200 md:grid-cols-2 lg:grid-cols-3">
+            {trustPrinciples.map((item, index) => (
+              <article
+                key={item.title}
+                className={`grid grid-cols-[36px_minmax(0,1fr)] gap-4 py-6 ${index > 0 ? 'border-t border-neutral-200 md:border-t-0' : ''} ${index >= 2 ? 'md:border-t' : ''} ${index >= 3 ? 'lg:border-t' : ''}`}
+              >
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-neutral-100 text-neutral-700">
+                  {index === 0 ? <Database className="h-4 w-4" /> : index === 4 ? <FileClock className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-neutral-950">{item.title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-neutral-600">{item.description}</p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </motion.section>
+
+        <motion.section {...sectionMotion}>
+          <SectionHeading eyebrow="Common Questions" title="FAQ / 常见问题" />
+          <div className="mt-8 divide-y divide-neutral-200 overflow-hidden rounded-2xl border border-neutral-200 bg-white">
             {methodologyFaq.map((item) => (
-              <details key={item.question} className="group rounded-[28px] border border-neutral-200 bg-white px-5 py-5 shadow-[0_14px_40px_rgba(0,0,0,0.03)]">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-left">
+              <details key={item.question} className="group px-5 py-5 open:bg-neutral-50/70 md:px-6">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 rounded-lg text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-neutral-900 text-white">
-                      <HelpCircle className="h-4 w-4" />
-                    </div>
-                    <span className="text-base md:text-lg font-black text-neutral-900">{item.question}</span>
+                    <HelpCircle className="h-5 w-5 shrink-0 text-indigo-600" />
+                    <span className="text-base font-black text-neutral-950 md:text-lg">{item.question}</span>
                   </div>
-                  <div className="rounded-full border border-neutral-200 px-3 py-1 text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400 transition group-open:text-neutral-900">
-                    展开
-                  </div>
+                  <span className="text-xs font-black text-neutral-400 transition group-open:rotate-45" aria-hidden="true">＋</span>
                 </summary>
-                <p className="pt-5 text-sm md:text-base leading-7 text-neutral-600">{item.answer}</p>
+                <p className="max-w-4xl pb-1 pt-5 text-sm leading-7 text-neutral-600 md:text-base">{item.answer}</p>
               </details>
             ))}
           </div>
         </motion.section>
 
         <motion.section {...sectionMotion}>
-          <div className="rounded-[32px] border border-neutral-200 bg-neutral-950 px-6 py-8 md:px-8 md:py-10 text-white">
-            <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
+          <div className="rounded-2xl bg-neutral-950 px-6 py-8 text-white md:px-10 md:py-10">
+            <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center">
               <div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/8 px-4 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-white/60">
-                  <ShieldCheck className="h-3.5 w-3.5" />
-                  Methodology Note
-                </div>
-                <h2 className="mt-4 text-2xl md:text-4xl font-black">结论先行：长期可信，比单次高性能样本更重要。</h2>
-                <p className="mt-4 max-w-3xl text-sm md:text-base leading-7 text-white/70">
-                  这就是 {PUBLIC_SITE_BRAND_NAME} 的机场评分规则。你可以先看榜单，再回到这里理解每一分是怎么来的；如果某个机场分数异常，你也能快速判断它是慢、贵，还是有真实风险。
+                <div className="text-[11px] font-black uppercase tracking-[0.2em] text-white/45">Methodology Note</div>
+                <h2 className="mt-4 text-2xl font-black tracking-[-0.025em] md:text-4xl">
+                  长期可信，比单次高性能样本更重要。
+                </h2>
+                <p className="mt-4 max-w-3xl text-sm leading-7 text-white/65 md:text-base">
+                  先看综合排名，再结合报告日期、趋势和风险状态做判断。GateRank 提供证据，不替用户承诺未来。
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => navigate(buildHomeHref(), { scrollToTop: true })}
-                className="inline-flex items-center justify-center gap-2 rounded-full bg-white px-5 py-3 text-sm font-black text-neutral-900 transition-transform hover:-translate-y-0.5"
-              >
-                回到榜单
-                <ArrowRight className="h-4 w-4" />
-              </button>
+              <div className="flex flex-wrap items-center gap-4">
+                <a
+                  href={buildFullRankingHref()}
+                  className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-white px-5 py-3 text-sm font-black text-neutral-950 transition hover:-translate-y-0.5 hover:bg-neutral-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+                >
+                  查看机场排行
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+                <a
+                  href={buildMonthlyReportsHref()}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-lg px-2 py-3 text-sm font-black text-white/75 transition hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white"
+                >
+                  查看最新报告
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+              </div>
             </div>
           </div>
         </motion.section>
@@ -463,54 +301,43 @@ export function MethodologyPage() {
   );
 }
 
-function MetricTile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-neutral-200 bg-white px-4 py-4">
-      <div className="text-[11px] font-black uppercase tracking-[0.18em] text-neutral-400">{label}</div>
-      <div className="mt-2 text-lg font-black text-neutral-900">{value}</div>
-    </div>
-  );
-}
-
-function ScoreTile({
-  label,
-  value,
-  detail,
-  tone,
+function BoundaryColumn({
+  icon: Icon,
+  eyebrow,
+  title,
+  description,
+  items,
+  protectedColumn = false,
 }: {
-  label: string;
-  value: number;
-  detail: string;
-  tone: 'emerald' | 'sky' | 'amber' | 'rose';
+  icon: React.ComponentType<{ className?: string }>;
+  eyebrow: string;
+  title: string;
+  description: string;
+  items: readonly string[];
+  protectedColumn?: boolean;
 }) {
-  const toneMap = {
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-800',
-    sky: 'border-sky-200 bg-sky-50 text-sky-800',
-    amber: 'border-amber-200 bg-amber-50 text-amber-800',
-    rose: 'border-rose-200 bg-rose-50 text-rose-800',
-  } as const;
-
-  const iconMap = {
-    emerald: ShieldCheck,
-    sky: Gauge,
-    amber: Wallet,
-    rose: ShieldAlert,
-  } as const;
-
-  const Icon = iconMap[tone];
-
   return (
-    <div className={`rounded-[28px] border p-5 ${toneMap[tone]}`}>
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <div className="text-[11px] font-black uppercase tracking-[0.18em]">{label}</div>
-          <div className="mt-2 text-3xl font-black">{formatNumber(value)}</div>
+    <article className={`p-6 md:p-8 ${protectedColumn ? 'border-t border-neutral-200 bg-neutral-50 lg:border-l lg:border-t-0' : ''}`}>
+      <div className="flex items-center gap-3">
+        <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${protectedColumn ? 'bg-neutral-950 text-white' : 'bg-indigo-600 text-white'}`}>
+          <Icon className="h-4.5 w-4.5" />
         </div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-current">
-          <Icon className="h-5 w-5" />
+        <div>
+          <div className="text-[10px] font-black uppercase tracking-[0.18em] text-neutral-400">{eyebrow}</div>
+          <h3 className="mt-1 text-xl font-black text-neutral-950">{title}</h3>
         </div>
       </div>
-      <div className="mt-4 text-sm leading-6 opacity-80">{detail}</div>
-    </div>
+      <p className="mt-5 text-sm leading-7 text-neutral-600">{description}</p>
+      <ul className="mt-6 space-y-3">
+        {items.map((item) => (
+          <li key={item} className="flex items-start gap-3 text-sm leading-6 text-neutral-700">
+            <span className={`mt-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${protectedColumn ? 'bg-neutral-200 text-neutral-700' : 'bg-indigo-100 text-indigo-700'}`}>
+              <Check className="h-3 w-3" />
+            </span>
+            <span>{item}</span>
+          </li>
+        ))}
+      </ul>
+    </article>
   );
 }

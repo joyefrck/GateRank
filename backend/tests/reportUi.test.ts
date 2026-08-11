@@ -52,6 +52,13 @@ test('buildReportRadarPoints clamps scores and maps S P C R to the four axes', (
   );
 });
 
+test('buildReportRadarPoints maps v2 S P N C R to five axes', () => {
+  assert.equal(
+    buildReportRadarPoints({ s: 100, p: 100, n: 100, c: 100, r: 100 }),
+    '60,12 105.65,45.17 88.21,98.83 31.79,98.83 14.35,45.17',
+  );
+});
+
 test('buildSparklineChartPoints places a constant 100 percent series near the top', () => {
   assert.deepEqual(
     buildSparklineChartPoints([100, 100, 100], [0, 100]),

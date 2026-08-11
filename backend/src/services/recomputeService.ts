@@ -1,9 +1,10 @@
 import { RANKING_TYPES } from '../config/scoring';
-import type { Airport, AirportScoreDaily, DailyMetrics, ScoreBreakdown } from '../types/domain';
+import type { Airport, AirportScoreDaily, DailyMetrics, NetworkCoverageRun, ScoreBreakdown } from '../types/domain';
 import { computeFinalEngineScore, computeScore, computeWeightedScore } from './scoringEngine';
 import { buildRankings } from './rankingService';
 import type { RankedAirportInput } from './rankingService';
 import { computeMedian, generateAirportTags } from './taggingService';
+import { SCORE_RULE_V1, SCORE_RULE_V2, type GateRankScoreRuleVersion } from './networkCoverageScoring';
 
 export interface RecomputeDependencies {
   airportRepository: {
@@ -32,6 +33,13 @@ export interface RecomputeDependencies {
       rows: Array<{ airport_id: number; rank: number; score: number; details: Record<string, unknown> }>,
     ): Promise<void>;
   };
+  networkCoverageRunRepository?: {
+    getSuccessfulByAirportIdsAndDate(airportIds: number[], date: string): Promise<Map<number, NetworkCoverageRun>>;
+    getLatestSuccessfulByAirportAndDate(airportId: number, date: string): Promise<NetworkCoverageRun | null>;
+  };
+  scoreRuleService?: {
+    resolveRuleVersion(date: string): Promise<GateRankScoreRuleVersion>;
+  };
 }
 
 export class RecomputeService {
@@ -44,6 +52,11 @@ export class RecomputeService {
     ]);
 
     const metricsMap = new Map(metrics.map((m) => [m.airport_id, m]));
+    const ruleVersion = await this.resolveRuleVersion(date);
+    const runnableAirportIds = airports.filter(isRunnableAirport).map((airport) => airport.id);
+    const coverageMap = ruleVersion === SCORE_RULE_V2 && this.deps.networkCoverageRunRepository
+      ? await this.deps.networkCoverageRunRepository.getSuccessfulByAirportIdsAndDate(runnableAirportIds, date)
+      : new Map<number, NetworkCoverageRun>();
     const noMetricsAirportIds: number[] = [];
     const scoredRows: Array<{ airport: Airport; metrics: DailyMetrics; score: ScoreBreakdown }> = [];
 
@@ -60,10 +73,19 @@ export class RecomputeService {
         await this.deps.scoreRepository.deleteDaily(airport.id, date);
         continue;
       }
+      const coverage = coverageMap.get(airport.id) || null;
+      if (ruleVersion === SCORE_RULE_V2 && !coverage) {
+        await this.deps.scoreRepository.deleteDaily(airport.id, date);
+        continue;
+      }
 
       const timeSeries = await this.deps.scoreRepository.getTimeSeriesBeforeDate(airport.id, date);
       const historicalScore = computeWeightedScore(timeSeries, date);
-      const score = computeScore(airport, m, historicalScore);
+      const score = computeScore(airport, m, historicalScore, {
+        ruleVersion,
+        networkCoverageScore: coverage?.score_n ?? null,
+      });
+      attachCoverageDetails(score, coverage);
       const finalScore = computeWeightedScore([...timeSeries, { date, score: score.score }], date);
 
       score.historical_score = historicalScore;
@@ -78,6 +100,8 @@ export class RecomputeService {
         rSeries: scoreTrend.map((row) => ({ date: row.date, score: row.r })),
         pricePer100gb: airport.plan_price_month,
         referenceDate: date,
+        ruleVersion,
+        networkCoverageScore: coverage?.score_n ?? null,
       }).final_score;
       score.details.total_score = totalScore;
       await this.deps.scoreRepository.upsertDaily(airport.id, date, score);
@@ -163,6 +187,7 @@ export class RecomputeService {
     const metricsMap = new Map(metrics.map((item) => [item.airport_id, item]));
     const scoreMap = new Map(scores.map((item) => [item.airport_id, item]));
     const rows: RankedAirportInput[] = [];
+    const ruleVersion = await this.resolveRuleVersion(date);
     for (const airport of airports) {
       if (!isRunnableAirport(airport)) {
         continue;
@@ -170,6 +195,9 @@ export class RecomputeService {
       const metricsRow = metricsMap.get(airport.id);
       const scoreRow = scoreMap.get(airport.id);
       if (!metricsRow || !scoreRow) {
+        continue;
+      }
+      if ((scoreRow.details.score_rule_version || SCORE_RULE_V1) !== ruleVersion) {
         continue;
       }
       rows.push({
@@ -186,9 +214,21 @@ export class RecomputeService {
   }
 
   private async computeAirportScore(airport: Airport, metrics: DailyMetrics, date: string): Promise<ScoreBreakdown> {
+    const ruleVersion = await this.resolveRuleVersion(date);
+    const coverage = ruleVersion === SCORE_RULE_V2 && this.deps.networkCoverageRunRepository
+      ? await this.deps.networkCoverageRunRepository.getLatestSuccessfulByAirportAndDate(airport.id, date)
+      : null;
+    if (ruleVersion === SCORE_RULE_V2 && !coverage) {
+      await this.deps.scoreRepository.deleteDaily(airport.id, date);
+      throw new MissingNetworkCoverageError(airport.id, date);
+    }
     const timeSeries = await this.deps.scoreRepository.getTimeSeriesBeforeDate(airport.id, date);
     const historicalScore = computeWeightedScore(timeSeries, date);
-    const score = computeScore(airport, metrics, historicalScore);
+    const score = computeScore(airport, metrics, historicalScore, {
+      ruleVersion,
+      networkCoverageScore: coverage?.score_n ?? null,
+    });
+    attachCoverageDetails(score, coverage);
     const finalScore = computeWeightedScore([...timeSeries, { date, score: score.score }], date);
 
     score.historical_score = historicalScore;
@@ -203,11 +243,42 @@ export class RecomputeService {
       rSeries: scoreTrend.map((row) => ({ date: row.date, score: row.r })),
       pricePer100gb: airport.plan_price_month,
       referenceDate: date,
+      ruleVersion,
+      networkCoverageScore: coverage?.score_n ?? null,
     }).final_score;
     score.details.total_score = totalScore;
     await this.deps.scoreRepository.upsertDaily(airport.id, date, score);
     return score;
   }
+
+  private async resolveRuleVersion(date: string): Promise<GateRankScoreRuleVersion> {
+    return this.deps.scoreRuleService?.resolveRuleVersion(date) ?? SCORE_RULE_V1;
+  }
+}
+
+export class MissingNetworkCoverageError extends Error {
+  constructor(airportId: number, date: string) {
+    super(`network coverage is required for airport ${airportId} on ${date}`);
+    this.name = 'MissingNetworkCoverageError';
+  }
+}
+
+function attachCoverageDetails(score: ScoreBreakdown, coverage: NetworkCoverageRun | null): void {
+  if (!coverage) return;
+  score.details.network_coverage_run_id = coverage.id;
+  score.details.network_coverage_rule_version = coverage.rule_version;
+  score.details.detected_nodes_count = coverage.detected_nodes_count;
+  score.details.healthy_nodes_count = coverage.healthy_nodes_count;
+  score.details.unsupported_nodes_count = coverage.unsupported_nodes_count;
+  score.details.unknown_healthy_nodes_count = coverage.unknown_healthy_nodes_count;
+  score.details.healthy_node_rate = coverage.healthy_node_rate;
+  score.details.core_regions_count = coverage.core_regions.length;
+  score.details.extended_regions_count = coverage.extended_regions.length;
+  score.details.max_region_share = coverage.max_region_share;
+  score.details.network_node_count_score = coverage.node_count_score;
+  score.details.network_region_score = coverage.region_score;
+  score.details.network_health_rate_score = coverage.health_rate_score;
+  score.details.network_balance_score = coverage.balance_score;
 }
 
 function preserveManualTotalScore(score: ScoreBreakdown, scoreTrend: AirportScoreDaily[], date: string): void {

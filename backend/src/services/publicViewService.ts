@@ -9,6 +9,7 @@ import type {
   HomePageView,
   HomeSponsoredDealView,
   NewsArticleListItem,
+  NetworkCoverageRun,
   PublicCardItem,
   PublicCardType,
   RankingItem,
@@ -73,12 +74,17 @@ interface PublicViewDeps {
   };
   scoreRepository: {
     getLatestAvailableDate(onOrBefore: string): Promise<string | null>;
-    getLatestAvailableDateByAirport?(airportId: number, onOrBefore: string): Promise<string | null>;
+    getLatestAvailableDateByAirport?(
+      airportId: number,
+      onOrBefore: string,
+      scoreRuleVersion?: 'v1_spcr' | 'v2_spncr',
+    ): Promise<string | null>;
     getByAirportAndDate(airportId: number, date: string): Promise<{
       airport_id: number;
       date: string;
       s: number;
       p: number;
+      n?: number | null;
       c: number;
       r: number;
       risk_penalty: number;
@@ -88,8 +94,16 @@ interface PublicViewDeps {
       final_score: number;
       details?: Record<string, ScoreDetailValue>;
     } | null>;
-    getPublicDisplayScoreByAirportAndDate(airportId: number, date: string): Promise<number | null>;
-    getPublicDisplayScoresByDate?(airportIds: number[], date: string): Promise<Map<number, number>>;
+    getPublicDisplayScoreByAirportAndDate(
+      airportId: number,
+      date: string,
+      scoreRuleVersion?: 'v1_spcr' | 'v2_spncr',
+    ): Promise<number | null>;
+    getPublicDisplayScoresByDate?(
+      airportIds: number[],
+      date: string,
+      scoreRuleVersion?: 'v1_spcr' | 'v2_spncr',
+    ): Promise<Map<number, number>>;
     getTrend(
       airportId: number,
       startDate: string,
@@ -99,6 +113,7 @@ interface PublicViewDeps {
         date: string;
         s: number;
         p: number;
+        n?: number | null;
         c: number;
         r: number;
         risk_penalty: number;
@@ -118,6 +133,7 @@ interface PublicViewDeps {
         date: string;
         s: number;
         p: number;
+        n?: number | null;
         c: number;
         r: number;
         risk_penalty: number;
@@ -137,6 +153,7 @@ interface PublicViewDeps {
         date: string;
         s: number;
         p: number;
+        n?: number | null;
         c: number;
         r: number;
         risk_penalty: number;
@@ -153,6 +170,7 @@ interface PublicViewDeps {
         pageSize: number,
         filters?: FullRankingFilters,
         clickChargeAmount?: number,
+        scoreRuleVersion?: 'v1_spcr' | 'v2_spncr',
       ): Promise<{
         total: number;
         items: FullRankingView['items'];
@@ -194,6 +212,13 @@ interface PublicViewDeps {
   subscriptionNodeSnapshotRepository?: {
     getLatestByAirport(airportId: number): Promise<SubscriptionNodeSnapshot | null>;
   };
+    networkCoverageRunRepository?: {
+    getLatestSuccessfulByAirportAndDate(airportId: number, date: string): Promise<NetworkCoverageRun | null>;
+  };
+  scoreRuleService?: {
+    resolveRuleVersion(date: string): Promise<'v1_spcr' | 'v2_spncr'>;
+    isForceDisabled?(): boolean;
+  };
   toolsDownloadService?: {
     getDownloadPageView(platform?: null): Promise<ToolsDownloadPageView>;
   };
@@ -215,6 +240,7 @@ interface CardContext {
   score: {
     s: number;
     p: number;
+    n: number | null;
     c: number;
     r: number;
       risk_penalty: number;
@@ -293,6 +319,7 @@ export class PublicViewService {
       const marketingConfig = await this.getMarketingConfig();
       const clickChargeAmount = marketingConfig.click_charge_amount;
       const sectionLimits = marketingConfig.home_section_limits;
+      const scoreRuleVersion = await this.resolveActiveScoreRuleVersion(resolvedDate);
       const [
       stats,
       fullRankingPreview,
@@ -312,6 +339,7 @@ export class PublicViewService {
           sectionLimits.today_pick,
           EMPTY_FULL_RANKING_FILTERS,
           clickChargeAmount,
+          scoreRuleVersion,
         ),
       this.deps.rankingRepository.getRanking(resolvedDate, 'stable'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'value'),
@@ -409,7 +437,7 @@ export class PublicViewService {
       requested_date: date,
       date: resolvedDate,
       resolved_from_fallback: resolvedFromFallback,
-      fallback_notice: resolvedFromFallback ? buildPublicFallbackNotice(date, resolvedDate) : null,
+      fallback_notice: resolvedFromFallback ? buildPublicFallbackNotice(date, resolvedDate, scoreRuleVersion) : null,
       generated_at: formatDateTimeInTimezoneIso(new Date(), SHANGHAI_TIMEZONE),
       hero: {
         report_time_at: stats.latest_data_at,
@@ -468,6 +496,7 @@ export class PublicViewService {
       const safePage = Math.max(1, page);
       const safePageSize = Math.max(1, pageSize);
       const clickChargeAmount = await this.getClickChargeAmount();
+      const scoreRuleVersion = await this.resolveActiveScoreRuleVersion(resolvedDate);
       const [result, toolDownloadCta] = await Promise.all([
         this.deps.scoreRepository.getPublicFullRankingByDate(
           resolvedDate,
@@ -475,12 +504,14 @@ export class PublicViewService {
           safePageSize,
           filters,
           clickChargeAmount,
+          scoreRuleVersion,
         ),
         this.buildToolDownloadCta(),
       ]);
 
     return {
       date: resolvedDate,
+      score_rule_version: scoreRuleVersion,
       generated_at: formatDateTimeInTimezoneIso(new Date(), SHANGHAI_TIMEZONE),
       filters,
       page: safePage,
@@ -521,8 +552,12 @@ export class PublicViewService {
   }
 
     async getReportView(airportId: number, date: string): Promise<ReportView | null> {
+      const requestedRuleVersion = await this.resolveActiveScoreRuleVersion(date);
+      const forcedRuleVersion = this.deps.scoreRuleService?.isForceDisabled?.()
+        ? requestedRuleVersion
+        : undefined;
       const latestAirportDate = this.deps.scoreRepository.getLatestAvailableDateByAirport
-        ? await this.deps.scoreRepository.getLatestAvailableDateByAirport(airportId, date)
+        ? await this.deps.scoreRepository.getLatestAvailableDateByAirport(airportId, date, forcedRuleVersion)
         : await this.deps.scoreRepository.getLatestAvailableDate(date);
       const resolvedDate = latestAirportDate || date;
       const resolvedFromFallback = resolvedDate !== date;
@@ -533,9 +568,13 @@ export class PublicViewService {
       return null;
     }
 
-    const [rawRanking, nodeSnapshot, toolDownloadCta] = await Promise.all([
+    const scoreRuleVersion = resolveScoreRuleVersion(base.score.details);
+    const [rawRanking, nodeSnapshot, networkCoverageRun, toolDownloadCta] = await Promise.all([
       this.deps.rankingRepository.getRanksForAirport(airportId, resolvedDate),
       this.deps.subscriptionNodeSnapshotRepository?.getLatestByAirport(airportId) ?? Promise.resolve(null),
+      scoreRuleVersion === 'v2_spncr'
+        ? this.deps.networkCoverageRunRepository?.getLatestSuccessfulByAirportAndDate(airportId, resolvedDate) ?? Promise.resolve(null)
+        : Promise.resolve(null),
       this.buildToolDownloadCta(),
     ]);
     const todayRank = rawRanking.today ?? (await this.getTodayPickRankFromPublicRanking(
@@ -556,8 +595,9 @@ export class PublicViewService {
     return {
       requested_date: date,
       date: resolvedDate,
+      score_rule_version: scoreRuleVersion,
       resolved_from_fallback: resolvedFromFallback,
-      fallback_notice: resolvedFromFallback ? buildPublicFallbackNotice(date, resolvedDate) : null,
+      fallback_notice: resolvedFromFallback ? buildPublicFallbackNotice(date, resolvedDate, scoreRuleVersion) : null,
       performance_under_review:
         base.metrics.performance_review_status != null && base.metrics.performance_review_status !== 'normal',
       tool_download_cta: toolDownloadCta,
@@ -590,6 +630,7 @@ export class PublicViewService {
       score_breakdown: {
         s: round2(base.score.s),
         p: round2(base.score.p),
+        n: scoreRuleVersion === 'v2_spncr' && base.score.n != null ? round2(base.score.n) : null,
         c: round2(base.score.c),
         r: round2(base.score.r),
           final_score: base.score.score_hidden ? null : round2(base.score.display_score ?? 0),
@@ -599,6 +640,7 @@ export class PublicViewService {
         complaint_penalty: getPenaltyValue(base.score.details, 'complaint_penalty'),
         history_penalty: getPenaltyValue(base.score.details, 'history_penalty'),
       },
+      network_coverage: networkCoverageRun ? buildNetworkCoverageSummary(networkCoverageRun) : null,
       metrics: {
         uptime_percent_30d: round2(base.metrics.uptime_percent_30d),
         median_latency_ms: round2(base.metrics.median_latency_ms),
@@ -648,6 +690,10 @@ export class PublicViewService {
 
   private async getClickChargeAmount(): Promise<number> {
     return (await this.getMarketingConfig()).click_charge_amount;
+  }
+
+  private async resolveActiveScoreRuleVersion(date: string): Promise<'v1_spcr' | 'v2_spncr'> {
+    return this.deps.scoreRuleService?.resolveRuleVersion(date) ?? 'v1_spcr';
   }
 
   private async getMarketingConfig(): Promise<{
@@ -782,12 +828,14 @@ export class PublicViewService {
     clickChargeAmount: number,
     todayPickLimit: number = DEFAULT_HOME_SECTION_LIMITS.today_pick,
   ): Promise<number | undefined> {
+    const scoreRuleVersion = await this.resolveActiveScoreRuleVersion(date);
     const { items } = await this.deps.scoreRepository.getPublicFullRankingByDate(
       date,
       1,
       todayPickLimit,
       EMPTY_FULL_RANKING_FILTERS,
       clickChargeAmount,
+      scoreRuleVersion,
     );
     const matchedItem = items.find((item) => item.airport_id === airportId);
     return matchedItem?.rank;
@@ -799,12 +847,14 @@ export class PublicViewService {
     clickChargeAmount: number,
     sectionLimits: HomeSectionLimits,
   ): Promise<Record<HomeSectionKey, PublicCardItem[]>> {
+    const scoreRuleVersion = await this.resolveActiveScoreRuleVersion(date);
     const { items } = await this.deps.scoreRepository.getPublicFullRankingByDate(
       date,
       1,
       100,
       EMPTY_FULL_RANKING_FILTERS,
       clickChargeAmount,
+      scoreRuleVersion,
     );
     const contexts = (
       await Promise.all(items.map((item) => loadCardContext(item.airport_id, date)))
@@ -885,6 +935,7 @@ export class PublicViewService {
     }
 
     const uniqueAirportIds = Array.from(new Set(airportIds));
+    const scoreRuleVersion = await this.resolveActiveScoreRuleVersion(date);
     const trendStartDate = dateDaysAgo(date, 29);
     const yesterdayDate = dateDaysAgo(date, 1);
     const [
@@ -899,7 +950,7 @@ export class PublicViewService {
       this.deps.airportRepository.getByIds(uniqueAirportIds),
       this.deps.metricsRepository.getByAirportIdsAndDate(uniqueAirportIds, date),
       this.deps.scoreRepository.getByAirportIdsAndDate(uniqueAirportIds, date),
-      this.deps.scoreRepository.getPublicDisplayScoresByDate(uniqueAirportIds, yesterdayDate),
+      this.deps.scoreRepository.getPublicDisplayScoresByDate(uniqueAirportIds, yesterdayDate, scoreRuleVersion),
       this.deps.metricsRepository.getTrendsByAirportIds(uniqueAirportIds, trendStartDate, date),
       this.deps.scoreRepository.getTrendsByAirportIds(uniqueAirportIds, trendStartDate, date),
       this.getScoreVisibilityByAirportIds(uniqueAirportIds, clickChargeAmount),
@@ -923,6 +974,7 @@ export class PublicViewService {
         score: {
           s: score.s,
           p: score.p,
+          n: score.n ?? null,
           c: score.c,
           r: score.r,
           risk_penalty: score.risk_penalty,
@@ -952,11 +1004,12 @@ export class PublicViewService {
   ): Promise<CardContext | null> {
     const trendStartDate = dateDaysAgo(date, 29);
     const yesterdayDate = dateDaysAgo(date, 1);
+    const scoreRuleVersion = await this.resolveActiveScoreRuleVersion(date);
     const [airport, metrics, score, yesterdayDisplayScore, metricsTrend30d, scoreTrend30d, scoreVisibilityById] = await Promise.all([
       this.deps.airportRepository.getById(airportId),
       this.deps.metricsRepository.getByAirportAndDate(airportId, date),
       this.deps.scoreRepository.getByAirportAndDate(airportId, date),
-      this.deps.scoreRepository.getPublicDisplayScoreByAirportAndDate(airportId, yesterdayDate),
+      this.deps.scoreRepository.getPublicDisplayScoreByAirportAndDate(airportId, yesterdayDate, scoreRuleVersion),
       this.deps.metricsRepository.getTrend(airportId, trendStartDate, date),
       this.deps.scoreRepository.getTrend(airportId, trendStartDate, date),
       this.getScoreVisibilityByAirportIds([airportId], clickChargeAmount),
@@ -978,6 +1031,7 @@ export class PublicViewService {
       score: {
         s: score.s,
         p: score.p,
+        n: score.n ?? null,
         c: score.c,
         r: score.r,
         risk_penalty: score.risk_penalty,
@@ -1681,13 +1735,42 @@ function round2(value: number): number {
   return Object.is(rounded, -0) ? 0 : rounded;
 }
 
+function resolveScoreRuleVersion(details: Record<string, ScoreDetailValue>): 'v1_spcr' | 'v2_spncr' {
+  return details.score_rule_version === 'v2_spncr' ? 'v2_spncr' : 'v1_spcr';
+}
+
+function buildNetworkCoverageSummary(run: NetworkCoverageRun): NonNullable<ReportView['network_coverage']> {
+  return {
+    sampled_date: run.sampled_date,
+    rule_version: run.rule_version,
+    detected_nodes_count: run.detected_nodes_count,
+    healthy_nodes_count: run.healthy_nodes_count,
+    unsupported_nodes_count: run.unsupported_nodes_count,
+    unknown_healthy_nodes_count: run.unknown_healthy_nodes_count,
+    healthy_node_rate: round2(run.healthy_node_rate),
+    core_regions: run.core_regions,
+    extended_regions: run.extended_regions,
+    max_region_code: run.max_region_code,
+    max_region_share: round2(run.max_region_share),
+    node_count_score: round2(run.node_count_score),
+    region_score: round2(run.region_score),
+    health_rate_score: round2(run.health_rate_score),
+    balance_score: round2(run.balance_score),
+  };
+}
+
 function getPenaltyValue(details: Record<string, ScoreDetailValue>, key: string): number {
   const value = details[key];
   return typeof value === 'number' && Number.isFinite(value) ? round2(value) : 0;
 }
 
-function buildPublicFallbackNotice(requestedDate: string, resolvedDate: string): string {
-  return `${requestedDate} 的公开分数尚未生成，当前展示 ${resolvedDate} 的最新已生成快照，非实时探测结果。`;
+function buildPublicFallbackNotice(
+  requestedDate: string,
+  resolvedDate: string,
+  scoreRuleVersion?: 'v1_spcr' | 'v2_spncr',
+): string {
+  const ruleLabel = scoreRuleVersion ? `，规则版本 ${scoreRuleVersion}` : '';
+  return `${requestedDate} 的公开分数尚未生成，当前展示 ${resolvedDate} 的最新已生成快照${ruleLabel}，非实时探测结果。`;
 }
 
 function toHomeNewsUpdate(item: NewsArticleListItem): HomeNewsUpdateView {
@@ -1723,6 +1806,7 @@ function toTodayPickRankedAirportInput(context: CardContext): RankedAirportInput
     score: {
       s: context.score.s,
       p: context.score.p,
+      n: context.score.n,
       c: context.score.c,
       r: context.score.r,
       risk_penalty: context.score.risk_penalty,

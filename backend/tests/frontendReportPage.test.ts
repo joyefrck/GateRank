@@ -105,11 +105,47 @@ test('React report exposes only a restrained regional review notice', async () =
   assert.doesNotMatch(metricsSource, /作弊|造假/);
 });
 
-test('React methodology content explains regional performance scoring', async () => {
-  const source = await readFile(path.join(process.cwd(), 'src/pages/methodology/content.ts'), 'utf8');
+test('React methodology exposes evaluation principles without model parameters', async () => {
+  const contentSource = await readFile(path.join(process.cwd(), 'src/pages/methodology/content.ts'), 'utf8');
+  const pageSource = await readFile(path.join(process.cwd(), 'src/pages/methodology/MethodologyPage.tsx'), 'utf8');
+  const publicSource = `${contentSource}\n${pageSource}`;
 
-  assert.match(source, /downloadMbps: \{ good: 300, bad: 10/);
-  assert.match(source, /mainlandDownloadMbps: \{ good: 160, bad: 10, ceiling: 180, probeBandwidth: 200/);
-  assert.match(source, /每个测试地区先按自身阈值独立计算性能分，再对当前纳入结果的地区等权平均/);
-  assert.match(source, /历史报告不回填、不改写/);
+  assert.match(publicSource, /五维评估框架/);
+  assert.match(publicSource, /稳定性/);
+  assert.match(publicSource, /性能/);
+  assert.match(publicSource, /网络覆盖/);
+  assert.match(publicSource, /性价比/);
+  assert.match(publicSource, /风险/);
+  assert.match(publicSource, /模型参数、阈值与计算细节属于内部方法，不对外披露/);
+  assert.match(publicSource, /数据如何形成结果/);
+  assert.match(publicSource, /透明度边界/);
+
+  assert.doesNotMatch(publicSource, /0\.30S|0\.4 ×|30 \/ 30 \/ 20 \/ 10 \/ 10/);
+  assert.doesNotMatch(publicSource, /UptimeScore|RiskPenalty|days_diff|recent_complaints_count/);
+  assert.doesNotMatch(publicSource, /冷启动系数\s*=|阈值分段|Nebula Air|Worked Example/);
+});
+
+test('React report switches between historical four-dimensional and current five-dimensional coverage views', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+  const methodologyStart = source.indexOf('function ReportMethodologyCard');
+  const methodologyEnd = source.indexOf('function ReportSnapshotGrid', methodologyStart);
+  assert.notEqual(methodologyStart, -1);
+  assert.notEqual(methodologyEnd, -1);
+  const methodologySource = source.slice(methodologyStart, methodologyEnd);
+
+  assert.match(methodologySource, /data\.score_rule_version === 'v2_spncr'/);
+  assert.match(methodologySource, /isV2 \? '五维评分模型' : '四维评分模型'/);
+  assert.match(methodologySource, /isV2 \? 'S · P · N · C · R' : 'S · P · C · R'/);
+  assert.match(methodologySource, /本报告\{isV2 \? '五维' : '四维'\}评分分布/);
+
+  const breakdownStart = source.indexOf('function ReportScoreBreakdown');
+  const breakdownEnd = source.indexOf('function ReportCoreMetrics', breakdownStart);
+  assert.notEqual(breakdownStart, -1);
+  assert.notEqual(breakdownEnd, -1);
+  const breakdownSource = source.slice(breakdownStart, breakdownEnd);
+
+  assert.match(breakdownSource, /data\.score_breakdown\.n === null \? \[\] :/);
+  assert.match(breakdownSource, /label: '网络覆盖 \(N\)'/);
+  assert.doesNotMatch(breakdownSource, /data\.network_coverage \? \(/);
+  assert.doesNotMatch(breakdownSource, /网络覆盖快照|Healthy \/ Detected|UNKNOWN|unsupported/);
 });

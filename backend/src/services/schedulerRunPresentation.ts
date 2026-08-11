@@ -40,7 +40,7 @@ function buildResultSummary(run: SchedulerRun): SchedulerRunResultSummary | null
 
 function extractCounts(run: SchedulerRun): BatchCounts | null {
   const detail = run.detail_json || {};
-  if (run.task_key === 'stability' || run.task_key === 'performance') {
+  if (run.task_key === 'stability' || run.task_key === 'performance' || run.task_key === 'network_coverage') {
     const structured = toCounts(
       detail.airport_count,
       detail.success_count,

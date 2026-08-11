@@ -40,6 +40,7 @@ import { SubscriptionNodeSnapshotRepository } from './repositories/subscriptionN
 import { ManualJobRepository } from './repositories/manualJobRepository';
 import { MarketingEventRepository } from './repositories/marketingEventRepository';
 import { SystemSettingRepository } from './repositories/systemSettingRepository';
+import { NetworkCoverageRunRepository } from './repositories/networkCoverageRunRepository';
 import { createAdminAuthRoutes } from './routes/adminAuthRoutes';
 import { createAdminRoutes } from './routes/adminRoutes';
 import { createPerformanceProbeRoutes } from './routes/performanceProbeRoutes';
@@ -92,6 +93,7 @@ import { TelegramNotificationService } from './services/telegramNotificationServ
 import { UserTelegramBotMessageService } from './services/userTelegramBotMessageService';
 import { UserTelegramBotSettingsService } from './services/userTelegramBotSettingsService';
 import { XOAuthSettingsService } from './services/xOAuthSettingsService';
+import { ScoreRuleService } from './services/scoreRuleService';
 import { getNewsUploadRootDir } from './utils/newsStorage';
 import { createTimedPromiseCache, PUBLIC_PAGE_CACHE_TTL_MS } from './utils/publicCache';
 
@@ -132,6 +134,8 @@ export async function createApp() {
   await performanceProbeSettingRepository.ensureSchema();
   const subscriptionNodeSnapshotRepository = new SubscriptionNodeSnapshotRepository(pool);
   await subscriptionNodeSnapshotRepository.ensureSchema();
+  const networkCoverageRunRepository = new NetworkCoverageRunRepository(pool);
+  await networkCoverageRunRepository.ensureSchema();
   const performanceProbeJobRepository = new PerformanceProbeJobRepository(pool);
   await performanceProbeJobRepository.ensureSchema();
   const subscriptionNodeCaptureService = new SubscriptionNodeCaptureService();
@@ -145,6 +149,7 @@ export async function createApp() {
   await schedulerRunRepository.ensureSchema();
   const systemSettingRepository = new SystemSettingRepository(pool);
   await systemSettingRepository.ensureSchema();
+  const scoreRuleService = new ScoreRuleService({ systemSettingRepository });
   const accessTokenRepository = new AccessTokenRepository(pool);
   await accessTokenRepository.ensureSchema();
   const marketingEventRepository = new MarketingEventRepository(pool);
@@ -166,6 +171,8 @@ export async function createApp() {
     metricsRepository,
     scoreRepository,
     rankingRepository,
+    networkCoverageRunRepository,
+    scoreRuleService,
   });
   const aggregationService = new AggregationService({
     airportRepository,
@@ -247,6 +254,8 @@ export async function createApp() {
       rankingRepository,
       statsRepository,
       subscriptionNodeSnapshotRepository,
+      networkCoverageRunRepository,
+      scoreRuleService,
       toolsDownloadService,
       airportAdCampaignRepository,
       newsRepository,
@@ -448,6 +457,8 @@ export async function createApp() {
       performanceProbeRepository,
       performanceProbeSettingRepository,
       subscriptionNodeSnapshotRepository,
+      networkCoverageRunRepository,
+      scoreRuleService,
       subscriptionNodeCaptureService,
       performanceNodePreferenceRepository,
       metricsRepository,

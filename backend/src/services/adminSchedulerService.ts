@@ -80,6 +80,7 @@ const TASK_DESCRIPTIONS: Record<SchedulerTaskKey, string> = {
   stability: '调用 monitor_stability.py 批量采集稳定性样本，不重复触发聚合和重算。',
   subscription_node_refresh: '批量刷新性能测试范围内的订阅链接并保存最新节点快照，供后续性能采集使用。',
   performance: '调用 monitor_performance.py 批量采集性能样本，不重复触发聚合和重算。',
+  network_coverage: '调用 monitor_network_coverage.py 对全部可检测节点执行真实代理 HTTP 健康检查，生成网络覆盖 N。',
   risk: '逐机场串行执行风险体检，刷新官网可用性与 SSL 检查结果。',
   aggregate_recompute: '执行全量聚合和时间衰减重算，统一刷新每日分数与榜单。',
   billing_listing_sync: '按余额规则同步公开总分展示、榜单排序和申请人余额提醒状态。',

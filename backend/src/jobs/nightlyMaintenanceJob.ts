@@ -48,7 +48,7 @@ interface NightlyMaintenanceJobDeps {
 }
 
 interface NightlyStageResult {
-  stage: 'stability' | 'performance' | 'risk' | 'aggregate' | 'recompute';
+  stage: 'stability' | 'performance' | 'network_coverage' | 'risk' | 'aggregate' | 'recompute';
   status: 'succeeded' | 'failed';
   detail: string;
 }
@@ -161,6 +161,9 @@ export class NightlyMaintenanceJob {
     results.push(await this.runScriptStage('performance', 'monitor_performance.py', 'nightly-performance'));
     await this.waitBetweenStages();
 
+    results.push(await this.runScriptStage('network_coverage', 'monitor_network_coverage.py', 'nightly-network-coverage'));
+    await this.waitBetweenStages();
+
     results.push(await this.runRiskStage(date));
     await this.waitBetweenStages();
 
@@ -171,8 +174,8 @@ export class NightlyMaintenanceJob {
   }
 
   private async runScriptStage(
-    stage: 'stability' | 'performance',
-    scriptName: 'monitor_stability.py' | 'monitor_performance.py',
+    stage: 'stability' | 'performance' | 'network_coverage',
+    scriptName: 'monitor_stability.py' | 'monitor_performance.py' | 'monitor_network_coverage.py',
     source: string,
   ): Promise<NightlyStageResult> {
     if (!this.adminApiKey && !this.adminBearerToken) {

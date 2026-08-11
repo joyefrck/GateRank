@@ -36,7 +36,12 @@ test('nightly maintenance runs stages in order and aggregates only once', async 
         },
       },
       execFileAsync: async (_file, args, options) => {
-        steps.push(`${args[0]?.includes('stability') ? 'stability' : 'performance'}:${options.env.SOURCE}`);
+        const stage = args[0]?.includes('stability')
+          ? 'stability'
+          : args[0]?.includes('network_coverage')
+            ? 'network_coverage'
+            : 'performance';
+        steps.push(`${stage}:${options.env.SOURCE}`);
         return {
           stdout: JSON.stringify({ airport_count: 2, success_count: 2, failure_count: 0 }),
           stderr: '',
@@ -53,6 +58,7 @@ test('nightly maintenance runs stages in order and aggregates only once', async 
       [
         'stability:nightly-stability',
         'performance:nightly-performance',
+        'network_coverage:nightly-network-coverage',
         'risk:1:2026-03-26',
         'risk:2:2026-03-26',
         'aggregate:2026-03-26',
@@ -64,6 +70,7 @@ test('nightly maintenance runs stages in order and aggregates only once', async 
       [
         'stability:succeeded',
         'performance:succeeded',
+        'network_coverage:succeeded',
         'risk:succeeded',
         'aggregate:succeeded',
         'recompute:succeeded',
