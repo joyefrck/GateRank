@@ -131,3 +131,37 @@ Inspect `http://127.0.0.1:3000/methodology` at desktop width and near 390 × 844
 - [ ] **Step 5: Review scope**
 
 Confirm the task touched only methodology, SEO, SSR, related tests, and intentionally regenerated methodology assets while preserving unrelated dirty-worktree changes.
+
+### Task 6: Restore the historical Sky Hero
+
+**Files:**
+- Modify: `src/pages/methodology/MethodologyPage.tsx`
+- Modify: `backend/src/services/publicPageRenderer.ts`
+- Modify: `backend/tests/frontendCrawlableLinks.test.ts`
+- Modify: `backend/tests/publicPageRoutes.test.ts`
+
+- [ ] **Step 1: Lock the historical palette with regression assertions**
+
+Assert that React and SSR contain the historical Sky Hero gradient `#082F49`, `#075985`, `#0284C7`, and `#BAE6FD`, along with white heading text, translucent white facts, and the historical blue shadow. Keep the existing negative formula assertions.
+
+- [ ] **Step 2: Run the focused tests and verify failure**
+
+Run `node --test --import tsx backend/tests/frontendCrawlableLinks.test.ts backend/tests/publicPageRoutes.test.ts --test-name-pattern='methodology|Methodology'`.
+
+Expected: the palette assertions fail because the current hero is white and pale gray.
+
+- [ ] **Step 3: Update the React hero**
+
+Change only the hero container, eyebrow, heading, description, disclosure panel, and fact-row classes. Use the historical Sky gradient and overlay from `ListPageHero`, retain the current copy and hierarchy, and leave every following section unchanged.
+
+- [ ] **Step 4: Update the SSR hero**
+
+Apply the same historical color stops, radial highlights, white typography, translucent panels, and responsive behavior to the methodology-specific SSR CSS. Keep the current sanitized HTML body.
+
+- [ ] **Step 5: Verify the focused tests and real page**
+
+Rerun the focused tests, then inspect `http://127.0.0.1:3000/methodology` in the browser. Confirm the historical blue treatment, readable disclosure copy, unchanged lower sections, and no formula text.
+
+- [ ] **Step 6: Run final verification**
+
+Run `npm run server:typecheck`, `npm run lint`, `npm run build`, the full backend test suite with the dot reporter, and `git diff --check`. Every command must exit with status zero.
