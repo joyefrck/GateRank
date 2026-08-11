@@ -129,7 +129,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.doesNotMatch(sponsoredDealHtml, /公开分/);
         assert.doesNotMatch(sponsoredDealHtml, /91\.2/);
         assert.match(sponsoredDealHtml, /<small>180 天观察<\/small>/);
-        assert.doesNotMatch(sponsoredDealHtml, /home-v3-airport-mark/);
+        assert.match(sponsoredDealHtml, /<span class="home-v3-airport-mark" style="background:linear-gradient\(135deg,hsl\(\d+ 72% 56%\),hsl\(\d+ 72% 44%\)\)" aria-hidden="true">星<\/span>/);
         assert.doesNotMatch(sponsoredDealHtml, /home-v3-tags|优惠码 GATE20|IEPL|新客优惠/);
         assert.doesNotMatch(sponsoredDealHtml, /月付起|home-v3-deal-bottom|¥12/);
         assert.match(sponsoredDealHtml, /href="https:\/\/deal\.example\.com" target="_blank" rel="nofollow sponsored noopener noreferrer" aria-label="访问 星云优惠机场 官网（新标签页）"/);
@@ -139,6 +139,8 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.doesNotMatch(html, /\.home-v3-deal-grid\s*\{[^}]*repeat\(5,minmax\(0,1fr\)\)/);
         assert.match(html, /\.home-v3-deal\s*\{[^}]*min-height:\s*88px;[^}]*justify-content:\s*center;[^}]*padding:\s*10px 12px;/);
         assert.match(html, /\.home-v3-deal\.home-v3-empty\s*\{[^}]*min-height:\s*88px;/);
+        assert.match(html, /\.home-v3-airport-mark\s*\{[^}]*width:\s*30px;[^}]*height:\s*30px;[^}]*flex:\s*0 0 30px;[^}]*border-radius:\s*8px;[^}]*font-size:\s*11px;/);
+        assert.match(html, /\.home-v3-deal-top\s*\{[^}]*display:\s*flex;[^}]*align-items:\s*center;[^}]*gap:\s*8px;/);
         assert.match(html, /\.home-v3-deal-offer\s*\{[^}]*margin-top:\s*8px;/);
         assert.match(html, /\.home-v3-deal-offer p\s*\{[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/);
         assert.match(html, /\.home-v3-deal:hover\s*\{[^}]*border-color:\s*#a5b4fc;[^}]*transform:\s*translateY\(-2px\);/);

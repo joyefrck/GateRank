@@ -2135,6 +2135,10 @@ function renderHomeV3SectionHead(eyebrow: string, title: string, subtitle: strin
   `;
 }
 
+function resolveAirportMarkHue(name: string): number {
+  return Array.from(name).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 360;
+}
+
 function renderHomeV3SponsoredDeals(view: HomePageView): string {
   const deals = view.sponsored_deals?.items || [];
   const total = view.sponsored_deals?.total || 0;
@@ -2150,20 +2154,24 @@ function renderHomeV3SponsoredDeals(view: HomePageView): string {
       <div class="home-v3-deal-grid">
           ${AIRPORT_HOME_AD_SLOTS.map((slot) => {
             const deal = dealsBySlot.get(slot);
-            return deal ? `
+            if (!deal) {
+              return `
+            <a class="home-v3-deal home-v3-empty" href="/apply" aria-label="申请首页 ${slot} 号广告位">
+              <strong>首页 ${slot} 号广告位招募中</strong>
+              <span>申请入驻</span>
+            </a>
+          `;
+            }
+            const markHue = resolveAirportMarkHue(deal.name);
+            return `
             <a class="home-v3-deal" href="${escapeAttribute(normalizeExternalHref(deal.website))}" target="_blank" rel="nofollow sponsored noopener noreferrer" aria-label="访问 ${escapeAttribute(deal.name)} 官网（新标签页）" data-marketing-placement="deal_card" data-airport-id="${deal.airport_id}">
               <div class="home-v3-deal-top">
-                <h3>${escapeHtml(deal.name)}</h3>
-                <small>${deal.tracking_days} 天观察</small>
+                <span class="home-v3-airport-mark" style="background:linear-gradient(135deg,hsl(${markHue} 72% 56%),hsl(${(markHue + 30) % 360} 72% 44%))" aria-hidden="true">${escapeHtml(deal.name.trim().charAt(0).toUpperCase() || 'G')}</span>
+                <div><h3>${escapeHtml(deal.name)}</h3><small>${deal.tracking_days} 天观察</small></div>
               </div>
               <div class="home-v3-deal-offer">
                 <p>${escapeHtml(deal.discount_title || '查看官网了解当前优惠活动。')}</p>
               </div>
-            </a>
-          ` : `
-            <a class="home-v3-deal home-v3-empty" href="/apply" aria-label="申请首页 ${slot} 号广告位">
-              <strong>首页 ${slot} 号广告位招募中</strong>
-              <span>申请入驻</span>
             </a>
           `;
           }).join('')}
@@ -3582,7 +3590,9 @@ const styles = `
   .home-v3-deal:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 2px; }
   .home-v3-deal.home-v3-empty { min-height: 88px; gap: 4px; padding: 10px 12px; }
   .home-v3-deal.home-v3-empty > span { color: #4f46e5; font-size: 11px; font-weight: 800; }
-  .home-v3-deal-top { min-width: 0; }
+  .home-v3-deal-top { display: flex; min-width: 0; align-items: center; gap: 8px; }
+  .home-v3-airport-mark { display: inline-flex; width: 30px; height: 30px; flex: 0 0 30px; align-items: center; justify-content: center; border-radius: 8px; color: #fff; font-size: 11px; font-weight: 900; box-shadow: 0 1px 2px rgba(15,23,42,.12); }
+  .home-v3-deal-top > div { min-width: 0; flex: 1; }
   .home-v3-deal h3 { overflow: hidden; margin: 0; color: #171717; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
   .home-v3-deal-top small { display: block; margin-top: 4px; color: #a3a3a3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
   .home-v3-deal-offer { margin-top: 8px; }

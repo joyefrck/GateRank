@@ -501,8 +501,13 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
       transition={{ duration: 0.2 }}
       className="group relative flex min-h-[88px] flex-col justify-center overflow-hidden rounded-[18px] border border-gray-200 bg-gradient-to-b from-slate-50/60 to-white p-3 no-underline shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 motion-reduce:transform-none"
     >
-      <h3 className="truncate text-[14px] font-black leading-tight text-gray-900 transition-colors group-hover:text-indigo-600 sm:text-[15px]">{deal.name}</h3>
-      <span className="mt-1 block font-mono text-[11.5px] leading-none text-gray-400">{deal.tracking_days} 天观察</span>
+      <div className="flex min-w-0 items-center gap-2">
+        <AirportMark name={deal.name} compact />
+        <div className="min-w-0">
+          <h3 className="truncate text-[14px] font-black leading-tight text-gray-900 transition-colors group-hover:text-indigo-600 sm:text-[15px]">{deal.name}</h3>
+          <span className="mt-1 block font-mono text-[11.5px] leading-none text-gray-400">{deal.tracking_days} 天观察</span>
+        </div>
+      </div>
       <p className="mt-2 truncate text-[11.5px] font-medium leading-snug text-gray-500">
         {deal.discount_title || '查看官网了解当前优惠活动。'}
       </p>

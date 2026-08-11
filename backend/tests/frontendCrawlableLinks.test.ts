@@ -385,7 +385,9 @@ test('React homepage uses shared five-slot commercial cards and plain summary sc
   assert.match(sponsoredDealCardSource, /min-h-\[88px\]/);
   assert.match(sponsoredDealCardSource, /rounded-\[18px\]/);
   assert.match(sponsoredDealCardSource, /p-3/);
-  assert.doesNotMatch(sponsoredDealCardSource, /<AirportMark\b/);
+  assert.match(sponsoredDealCardSource, /<AirportMark name=\{deal\.name\} compact \/>/);
+  assert.match(sponsoredDealCardSource, /flex min-w-0 items-center gap-2/);
+  assert.match(source, /compact \? 'h-\[30px\] w-\[30px\] rounded-lg text-\[11px\]'/);
   assert.doesNotMatch(sponsoredDealCardSource, /deal\.tags|<FeatureTag\b/);
   assert.match(sponsoredDealCardSource, /truncate text-\[11\.5px\]/);
   assert.match(sponsoredDealCardSource, /whileTap=\{\{ scale: 0\.99 \}\}/);
