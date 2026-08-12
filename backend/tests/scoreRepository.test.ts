@@ -114,12 +114,12 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
 	  assert.ok(calls.some((call) => call.sql.includes('score_hidden ASC')));
 });
 
-test('ScoreRepository.getPublicFullRankingByDate excludes missing same-day v2 scores', async () => {
+test('ScoreRepository.getPublicFullRankingByDate counts all listed airports while displaying same-day v2 scores only', async () => {
   const calls: Array<{ sql: string; params?: unknown[] }> = [];
   const repository = new ScoreRepository({
     query: async (sql: string, params?: unknown[]) => {
       calls.push({ sql, params });
-      if (sql.includes('COUNT(*) AS total')) return [[{ total: 0 }]];
+      if (sql.includes('COUNT(*) AS total')) return [[{ total: 61 }]];
       return [[]];
     },
   } as never);
@@ -133,10 +133,12 @@ test('ScoreRepository.getPublicFullRankingByDate excludes missing same-day v2 sc
     'v2_spncr',
   );
 
-  assert.equal(result.total, 0);
-  assert.match(calls[0].sql, /EXISTS/);
+  assert.equal(result.total, 61);
+  assert.doesNotMatch(calls[0].sql, /same_day_score|EXISTS/);
+  assert.deepEqual(calls[0].params, []);
+  assert.match(calls[0].sql, /a\.status IN \('normal', 'risk'\)/);
   assert.match(calls[1].sql, /WHERE date = \?/);
-  assert.deepEqual(calls[0].params?.slice(0, 2), ['2026-08-11', 'v2_spncr']);
+  assert.match(calls[1].sql, /a\.status IN \('normal', 'risk'\)/);
   assert.deepEqual(calls[1].params?.slice(0, 3), [0.6, '2026-08-11', 'v2_spncr']);
 });
 

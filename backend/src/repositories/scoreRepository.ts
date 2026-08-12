@@ -442,22 +442,13 @@ export class ScoreRepository {
     const rankingFilters = buildPublicFullRankingFilters(filters);
     const isV2 = scoreRuleVersion === 'v2_spncr';
     const versionExpression = "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.score_rule_version')), 'v1_spcr')";
-    const v2ParticipationSql = isV2
-      ? `AND EXISTS (
-           SELECT 1 FROM airport_scores_daily same_day_score
-            WHERE same_day_score.airport_id = a.id
-              AND same_day_score.date = ?
-              AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(same_day_score.details_json, '$.score_rule_version')), 'v1_spcr') = ?
-         )`
-      : '';
 
     const [totalRows] = await this.pool.query<Array<RowDataPacket & { total: number }>>(
       `SELECT COUNT(*) AS total
          FROM airports a
         WHERE a.is_listed = 1
-          ${v2ParticipationSql}
           ${rankingFilters.whereSql}`,
-      [...(isV2 ? [date, scoreRuleVersion] : []), ...rankingFilters.params],
+      rankingFilters.params,
     );
 
     const [rows] = await this.pool.query<PublicFullRankingRow[]>(
