@@ -2456,7 +2456,7 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
   );
   assert.deepEqual(
     result.capabilities.regions.map((item) => [item.label, item.node_count, item.line_types]),
-    [['香港', 0, ['IEPL']], ['日本', 0, ['BGP']]],
+    [],
   );
   assert.equal(result.capabilities.plan.supports_monthly, true);
   assert.equal(result.capabilities.plan.supports_quarterly, false);
@@ -2516,6 +2516,7 @@ test('PublicViewService.getReportView includes latest snapshot node counts as re
             hong_kong: { has_residential: null, has_native_ip: null, line_types: [] },
             singapore: { has_residential: null, has_native_ip: null, line_types: [] },
             united_states: { has_residential: null, has_native_ip: null, line_types: [] },
+            japan: { has_residential: true, has_native_ip: true, line_types: ['iepl'] },
           },
         } as any,
         tags: ['稳定'],

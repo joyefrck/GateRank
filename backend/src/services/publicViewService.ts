@@ -1321,15 +1321,12 @@ function buildRegionCapabilities(
     .map(([key, label]) => {
       const region = source[key as keyof typeof source];
       const nodeCount = nodeCounts[key] || 0;
-      if (!region && nodeCount <= 0) {
+      if (nodeCount <= 0) {
         return null;
       }
       const lineTypes = Array.isArray(region?.line_types)
         ? region.line_types.map((type) => LINE_TYPE_LABELS[type] || type)
         : [];
-      if (region?.has_residential !== true && region?.has_native_ip !== true && lineTypes.length === 0 && nodeCount <= 0) {
-        return null;
-      }
       return {
         key,
         label,

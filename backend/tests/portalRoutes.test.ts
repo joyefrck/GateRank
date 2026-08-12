@@ -4193,6 +4193,11 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
     subscription_url: 'https://subscribe.example.com',
     test_account: 'tester',
     test_password: 'secret',
+    profile: {
+      regions: {
+        hong_kong: { has_residential: false, has_native_ip: false, line_types: ['relay'] },
+      },
+    },
     created_at: '2026-04-18 10:00:00',
   };
   const approvedAirport: any = {
@@ -4219,6 +4224,9 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
         lowest_annual_monthly_price: null,
         has_trial_plan: true,
         has_lifetime_plan: null,
+      },
+      regions: {
+        hong_kong: { has_residential: false, has_native_ip: true, line_types: ['bgp'] },
       },
     },
   };
@@ -4316,6 +4324,10 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
           },
           clients: { clash: true, clash_mi: true, clash_party: true },
           import_methods: { one_click_import: true },
+          regions: {
+            hong_kong: { has_residential: true, has_native_ip: true, line_types: ['iepl'] },
+            taiwan: { has_residential: true, has_native_ip: true, line_types: ['iepl', 'cn2'] },
+          },
         },
         subscription_url: 'https://subscribe-new.example.com',
         applicant_telegram: '@cloudpro',
@@ -4370,6 +4382,26 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
     assert.equal((updatedAirports[0].profile as any).clients.clash_mi, true);
     assert.equal((updatedAirports[0].profile as any).clients.clash_party, true);
     assert.equal((updatedAirports[0].profile as any).import_methods.one_click_import, true);
+    assert.deepEqual((updatedApplications[0].profile as any).regions.hong_kong, {
+      has_residential: false,
+      has_native_ip: false,
+      line_types: ['relay'],
+    });
+    assert.deepEqual((updatedApplications[0].profile as any).regions.taiwan, {
+      has_residential: null,
+      has_native_ip: null,
+      line_types: [],
+    });
+    assert.deepEqual((updatedAirports[0].profile as any).regions.hong_kong, {
+      has_residential: false,
+      has_native_ip: true,
+      line_types: ['bgp'],
+    });
+    assert.deepEqual((updatedAirports[0].profile as any).regions.taiwan, {
+      has_residential: null,
+      has_native_ip: null,
+      line_types: [],
+    });
     assert.equal(cacheClears, 1);
     const data = (await response.json()) as {
       application: {

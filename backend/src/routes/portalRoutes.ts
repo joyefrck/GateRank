@@ -1125,6 +1125,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const payload = toPlainObject(req.body ?? {}, 'body');
       const input = parseApplicantApplicationOperationsPayload(payload);
       input.name = application.name;
+      input.profile = preserveProtectedProfileRegions(input.profile, application.profile);
 
       if (!deps.airportApplicationRepository.updateApplicantOperations) {
         throw new Error('airportApplicationRepository.updateApplicantOperations is not configured');
@@ -1635,9 +1636,10 @@ async function syncApprovedAirportOperations(
   const airport = deps.airportRepository.getById
     ? await deps.airportRepository.getById(approvedAirportId)
     : null;
-  const profile = input.profile_from_payload
+  const applicantProfile = input.profile_from_payload
     ? input.profile
     : buildSyncedAirportProfile(airport?.profile ?? createDefaultAirportProfile(), input);
+  const profile = preserveProtectedProfileRegions(applicantProfile, airport?.profile ?? applicantProfile);
 
   const patch: UpdateAirportInput = {
     website: input.website,
@@ -1677,6 +1679,16 @@ function buildSyncedAirportProfile(
       lowest_monthly_price: input.plan_price_month,
       has_trial_plan: input.has_trial,
     },
+  };
+}
+
+function preserveProtectedProfileRegions(
+  profile: AirportProfile,
+  authoritativeProfile: unknown,
+): AirportProfile {
+  return {
+    ...profile,
+    regions: normalizeAirportProfile(authoritativeProfile).regions,
   };
 }
 

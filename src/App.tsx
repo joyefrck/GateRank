@@ -521,7 +521,7 @@ type AirportProfileRegionKey =
   | 'argentina'
   | 'india';
 type AirportProfileLineType = 'iepl' | 'iplc' | 'cn2' | 'bgp' | 'relay';
-type PortalProfileTab = 'basic' | 'review' | 'plan' | 'telegram' | 'nodes' | 'clients' | 'import';
+type PortalProfileTab = 'basic' | 'review' | 'plan' | 'telegram' | 'clients' | 'import';
 
 interface AirportProfilePlan {
   supports_monthly: boolean | null;
@@ -667,7 +667,6 @@ const PORTAL_PROFILE_TABS: Array<{ key: PortalProfileTab; label: string }> = [
   { key: 'review', label: '申报信息' },
   { key: 'plan', label: '套餐信息' },
   { key: 'telegram', label: '电报信息' },
-  { key: 'nodes', label: '节点覆盖' },
   { key: 'clients', label: '客户端支持' },
   { key: 'import', label: '导入教程' },
 ];
@@ -6847,7 +6846,7 @@ function PortalPage() {
         payment_crypto_other: applicationForm.payment_methods.includes('crypto_other')
           ? applicationForm.payment_crypto_other.trim()
           : null,
-        profile: normalizeAirportProfile(applicationForm.profile),
+        profile: buildApplicantOperationsProfile(applicationForm.profile),
         applicant_telegram: applicationForm.applicant_telegram.trim(),
         founded_on: applicationForm.founded_on,
         airport_intro: applicationForm.airport_intro.trim(),
@@ -7323,23 +7322,6 @@ function PortalPage() {
         profile: { ...current.profile, import_methods: { ...current.profile.import_methods, [key]: value } },
       }));
     };
-    const updateRegion = <K extends keyof AirportProfileRegionInfo>(
-      regionKey: AirportProfileRegionKey,
-      key: K,
-      value: AirportProfileRegionInfo[K],
-    ) => {
-      setApplicationForm((current) => ({
-        ...current,
-        profile: {
-          ...current.profile,
-          regions: {
-            ...current.profile.regions,
-            [regionKey]: { ...current.profile.regions[regionKey], [key]: value },
-          },
-        },
-      }));
-    };
-
     return (
       <PortalSectionCard
         title="资料"
@@ -7598,57 +7580,6 @@ function PortalPage() {
                       onChange={(e) => updateProfileTelegram('recent_active_at', e.target.value || null)}
                     />
                   </PublicFormField>
-                </div>
-              )}
-
-              {applicationProfileTab === 'nodes' && (
-                <div className="mt-5 overflow-x-auto rounded-[24px] border border-slate-200 bg-white">
-                  <table className="w-full min-w-[1080px] table-fixed text-sm">
-                    <colgroup>
-                      <col className="w-[120px]" />
-                      <col className="w-[260px]" />
-                      <col className="w-[260px]" />
-                      <col />
-                    </colgroup>
-                    <thead className="bg-slate-50 text-left text-xs font-black uppercase tracking-[0.14em] text-slate-500">
-                      <tr>
-                        <th className="px-5 py-3">地区</th>
-                        <th className="px-5 py-3">家宽节点</th>
-                        <th className="px-5 py-3">原生 IP</th>
-                        <th className="px-5 py-3">线路属性</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {AIRPORT_PROFILE_REGION_OPTIONS.map((region) => (
-                        <tr key={region.value} className="h-[68px] border-t border-slate-100 align-middle">
-                          <td className="px-5 py-3 font-black text-slate-900">
-                            <span className="block whitespace-nowrap">{region.label}</span>
-                          </td>
-                          <td className="px-5 py-3 align-middle">
-                            <PortalCompactBooleanRadioGroup
-                              name={`portal-region-${region.value}-residential`}
-                              value={applicationForm.profile.regions[region.value].has_residential}
-                              onChange={(value) => updateRegion(region.value, 'has_residential', value)}
-                            />
-                          </td>
-                          <td className="px-5 py-3 align-middle">
-                            <PortalCompactBooleanRadioGroup
-                              name={`portal-region-${region.value}-native`}
-                              value={applicationForm.profile.regions[region.value].has_native_ip}
-                              onChange={(value) => updateRegion(region.value, 'has_native_ip', value)}
-                            />
-                          </td>
-                          <td className="px-5 py-3 align-middle">
-                            <PortalCompactCheckboxPillGroup
-                              options={AIRPORT_PROFILE_LINE_TYPE_OPTIONS}
-                              value={applicationForm.profile.regions[region.value].line_types}
-                              onChange={(lineTypes) => updateRegion(region.value, 'line_types', lineTypes)}
-                            />
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
                 </div>
               )}
 
@@ -9038,71 +8969,6 @@ function PortalCheckboxPillGroup<T extends string>({
   );
 }
 
-function PortalCompactCheckboxPillGroup<T extends string>({
-  options,
-  value,
-  onChange,
-}: {
-  options: Array<{ value: T; label: string }>;
-  value: T[];
-  onChange: (value: T[]) => void;
-}) {
-  const selected = new Set(value);
-  return (
-    <div className="flex min-w-0 flex-nowrap items-center gap-2 overflow-x-auto whitespace-nowrap py-1">
-      {options.map((option) => {
-        const active = selected.has(option.value);
-        return (
-          <button
-            key={option.value}
-            type="button"
-            className={`inline-flex h-9 shrink-0 items-center justify-center rounded-full border px-4 text-xs font-black transition ${
-              active ? 'border-cyan-600 bg-cyan-50 text-cyan-700' : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-            }`}
-            onClick={() => onChange(active ? value.filter((item) => item !== option.value) : [...value, option.value])}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function PortalCompactBooleanRadioGroup({
-  name,
-  value,
-  onChange,
-}: {
-  name: string;
-  value: boolean | null;
-  onChange: (value: boolean | null) => void;
-}) {
-  return (
-    <div className="inline-flex h-10 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-slate-50 p-1">
-      {[
-        { label: '是', value: true },
-        { label: '否', value: false },
-        { label: '未设置', value: null },
-      ].map((option) => {
-        const active = value === option.value;
-        return (
-          <button
-            key={`${name}-${option.label}`}
-            type="button"
-            className={`inline-flex h-8 min-w-[56px] items-center justify-center rounded-full px-3 text-xs font-black transition ${
-              active ? 'bg-white text-cyan-700 shadow-sm ring-1 ring-cyan-100' : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'
-            }`}
-            onClick={() => onChange(option.value)}
-          >
-            {option.label}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function PortalNullableBooleanRadioGroup({
   label,
   name,
@@ -9269,6 +9135,12 @@ function normalizeAirportProfile(
     profile.plan.has_trial_plan = hasTrial;
   }
   return profile;
+}
+
+function buildApplicantOperationsProfile(profile: AirportProfile): Omit<AirportProfile, 'regions'> {
+  const { regions: _protectedRegions, ...applicantProfile } = normalizeAirportProfile(profile);
+  void _protectedRegions;
+  return applicantProfile;
 }
 
 function createApplicationForm(): ApplicationFormState {
