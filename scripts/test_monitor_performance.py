@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import ssl
 import subprocess
 import sys
 import unittest
@@ -23,6 +24,7 @@ from scripts.monitor_performance import (
     parse_node_line,
     parse_nodes,
     performance_node_key,
+    probe_node_proxy_http_availability,
     probe_node,
     resolve_selected_nodes,
     run_for_airport,
@@ -412,6 +414,69 @@ proxies:
         self.assertEqual(results[0].check, "proxy_http")
         self.assertEqual(results[0].tcp_reachable, True)
         proxy_probe.assert_called_once_with(config, node)
+
+    def test_proxy_http_availability_returns_after_primary_target_succeeds(self) -> None:
+        config = self.make_config()
+        node = parse_node_line("trojan://password@hk.example.com:443#HK-A")
+        assert node is not None
+
+        with (
+            patch("scripts.monitor_performance.probe_node_availability", return_value=NodeAvailabilityResult(
+                node=node, available=True, check="tcp", tcp_reachable=True,
+            )),
+            patch("scripts.monitor_performance.run_sing_box", return_value=(MagicMock(), "/tmp/test.json")),
+            patch("scripts.monitor_performance.stop_sing_box"),
+            patch("scripts.monitor_performance.test_proxy_http_once") as request_once,
+        ):
+            result = probe_node_proxy_http_availability(config, node)
+
+        self.assertTrue(result.available)
+        request_once.assert_called_once_with(config, config.test_url_latency)
+
+    def test_proxy_http_availability_recovers_from_tls_eof_with_fallback_target(self) -> None:
+        config = self.make_config()
+        node = parse_node_line("trojan://password@jp.example.com:443#JP-A")
+        assert node is not None
+        tls_eof = ssl.SSLEOFError(8, "UNEXPECTED_EOF_WHILE_READING")
+
+        with (
+            patch("scripts.monitor_performance.probe_node_availability", return_value=NodeAvailabilityResult(
+                node=node, available=True, check="tcp", tcp_reachable=True,
+            )),
+            patch("scripts.monitor_performance.run_sing_box", return_value=(MagicMock(), "/tmp/test.json")),
+            patch("scripts.monitor_performance.stop_sing_box"),
+            patch("scripts.monitor_performance.time.sleep"),
+            patch("scripts.monitor_performance.test_proxy_http_once", side_effect=[tls_eof, tls_eof, None]) as request_once,
+        ):
+            result = probe_node_proxy_http_availability(config, node)
+
+        self.assertTrue(result.available)
+        self.assertEqual(request_once.call_args_list, [
+            call(config, config.test_url_latency),
+            call(config, config.test_url_latency),
+            call(config, "https://cp.cloudflare.com/generate_204"),
+        ])
+
+    def test_proxy_http_availability_reports_ssl_eof_after_all_targets_fail(self) -> None:
+        config = self.make_config()
+        node = parse_node_line("trojan://password@sg.example.com:443#SG-A")
+        assert node is not None
+        tls_eof = ssl.SSLEOFError(8, "UNEXPECTED_EOF_WHILE_READING")
+
+        with (
+            patch("scripts.monitor_performance.probe_node_availability", return_value=NodeAvailabilityResult(
+                node=node, available=True, check="tcp", tcp_reachable=True,
+            )),
+            patch("scripts.monitor_performance.run_sing_box", return_value=(MagicMock(), "/tmp/test.json")),
+            patch("scripts.monitor_performance.stop_sing_box"),
+            patch("scripts.monitor_performance.time.sleep"),
+            patch("scripts.monitor_performance.test_proxy_http_once", side_effect=tls_eof) as request_once,
+        ):
+            result = probe_node_proxy_http_availability(config, node)
+
+        self.assertFalse(result.available)
+        self.assertEqual(result.error_code, "proxy_ssl_eof")
+        self.assertEqual(request_once.call_count, 6)
 
     def test_build_config_defaults_to_three_latency_attempts_and_three_second_interval(self) -> None:
         env = {

@@ -119,6 +119,8 @@ class NetworkCoverageCollectorTests(unittest.TestCase):
             {"healthy": True, "error_code": None},
         ]), [{"error_code": "timeout", "count": 2}])
         self.assertEqual(sanitize_node_error("tcp_unreachable:1.2.3.4"), "tcp_unreachable")
+        self.assertEqual(sanitize_node_error("proxy_ssl_eof"), "proxy_ssl_eof")
+        self.assertEqual(sanitize_node_error("[Errno 104] Connection reset by peer"), "proxy_connection_reset")
         self.assertEqual(sanitize_node_name("vless://secret@example.com"), "[redacted-node-name]")
         self.assertNotIn("550e8400-e29b-41d4-a716-446655440000", sanitize_node_name("JP 550e8400-e29b-41d4-a716-446655440000"))
 

@@ -56,6 +56,12 @@ DEFAULT_SPEED_TIMEOUT = 10
 DEFAULT_SPEED_CONNECTIONS = 2
 DEFAULT_PERFORMANCE_CONCURRENCY = 4
 DEFAULT_NODE_AVAILABILITY_CHECK = "proxy_http"
+DEFAULT_PROXY_AVAILABILITY_FALLBACK_URLS = (
+    "https://cp.cloudflare.com/generate_204",
+    "https://example.com/",
+)
+DEFAULT_PROXY_AVAILABILITY_ATTEMPTS_PER_TARGET = 2
+DEFAULT_PROXY_AVAILABILITY_RETRY_INTERVAL_SECONDS = 0.25
 DEFAULT_SOURCE = "cron-performance"
 DEFAULT_TEST_URL_LATENCY = "https://www.google.com/generate_204"
 DEFAULT_TEST_URL_SPEED = "https://speed.cloudflare.com/__down?bytes=5000000"
@@ -1672,10 +1678,25 @@ def probe_node_proxy_http_availability(config: Config, node: ParsedNode) -> Node
     proc: subprocess.Popen[Any] | None = None
     try:
         proc, config_path = run_sing_box(config, node)
-        test_proxy_http_once(config)
+        errors: list[Exception] = []
+        for test_url in proxy_http_availability_targets(config):
+            for attempt in range(DEFAULT_PROXY_AVAILABILITY_ATTEMPTS_PER_TARGET):
+                try:
+                    test_proxy_http_once(config, test_url)
+                    return NodeAvailabilityResult(
+                        node=node,
+                        available=True,
+                        check="proxy_http",
+                        tcp_reachable=True,
+                    )
+                except Exception as exc:
+                    errors.append(exc)
+                    if attempt < DEFAULT_PROXY_AVAILABILITY_ATTEMPTS_PER_TARGET - 1:
+                        time.sleep(DEFAULT_PROXY_AVAILABILITY_RETRY_INTERVAL_SECONDS)
         return NodeAvailabilityResult(
             node=node,
-            available=True,
+            available=False,
+            error_code=classify_proxy_http_failures(errors),
             check="proxy_http",
             tcp_reachable=True,
         )
@@ -1683,7 +1704,7 @@ def probe_node_proxy_http_availability(config: Config, node: ParsedNode) -> Node
         return NodeAvailabilityResult(
             node=node,
             available=False,
-            error_code=str(exc),
+            error_code=classify_proxy_http_failure(exc),
             check="proxy_http",
             tcp_reachable=True,
         )
@@ -1902,9 +1923,40 @@ def test_proxy_real_latency(config: Config) -> tuple[list[float], list[str], int
     return samples, sampled_at, failures, attempts
 
 
-def test_proxy_http_once(config: Config) -> None:
+def proxy_http_availability_targets(config: Config) -> tuple[str, ...]:
+    targets: list[str] = []
+    for value in (config.test_url_latency, *DEFAULT_PROXY_AVAILABILITY_FALLBACK_URLS):
+        target = str(value or "").strip()
+        if target and target not in targets:
+            targets.append(target)
+    return tuple(targets)
+
+
+def classify_proxy_http_failures(errors: list[Exception]) -> str:
+    if not errors:
+        return "proxy_check_failed"
+    codes = [classify_proxy_http_failure(error) for error in errors]
+    return max(dict.fromkeys(codes), key=codes.count)
+
+
+def classify_proxy_http_failure(exc: Exception) -> str:
+    text = str(exc).lower()
+    if isinstance(exc, ssl.SSLEOFError) or "unexpected_eof_while_reading" in text:
+        return "proxy_ssl_eof"
+    if isinstance(exc, (TimeoutError, socket.timeout)) or "timeout" in text or "timed out" in text:
+        return "proxy_http_timeout"
+    if isinstance(exc, ConnectionResetError) or "connection reset" in text:
+        return "proxy_connection_reset"
+    if "singbox_start_failed" in text or "sing-box" in text or "sing_box" in text:
+        return "proxy_start_failed"
+    if isinstance(exc, (HTTPError, URLError)) or "http" in text:
+        return "proxy_http_failed"
+    return "proxy_check_failed"
+
+
+def test_proxy_http_once(config: Config, test_url: str | None = None) -> None:
     opener = build_proxy_opener(config)
-    request = Request(config.test_url_latency, method="GET", headers={"User-Agent": "GateRank-Performance-Monitor/1.0"})
+    request = Request(test_url or config.test_url_latency, method="GET", headers={"User-Agent": "GateRank-Performance-Monitor/1.0"})
     with opener.open(request, timeout=config.http_timeout) as response:
         response.read(1)
 

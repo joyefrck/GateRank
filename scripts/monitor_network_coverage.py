@@ -224,6 +224,20 @@ def sanitize_node_error(value: Any) -> str | None:
     text = str(value).lower()
     if text.startswith("tcp_unreachable"):
         return "tcp_unreachable"
+    safe_proxy_codes = {
+        "proxy_ssl_eof",
+        "proxy_connection_reset",
+        "proxy_http_timeout",
+        "proxy_start_failed",
+        "proxy_http_failed",
+        "proxy_check_failed",
+    }
+    if text in safe_proxy_codes:
+        return text
+    if "unexpected_eof_while_reading" in text:
+        return "proxy_ssl_eof"
+    if "connection reset" in text:
+        return "proxy_connection_reset"
     if "timeout" in text or "timed out" in text:
         return "proxy_http_timeout"
     if "sing-box" in text or "sing_box" in text:
