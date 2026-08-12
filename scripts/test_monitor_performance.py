@@ -317,9 +317,13 @@ proxies:
         self.assertEqual([node.name for node in selected], ["HK-A"])
 
     def test_select_nodes_skips_informational_and_other_nodes_by_default(self) -> None:
+        traffic_node = parse_node_line("trojan://password@info.example.com:443#剩余流量：1008.61 GB")
+        assert traffic_node is not None
+        self.assertIsNone(traffic_node.region)
+
         nodes = [
             node for node in [
-                parse_node_line("trojan://password@info.example.com:443#剩余流量：1008.61 GB"),
+                traffic_node,
                 parse_node_line("trojan://password@hk.example.com:443#香港IEPL专线 01"),
                 parse_node_line("trojan://password@nl.example.com:443#荷兰BGP多线 01"),
             ]

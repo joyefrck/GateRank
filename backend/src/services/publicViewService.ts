@@ -35,6 +35,7 @@ import {
   getDateInTimezone,
 } from '../utils/time';
 import { buildRiskReasonSummary } from '../utils/risk';
+import { isInformationalNodeName } from '../utils/informationalNode';
 import { buildTodayPickRows, isTodayPickEligible, type RankedAirportInput } from './rankingService';
 import { DEFAULT_HOME_SECTION_LIMITS, type HomeSectionLimits } from './marketingSettingsService';
 import { buildAirportReportPath, buildAirportSlugCandidate } from '../../../shared/publicSeo';
@@ -1342,6 +1343,9 @@ function buildRegionCapabilities(
 function buildRegionNodeCounts(snapshot: SubscriptionNodeSnapshot | null): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const node of snapshot?.nodes || []) {
+    if (isInformationalNodeName(node.name)) {
+      continue;
+    }
     const key = normalizeReportRegionKey(node.region || node.name);
     if (key) {
       counts[key] = (counts[key] || 0) + 1;

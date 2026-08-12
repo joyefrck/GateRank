@@ -141,3 +141,17 @@ Run the focused portal, public-view, Network Coverage, and performance collector
 - Now Acceleration shows only regions present in its latest system snapshot.
 - N scoring and performance collection continue to use system snapshot/run data and administrator configuration.
 - No unrelated applicant operations fields regress.
+
+## Production Finding: Informational Node Names
+
+The production snapshot for Now Acceleration contains informational subscription entries such as `剩余流量：4763.25 GB` and `套餐到期：长期有效`. The short alias matcher previously interpreted the capacity unit `GB` as the United Kingdom region code, even though the entry is not a geographic proxy node.
+
+Informational entries remain in the system snapshot and Network Coverage health totals, but their region must be `UNKNOWN`. Names containing operational metadata markers such as remaining traffic, expiry, plans, announcements, notices, customer service, groups, subscription-update instructions, or usage instructions must not establish a public region. Real geographic names such as `UK`, `London`, or `英国` continue to classify as the United Kingdom when the node name is not informational.
+
+This guard applies at all three boundaries:
+
+- subscription parsing must not persist a false geographic region for an informational entry;
+- Network Coverage scoring must classify the entry as `UNKNOWN`, so it cannot contribute an extended region; and
+- public capability construction must suppress a stale persisted region when the original node name is informational.
+
+After deployment, recapture Now Acceleration's subscription snapshot, rerun Network Coverage, and aggregate the current date so the persisted run and final score no longer contain the false United Kingdom coverage.

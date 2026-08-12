@@ -10,6 +10,7 @@ import type {
   SubscriptionNodeSnapshotNode,
 } from '../types/domain';
 import { buildPerformanceNodeKey } from '../utils/performanceNodeKey';
+import { isInformationalNodeName } from '../utils/informationalNode';
 
 interface PerformanceProbeDispatchDeps {
   airportRepository: {
@@ -165,7 +166,7 @@ function resolveSelectedNodeKeys(
   if (preferred.length > 0) return [...new Set(preferred)];
 
   const eligible = [...nodeKeys.entries()]
-    .filter(([, node]) => !isInformationalNode(node.name))
+    .filter(([, node]) => !isInformationalNodeName(node.name))
     .sort(([left], [right]) => left.localeCompare(right));
   const byRegion = new Map<string, string[]>();
   for (const [key, node] of eligible) {
@@ -175,10 +176,6 @@ function resolveSelectedNodeKeys(
     byRegion.set(region, existing);
   }
   return [...byRegion.keys()].sort().slice(0, 6).map((region) => byRegion.get(region)![0]);
-}
-
-function isInformationalNode(name: string): boolean {
-  return /(官网|网站|剩余|流量|到期|套餐|公告|通知|倍率|客服|群组|更新订阅|使用说明)/i.test(name);
 }
 
 function emptyResult(): PerformanceProbeDispatchResult {

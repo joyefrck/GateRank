@@ -1,3 +1,5 @@
+import { isInformationalNodeName } from '../utils/informationalNode';
+
 export const NETWORK_COVERAGE_RULE_VERSION = 'network_coverage_v1' as const;
 export const SCORE_RULE_V1 = 'v1_spcr' as const;
 export const SCORE_RULE_V2 = 'v2_spncr' as const;
@@ -85,6 +87,13 @@ const REGION_DEFINITIONS: readonly RegionDefinition[] = [
 const UNKNOWN_REGION = { code: 'UNKNOWN', name: '未知地区', group: 'unknown' as const };
 
 export function classifyNetworkCoverageRegion(value: string): Pick<NetworkCoverageNodeResult, 'region_code' | 'region_name' | 'region_group'> {
+  if (isInformationalNodeName(value)) {
+    return {
+      region_code: UNKNOWN_REGION.code,
+      region_name: UNKNOWN_REGION.name,
+      region_group: UNKNOWN_REGION.group,
+    };
+  }
   const normalized = value.normalize('NFKC').toLowerCase();
   for (const definition of REGION_DEFINITIONS) {
     if (definition.aliases.some((alias) => matchesAlias(normalized, alias.toLowerCase()))) {

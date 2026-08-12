@@ -170,3 +170,35 @@ Confirm the applicant portal has no Node Coverage tab. Query Now Acceleration's 
 - [ ] **Step 3: Verify production collectors remain authoritative**
 
 Inspect the latest subscription snapshot, Network Coverage run, and performance selection/run evidence for Now Acceleration. Confirm collection sources are stored system snapshots and administrator configuration.
+
+### Task 7: Reject informational-name region aliases
+
+**Files:**
+- Modify: `scripts/test_monitor_performance.py`
+- Modify: `scripts/monitor_performance.py`
+- Modify: `backend/tests/networkCoverageScoring.test.ts`
+- Modify: `backend/src/services/networkCoverageScoring.ts`
+- Modify: `backend/tests/publicViewService.test.ts`
+- Modify: `backend/src/services/publicViewService.ts`
+
+- [ ] **Step 1: Add failing production regressions**
+
+Assert that `剩余流量：4763.25 GB` parses with no Python display region, classifies as `UNKNOWN` for Network Coverage, and cannot publish the United Kingdom even when a stale snapshot region says `UK`.
+
+- [ ] **Step 2: Verify the regressions fail**
+
+Run: `python3 -m unittest scripts.test_monitor_performance` and `npx tsx --test backend/tests/networkCoverageScoring.test.ts backend/tests/publicViewService.test.ts`
+
+Expected: the new assertions fail because `GB` currently matches the United Kingdom short alias.
+
+- [ ] **Step 3: Add the informational-name guard**
+
+Reuse the established informational markers from performance dispatch. Apply the guard before region alias matching in Python and Network Coverage scoring, and before public capability normalization so an older persisted false region is not rendered.
+
+- [ ] **Step 4: Run focused and full verification**
+
+Run the focused regressions, backend suite, server type checking, lint, production build, and whitespace checks. All commands must exit 0.
+
+- [ ] **Step 5: Republish and repair today's derived data**
+
+Push the verified revision, wait for both container images, redeploy API and web, capture a new Now Acceleration subscription snapshot, rerun Network Coverage and aggregation for `2026-08-12`, and verify the public report contains Hong Kong only.

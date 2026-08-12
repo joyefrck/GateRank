@@ -75,6 +75,28 @@ REGION_KEYWORDS = {
     "KR": ("kr", "korea", "south korea", "seoul", "韩国", "韓國", "首尔", "首爾"),
     "UK": ("uk", "gb", "united kingdom", "england", "london", "英国", "英國", "伦敦", "倫敦"),
 }
+INFORMATIONAL_NODE_MARKERS = (
+    "剩余",
+    "流量",
+    "到期",
+    "套餐",
+    "官网",
+    "网站",
+    "节点不通",
+    "刷新",
+    "重导订阅",
+    "订阅",
+    "公告",
+    "通知",
+    "倍率",
+    "客服",
+    "群组",
+    "使用说明",
+    "traffic",
+    "expire",
+    "official",
+    "website",
+)
 
 
 @dataclass
@@ -1498,21 +1520,12 @@ def is_default_test_candidate(node: ParsedNode) -> bool:
 
 
 def is_informational_node(node: ParsedNode) -> bool:
-    name = node.name.strip().lower()
-    informational_markers = (
-        "剩余流量",
-        "套餐到期",
-        "官网",
-        "节点不通",
-        "刷新",
-        "重导订阅",
-        "订阅",
-        "traffic",
-        "expire",
-        "official",
-        "website",
-    )
-    return any(marker in name for marker in informational_markers)
+    return is_informational_node_name(node.name)
+
+
+def is_informational_node_name(name: str) -> bool:
+    normalized = name.strip().lower()
+    return any(marker in normalized for marker in INFORMATIONAL_NODE_MARKERS)
 
 
 def resolve_selected_nodes(
@@ -1594,6 +1607,8 @@ def count_selected_regions(nodes: list[ParsedNode]) -> int:
 
 
 def detect_region(name: str) -> str | None:
+    if is_informational_node_name(name):
+        return None
     normalized = name.lower()
     for region, keywords in REGION_KEYWORDS.items():
         for keyword in keywords:
