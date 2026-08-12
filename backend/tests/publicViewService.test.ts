@@ -2579,13 +2579,14 @@ test('PublicViewService.getReportView includes latest snapshot node counts as re
         source: 'test',
         subscription_url: null,
         subscription_format: 'clash_yaml',
-        parsed_nodes_count: 6,
-        supported_nodes_count: 6,
+        parsed_nodes_count: 7,
+        supported_nodes_count: 7,
         nodes: [
           { name: 'HK-1', region: 'HK', type: 'vless', outbound: {}, raw_uri: '' },
           { name: '香港 2', region: null, type: 'vless', outbound: {}, raw_uri: '' },
           { name: 'SG-1', region: 'SG', type: 'vless', outbound: {}, raw_uri: '' },
           { name: 'US-1', region: 'US', type: 'vless', outbound: {}, raw_uri: '' },
+          { name: '韩国-标准套餐01', region: 'KR', type: 'vmess', outbound: {}, raw_uri: '' },
           { name: 'Unknown-1', region: 'Mars', type: 'vless', outbound: {}, raw_uri: '' },
           { name: '剩余流量：4763.25 GB', region: 'UK', type: 'vmess', outbound: {}, raw_uri: '' },
         ],
@@ -2604,6 +2605,7 @@ test('PublicViewService.getReportView includes latest snapshot node counts as re
       ['hong_kong', '香港', 2, []],
       ['singapore', '新加坡', 1, []],
       ['united_states', '美国', 1, []],
+      ['south_korea', '韩国', 1, []],
     ],
   );
 });

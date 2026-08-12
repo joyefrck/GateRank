@@ -127,6 +127,74 @@ test('PerformanceProbeDispatchService skips disabled regions and reports missing
   assert.doesNotMatch(JSON.stringify(result), /raw_uri|password|subscription/i);
 });
 
+test('PerformanceProbeDispatchService keeps real package-named nodes in automatic selection', async () => {
+  const created: PerformanceProbeJobInput[] = [];
+  const koreanNode = {
+    name: '韩国-标准套餐01',
+    region: 'KR',
+    type: 'vmess',
+    outbound: { type: 'vmess', server: 'kr.example', server_port: 443 },
+    raw_uri: 'vmess://required-worker-config',
+  };
+  const informationalNode = {
+    name: '套餐到期：长期有效 UK',
+    region: 'UK',
+    type: 'vmess',
+    outbound: { type: 'vmess', server: 'info.example', server_port: 443 },
+    raw_uri: 'vmess://informational-row',
+  };
+  const service = new PerformanceProbeDispatchService({
+    airportRepository: {
+      listAll: async () => [{ id: 9, name: 'Now', status: 'normal', is_listed: true }],
+    },
+    probeRepository: {
+      list: async () => [probe('cn-shanghai', true)],
+    },
+    settingRepository: {
+      getByAirport: async () => ({
+        airport_id: 9,
+        config_version: 1,
+        settings: [
+          { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+        ],
+      }),
+    },
+    snapshotRepository: {
+      getLatestByAirport: async () => ({
+        id: 13,
+        airport_id: 9,
+        captured_at: '2026-08-12T01:00:00+08:00',
+        source: 'scheduler',
+        subscription_url: null,
+        subscription_format: 'clash_yaml',
+        parsed_nodes_count: 4,
+        supported_nodes_count: 4,
+        nodes: [...snapshotNodes, koreanNode, informationalNode],
+        unsupported_nodes: [],
+        created_at: '2026-08-12T01:00:01+08:00',
+      }),
+    },
+    preferenceRepository: { getByAirport: async () => null },
+    jobRepository: {
+      create: async (input) => {
+        created.push(input);
+        return true;
+      },
+      listByIds: async () => [],
+    },
+  });
+
+  const result = await service.dispatchAll('2026-08-12', 'scheduler-performance');
+
+  assert.equal(result.created, 1);
+  assert.deepEqual(created[0]?.selected_node_keys, [
+    buildPerformanceNodeKey(snapshotNodes[0]),
+    buildPerformanceNodeKey(snapshotNodes[1]),
+    buildPerformanceNodeKey(koreanNode),
+  ]);
+  assert.ok(!created[0]?.selected_node_keys.includes(buildPerformanceNodeKey(informationalNode)));
+});
+
 test('PerformanceProbeDispatchService waits for the exact dispatched jobs and reports progress', async () => {
   let reads = 0;
   const progress: Array<[number, number, number]> = [];

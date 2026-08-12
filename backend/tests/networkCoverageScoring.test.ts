@@ -17,6 +17,7 @@ test('network coverage region classifier recognizes core, extended, flag and unk
   assert.equal(classifyNetworkCoverageRegion('Premium Relay 01').region_code, 'UNKNOWN');
   assert.equal(classifyNetworkCoverageRegion('HKT Premium').region_code, 'UNKNOWN');
   assert.equal(classifyNetworkCoverageRegion('剩余流量：4763.25 GB').region_code, 'UNKNOWN');
+  assert.equal(classifyNetworkCoverageRegion('韩国-标准套餐01').region_code, 'KR');
   assert.equal(classifyNetworkCoverageRegion('套餐到期：长期有效 UK').region_code, 'UNKNOWN');
   assert.equal(classifyNetworkCoverageRegion('London UK-01').region_code, 'GB');
 });
