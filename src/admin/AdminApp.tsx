@@ -1248,6 +1248,7 @@ interface SchedulerRunRecord {
   created_at: string;
   outcome: SchedulerRunOutcome;
   result_summary: SchedulerRunResultSummary | null;
+  stage_summary: SchedulerRunStageSummary | null;
 }
 
 interface SchedulerRunFailureDetail {
@@ -1263,6 +1264,12 @@ interface SchedulerRunResultSummary {
   skipped_count: number;
   failures: SchedulerRunFailureDetail[];
   missing_failure_detail_count: number;
+}
+
+interface SchedulerRunStageSummary {
+  central_collection: SchedulerRunResultSummary | null;
+  regional_dispatch: SchedulerRunResultSummary | null;
+  regional_job_count: number;
 }
 
 interface SchedulerTaskView {
@@ -1305,6 +1312,7 @@ interface SchedulerDailyStat {
   last_finished_at: string | null;
   last_outcome: SchedulerRunOutcome;
   last_result_summary: SchedulerRunResultSummary | null;
+  last_stage_summary: SchedulerRunStageSummary | null;
 }
 
 interface SchedulerDailyStatsResponse {
@@ -3101,6 +3109,30 @@ function SchedulerResultSummary({
   );
 }
 
+function SchedulerStageSummary({ summary }: { summary: SchedulerRunStageSummary | null }) {
+  if (!summary) return null;
+  const central = summary.central_collection;
+  const regional = summary.regional_dispatch;
+  return (
+    <div className="mt-2 text-xs leading-5 text-neutral-500">
+      {central && (
+        <span>
+          中心采集：成功 {central.success_count}，失败 {central.failure_count}
+          {central.skipped_count > 0 ? `，跳过 ${central.skipped_count}` : ''}
+        </span>
+      )}
+      {central && regional && <span aria-hidden="true">；</span>}
+      {regional && (
+        <span>
+          区域派发：成功 {regional.success_count}，失败 {regional.failure_count}
+          {regional.skipped_count > 0 ? `，跳过 ${regional.skipped_count}` : ''}
+          {`，任务排队 ${summary.regional_job_count}`}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function SchedulerFailureDetails({ summary }: { summary: SchedulerRunResultSummary | null }) {
   if (!summary || (summary.failure_count === 0 && summary.missing_failure_detail_count === 0)) {
     return null;
@@ -3347,6 +3379,7 @@ function SchedulerPage() {
                     </div>
                     <div className="mt-3">
                       <SchedulerResultSummary summary={task.latest_run.result_summary} />
+                      <SchedulerStageSummary summary={task.latest_run.stage_summary} />
                     </div>
                     {task.latest_run.message && (
                       <div className="mt-2 leading-6 text-neutral-500">{task.latest_run.message}</div>
@@ -3451,6 +3484,7 @@ function SchedulerPage() {
                     {item.last_result_summary
                       ? <SchedulerResultSummary summary={item.last_result_summary} compact />
                       : <span className="text-neutral-400">-</span>}
+                    <SchedulerStageSummary summary={item.last_stage_summary} />
                   </td>
                   <td className="px-4 py-3">{formatDuration(item.total_duration_ms)}</td>
                 </tr>
@@ -3501,6 +3535,7 @@ function SchedulerPage() {
                   <td className="px-4 py-3">{formatDuration(run.duration_ms)}</td>
                   <td className="min-w-72 px-4 py-3 text-neutral-600">
                     <SchedulerResultSummary summary={run.result_summary} compact />
+                    <SchedulerStageSummary summary={run.stage_summary} />
                     <div className={run.result_summary ? 'mt-2 leading-5' : 'leading-5'}>{run.message || '-'}</div>
                     <SchedulerFailureDetails summary={run.result_summary} />
                   </td>

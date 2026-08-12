@@ -88,6 +88,15 @@ test('PerformanceProbeDispatchService creates enabled shadow jobs with identical
   assert.equal(result.created, 2);
   assert.equal(result.shadow, 2);
   assert.equal(result.official, 0);
+  assert.deepEqual(
+    {
+      airport_count: result.airport_count,
+      success_count: result.success_count,
+      failure_count: result.failure_count,
+      skipped_count: result.skipped_count,
+    },
+    { airport_count: 1, success_count: 1, failure_count: 0, skipped_count: 0 },
+  );
   assert.deepEqual(result.job_ids, created.map((job) => job.job_id));
   assert.deepEqual(created.map((job) => [job.probe_id, job.include_in_result_snapshot]), [
     ['cn-shanghai', false],
@@ -123,8 +132,101 @@ test('PerformanceProbeDispatchService skips disabled regions and reports missing
 
   const result = await service.dispatchAll('2026-08-08', 'scheduler-performance');
   assert.equal(result.created, 0);
+  assert.deepEqual(
+    {
+      airport_count: result.airport_count,
+      success_count: result.success_count,
+      failure_count: result.failure_count,
+      skipped_count: result.skipped_count,
+    },
+    { airport_count: 1, success_count: 0, failure_count: 1, skipped_count: 0 },
+  );
   assert.deepEqual(result.failures, [{ airport_id: 9, airport_name: 'Now', error_code: 'node_snapshot_missing' }]);
   assert.doesNotMatch(JSON.stringify(result), /raw_uri|password|subscription/i);
+});
+
+test('PerformanceProbeDispatchService counts disabled mainland probes as a skipped airport', async () => {
+  const service = new PerformanceProbeDispatchService({
+    airportRepository: {
+      listAll: async () => [{ id: 9, name: 'Now', status: 'normal', is_listed: true }],
+    },
+    probeRepository: {
+      list: async () => [probe('cn-shanghai', true), probe('cn-guangzhou', true)],
+    },
+    settingRepository: {
+      getByAirport: async () => ({
+        airport_id: 9,
+        config_version: 1,
+        settings: [
+          { probe_id: 'cn-shanghai', test_enabled: false, include_in_result: false, updated_by: null, updated_at: null },
+          { probe_id: 'cn-guangzhou', test_enabled: false, include_in_result: false, updated_by: null, updated_at: null },
+        ],
+      }),
+    },
+    snapshotRepository: { getLatestByAirport: async () => null },
+    preferenceRepository: { getByAirport: async () => null },
+    jobRepository: { create: async () => true, listByIds: async () => [] },
+  });
+
+  const result = await service.dispatchAll('2026-08-08', 'scheduler-performance');
+
+  assert.deepEqual(
+    {
+      airport_count: result.airport_count,
+      success_count: result.success_count,
+      failure_count: result.failure_count,
+      skipped_count: result.skipped_count,
+    },
+    { airport_count: 1, success_count: 0, failure_count: 0, skipped_count: 1 },
+  );
+});
+
+test('PerformanceProbeDispatchService counts an idempotent existing job as a successful airport', async () => {
+  const service = new PerformanceProbeDispatchService({
+    airportRepository: {
+      listAll: async () => [{ id: 9, name: 'Now', status: 'normal', is_listed: true }],
+    },
+    probeRepository: { list: async () => [probe('cn-shanghai', true)] },
+    settingRepository: {
+      getByAirport: async () => ({
+        airport_id: 9,
+        config_version: 1,
+        settings: [
+          { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+        ],
+      }),
+    },
+    snapshotRepository: {
+      getLatestByAirport: async () => ({
+        id: 12,
+        airport_id: 9,
+        captured_at: '2026-08-08T12:00:00+08:00',
+        source: 'scheduler',
+        subscription_url: null,
+        subscription_format: 'plain',
+        parsed_nodes_count: 2,
+        supported_nodes_count: 2,
+        nodes: snapshotNodes,
+        unsupported_nodes: [],
+        created_at: '2026-08-08T12:00:01+08:00',
+      }),
+    },
+    preferenceRepository: { getByAirport: async () => null },
+    jobRepository: { create: async () => false, listByIds: async () => [] },
+  });
+
+  const result = await service.dispatchAll('2026-08-08', 'scheduler-performance');
+
+  assert.equal(result.created, 0);
+  assert.deepEqual(
+    {
+      airport_count: result.airport_count,
+      success_count: result.success_count,
+      failure_count: result.failure_count,
+      skipped_count: result.skipped_count,
+    },
+    { airport_count: 1, success_count: 1, failure_count: 0, skipped_count: 0 },
+  );
 });
 
 test('PerformanceProbeDispatchService keeps real package-named nodes in automatic selection', async () => {

@@ -502,9 +502,16 @@ export interface SchedulerRunResultSummary {
   missing_failure_detail_count: number;
 }
 
+export interface SchedulerRunStageSummary {
+  central_collection: SchedulerRunResultSummary | null;
+  regional_dispatch: SchedulerRunResultSummary | null;
+  regional_job_count: number;
+}
+
 export interface SchedulerRunView extends SchedulerRun {
   outcome: SchedulerRunOutcome;
   result_summary: SchedulerRunResultSummary | null;
+  stage_summary: SchedulerRunStageSummary | null;
 }
 
 export interface AirportScoreDaily extends ScoreBreakdown {

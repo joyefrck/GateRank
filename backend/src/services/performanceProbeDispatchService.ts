@@ -35,6 +35,10 @@ interface PerformanceProbeDispatchDeps {
 }
 
 export interface PerformanceProbeDispatchResult {
+  airport_count: number;
+  success_count: number;
+  failure_count: number;
+  skipped_count: number;
   created: number;
   shadow: number;
   official: number;
@@ -117,7 +121,7 @@ export class PerformanceProbeDispatchService {
       const setting = settingByProbe.get(probe.probe_id);
       return probe.probe_type === 'mainland' && probe.globally_enabled && setting?.test_enabled;
     });
-    if (activeProbes.length === 0) return emptyResult();
+    if (activeProbes.length === 0) return skippedAirportResult();
 
     const [snapshot, preference] = await Promise.all([
       this.deps.snapshotRepository.getLatestByAirport(airportId),
@@ -127,7 +131,7 @@ export class PerformanceProbeDispatchService {
     const selectedNodeKeys = resolveSelectedNodeKeys(snapshot.nodes, preference);
     if (selectedNodeKeys.length === 0) return failureResult(airportId, airportName, 'selected_nodes_empty');
 
-    const result = emptyResult();
+    const result = successfulAirportResult();
     for (const probe of activeProbes) {
       const setting = settingByProbe.get(probe.probe_id)!;
       const input: PerformanceProbeJobInput = {
@@ -179,17 +183,49 @@ function resolveSelectedNodeKeys(
 }
 
 function emptyResult(): PerformanceProbeDispatchResult {
-  return { created: 0, shadow: 0, official: 0, job_ids: [], failures: [] };
+  return {
+    airport_count: 0,
+    success_count: 0,
+    failure_count: 0,
+    skipped_count: 0,
+    created: 0,
+    shadow: 0,
+    official: 0,
+    job_ids: [],
+    failures: [],
+  };
+}
+
+function successfulAirportResult(): PerformanceProbeDispatchResult {
+  return {
+    ...emptyResult(),
+    airport_count: 1,
+    success_count: 1,
+  };
+}
+
+function skippedAirportResult(): PerformanceProbeDispatchResult {
+  return {
+    ...emptyResult(),
+    airport_count: 1,
+    skipped_count: 1,
+  };
 }
 
 function failureResult(airportId: number, airportName: string, errorCode: string): PerformanceProbeDispatchResult {
   return {
     ...emptyResult(),
+    airport_count: 1,
+    failure_count: 1,
     failures: [{ airport_id: airportId, airport_name: airportName, error_code: errorCode }],
   };
 }
 
 function mergeResult(target: PerformanceProbeDispatchResult, source: PerformanceProbeDispatchResult): void {
+  target.airport_count += source.airport_count;
+  target.success_count += source.success_count;
+  target.failure_count += source.failure_count;
+  target.skipped_count += source.skipped_count;
   target.created += source.created;
   target.shadow += source.shadow;
   target.official += source.official;

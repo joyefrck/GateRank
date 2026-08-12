@@ -240,11 +240,18 @@ test('SchedulerTaskExecutor.runPerformanceCollection dispatches mainland jobs an
       dispatchAll: async (date: string, source: string) => {
         dispatchCalls.push([date, source]);
         return {
-          created: 1,
-          shadow: 1,
-          official: 0,
+          airport_count: 61,
+          success_count: 59,
+          failure_count: 2,
+          skipped_count: 0,
+          created: 118,
+          shadow: 0,
+          official: 118,
           job_ids: ['job-shanghai'],
-          failures: [{ airport_id: 9, airport_name: 'Now', error_code: 'node_snapshot_missing' }],
+          failures: [
+            { airport_id: 75, airport_name: '宇宙云', error_code: 'node_snapshot_missing' },
+            { airport_id: 82, airport_name: 'dashbit比特冲刺', error_code: 'node_snapshot_missing' },
+          ],
         };
       },
     },
@@ -254,13 +261,68 @@ test('SchedulerTaskExecutor.runPerformanceCollection dispatches mainland jobs an
 
   assert.deepEqual(dispatchCalls, [['2026-08-08', 'scheduler-performance']]);
   assert.equal(result.status, 'failed');
-  assert.deepEqual(result.detail.regional_dispatch, {
-    created: 1,
-    shadow: 1,
-    official: 0,
-    job_ids: ['job-shanghai'],
-    failures: [{ airport_id: 9, airport_name: 'Now', error_code: 'node_snapshot_missing' }],
+  assert.equal(result.detail.airport_count, 61);
+  assert.equal(result.detail.success_count, 59);
+  assert.equal(result.detail.failure_count, 2);
+  assert.equal(result.detail.skipped_count, 0);
+  assert.deepEqual(result.detail.central_collection, {
+    airport_count: 1,
+    success_count: 1,
+    failure_count: 0,
+    skipped_count: 0,
+    failures: [],
   });
+  assert.deepEqual(result.detail.regional_dispatch, {
+    airport_count: 61,
+    success_count: 59,
+    failure_count: 2,
+    skipped_count: 0,
+    created: 118,
+    shadow: 0,
+    official: 118,
+    job_ids: ['job-shanghai'],
+    failures: [
+      { airport_id: 75, airport_name: '宇宙云', error_code: 'node_snapshot_missing' },
+      { airport_id: 82, airport_name: 'dashbit比特冲刺', error_code: 'node_snapshot_missing' },
+    ],
+  });
+});
+
+test('SchedulerTaskExecutor.runNetworkCoverageCollection preserves skipped airports and error codes', async () => {
+  const executor = createSchedulerTaskExecutor({
+    execFileAsync: async () => {
+      const error = new Error('Command failed: python3 monitor_network_coverage.py') as Error & {
+        stdout: string;
+        stderr: string;
+      };
+      error.stdout = JSON.stringify({
+        airport_count: 63,
+        success_count: 58,
+        failure_count: 3,
+        skipped_count: 2,
+        failures: [{
+          airport_id: 82,
+          airport_name: 'dashbit比特冲刺',
+          error_code: 'subscription_fetch_or_parse_failed',
+        }],
+      });
+      error.stderr = '';
+      throw error;
+    },
+  });
+
+  const result = await executor.runNetworkCoverageCollection();
+
+  assert.equal(result.status, 'failed');
+  assert.equal(result.detail.airport_count, 63);
+  assert.equal(result.detail.success_count, 58);
+  assert.equal(result.detail.failure_count, 3);
+  assert.equal(result.detail.skipped_count, 2);
+  assert.deepEqual(result.detail.failures, [{
+    airport_id: 82,
+    airport_name: 'dashbit比特冲刺',
+    error: 'subscription_fetch_or_parse_failed',
+  }]);
 });
 
 test('SchedulerTaskExecutor.runPerformanceCollection injects scheduler-safe probe defaults', async () => {

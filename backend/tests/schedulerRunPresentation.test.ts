@@ -125,3 +125,68 @@ test('presentSchedulerRun rejects contradictory counts and preserves non-batch s
   assert.equal(aggregate.outcome, 'failed');
   assert.equal(aggregate.result_summary, null);
 });
+
+test('presentSchedulerRun derives partial network coverage with skipped airports', () => {
+  const view = presentSchedulerRun(createRun({
+    task_key: 'network_coverage',
+    detail_json: {
+      stage: 'network_coverage',
+      airport_count: 63,
+      success_count: 58,
+      failure_count: 3,
+      skipped_count: 2,
+      failures: [{ airport_id: 82, airport_name: 'dashbit比特冲刺', error: 'subscription_fetch_or_parse_failed' }],
+    },
+  }));
+
+  assert.equal(view.outcome, 'partial');
+  assert.equal(view.result_summary?.success_count, 58);
+  assert.equal(view.result_summary?.failure_count, 3);
+  assert.equal(view.result_summary?.skipped_count, 2);
+});
+
+test('presentSchedulerRun parses explicit skipped counts from a legacy network coverage summary', () => {
+  const summary = '58/63 succeeded, 3 failed, 2 skipped; dashbit比特冲刺 #82: subscription_fetch_or_parse_failed';
+  const view = presentSchedulerRun(createRun({
+    task_key: 'network_coverage',
+    detail_json: { stage: 'network_coverage', summary },
+  }));
+
+  assert.equal(view.outcome, 'partial');
+  assert.equal(view.result_summary?.skipped_count, 2);
+});
+
+test('presentSchedulerRun derives partial performance and exposes both stages', () => {
+  const view = presentSchedulerRun(createRun({
+    task_key: 'performance',
+    detail_json: {
+      stage: 'performance',
+      airport_count: 61,
+      success_count: 59,
+      failure_count: 2,
+      skipped_count: 0,
+      failures: [{ airport_id: 75, airport_name: '宇宙云', error: 'node_snapshot_missing' }],
+      central_collection: {
+        airport_count: 63,
+        success_count: 2,
+        failure_count: 0,
+        skipped_count: 61,
+        failures: [],
+      },
+      regional_dispatch: {
+        airport_count: 61,
+        success_count: 59,
+        failure_count: 2,
+        skipped_count: 0,
+        created: 118,
+        failures: [{ airport_id: 75, airport_name: '宇宙云', error_code: 'node_snapshot_missing' }],
+      },
+    },
+  }));
+
+  assert.equal(view.outcome, 'partial');
+  assert.equal(view.result_summary?.success_count, 59);
+  assert.equal(view.stage_summary?.central_collection?.success_count, 2);
+  assert.equal(view.stage_summary?.regional_dispatch?.failure_count, 2);
+  assert.equal(view.stage_summary?.regional_job_count, 118);
+});

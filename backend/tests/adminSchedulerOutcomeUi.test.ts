@@ -17,4 +17,7 @@ test('scheduler admin renders partial outcomes with exact counts and expandable 
   assert.match(adminSource, /SchedulerOutcomeBadge/);
   assert.match(adminSource, /SchedulerResultSummary/);
   assert.match(adminSource, /SchedulerFailureDetails/);
+  assert.match(adminSource, /SchedulerStageSummary/);
+  assert.match(adminSource, /中心采集/);
+  assert.match(adminSource, /区域派发/);
 });

@@ -4,6 +4,7 @@ import type {
   SchedulerRun,
   SchedulerRunOutcome,
   SchedulerRunResultSummary,
+  SchedulerRunStageSummary,
   SchedulerRunStatus,
   SchedulerTask,
   SchedulerTaskKey,
@@ -74,6 +75,7 @@ export interface SchedulerTaskView extends SchedulerTask {
 export interface SchedulerDailyStatView extends Omit<SchedulerDailyStat, 'last_message' | 'last_detail_json'> {
   last_outcome: SchedulerRunOutcome;
   last_result_summary: SchedulerRunResultSummary | null;
+  last_stage_summary: SchedulerRunStageSummary | null;
 }
 
 const TASK_DESCRIPTIONS: Record<SchedulerTaskKey, string> = {
@@ -391,6 +393,7 @@ function presentDailyStat(item: SchedulerDailyStat): SchedulerDailyStatView {
     ...publicItem,
     last_outcome: run.outcome,
     last_result_summary: run.result_summary,
+    last_stage_summary: run.stage_summary,
   };
 }
 

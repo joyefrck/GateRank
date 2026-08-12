@@ -124,6 +124,10 @@ test('manual performance job dispatches uniquely keyed mainland jobs and reports
       dispatchAirport: async (airportId: number, date: string, source: string) => {
         dispatchCalls.push([airportId, date, source]);
         return {
+          airport_count: 1,
+          success_count: 1,
+          failure_count: 0,
+          skipped_count: 0,
           created: 2,
           shadow: 2,
           official: 0,

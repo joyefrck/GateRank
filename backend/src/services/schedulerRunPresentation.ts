@@ -3,6 +3,7 @@ import type {
   SchedulerRunFailureDetail,
   SchedulerRunOutcome,
   SchedulerRunResultSummary,
+  SchedulerRunStageSummary,
   SchedulerRunView,
 } from '../types/domain';
 
@@ -19,6 +20,7 @@ export function presentSchedulerRun(run: SchedulerRun): SchedulerRunView {
     ...run,
     outcome: resolveOutcome(run, resultSummary),
     result_summary: resultSummary,
+    stage_summary: buildStageSummary(run),
   };
 }
 
@@ -38,6 +40,48 @@ function buildResultSummary(run: SchedulerRun): SchedulerRunResultSummary | null
   };
 }
 
+function buildStageSummary(run: SchedulerRun): SchedulerRunStageSummary | null {
+  if (run.task_key !== 'performance') {
+    return null;
+  }
+  const detail = run.detail_json || {};
+  const central = toStructuredSummary(detail.central_collection);
+  const regional = toStructuredSummary(detail.regional_dispatch);
+  if (!central && !regional) {
+    return null;
+  }
+  const regionalDetail = objectValue(detail.regional_dispatch);
+  return {
+    central_collection: central,
+    regional_dispatch: regional,
+    regional_job_count: toNonNegativeInteger(regionalDetail.created) ?? 0,
+  };
+}
+
+function toStructuredSummary(value: unknown): SchedulerRunResultSummary | null {
+  const detail = objectValue(value);
+  const counts = toCounts(
+    detail.airport_count,
+    detail.success_count,
+    detail.failure_count,
+    detail.skipped_count ?? 0,
+  );
+  if (!counts || !validCounts(counts)) {
+    return null;
+  }
+  const failures = Array.isArray(detail.failures)
+    ? detail.failures.map(toFailureDetail).filter((item): item is SchedulerRunFailureDetail => item !== null)
+    : [];
+  return {
+    total_count: counts.total,
+    success_count: counts.success,
+    failure_count: counts.failure,
+    skipped_count: counts.skipped,
+    failures: failures.slice(0, counts.failure),
+    missing_failure_detail_count: Math.max(0, counts.failure - failures.length),
+  };
+}
+
 function extractCounts(run: SchedulerRun): BatchCounts | null {
   const detail = run.detail_json || {};
   if (run.task_key === 'stability' || run.task_key === 'performance' || run.task_key === 'network_coverage') {
@@ -45,7 +89,7 @@ function extractCounts(run: SchedulerRun): BatchCounts | null {
       detail.airport_count,
       detail.success_count,
       detail.failure_count,
-      0,
+      detail.skipped_count ?? 0,
     );
     return structured || parseRatioCounts(readSummary(run));
   }
@@ -99,7 +143,7 @@ function toFailureDetail(value: unknown): SchedulerRunFailureDetail | null {
   }
   const row = value as Record<string, unknown>;
   const airportId = toOptionalNonNegativeInteger(row.airport_id);
-  const rawError = String(row.error || '').trim();
+  const rawError = String(row.error || row.error_code || '').trim();
   if (!rawError) {
     return null;
   }
@@ -112,11 +156,11 @@ function toFailureDetail(value: unknown): SchedulerRunFailureDetail | null {
 }
 
 function parseRatioCounts(value: string): BatchCounts | null {
-  const match = value.match(/(\d+)\s*\/\s*(\d+)\s+succeeded,\s*(\d+)\s+failed/i);
+  const match = value.match(/(\d+)\s*\/\s*(\d+)\s+succeeded,\s*(\d+)\s+failed(?:,\s*(\d+)\s+skipped)?/i);
   if (!match) {
     return null;
   }
-  return toCounts(match[2], match[1], match[3], 0);
+  return toCounts(match[2], match[1], match[3], match[4] ?? 0);
 }
 
 function parseSimpleCounts(value: string): BatchCounts | null {
@@ -201,6 +245,10 @@ function toOptionalNonNegativeInteger(value: unknown): number | null {
 function nonEmptyString(value: unknown): string | null {
   const text = typeof value === 'string' ? value.trim() : '';
   return text || null;
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
 }
 
 function sanitizeSchedulerDetail(value: string): string {

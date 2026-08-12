@@ -173,6 +173,10 @@ export class SchedulerTaskExecutor {
       } catch (error) {
         this.logger.error('Regional performance dispatch failed', error);
         regionalDispatch = {
+          airport_count: 1,
+          success_count: 0,
+          failure_count: 1,
+          skipped_count: 0,
           created: 0,
           shadow: 0,
           official: 0,
@@ -181,11 +185,30 @@ export class SchedulerTaskExecutor {
         };
       }
     }
-    const dispatchFailed = Boolean(regionalDispatch?.failures.length);
+    const dispatchFailed = Boolean(
+      regionalDispatch && (regionalDispatch.failure_count > 0 || regionalDispatch.failures.length > 0),
+    );
     const status = result.status === 'succeeded' && !dispatchFailed ? 'succeeded' : 'failed';
     const regionalSummary = regionalDispatch
       ? `，区域任务已排队 ${regionalDispatch.created} 个${dispatchFailed ? `，派发失败 ${regionalDispatch.failures.length} 个` : ''}`
       : '';
+    const regionalFailures = regionalDispatch
+      ? regionalDispatch.failures
+        .map((failure) => toSchedulerFailureDetail({ ...failure, error: failure.error_code }))
+        .filter((failure): failure is SchedulerRunFailureDetail => failure !== null)
+      : [];
+    const primarySummary = regionalDispatch && regionalDispatch.airport_count > 0
+      ? summarizeRegionalDispatch(regionalDispatch)
+      : result.detail;
+    const primaryExecutionSummary = regionalDispatch && regionalDispatch.airport_count > 0
+      ? {
+          airport_count: regionalDispatch.airport_count,
+          success_count: regionalDispatch.success_count,
+          failure_count: regionalDispatch.failure_count,
+          skipped_count: regionalDispatch.skipped_count,
+          failures: regionalFailures,
+        }
+      : result.executionSummary;
     return {
       status,
       message: status === 'succeeded'
@@ -193,8 +216,9 @@ export class SchedulerTaskExecutor {
         : `性能采集失败：${result.detail}${regionalSummary}`,
       detail: {
         stage: 'performance',
-        summary: result.detail,
-        ...(result.executionSummary || {}),
+        summary: primarySummary,
+        ...(primaryExecutionSummary || {}),
+        ...(result.executionSummary ? { central_collection: result.executionSummary } : {}),
         ...(regionalDispatch ? { regional_dispatch: regionalDispatch } : {}),
       },
     };
@@ -655,6 +679,7 @@ interface ScriptExecutionSummary {
   airport_count: number;
   success_count: number;
   failure_count: number;
+  skipped_count: number;
   failures: SchedulerRunFailureDetail[];
 }
 
@@ -668,12 +693,17 @@ function parseScriptExecutionSummary(stdout?: string, stderr?: string): ScriptEx
       airport_count?: unknown;
       success_count?: unknown;
       failure_count?: unknown;
+      skipped_count?: unknown;
+      skipped_airports?: unknown;
       failures?: unknown;
     };
     const airportCount = toNonNegativeInteger(parsed.airport_count);
     const successCount = toNonNegativeInteger(parsed.success_count);
     const failureCount = toNonNegativeInteger(parsed.failure_count);
-    if (airportCount === null || successCount === null || failureCount === null) {
+    const skippedCount = toNonNegativeInteger(
+      parsed.skipped_count ?? (Array.isArray(parsed.skipped_airports) ? parsed.skipped_airports.length : 0),
+    );
+    if (airportCount === null || successCount === null || failureCount === null || skippedCount === null) {
       return null;
     }
     const failures = Array.isArray(parsed.failures)
@@ -683,6 +713,7 @@ function parseScriptExecutionSummary(stdout?: string, stderr?: string): ScriptEx
       airport_count: airportCount,
       success_count: successCount,
       failure_count: failureCount,
+      skipped_count: skippedCount,
       failures,
     };
   } catch {
@@ -691,7 +722,8 @@ function parseScriptExecutionSummary(stdout?: string, stderr?: string): ScriptEx
 }
 
 function summarizeParsedScriptExecution(summary: ScriptExecutionSummary): string {
-  const countSummary = `${summary.success_count}/${summary.airport_count} succeeded, ${summary.failure_count} failed`;
+  const skippedSummary = summary.skipped_count > 0 ? `, ${summary.skipped_count} skipped` : '';
+  const countSummary = `${summary.success_count}/${summary.airport_count} succeeded, ${summary.failure_count} failed${skippedSummary}`;
   const firstFailure = summary.failures[0];
   if (!firstFailure?.error) {
     return countSummary;
@@ -702,12 +734,17 @@ function summarizeParsedScriptExecution(summary: ScriptExecutionSummary): string
   return `${countSummary}; ${label ? `${label}: ` : ''}${firstFailure.error}`;
 }
 
+function summarizeRegionalDispatch(result: PerformanceProbeDispatchResult): string {
+  const skippedSummary = result.skipped_count > 0 ? `, ${result.skipped_count} skipped` : '';
+  return `${result.success_count}/${result.airport_count} dispatched, ${result.failure_count} failed${skippedSummary}`;
+}
+
 function toSchedulerFailureDetail(value: unknown): SchedulerRunFailureDetail | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
   const item = value as Record<string, unknown>;
-  const error = sanitizeSchedulerDetail(String(item.error || '').trim());
+  const error = sanitizeSchedulerDetail(String(item.error || item.error_code || '').trim());
   if (!error) {
     return null;
   }
