@@ -18,6 +18,7 @@ const PERFORMANCE_ENV_KEYS = [
   'SPEED_CONNECTIONS',
   'NODE_AVAILABILITY_CHECK',
   'NIGHTLY_PIPELINE_SCRIPT_TIMEOUT_MS',
+  'SCHEDULER_NETWORK_COVERAGE_SCRIPT_TIMEOUT_MS',
 ] as const;
 
 function createSchedulerTaskExecutor(overrides: Partial<ConstructorParameters<typeof SchedulerTaskExecutor>[0]> = {}) {
@@ -323,6 +324,30 @@ test('SchedulerTaskExecutor.runNetworkCoverageCollection preserves skipped airpo
     airport_name: 'dashbit比特冲刺',
     error: 'subscription_fetch_or_parse_failed',
   }]);
+});
+
+test('SchedulerTaskExecutor.runNetworkCoverageCollection allows long sequential node checks', async () => {
+  await withSchedulerEnv({}, async () => {
+    let capturedTimeout = 0;
+    const executor = createSchedulerTaskExecutor({
+      execFileAsync: async (_file: string, _args: readonly string[], options: ExecOptions) => {
+        capturedTimeout = options.timeout;
+        return {
+          stdout: JSON.stringify({
+            airport_count: 63,
+            success_count: 60,
+            failure_count: 1,
+            skipped_count: 2,
+          }),
+          stderr: '',
+        };
+      },
+    });
+
+    await executor.runNetworkCoverageCollection();
+
+    assert.equal(capturedTimeout, 90 * 60 * 1000);
+  });
 });
 
 test('SchedulerTaskExecutor.runPerformanceCollection injects scheduler-safe probe defaults', async () => {

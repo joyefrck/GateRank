@@ -100,6 +100,7 @@ export class SchedulerTaskExecutor {
   private readonly adminApiKey: string;
   private readonly adminBearerToken: string;
   private readonly scriptTimeoutMs: number;
+  private readonly networkCoverageScriptTimeoutMs: number;
   private readonly airportStatus: string;
   private readonly riskAirportGapMs: number;
   private readonly singBoxBin: string;
@@ -117,6 +118,10 @@ export class SchedulerTaskExecutor {
     this.adminBearerToken = process.env.ADMIN_BEARER_TOKEN
       || (authConfig.jwtSecret ? signAdminToken(authConfig.jwtSecret, authConfig.tokenTtlHours).token : '');
     this.scriptTimeoutMs = maxNumber(process.env.NIGHTLY_PIPELINE_SCRIPT_TIMEOUT_MS, 30 * 60 * 1000);
+    this.networkCoverageScriptTimeoutMs = maxNumber(
+      process.env.SCHEDULER_NETWORK_COVERAGE_SCRIPT_TIMEOUT_MS,
+      Math.max(this.scriptTimeoutMs, 90 * 60 * 1000),
+    );
     this.airportStatus = (process.env.NIGHTLY_PIPELINE_AIRPORT_STATUS || '').trim();
     this.riskAirportGapMs = maxNumber(process.env.NIGHTLY_PIPELINE_RISK_AIRPORT_GAP_MS, 1_500);
     this.singBoxBin = resolveBinaryPath('sing-box', process.env.SING_BOX_BIN);
@@ -511,13 +516,16 @@ export class SchedulerTaskExecutor {
     if (stage === 'performance') {
       applyMissingEnvDefaults(env, SCHEDULER_PERFORMANCE_ENV_DEFAULTS);
     }
+    const timeoutMs = stage === 'network_coverage'
+      ? this.networkCoverageScriptTimeoutMs
+      : this.scriptTimeoutMs;
 
     try {
       const { stdout, stderr } = await this.execFileFn(this.pythonBin, [scriptPath], {
         cwd: this.repoRoot,
         env,
         maxBuffer: 10 * 1024 * 1024,
-        timeout: this.scriptTimeoutMs,
+        timeout: timeoutMs,
       });
       const executionSummary = parseScriptExecutionSummary(stdout, stderr);
       const detail = executionSummary
@@ -530,7 +538,7 @@ export class SchedulerTaskExecutor {
       const executionSummary = parseScriptExecutionSummary(execError?.stdout, execError?.stderr);
       const detail = executionSummary
         ? summarizeParsedScriptExecution(executionSummary)
-        : summarizeScriptFailure(error, this.singBoxBin, this.scriptTimeoutMs);
+        : summarizeScriptFailure(error, this.singBoxBin, timeoutMs);
       this.logger.error(`[scheduler] ${stage} stage failed`, error);
       return { stage, status: 'failed', detail, executionSummary: executionSummary || undefined };
     }
