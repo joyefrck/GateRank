@@ -305,7 +305,7 @@ interface RechargeOrderRecord {
 
 interface WalletTransactionRecord {
   id: number;
-  transaction_type: 'recharge' | 'click_charge' | 'adjustment';
+  transaction_type: 'recharge' | 'click_charge' | 'ad_campaign_charge' | 'adjustment';
   amount: number;
   balance_after: number;
   reference_type: string | null;

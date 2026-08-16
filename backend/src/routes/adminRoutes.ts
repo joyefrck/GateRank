@@ -227,7 +227,7 @@ interface AdminDeps {
       airportId: number,
       page?: number,
       pageSize?: number,
-      transactionType?: WalletTransactionType,
+      transactionTypes?: readonly WalletTransactionType[],
     ): Promise<{ items: WalletTransactionView[]; total: number }>;
     addWalletBalanceAdjustment?(input: {
       airport_id: number;
@@ -1697,7 +1697,12 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       if (!billingRepository?.listWalletTransactionsByAirportId) {
         throw new Error('applicantBillingRepository.listWalletTransactionsByAirportId is not configured');
       }
-      const result = await billingRepository.listWalletTransactionsByAirportId(airportId, page, pageSize, 'click_charge');
+      const result = await billingRepository.listWalletTransactionsByAirportId(
+        airportId,
+        page,
+        pageSize,
+        ['click_charge', 'ad_campaign_charge'],
+      );
       res.json({
         page,
         page_size: pageSize,

@@ -1104,11 +1104,13 @@ export class ApplicantBillingRepository {
     airportId: number,
     page = 1,
     pageSize = 20,
-    transactionType?: WalletTransactionType,
+    transactionTypes?: readonly WalletTransactionType[],
   ): Promise<PaginatedBillingRecords<WalletTransactionView>> {
     const offset = (page - 1) * pageSize;
-    const typeFilter = transactionType ? ' AND t.transaction_type = ?' : '';
-    const params = transactionType ? [airportId, transactionType] : [airportId];
+    const typeFilter = transactionTypes?.length
+      ? ` AND t.transaction_type IN (${transactionTypes.map(() => '?').join(', ')})`
+      : '';
+    const params = transactionTypes?.length ? [airportId, ...transactionTypes] : [airportId];
     const [[countRow], [rows]] = await Promise.all([
       this.pool.query<Array<RowDataPacket & { total: number }>>(
         `SELECT COUNT(*) AS total

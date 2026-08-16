@@ -2405,8 +2405,8 @@ test('GET /airports/:id/recharge-orders returns paginated recharge records', asy
   }
 });
 
-test('GET /airports/:id/wallet-transactions returns paginated click charge records only', async () => {
-  const calls: Array<{ airportId: number; page?: number; pageSize?: number; transactionType?: string }> = [];
+test('GET /airports/:id/wallet-transactions returns paginated business consumption records', async () => {
+  const calls: Array<{ airportId: number; page?: number; pageSize?: number; transactionTypes?: readonly string[] }> = [];
   const app = express();
   app.use(express.json());
   app.use(
@@ -2415,16 +2415,26 @@ test('GET /airports/:id/wallet-transactions returns paginated click charge recor
       airportApplicationRepository: stubAirportApplicationRepository(),
       applicantBillingRepository: {
         linkAirportByApplicationId: async () => undefined,
-        listWalletTransactionsByAirportId: async (airportId, page, pageSize, transactionType) => {
-          calls.push({ airportId, page, pageSize, transactionType });
+        listWalletTransactionsByAirportId: async (airportId, page, pageSize, transactionTypes) => {
+          calls.push({ airportId, page, pageSize, transactionTypes });
           return {
-            total: 1,
+            total: 2,
             items: [
+              {
+                id: 12,
+                transaction_type: 'ad_campaign_charge',
+                amount: -1200,
+                balance_after: 99.4,
+                reference_type: 'ad_campaign',
+                reference_id: 'campaign-charge-1',
+                description: '优惠活动投放扣费 ¥1200.00（1个月）',
+                created_at: '2026-05-10T12:01:00+08:00',
+              },
               {
                 id: 11,
                 transaction_type: 'click_charge',
                 amount: -0.6,
-                balance_after: 99.4,
+                balance_after: 1299.4,
                 reference_type: 'outbound_click',
                 reference_id: 'click-1',
                 description: '官网点击扣费',
@@ -2463,14 +2473,19 @@ test('GET /airports/:id/wallet-transactions returns paginated click charge recor
     const port = (server.address() as AddressInfo).port;
     const response = await fetch(`http://127.0.0.1:${port}/airports/1/wallet-transactions?page=3&page_size=5`);
     assert.equal(response.status, 200);
-    assert.deepEqual(calls, [{ airportId: 1, page: 3, pageSize: 5, transactionType: 'click_charge' }]);
+    assert.deepEqual(calls, [{
+      airportId: 1,
+      page: 3,
+      pageSize: 5,
+      transactionTypes: ['click_charge', 'ad_campaign_charge'],
+    }]);
     const data = (await response.json()) as {
       total: number;
       items: Array<{ transaction_type: string; reference_id: string }>;
     };
-    assert.equal(data.total, 1);
-    assert.deepEqual(data.items.map((item) => item.transaction_type), ['click_charge']);
-    assert.equal(data.items[0]?.reference_id, 'click-1');
+    assert.equal(data.total, 2);
+    assert.deepEqual(data.items.map((item) => item.transaction_type), ['ad_campaign_charge', 'click_charge']);
+    assert.equal(data.items[0]?.reference_id, 'campaign-charge-1');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

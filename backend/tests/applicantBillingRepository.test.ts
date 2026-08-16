@@ -159,6 +159,57 @@ test('ApplicantBillingRepository.countClicksForDate counts applicant clicks for 
   assert.deepEqual(calls[0]!.params, [2, '2026-05-16']);
 });
 
+test('ApplicantBillingRepository.listWalletTransactionsByAirportId filters multiple business consumption types', async () => {
+  const calls: Array<{ sql: string; params?: unknown[] }> = [];
+  const repository = new ApplicantBillingRepository({
+    query: async (sql: string, params?: unknown[]) => {
+      calls.push({ sql, params });
+      if (sql.includes('COUNT(*)')) {
+        return [[{ total: 2 }]];
+      }
+      return [[
+        {
+          id: 12,
+          transaction_type: 'ad_campaign_charge',
+          amount: -1200,
+          balance_after: 98.8,
+          reference_type: 'ad_campaign',
+          reference_id: 'campaign-charge-1',
+          description: '优惠活动投放扣费 ¥1200.00（1个月）',
+          created_at: '2026-05-10 12:01:00',
+        },
+        {
+          id: 11,
+          transaction_type: 'click_charge',
+          amount: -0.6,
+          balance_after: 1298.8,
+          reference_type: 'outbound_click',
+          reference_id: 'click-1',
+          description: '官网点击扣费',
+          created_at: '2026-05-10 12:00:00',
+        },
+      ]];
+    },
+  } as never);
+
+  const result = await repository.listWalletTransactionsByAirportId(
+    83,
+    3,
+    5,
+    ['click_charge', 'ad_campaign_charge'],
+  );
+
+  assert.equal(result.total, 2);
+  assert.deepEqual(result.items.map((item) => item.transaction_type), ['ad_campaign_charge', 'click_charge']);
+  assert.equal(calls.length, 2);
+  for (const call of calls) {
+    assert.match(call.sql, /t\.transaction_type IN \(\?, \?\)/);
+    assert.doesNotMatch(call.sql, /transaction_type = \?/);
+  }
+  assert.deepEqual(calls[0]!.params, [83, 'click_charge', 'ad_campaign_charge']);
+  assert.deepEqual(calls[1]!.params, [83, 'click_charge', 'ad_campaign_charge', 5, 10]);
+});
+
 test('ApplicantBillingRepository.addWalletBalanceAdjustment creates internal wallet before adjustment when missing', async () => {
   const calls: Array<{ kind: 'query' | 'execute' | 'begin' | 'commit' | 'rollback' | 'release'; sql?: string; params?: unknown[] }> = [];
   let walletLookupCount = 0;
