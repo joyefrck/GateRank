@@ -5395,7 +5395,7 @@ function ReportRegionGroup({ regions, className = '' }: { regions: ReportViewRes
         <h3 className="text-sm font-black text-slate-950">节点覆盖</h3>
       </div>
       <div className="space-y-2">
-        {regions.length > 0 ? regions.slice(0, 5).map((region) => (
+        {regions.length > 0 ? regions.slice(0, 14).map((region) => (
           <CapabilityLine
             key={region.key}
             capabilityKey={region.key}
@@ -5404,7 +5404,7 @@ function ReportRegionGroup({ regions, className = '' }: { regions: ReportViewRes
           />
         )) : <EmptyCapabilityLine />}
       </div>
-      {regions.length > 5 ? <div className="mt-3 text-xs font-bold text-slate-400">另有 {regions.length - 5} 个地区</div> : null}
+      {regions.length > 14 ? <div className="mt-3 text-xs font-bold text-slate-400">另有 {regions.length - 14} 个地区</div> : null}
     </div>
   );
 }

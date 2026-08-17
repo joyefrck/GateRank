@@ -2186,6 +2186,25 @@ const reportView: ReportView = {
   },
 };
 
+test('SSR report node coverage shows fourteen regions and summarizes the remainder', () => {
+  const regions = Array.from({ length: 15 }, (_, index) => ({
+    key: `region_${index + 1}`,
+    label: `测试地区${index + 1}`,
+    node_count: index + 1,
+    line_types: [],
+    has_residential: false,
+    has_native_ip: false,
+  }));
+  const html = renderReportPublicPage('https://gate-rank.com', {
+    ...reportView,
+    capabilities: { ...reportView.capabilities, regions },
+  });
+
+  assert.match(html, /测试地区14 · 14 节点/);
+  assert.doesNotMatch(html, /测试地区15 · 15 节点/);
+  assert.match(html, /另有 1 个地区/);
+});
+
 test('SSR report renders v2 five-axis network coverage without changing v1 history', () => {
   const v2View: ReportView = {
     ...reportView,

@@ -57,6 +57,7 @@ const REGION_DEFINITIONS: readonly RegionDefinition[] = [
   { code: 'HK', name: '香港', group: 'core', aliases: ['hk', 'hong kong', 'hongkong', '香港', '港', '🇭🇰'] },
   { code: 'US', name: '美国', group: 'core', aliases: ['us', 'usa', 'america', 'united states', '美国', '美國', '洛杉矶', '洛杉磯', '硅谷', '西雅图', '西雅圖', '纽约', '紐約', '🇺🇸'] },
   { code: 'TW', name: '台湾', group: 'extended', aliases: ['tw', 'taiwan', 'taipei', '台湾', '台灣', '台北', '🇹🇼'] },
+  { code: 'MO', name: '澳门', group: 'extended', aliases: ['mo', 'macau', 'macao', '澳门', '澳門', '🇲🇴'] },
   { code: 'GB', name: '英国', group: 'extended', aliases: ['gb', 'uk', 'united kingdom', 'england', 'london', '英国', '英國', '伦敦', '倫敦', '🇬🇧'] },
   { code: 'DE', name: '德国', group: 'extended', aliases: ['de', 'germany', 'frankfurt', '德国', '德國', '法兰克福', '法蘭克福', '🇩🇪'] },
   { code: 'CA', name: '加拿大', group: 'extended', aliases: ['ca', 'canada', 'toronto', 'vancouver', '加拿大', '多伦多', '多倫多', '温哥华', '溫哥華', '🇨🇦'] },

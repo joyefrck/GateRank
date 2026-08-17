@@ -1310,7 +1310,7 @@ function renderCapabilityLine(
 }
 
 function renderRegionGroup(view: ReportView): string {
-  const regions = view.capabilities.regions.slice(0, 5);
+  const regions = view.capabilities.regions.slice(0, 14);
   return `
     <article class="capability-card">
       <h3>节点覆盖</h3>
@@ -1319,7 +1319,7 @@ function renderRegionGroup(view: ReportView): string {
           ? regions.map((region) => renderCapabilityLine(region, 'region', formatReportRegionLabel(region))).join('')
           : '<p class="muted">未收录</p>'}
       </div>
-      ${view.capabilities.regions.length > 5 ? `<div class="capability-footnote">另有 ${view.capabilities.regions.length - 5} 个地区</div>` : ''}
+      ${view.capabilities.regions.length > 14 ? `<div class="capability-footnote">另有 ${view.capabilities.regions.length - 14} 个地区</div>` : ''}
     </article>
   `;
 }

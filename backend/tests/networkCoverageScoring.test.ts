@@ -20,6 +20,13 @@ test('network coverage region classifier recognizes core, extended, flag and unk
   assert.equal(classifyNetworkCoverageRegion('韩国-标准套餐01').region_code, 'KR');
   assert.equal(classifyNetworkCoverageRegion('套餐到期：长期有效 UK').region_code, 'UNKNOWN');
   assert.equal(classifyNetworkCoverageRegion('London UK-01').region_code, 'GB');
+  for (const name of ['澳门专线 01', '澳門 IPLC 02', 'Macau Premium', 'Macao-01', 'MO-01', '🇲🇴 澳门']) {
+    assert.deepEqual(classifyNetworkCoverageRegion(name), {
+      region_code: 'MO', region_name: '澳门', region_group: 'extended',
+    });
+  }
+  assert.equal(classifyNetworkCoverageRegion('澳大利亚 Sydney 01').region_code, 'AU');
+  assert.equal(classifyNetworkCoverageRegion('澳洲 01').region_code, 'AU');
 });
 
 test('network coverage scoring tables preserve every documented boundary', () => {

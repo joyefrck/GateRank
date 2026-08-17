@@ -105,6 +105,17 @@ test('React report exposes only a restrained regional review notice', async () =
   assert.doesNotMatch(metricsSource, /作弊|造假/);
 });
 
+test('React report node coverage shows at most fourteen regions', async () => {
+  const source = await readFile(path.join(process.cwd(), 'src/App.tsx'), 'utf8');
+  const start = source.indexOf('function ReportRegionGroup');
+  const end = source.indexOf('function formatReportRegionLabel', start);
+  const regionGroupSource = source.slice(start, end);
+
+  assert.match(regionGroupSource, /regions\.slice\(0, 14\)/);
+  assert.match(regionGroupSource, /regions\.length > 14/);
+  assert.match(regionGroupSource, /regions\.length - 14/);
+});
+
 test('React methodology exposes evaluation principles without model parameters', async () => {
   const contentSource = await readFile(path.join(process.cwd(), 'src/pages/methodology/content.ts'), 'utf8');
   const pageSource = await readFile(path.join(process.cwd(), 'src/pages/methodology/MethodologyPage.tsx'), 'utf8');
