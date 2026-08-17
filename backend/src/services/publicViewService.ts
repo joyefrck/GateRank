@@ -36,6 +36,7 @@ import {
 } from '../utils/time';
 import { buildRiskReasonSummary } from '../utils/risk';
 import { isInformationalNodeName } from '../utils/informationalNode';
+import { findNodeRegionDefinition, REPORT_NODE_REGION_DEFINITIONS } from '../utils/nodeRegion';
 import { buildTodayPickRows, isTodayPickEligible, type RankedAirportInput } from './rankingService';
 import { DEFAULT_HOME_SECTION_LIMITS, type HomeSectionLimits } from './marketingSettingsService';
 import { buildAirportReportPath, buildAirportSlugCandidate } from '../../../shared/publicSeo';
@@ -1201,34 +1202,6 @@ const IMPORT_METHOD_LABELS: Record<string, string> = {
   tutorials: '教程支持',
 };
 
-const REGION_LABELS: Record<string, string> = {
-  hong_kong: '香港',
-  taiwan: '台湾',
-  japan: '日本',
-  singapore: '新加坡',
-  united_states: '美国',
-  south_korea: '韩国',
-  united_kingdom: '英国',
-  germany: '德国',
-  turkey: '土耳其',
-  argentina: '阿根廷',
-  india: '印度',
-};
-
-const REGION_ALIASES: Record<string, string[]> = {
-  hong_kong: ['hong_kong', 'hong kong', 'hk', '香港'],
-  taiwan: ['taiwan', 'tw', '台湾', '臺灣'],
-  japan: ['japan', 'jp', '日本'],
-  singapore: ['singapore', 'sg', '新加坡'],
-  united_states: ['united_states', 'united states', 'us', 'usa', '美国', '美國'],
-  south_korea: ['south_korea', 'south korea', 'kr', 'korea', 'seoul', '韩国', '韓國', '首尔', '首爾'],
-  united_kingdom: ['united_kingdom', 'united kingdom', 'uk', 'gb', 'england', 'london', '英国', '英國', '伦敦', '倫敦'],
-  germany: ['germany', 'de', '德国', '德國'],
-  turkey: ['turkey', 'tr', '土耳其'],
-  argentina: ['argentina', 'ar', '阿根廷'],
-  india: ['india', 'in', '印度'],
-};
-
 const LINE_TYPE_LABELS: Record<string, string> = {
   iepl: 'IEPL',
   iplc: 'IPLC',
@@ -1318,8 +1291,9 @@ function buildRegionCapabilities(
   nodeCounts: Record<string, number> = {},
 ): ReportCapabilities['regions'] {
   const source = values || {};
-  return Object.entries(REGION_LABELS)
-    .map(([key, label]) => {
+  return REPORT_NODE_REGION_DEFINITIONS
+    .map((definition) => {
+      const key = definition.reportKey;
       const region = source[key as keyof typeof source];
       const nodeCount = nodeCounts[key] || 0;
       if (nodeCount <= 0) {
@@ -1330,7 +1304,7 @@ function buildRegionCapabilities(
         : [];
       return {
         key,
-        label,
+        label: definition.name,
         node_count: nodeCount,
         line_types: lineTypes,
         has_residential: region?.has_residential ?? null,
@@ -1346,34 +1320,12 @@ function buildRegionNodeCounts(snapshot: SubscriptionNodeSnapshot | null): Recor
     if (isInformationalNodeName(node.name)) {
       continue;
     }
-    const key = normalizeReportRegionKey(node.region || node.name);
-    if (key) {
-      counts[key] = (counts[key] || 0) + 1;
+    const definition = findNodeRegionDefinition(`${node.region || ''} ${node.name}`);
+    if (definition) {
+      counts[definition.reportKey] = (counts[definition.reportKey] || 0) + 1;
     }
   }
   return counts;
-}
-
-function normalizeReportRegionKey(value: string | null | undefined): string | null {
-  const normalized = String(value || '').trim().toLowerCase();
-  if (!normalized) {
-    return null;
-  }
-  return Object.entries(REGION_ALIASES).find(([, aliases]) => (
-    aliases.some((alias) => matchesReportRegionAlias(normalized, alias))
-  ))?.[0] || null;
-}
-
-function matchesReportRegionAlias(normalizedValue: string, alias: string): boolean {
-  const normalizedAlias = alias.toLowerCase();
-  if (normalizedAlias.length <= 3 && /^[a-z0-9]+$/.test(normalizedAlias)) {
-    return new RegExp(`(^|[^a-z])${escapeRegExp(normalizedAlias)}($|[^a-z])`).test(normalizedValue);
-  }
-  return normalizedValue.includes(normalizedAlias);
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function mergeHomeSectionItems(limit: number, ...groups: PublicCardItem[][]): PublicCardItem[] {

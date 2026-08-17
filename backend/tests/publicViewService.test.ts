@@ -2475,7 +2475,7 @@ test('PublicViewService.getReportView does not classify normal airport as risk a
   assert.equal(result.capabilities.telegram.group_member_count, 1600);
 });
 
-test('PublicViewService.getReportView includes latest snapshot node counts as region coverage', async () => {
+test('PublicViewService.getReportView includes every recognized latest-snapshot region without prefix collisions', async () => {
   const service = new PublicViewService({
     airportRepository: {
       getById: async () => ({
@@ -2579,16 +2579,26 @@ test('PublicViewService.getReportView includes latest snapshot node counts as re
         source: 'test',
         subscription_url: null,
         subscription_format: 'clash_yaml',
-        parsed_nodes_count: 7,
-        supported_nodes_count: 7,
+        parsed_nodes_count: 46,
+        supported_nodes_count: 46,
         nodes: [
-          { name: 'HK-1', region: 'HK', type: 'vless', outbound: {}, raw_uri: '' },
-          { name: '香港 2', region: null, type: 'vless', outbound: {}, raw_uri: '' },
-          { name: 'SG-1', region: 'SG', type: 'vless', outbound: {}, raw_uri: '' },
-          { name: 'US-1', region: 'US', type: 'vless', outbound: {}, raw_uri: '' },
-          { name: '韩国-标准套餐01', region: 'KR', type: 'vmess', outbound: {}, raw_uri: '' },
-          { name: 'Unknown-1', region: 'Mars', type: 'vless', outbound: {}, raw_uri: '' },
+          ...[
+            '🇭🇰HK-香港', '🇹🇼TW-台湾', '🇲🇴MO-澳门', '🇯🇵JP-日本', '🇸🇬SG-新加坡',
+            '🇺🇸US-美国', '🇰🇷KR-韩国', '🇬🇧GB-英国', '🇩🇪DE-德国', '🇹🇷TR-土耳其',
+            '🇮🇩IDR-印度尼西亚', '🇹🇭TH-泰国', '🇵🇭PH-菲律宾', '🇲🇾MY-马来西亚',
+            '🇻🇳VN-越南', '🇦🇺AU-澳大利亚', '🇨🇦CA-加拿大', '🇧🇷BR-巴西',
+            '🇨🇱CL-智利', '🇫🇷FR-法国', '🇮🇹IT-意大利',
+          ].flatMap((name) => [1, 2].map((index) => ({
+            name: `${name}${String(index).padStart(2, '0')}`,
+            region: null,
+            type: 'vmess',
+            outbound: {},
+            raw_uri: '',
+          }))),
           { name: '剩余流量：4763.25 GB', region: 'UK', type: 'vmess', outbound: {}, raw_uri: '' },
+          { name: '套餐到期：长期有效', region: 'US', type: 'vmess', outbound: {}, raw_uri: '' },
+          { name: '官网：https://example.com', region: 'SG', type: 'vmess', outbound: {}, raw_uri: '' },
+          { name: '通知：请勿测速', region: 'JP', type: 'vmess', outbound: {}, raw_uri: '' },
         ],
         unsupported_nodes: [],
         created_at: '2026-03-24T09:00:00+08:00',
@@ -2603,9 +2613,26 @@ test('PublicViewService.getReportView includes latest snapshot node counts as re
     result.capabilities.regions.map((item) => [item.key, item.label, item.node_count, item.line_types]),
     [
       ['hong_kong', '香港', 2, []],
-      ['singapore', '新加坡', 1, []],
-      ['united_states', '美国', 1, []],
-      ['south_korea', '韩国', 1, []],
+      ['taiwan', '台湾', 2, []],
+      ['macau', '澳门', 2, []],
+      ['japan', '日本', 2, ['IEPL']],
+      ['singapore', '新加坡', 2, []],
+      ['united_states', '美国', 2, []],
+      ['south_korea', '韩国', 2, []],
+      ['united_kingdom', '英国', 2, []],
+      ['germany', '德国', 2, []],
+      ['turkey', '土耳其', 2, []],
+      ['indonesia', '印度尼西亚', 2, []],
+      ['thailand', '泰国', 2, []],
+      ['philippines', '菲律宾', 2, []],
+      ['malaysia', '马来西亚', 2, []],
+      ['vietnam', '越南', 2, []],
+      ['australia', '澳大利亚', 2, []],
+      ['canada', '加拿大', 2, []],
+      ['brazil', '巴西', 2, []],
+      ['chile', '智利', 2, []],
+      ['france', '法国', 2, []],
+      ['italy', '意大利', 2, []],
     ],
   );
 });

@@ -27,6 +27,12 @@ test('network coverage region classifier recognizes core, extended, flag and unk
   }
   assert.equal(classifyNetworkCoverageRegion('澳大利亚 Sydney 01').region_code, 'AU');
   assert.equal(classifyNetworkCoverageRegion('澳洲 01').region_code, 'AU');
+  assert.deepEqual(classifyNetworkCoverageRegion('🇮🇩IDR-印度尼西亚01'), {
+    region_code: 'ID', region_name: '印度尼西亚', region_group: 'extended',
+  });
+  assert.deepEqual(classifyNetworkCoverageRegion('🇨🇱CL-智利01'), {
+    region_code: 'CL', region_name: '智利', region_group: 'extended',
+  });
 });
 
 test('network coverage scoring tables preserve every documented boundary', () => {
