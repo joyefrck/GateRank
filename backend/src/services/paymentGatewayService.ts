@@ -252,9 +252,6 @@ export class PaymentGatewayService {
     const requestParams: Record<string, string | number> = {
       pid: usdtConfig.merchant_id,
       order_id: input.out_trade_no,
-      currency: 'cny',
-      token: 'usdt',
-      network: 'tron',
       amount: Number(input.money.toFixed(2)),
       notify_url: input.notify_url,
       redirect_url: input.return_url,

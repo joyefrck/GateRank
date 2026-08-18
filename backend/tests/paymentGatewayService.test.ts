@@ -307,7 +307,7 @@ test('PaymentGatewayService queries an order and verifies the RSA response', asy
   assert.match(requestedBodies[0], /sign_type=RSA/);
 });
 
-test('PaymentGatewayService creates USDT GMPay order with HMAC-SHA256 signature', async () => {
+test('PaymentGatewayService lets GMPay apply its configured payment defaults', async () => {
   const requestedUrls: string[] = [];
   const requestedBodies: Record<string, string | number>[] = [];
   const service = new PaymentGatewayService({
@@ -344,9 +344,9 @@ test('PaymentGatewayService creates USDT GMPay order with HMAC-SHA256 signature'
   assert.equal(requestedUrls[0], 'https://pay-usdt.example.com/payments/gmpay/v1/order/create-transaction');
   assert.equal(requestedBodies[0].pid, '1000');
   assert.equal(requestedBodies[0].order_id, 'gr_9_usdt');
-  assert.equal(requestedBodies[0].currency, 'cny');
-  assert.equal(requestedBodies[0].token, 'usdt');
-  assert.equal(requestedBodies[0].network, 'tron');
+	assert.equal(Object.hasOwn(requestedBodies[0], 'currency'), false);
+	assert.equal(Object.hasOwn(requestedBodies[0], 'token'), false);
+	assert.equal(Object.hasOwn(requestedBodies[0], 'network'), false);
   assert.equal(requestedBodies[0].amount, 12.34);
   assert.equal(requestedBodies[0].notify_url, 'https://api.example.com/api/v1/portal/payment-notify');
   assert.equal(requestedBodies[0].redirect_url, 'https://www.example.com/portal');
@@ -477,9 +477,9 @@ test('PaymentGatewayService verifies current and legacy USDT GMPay notification 
     pid: '1000',
     trade_id: 'gw_1',
     order_id: 'gr_9_usdt',
-    currency: 'cny',
-    token: 'usdt',
-    network: 'tron',
+	currency: 'usd',
+	token: 'usdc',
+	network: 'ethereum',
     amount: '12.34',
     status: 'success',
   };
