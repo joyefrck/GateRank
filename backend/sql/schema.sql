@@ -419,6 +419,7 @@ CREATE TABLE IF NOT EXISTS airport_subscription_node_snapshots (
   subscription_format VARCHAR(64) NULL,
   parsed_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
   supported_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
+  region_counts_json JSON NULL,
   nodes_json JSON NOT NULL,
   unsupported_nodes_json JSON NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,

@@ -1197,6 +1197,7 @@ export interface SubscriptionNodeSnapshot {
   subscription_format: string | null;
   parsed_nodes_count: number;
   supported_nodes_count: number;
+  region_counts?: Record<string, number>;
   nodes: SubscriptionNodeSnapshotNode[];
   unsupported_nodes: SubscriptionNodeSnapshotUnsupportedNode[];
   created_at: string;

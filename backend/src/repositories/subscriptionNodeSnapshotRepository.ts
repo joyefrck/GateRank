@@ -5,6 +5,8 @@ import type {
   SubscriptionNodeSnapshotNode,
   SubscriptionNodeSnapshotUnsupportedNode,
 } from '../types/domain';
+import { isInformationalNodeName } from '../utils/informationalNode';
+import { findNodeRegionDefinition } from '../utils/nodeRegion';
 import { sqlDateTimeToTimezoneIso } from '../utils/time';
 
 interface SubscriptionNodeSnapshotRow extends RowDataPacket {
@@ -16,6 +18,7 @@ interface SubscriptionNodeSnapshotRow extends RowDataPacket {
   subscription_format: string | null;
   parsed_nodes_count: number;
   supported_nodes_count: number;
+  region_counts_json: unknown;
   nodes_json: unknown;
   unsupported_nodes_json: unknown;
   created_at: string;
@@ -35,6 +38,7 @@ export class SubscriptionNodeSnapshotRepository {
         subscription_format VARCHAR(64) NULL,
         parsed_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
         supported_nodes_count INT UNSIGNED NOT NULL DEFAULT 0,
+        region_counts_json JSON NULL,
         nodes_json JSON NOT NULL,
         unsupported_nodes_json JSON NOT NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -43,16 +47,19 @@ export class SubscriptionNodeSnapshotRepository {
         CONSTRAINT fk_subscription_node_snapshots_airport FOREIGN KEY (airport_id) REFERENCES airports(id)
       )`,
     );
+    await this.ensureRegionCountsColumn();
+    await this.backfillLatestRegionCounts();
   }
 
   async insert(input: SubscriptionNodeSnapshotInput): Promise<number> {
     const nodes = normalizeNodes(input.nodes);
     const unsupportedNodes = normalizeUnsupportedNodes(input.unsupported_nodes || []);
+    const regionCounts = buildSubscriptionNodeRegionCounts(nodes);
     const [result] = await this.pool.execute<ResultSetHeader>(
       `INSERT INTO airport_subscription_node_snapshots (
          airport_id, captured_at, source, subscription_url, subscription_format,
-         parsed_nodes_count, supported_nodes_count, nodes_json, unsupported_nodes_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         parsed_nodes_count, supported_nodes_count, region_counts_json, nodes_json, unsupported_nodes_json
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         input.airport_id,
         input.captured_at,
@@ -61,6 +68,7 @@ export class SubscriptionNodeSnapshotRepository {
         input.subscription_format ?? null,
         Math.max(0, Number(input.parsed_nodes_count ?? nodes.length)),
         Math.max(0, Number(input.supported_nodes_count ?? nodes.length)),
+        JSON.stringify(regionCounts),
         JSON.stringify(nodes),
         JSON.stringify(unsupportedNodes),
       ],
@@ -71,7 +79,7 @@ export class SubscriptionNodeSnapshotRepository {
   async getLatestByAirport(airportId: number): Promise<SubscriptionNodeSnapshot | null> {
     const [rows] = await this.pool.query<SubscriptionNodeSnapshotRow[]>(
       `SELECT id, airport_id, captured_at, source, subscription_url, subscription_format,
-              parsed_nodes_count, supported_nodes_count, nodes_json, unsupported_nodes_json, created_at
+              parsed_nodes_count, supported_nodes_count, region_counts_json, nodes_json, unsupported_nodes_json, created_at
          FROM airport_subscription_node_snapshots
         WHERE airport_id = ?
         ORDER BY captured_at DESC, id DESC
@@ -85,13 +93,53 @@ export class SubscriptionNodeSnapshotRepository {
   async getById(snapshotId: number): Promise<SubscriptionNodeSnapshot | null> {
     const [rows] = await this.pool.query<SubscriptionNodeSnapshotRow[]>(
       `SELECT id, airport_id, captured_at, source, subscription_url, subscription_format,
-              parsed_nodes_count, supported_nodes_count, nodes_json, unsupported_nodes_json, created_at
+              parsed_nodes_count, supported_nodes_count, region_counts_json, nodes_json, unsupported_nodes_json, created_at
          FROM airport_subscription_node_snapshots
         WHERE id = ?
         LIMIT 1`,
       [snapshotId],
     );
     return rows[0] ? toSubscriptionNodeSnapshot(rows[0]) : null;
+  }
+
+  private async ensureRegionCountsColumn(): Promise<void> {
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT 1
+         FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = 'airport_subscription_node_snapshots'
+          AND COLUMN_NAME = 'region_counts_json'
+        LIMIT 1`,
+    );
+    if (rows.length === 0) {
+      await this.pool.query(
+        'ALTER TABLE airport_subscription_node_snapshots ADD COLUMN region_counts_json JSON NULL AFTER supported_nodes_count',
+      );
+    }
+  }
+
+  private async backfillLatestRegionCounts(): Promise<void> {
+    const [rows] = await this.pool.query<Array<RowDataPacket & { id: number; nodes_json: unknown }>>(
+      `SELECT latest.id, latest.nodes_json
+         FROM airport_subscription_node_snapshots latest
+        WHERE latest.region_counts_json IS NULL
+          AND latest.id = (
+            SELECT candidate.id
+              FROM airport_subscription_node_snapshots candidate
+             WHERE candidate.airport_id = latest.airport_id
+             ORDER BY candidate.captured_at DESC, candidate.id DESC
+             LIMIT 1
+          )`,
+    );
+    for (const row of rows) {
+      const nodes = normalizeNodes(safeJson(row.nodes_json));
+      await this.pool.execute(
+        `UPDATE airport_subscription_node_snapshots
+            SET region_counts_json = ?
+          WHERE id = ? AND region_counts_json IS NULL`,
+        [JSON.stringify(buildSubscriptionNodeRegionCounts(nodes)), Number(row.id)],
+      );
+    }
   }
 }
 
@@ -105,10 +153,27 @@ function toSubscriptionNodeSnapshot(row: SubscriptionNodeSnapshotRow): Subscript
     subscription_format: row.subscription_format,
     parsed_nodes_count: Number(row.parsed_nodes_count),
     supported_nodes_count: Number(row.supported_nodes_count),
+    region_counts: safeRegionCounts(row.region_counts_json),
     nodes: normalizeNodes(safeJson(row.nodes_json)),
     unsupported_nodes: normalizeUnsupportedNodes(safeJson(row.unsupported_nodes_json)),
     created_at: sqlDateTimeToTimezoneIso(row.created_at),
   };
+}
+
+export function buildSubscriptionNodeRegionCounts(
+  nodes: readonly SubscriptionNodeSnapshotNode[],
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const node of nodes) {
+    if (isInformationalNodeName(node.name)) {
+      continue;
+    }
+    const definition = findNodeRegionDefinition(`${node.region || ''} ${node.name}`);
+    if (definition) {
+      counts[definition.code] = (counts[definition.code] || 0) + 1;
+    }
+  }
+  return counts;
 }
 
 function normalizeNodes(value: unknown): SubscriptionNodeSnapshotNode[] {
@@ -161,4 +226,16 @@ function safeJson(value: unknown): unknown {
   } catch {
     return null;
   }
+}
+
+function safeRegionCounts(value: unknown): Record<string, number> {
+  const source = safeJson(value);
+  if (!source || typeof source !== 'object' || Array.isArray(source)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(source)
+      .map(([key, count]) => [key, Math.max(0, Number(count) || 0)] as const)
+      .filter(([, count]) => count > 0),
+  );
 }
