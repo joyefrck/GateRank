@@ -82,13 +82,15 @@ const INDEXABLE_REGION_KEYS = new Set([
   'india',
 ]);
 
-export const AIRPORT_REGION_FILTERS: AirportRegionFilterOption[] = NODE_REGION_CATALOG.map((region) => ({
-  key: region.key,
-  label: region.label,
-  seoLabel: `${region.label}节点`,
-  regionCode: region.code,
-  indexable: INDEXABLE_REGION_KEYS.has(region.key),
-}));
+export const AIRPORT_REGION_FILTERS: AirportRegionFilterOption[] = [...NODE_REGION_CATALOG]
+  .sort((left, right) => left.reportOrder - right.reportOrder)
+  .map((region) => ({
+    key: region.key,
+    label: region.label,
+    seoLabel: `${region.label}节点`,
+    regionCode: region.code,
+    indexable: INDEXABLE_REGION_KEYS.has(region.key),
+  }));
 
 export const AIRPORT_LINE_FILTERS: AirportFilterOption[] = [
   { key: 'iepl', label: 'IEPL', seoLabel: 'IEPL 专线' },

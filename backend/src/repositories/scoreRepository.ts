@@ -21,6 +21,7 @@ import {
   getAirportFilterLabel,
 } from '../../../shared/airportFilterCatalog';
 import { EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../../shared/fullRankingFilters';
+import { AIRPORT_PROFILE_REGION_KEYS } from '../utils/airportProfile';
 
 interface ScoreRow extends RowDataPacket {
   airport_id: number;
@@ -61,6 +62,7 @@ interface PublicFullRankingRow extends RowDataPacket {
   telegram_allows_speaking: number | null;
   has_lifetime_plan: number | null;
   airport_profile_json: unknown;
+  region_counts_json: unknown;
   founded_on: unknown;
   plan_price_month: number;
   has_trial: number;
@@ -113,6 +115,16 @@ const PUBLIC_FULL_RANKING_ORDER_SQL = `
         display_score DESC,
         a.created_at DESC,
         a.id ASC`;
+
+const LATEST_SUBSCRIPTION_NODE_SNAPSHOT_JOIN_SQL = `
+       LEFT JOIN airport_subscription_node_snapshots sns
+         ON sns.id = (
+           SELECT latest_sns.id
+             FROM airport_subscription_node_snapshots latest_sns
+            WHERE latest_sns.airport_id = a.id
+            ORDER BY latest_sns.captured_at DESC, latest_sns.id DESC
+            LIMIT 1
+         )`;
 
 export class ScoreRepository {
   constructor(private readonly pool: Pool) {}
@@ -440,12 +452,14 @@ export class ScoreRepository {
     const safePageSize = Math.min(100, Math.max(1, pageSize));
     const offset = (safePage - 1) * safePageSize;
     const rankingFilters = buildPublicFullRankingFilters(filters);
+    const countSnapshotJoin = filters.region.length > 0 ? LATEST_SUBSCRIPTION_NODE_SNAPSHOT_JOIN_SQL : '';
     const isV2 = scoreRuleVersion === 'v2_spncr';
     const versionExpression = "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.score_rule_version')), 'v1_spcr')";
 
     const [totalRows] = await this.pool.query<Array<RowDataPacket & { total: number }>>(
       `SELECT COUNT(*) AS total
          FROM airports a
+         ${countSnapshotJoin}
         WHERE a.is_listed = 1
           ${rankingFilters.whereSql}`,
       rankingFilters.params,
@@ -466,6 +480,7 @@ export class ScoreRepository {
          a.telegram_allows_speaking,
          a.has_lifetime_plan,
          a.airport_profile_json,
+         sns.region_counts_json,
          a.founded_on,
          a.plan_price_month,
          a.has_trial,
@@ -479,6 +494,7 @@ export class ScoreRepository {
          ) AS display_score,
          (COALESCE(w.balance, 0) < ?) AS score_hidden
        FROM airports a
+       ${LATEST_SUBSCRIPTION_NODE_SNAPSHOT_JOIN_SQL}
        LEFT JOIN applicant_wallets w
          ON w.airport_id = a.id
        LEFT JOIN (
@@ -770,21 +786,22 @@ function addRegionFilter(clauses: string[], values: string[]): void {
   if (values.length === 0) {
     return;
   }
-  clauses.push(`(${values.map((value) => {
-    const path = `$.regions.${value}`;
-    return `(
-      JSON_UNQUOTE(JSON_EXTRACT(a.airport_profile_json, '${path}.has_residential')) = 'true'
-      OR JSON_UNQUOTE(JSON_EXTRACT(a.airport_profile_json, '${path}.has_native_ip')) = 'true'
-      OR COALESCE(JSON_LENGTH(JSON_EXTRACT(a.airport_profile_json, '${path}.line_types')), 0) > 0
-    )`;
-  }).join(' OR ')})`);
+  const regionCodes = values
+    .map((value) => AIRPORT_REGION_FILTERS.find((item) => item.key === value)?.regionCode)
+    .filter((value): value is string => Boolean(value));
+  if (regionCodes.length === 0) {
+    return;
+  }
+  clauses.push(`(${regionCodes.map((code) => (
+    `COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(sns.region_counts_json, '$.${code}')) AS UNSIGNED), 0) > 0`
+  )).join(' OR ')})`);
 }
 
 function addLineFilter(clauses: string[], params: unknown[], values: string[]): void {
   if (values.length === 0) {
     return;
   }
-  const regionKeys = AIRPORT_REGION_FILTERS.map((item) => item.key);
+  const regionKeys = AIRPORT_PROFILE_REGION_KEYS;
   clauses.push(`(${values.map(() => (
     `(${regionKeys.map((regionKey) => (
       `JSON_CONTAINS(COALESCE(JSON_EXTRACT(a.airport_profile_json, '$.regions.${regionKey}.line_types'), JSON_ARRAY()), JSON_QUOTE(?))`
@@ -804,7 +821,10 @@ function buildFullRankingCapabilities(row: PublicFullRankingRow): FullRankingCap
     streaming: toCatalogItems(safeJsonArray(row.streaming_support_json), 'streaming'),
     clients: toBooleanCatalogItems(safeJsonRecord(profile.clients), AIRPORT_CLIENT_FILTERS),
     import_methods: toBooleanCatalogItems(safeJsonRecord(profile.import_methods), AIRPORT_IMPORT_FILTERS),
-    regions: buildFullRankingRegionCapabilities(safeJsonRecord(profile.regions)),
+    regions: buildFullRankingRegionCapabilities(
+      safeJsonRecord(profile.regions),
+      safeJsonRecord(row.region_counts_json),
+    ),
     plan: {
       supports_annual: nullableBoolean(plan.supports_annual) ?? nullableDbBoolean(row.has_annual_plan),
       has_lifetime_plan: nullableBoolean(plan.has_lifetime_plan) ?? nullableDbBoolean(row.has_lifetime_plan),
@@ -834,18 +854,19 @@ function toBooleanCatalogItems(
 
 function buildFullRankingRegionCapabilities(
   source: Record<string, unknown>,
+  regionCounts: Record<string, unknown>,
 ): FullRankingCapabilities['regions'] {
   return AIRPORT_REGION_FILTERS
     .map((option) => {
+      if (Number(regionCounts[option.regionCode] || 0) <= 0) {
+        return null;
+      }
       const region = safeJsonRecord(source[option.key]);
       const lineTypes = safeJsonArray(region.line_types)
         .filter((value) => AIRPORT_LINE_FILTERS.some((item) => item.key === value))
         .map((value) => ({ key: value, label: getAirportFilterLabel('line', value) }));
       const hasResidential = nullableBoolean(region.has_residential);
       const hasNativeIp = nullableBoolean(region.has_native_ip);
-      if (lineTypes.length === 0 && hasResidential !== true && hasNativeIp !== true) {
-        return null;
-      }
       return {
         key: option.key,
         label: option.label,
