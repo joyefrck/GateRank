@@ -1,6 +1,7 @@
 import {
   AIRPORT_FILTER_CATALOG,
   AIRPORT_PRIMARY_INDEXABLE_FILTER_CATEGORIES,
+  getAirportFilterOption,
   getAirportFilterSeoLabel,
   type AirportFilterCategory,
   type AirportPrimaryIndexableFilterCategory,
@@ -137,7 +138,7 @@ export function buildFullRankingPath(filters: FullRankingFilters, input: {
 
 export function getIndexableFullRankingFilterPaths(): string[] {
   return AIRPORT_PRIMARY_INDEXABLE_FILTER_CATEGORIES.flatMap((category) => (
-    AIRPORT_FILTER_CATALOG[category].map((option) => (
+    AIRPORT_FILTER_CATALOG[category].filter((option) => option.indexable !== false).map((option) => (
       buildFullRankingStaticPath(category, option.key)
     ))
   ));
@@ -157,7 +158,9 @@ export function parseFullRankingStaticPath(pathname: string): FullRankingStaticF
     return null;
   }
   const slug = decodeURIComponent(match[2]);
-  const option = AIRPORT_FILTER_CATALOG[category].find((item) => buildFullRankingStaticSlug(item.key) === slug);
+  const option = AIRPORT_FILTER_CATALOG[category].find((item) => (
+    item.indexable !== false && buildFullRankingStaticSlug(item.key) === slug
+  ));
   return option ? { category, value: option.key } : null;
 }
 
@@ -189,18 +192,24 @@ export function getFullRankingSeoDecision(filters: FullRankingFilters, page = 1)
   const basePage = primarySelections.length === 0 && !hasDisqualifyingFilter;
   const singlePrimary = primarySelections.length === 1;
   const primary = singlePrimary ? primarySelections[0] : null;
-  const isIndexable = basePage || (Boolean(primary) && !hasDisqualifyingFilter && page <= 1);
-  const canonicalFilters = primary
-    ? { ...EMPTY_FULL_RANKING_FILTERS, [primary.category]: [primary.value] }
+  const indexablePrimary = primary
+    && getAirportFilterOption(primary.category, primary.value)?.indexable !== false
+    ? primary
+    : null;
+  const isIndexable = basePage || (Boolean(indexablePrimary) && !hasDisqualifyingFilter && page <= 1);
+  const canonicalFilters = indexablePrimary
+    ? { ...EMPTY_FULL_RANKING_FILTERS, [indexablePrimary.category]: [indexablePrimary.value] }
     : { ...EMPTY_FULL_RANKING_FILTERS };
 
   return {
     robots: isIndexable ? 'index,follow,max-image-preview:large' : 'noindex,follow',
     canonicalFilters,
     isIndexable,
-    primaryCategory: primary?.category || null,
-    primaryValue: primary?.value || null,
-    primaryLabel: primary ? getAirportFilterSeoLabel(primary.category, primary.value) : null,
+    primaryCategory: indexablePrimary?.category || null,
+    primaryValue: indexablePrimary?.value || null,
+    primaryLabel: indexablePrimary
+      ? getAirportFilterSeoLabel(indexablePrimary.category, indexablePrimary.value)
+      : null,
   };
 }
 

@@ -1,3 +1,5 @@
+import { NODE_REGION_CATALOG } from './nodeRegionCatalog';
+
 export type AirportFilterCategory =
   | 'payment'
   | 'streaming'
@@ -10,6 +12,11 @@ export interface AirportFilterOption {
   key: string;
   label: string;
   seoLabel: string;
+  indexable?: boolean;
+}
+
+export interface AirportRegionFilterOption extends AirportFilterOption {
+  regionCode: string;
 }
 
 export const AIRPORT_PAYMENT_FILTERS: AirportFilterOption[] = [
@@ -61,19 +68,27 @@ export const AIRPORT_IMPORT_FILTERS: AirportFilterOption[] = [
   { key: 'tutorials', label: '教程支持', seoLabel: '提供教程' },
 ];
 
-export const AIRPORT_REGION_FILTERS: AirportFilterOption[] = [
-  { key: 'hong_kong', label: '香港', seoLabel: '香港节点' },
-  { key: 'taiwan', label: '台湾', seoLabel: '台湾节点' },
-  { key: 'japan', label: '日本', seoLabel: '日本节点' },
-  { key: 'singapore', label: '新加坡', seoLabel: '新加坡节点' },
-  { key: 'united_states', label: '美国', seoLabel: '美国节点' },
-  { key: 'south_korea', label: '韩国', seoLabel: '韩国节点' },
-  { key: 'united_kingdom', label: '英国', seoLabel: '英国节点' },
-  { key: 'germany', label: '德国', seoLabel: '德国节点' },
-  { key: 'turkey', label: '土耳其', seoLabel: '土耳其节点' },
-  { key: 'argentina', label: '阿根廷', seoLabel: '阿根廷节点' },
-  { key: 'india', label: '印度', seoLabel: '印度节点' },
-];
+const INDEXABLE_REGION_KEYS = new Set([
+  'hong_kong',
+  'taiwan',
+  'japan',
+  'singapore',
+  'united_states',
+  'south_korea',
+  'united_kingdom',
+  'germany',
+  'turkey',
+  'argentina',
+  'india',
+]);
+
+export const AIRPORT_REGION_FILTERS: AirportRegionFilterOption[] = NODE_REGION_CATALOG.map((region) => ({
+  key: region.key,
+  label: region.label,
+  seoLabel: `${region.label}节点`,
+  regionCode: region.code,
+  indexable: INDEXABLE_REGION_KEYS.has(region.key),
+}));
 
 export const AIRPORT_LINE_FILTERS: AirportFilterOption[] = [
   { key: 'iepl', label: 'IEPL', seoLabel: 'IEPL 专线' },

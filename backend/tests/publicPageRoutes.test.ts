@@ -1239,6 +1239,35 @@ test('GET /rankings/all noindexes search and combination filters', async () => {
   }
 });
 
+test('GET /rankings/all keeps newly recognized region filters query-only and noindexed', async () => {
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: {
+      ...createPublicViewServiceStub(),
+      getFullRankingView: async (_date: string, _page: number, _pageSize: number, filters): Promise<FullRankingView> => ({
+        ...fullRankingView,
+        filters,
+      }),
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/rankings/all?region=thailand`);
+    assert.equal(response.status, 200);
+    const html = await response.text();
+    assert.match(html, /<meta name="robots" content="noindex,follow"/);
+    assert.match(html, /<link rel="canonical" href="http:\/\/127\.0\.0\.1:\d+\/rankings\/all"/);
+    assert.match(html, /class="filter-chip active" href="\/rankings\/all">泰国<\/a>/);
+
+    const staticResponse = await fetch(`http://127.0.0.1:${port}/rankings/region/thailand`);
+    assert.equal(staticResponse.status, 404);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /rankings static filter rejects unknown slugs', async () => {
   const app = express();
   app.use(createPublicPageRoutes({ publicViewService: createPublicViewServiceStub() }));

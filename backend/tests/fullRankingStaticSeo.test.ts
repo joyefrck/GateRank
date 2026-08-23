@@ -4,9 +4,12 @@ import {
   buildFullRankingPath,
   buildFullRankingStaticPath,
   EMPTY_FULL_RANKING_FILTERS,
+  getIndexableFullRankingFilterPaths,
   parseFullRankingStaticPath,
 } from '../../shared/fullRankingFilters';
 import { buildFullRankingHeading, buildFullRankingSeo } from '../../shared/publicSeo';
+import { AIRPORT_REGION_FILTERS } from '../../shared/airportFilterCatalog';
+import { NODE_REGION_CATALOG } from '../../shared/nodeRegionCatalog';
 
 test('static full ranking filter paths cover priority SEO examples', () => {
   const checks = [
@@ -29,4 +32,24 @@ test('static full ranking filter paths cover priority SEO examples', () => {
     assert.equal(buildFullRankingHeading(filters), heading);
     assert.doesNotMatch(buildFullRankingSeo({ filters }).title, /机场机场/);
   }
+});
+
+test('region filters cover the shared node catalog without indexing newly added long-tail regions', () => {
+  assert.equal(AIRPORT_REGION_FILTERS.length, NODE_REGION_CATALOG.length);
+  assert.equal(new Set(AIRPORT_REGION_FILTERS.map((item) => item.key)).size, NODE_REGION_CATALOG.length);
+  assert.equal(new Set(AIRPORT_REGION_FILTERS.map((item) => item.regionCode)).size, NODE_REGION_CATALOG.length);
+
+  for (const region of NODE_REGION_CATALOG) {
+    const option = AIRPORT_REGION_FILTERS.find((item) => item.key === region.key);
+    assert.deepEqual(
+      option && { code: option.regionCode, label: option.label },
+      { code: region.code, label: region.label },
+    );
+  }
+
+  const thailandFilters = { ...EMPTY_FULL_RANKING_FILTERS, region: ['thailand'] };
+  assert.equal(buildFullRankingPath(thailandFilters), '/rankings/all?region=thailand');
+  assert.equal(parseFullRankingStaticPath('/rankings/region/thailand'), null);
+  assert.ok(!getIndexableFullRankingFilterPaths().includes('/rankings/region/thailand'));
+  assert.ok(getIndexableFullRankingFilterPaths().includes('/rankings/region/turkey'));
 });
