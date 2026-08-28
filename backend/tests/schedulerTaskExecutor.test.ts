@@ -128,6 +128,39 @@ test('SchedulerTaskExecutor.runRiskInspection skips down and unlisted airports',
   assert.deepEqual(result.detail.failures, []);
 });
 
+test('SchedulerTaskExecutor dispatches the ad expiry reminder with the run date and portal URL', async () => {
+  const calls: Array<{ date: string; portalLoginUrl: string }> = [];
+  const executor = createSchedulerTaskExecutor({
+    adExpiryReminderService: {
+      run: async (date, portalLoginUrl) => {
+        calls.push({ date, portalLoginUrl });
+        return {
+          candidate_campaign_count: 3,
+          applicant_count: 2,
+          success_count: 1,
+          failure_count: 1,
+          skipped_count: 0,
+          failures: [{ applicant_account_id: 8, applicant_email: 'other@example.com', error: 'timeout' }],
+        };
+      },
+    },
+    siteOrigin: 'https://gate-rank.com/',
+  });
+
+  const result = await executor.runTask('ad_expiry_reminder', '2026-08-29');
+
+  assert.deepEqual(calls, [{ date: '2026-08-29', portalLoginUrl: 'https://gate-rank.com/portal' }]);
+  assert.equal(result.status, 'failed');
+  assert.equal(result.detail.candidate_campaign_count, 3);
+  assert.equal(result.detail.success_count, 1);
+  assert.equal(result.detail.failure_count, 1);
+  assert.deepEqual(result.detail.failures, [{
+    airport_id: null,
+    airport_name: 'other@example.com',
+    error: 'timeout',
+  }]);
+});
+
 test('SchedulerTaskExecutor.runRiskInspection retains every failed airport detail', async () => {
   const executor = createSchedulerTaskExecutor({
     airportRepository: {

@@ -1511,6 +1511,16 @@ test('PATCH /scheduler/tasks/:taskKey validates schedule_time', async () => {
     const refreshTask = (await refreshResponse.json()) as { task_key: string; schedule_time: string };
     assert.equal(refreshTask.task_key, 'subscription_node_refresh');
     assert.equal(refreshTask.schedule_time, '01:00');
+
+    const reminderResponse = await fetch(`http://127.0.0.1:${port}/scheduler/tasks/ad_expiry_reminder`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ schedule_time: '09:00' }),
+    });
+    assert.equal(reminderResponse.status, 200);
+    const reminderTask = (await reminderResponse.json()) as { task_key: string; schedule_time: string };
+    assert.equal(reminderTask.task_key, 'ad_expiry_reminder');
+    assert.equal(reminderTask.schedule_time, '09:00');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -5489,6 +5499,15 @@ test('PATCH /system-settings/smtp/templates/:key/enabled updates one template sw
     assert.deepEqual(updates, [{ templateKey: 'low_balance_warning', enabled: false, updatedBy: 'tester' }]);
     assert.equal(audits[0]?.action, 'update_system_setting_smtp_template_enabled');
     assert.deepEqual(audits[0]?.payload, { template_key: 'low_balance_warning', enabled: false });
+
+    const reminderResponse = await fetch(`http://127.0.0.1:${port}/system-settings/smtp/templates/ad_expiry_reminder/enabled`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-admin-actor': 'tester' },
+      body: JSON.stringify({ enabled: true }),
+    });
+    assert.equal(reminderResponse.status, 200);
+    assert.deepEqual(updates[1], { templateKey: 'ad_expiry_reminder', enabled: true, updatedBy: 'tester' });
+    assert.deepEqual(audits[1]?.payload, { template_key: 'ad_expiry_reminder', enabled: true });
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

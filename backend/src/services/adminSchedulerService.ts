@@ -87,6 +87,7 @@ const TASK_DESCRIPTIONS: Record<SchedulerTaskKey, string> = {
   aggregate_recompute: '执行全量聚合和时间衰减重算，统一刷新每日分数与榜单。',
   billing_listing_sync: '按余额规则同步公开总分展示、榜单排序和申请人余额提醒状态。',
   stability_resample_guard: '对比当日与上一期稳定性 S 分，差异过大时自动复测一次并刷新聚合重算。',
+  ad_expiry_reminder: '每天上午 9 点检查未来 3 天内到期的广告，按申请人合并发送续费提醒。',
 };
 
 export class AdminSchedulerService {

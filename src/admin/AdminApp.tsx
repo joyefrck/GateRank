@@ -122,7 +122,7 @@ type ProbeScope = 'stability' | 'performance';
 type ManualJobKind = 'full' | 'stability' | 'performance' | 'network_coverage' | 'risk' | 'time_decay';
 type ManualJobStatus = 'queued' | 'running' | 'succeeded' | 'failed';
 type PublishTokenScope = 'news:create' | 'news:update' | 'news:publish' | 'news:archive' | 'news:upload';
-type SchedulerTaskKey = 'stability' | 'subscription_node_refresh' | 'performance' | 'network_coverage' | 'risk' | 'aggregate_recompute' | 'billing_listing_sync' | 'stability_resample_guard';
+type SchedulerTaskKey = 'stability' | 'subscription_node_refresh' | 'performance' | 'network_coverage' | 'risk' | 'aggregate_recompute' | 'billing_listing_sync' | 'stability_resample_guard' | 'ad_expiry_reminder';
 type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
 type SchedulerRunOutcome = SchedulerRunStatus | 'partial';
 type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';
@@ -1120,6 +1120,7 @@ type SmtpTemplateKey =
   | 'applicant_password_reset'
   | 'application_approved'
   | 'application_reply'
+  | 'ad_expiry_reminder'
   | 'low_balance_warning'
   | 'airport_auto_unlisted'
   | 'airport_online';
@@ -1135,6 +1136,7 @@ interface SmtpTemplateMap {
   applicant_password_reset: SmtpTemplateItem;
   application_approved: SmtpTemplateItem;
   application_reply: SmtpTemplateItem;
+  ad_expiry_reminder: SmtpTemplateItem;
   low_balance_warning: SmtpTemplateItem;
   airport_auto_unlisted: SmtpTemplateItem;
   airport_online: SmtpTemplateItem;
@@ -1401,6 +1403,7 @@ const SMTP_TEMPLATE_ORDER: SmtpTemplateKey[] = [
   'applicant_password_reset',
   'application_approved',
   'application_reply',
+  'ad_expiry_reminder',
   'low_balance_warning',
   'airport_auto_unlisted',
   'airport_online',
@@ -1543,6 +1546,25 @@ const SMTP_TEMPLATE_SCENARIOS: Record<
       admin_telegram_username: '@gaterank_admin',
       admin_telegram_url: 'https://t.me/gaterank_admin',
       portal_login_url: 'https://gaterank.example.com/portal',
+      site_name: 'GateRank',
+    },
+  },
+  ad_expiry_reminder: {
+    title: '广告到期提醒邮件',
+    trigger: '广告到期前第 3、2、1 天，北京时间上午 9 点按申请人合并发送。',
+    description: '提醒申请人及时登录后台续费即将到期的广告；同一申请人的多条临期广告合并在一封邮件中。',
+    variables: ['{{campaign_count}}', '{{campaign_items}}', '{{portal_login_url}}', '{{applicant_email}}', '{{site_name}}'],
+    sampleValues: {
+      campaign_count: '2',
+      campaign_items: [
+        '<tr><td style="padding:16px;border:1px solid #e5e5e5;border-radius:12px;background:#fafafa;">',
+        '<strong>大象网络</strong><span style="float:right;color:#dc2626;font-weight:700;">还剩 3 天</span>',
+        '<div style="margin-top:7px;color:#525252;">首页广告位 2</div>',
+        '<div style="margin-top:4px;color:#737373;font-size:13px;">到期时间：2026/09/01 00:02</div>',
+        '</td></tr>',
+      ].join(''),
+      portal_login_url: 'https://gaterank.example.com/portal',
+      applicant_email: 'owner@example.com',
       site_name: 'GateRank',
     },
   },
@@ -5083,7 +5105,7 @@ function SystemSettingsPage() {
               : activeTab === 'payment_gateway'
                 ? '支付配置用于申请人后台下单和支付回调验签，商户号和密钥保存后立即生效。'
                 : activeTab === 'smtp'
-                  ? 'SMTP 配置用于发送申请、审批、余额和总分展示状态提醒邮件。'
+                  ? 'SMTP 配置用于发送申请、审批、广告到期、余额和总分展示状态提醒邮件。'
                   : activeTab === 'x_oauth'
                     ? 'X 登录配置用于申请人后台绑定和 X 一键登录，保存后立即生效。'
                 : activeTab === 'media_libraries'
@@ -6399,6 +6421,24 @@ function getDefaultSmtpTemplates(): SmtpTemplateMap {
         '申请人管理后台：{{portal_login_url}}',
       ].join('\n'),
     },
+    ad_expiry_reminder: {
+      enabled: true,
+      subject: 'GateRank 广告即将到期提醒（共 {{campaign_count}} 项）',
+      body: [
+        '<!doctype html>',
+        '<html lang="zh-CN"><body style="margin:0;padding:0;background:#f5f5f5;color:#171717;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">',
+        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f5f5;padding:32px 16px;"><tr><td align="center">',
+        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #e5e5e5;border-radius:20px;overflow:hidden;"><tr><td style="padding:32px;">',
+        '<div style="font-size:12px;font-weight:700;letter-spacing:.14em;color:#6366f1;text-transform:uppercase;">GateRank</div>',
+        '<h1 style="margin:10px 0 8px;font-size:26px;line-height:1.3;">广告即将到期</h1>',
+        '<p style="margin:0 0 24px;color:#525252;line-height:1.7;">您有 {{campaign_count}} 项广告将在 3 天内到期，请及时续费，避免广告展示中断。</p>',
+        '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0 10px;">{{campaign_items}}</table>',
+        '<div style="margin:26px 0;text-align:center;"><a href="{{portal_login_url}}" style="display:inline-block;padding:13px 22px;border-radius:10px;background:#171717;color:#ffffff;text-decoration:none;font-weight:700;">登录申请人后台</a></div>',
+        '<div style="padding:18px;border:1px solid #e5e5e5;border-radius:14px;background:#fafafa;"><div style="font-weight:700;margin-bottom:10px;">续费操作指引</div><ol style="margin:0;padding-left:20px;color:#525252;line-height:1.8;"><li>登录申请人后台</li><li>打开“广告管理”</li><li>选择对应广告续费并完成支付</li></ol></div>',
+        '<p style="margin:22px 0 0;color:#737373;font-size:13px;line-height:1.6;">申请人账号：{{applicant_email}}。如已完成续费，请忽略本邮件。</p>',
+        '</td></tr></table></td></tr></table></body></html>',
+      ].join(''),
+    },
     low_balance_warning: {
       enabled: true,
       subject: 'GateRank 余额提醒 - {{airport_name}}',
@@ -6517,7 +6557,7 @@ function renderTextTemplatePreview(template: string, values: Record<string, stri
 }
 
 function summarizeTemplateBody(body: string): string {
-  const compact = body.replace(/\s+/g, ' ').trim();
+  const compact = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   if (compact.length <= 80) {
     return compact || '-';
   }
@@ -6687,7 +6727,7 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
     <section className="rounded-2xl border border-neutral-200 bg-white p-5 space-y-5">
       <div>
         <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">邮件配置</div>
-        <p className="mt-1 text-sm text-neutral-500">用于发送申请、审批、余额和总分展示状态提醒邮件。</p>
+        <p className="mt-1 text-sm text-neutral-500">用于发送申请、审批、广告到期、余额和总分展示状态提醒邮件。</p>
       </div>
 
       {loading && <div className="text-sm text-neutral-500">加载中...</div>}
@@ -6867,7 +6907,11 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
                 <section className="mt-5 rounded-2xl border border-neutral-200 bg-neutral-50/70 p-5 space-y-4">
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-[0.18em] text-neutral-500">模板编辑</div>
-                    <p className="mt-1 text-sm text-neutral-500">支持纯文本和变量替换，变量会在发送时注入真实内容。</p>
+                    <p className="mt-1 text-sm text-neutral-500">
+                      {templateEditorKey === 'ad_expiry_reminder'
+                        ? '支持 HTML 模板和变量替换，系统同时发送纯文本备用正文。'
+                        : '支持纯文本和变量替换，变量会在发送时注入真实内容。'}
+                    </p>
                   </div>
                   <FormField label="邮件主题">
                     <input
@@ -6876,7 +6920,12 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
                       onChange={(e) => setTemplateDraft({ ...templateDraft, subject: e.target.value })}
                     />
                   </FormField>
-                  <FormField label="邮件正文" hint="纯文本模板，换行会按原样保留。">
+                  <FormField
+                    label="邮件正文"
+                    hint={templateEditorKey === 'ad_expiry_reminder'
+                      ? 'HTML 模板，建议使用内联样式以兼容主流邮箱。'
+                      : '纯文本模板，换行会按原样保留。'}
+                  >
                     <textarea
                       className="min-h-[220px] w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
                       value={templateDraft.body}
@@ -6920,7 +6969,16 @@ function SmtpSettingsTab({ refreshTick }: { refreshTick: number }) {
                       <p className="mt-1 text-sm text-neutral-500">以下预览使用示例变量渲染，仅用于确认模板内容。</p>
                     </div>
                     <ReadField label="预览主题" value={templatePreview?.subject || '-'} />
-                    <ReadField label="预览正文" value={templatePreview?.body || '-'} />
+                    {templateEditorKey === 'ad_expiry_reminder' ? (
+                      <iframe
+                        title="广告到期提醒邮件 HTML 预览"
+                        sandbox=""
+                        srcDoc={templatePreview?.body || ''}
+                        className="h-[360px] w-full rounded-2xl border border-neutral-200 bg-white"
+                      />
+                    ) : (
+                      <ReadField label="预览正文" value={templatePreview?.body || '-'} />
+                    )}
                   </div>
                 </section>
 
@@ -12221,6 +12279,7 @@ function formatSchedulerTaskLabel(taskKey: SchedulerTaskKey): string {
   if (taskKey === 'risk') return '风险体检';
   if (taskKey === 'billing_listing_sync') return '余额展示同步';
   if (taskKey === 'stability_resample_guard') return '稳定性复测保护';
+  if (taskKey === 'ad_expiry_reminder') return '广告到期提醒';
   return '聚合重算';
 }
 

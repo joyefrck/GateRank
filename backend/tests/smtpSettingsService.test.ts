@@ -29,6 +29,10 @@ test('SmtpSettingsService returns default view', async () => {
   assert.match(view.templates.low_balance_warning.subject, /余额提醒/);
   assert.match(view.templates.airport_auto_unlisted.subject, /余额不足提醒/);
   assert.match(view.templates.airport_online.subject, /余额恢复通知/);
+  assert.equal(view.templates.ad_expiry_reminder.enabled, true);
+  assert.match(view.templates.ad_expiry_reminder.subject, /广告即将到期提醒/);
+  assert.match(view.templates.ad_expiry_reminder.body, /\{\{campaign_items\}\}/);
+  assert.match(view.templates.ad_expiry_reminder.body, /\{\{portal_login_url\}\}/);
   assert.doesNotMatch(view.templates.airport_auto_unlisted.body, /下线|下架|恢复上线/);
 });
 
@@ -81,6 +85,7 @@ test('SmtpSettingsService saves and masks password', async () => {
   assert.match(view.templates.application_approved.subject, /审批通过通知/);
   assert.match(view.templates.application_reply.subject, /入驻申请回复/);
   assert.equal(view.templates.low_balance_warning.enabled, true);
+  assert.equal(view.templates.ad_expiry_reminder.enabled, true);
 });
 
 test('SmtpSettingsService upgrades stored old default application reply template', async () => {

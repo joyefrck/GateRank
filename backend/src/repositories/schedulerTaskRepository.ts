@@ -24,10 +24,11 @@ const DEFAULT_TASKS: Array<Pick<SchedulerTask, 'task_key' | 'name' | 'schedule_t
   { task_key: 'aggregate_recompute', name: '聚合重算', schedule_time: '04:00' },
   { task_key: 'billing_listing_sync', name: '余额展示同步', schedule_time: '03:00' },
   { task_key: 'stability_resample_guard', name: '稳定性复测保护', schedule_time: '06:00' },
+  { task_key: 'ad_expiry_reminder', name: '广告到期提醒', schedule_time: '09:00', enabled_by_default: true },
 ];
 
-const SCHEDULER_TASK_ENUM = "ENUM('stability', 'subscription_node_refresh', 'performance', 'network_coverage', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard')";
-const SCHEDULER_TASK_ORDER = "'stability', 'subscription_node_refresh', 'performance', 'network_coverage', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard'";
+const SCHEDULER_TASK_ENUM = "ENUM('stability', 'subscription_node_refresh', 'performance', 'network_coverage', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard', 'ad_expiry_reminder')";
+const SCHEDULER_TASK_ORDER = "'stability', 'subscription_node_refresh', 'performance', 'network_coverage', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard', 'ad_expiry_reminder'";
 
 export class SchedulerTaskRepository {
   constructor(private readonly pool: Pool) {}

@@ -16,6 +16,7 @@ import { ApplicantTelegramLoginFlowRepository } from './repositories/applicantTe
 import { ApplicantXOAuthFlowRepository } from './repositories/applicantXOAuthFlowRepository';
 import { AirportRepository } from './repositories/airportRepository';
 import { AirportAdCampaignRepository } from './repositories/airportAdCampaignRepository';
+import { AdExpiryReminderRepository } from './repositories/adExpiryReminderRepository';
 import { AirportApplicationRepository } from './repositories/airportApplicationRepository';
 import { ApplicationPaymentOrderRepository } from './repositories/applicationPaymentOrderRepository';
 import { ApplicantBillingRepository } from './repositories/applicantBillingRepository';
@@ -86,6 +87,7 @@ import { AirportDealDetailService } from './services/airportDealDetailService';
 import { RecomputeService } from './services/recomputeService';
 import { RiskCheckService } from './services/riskCheckService';
 import { SmtpSettingsService } from './services/smtpSettingsService';
+import { AdExpiryReminderService } from './services/adExpiryReminderService';
 import { AdminSchedulerService } from './services/adminSchedulerService';
 import { SchedulerTaskExecutor } from './services/schedulerTaskExecutor';
 import { SubscriptionNodeCaptureService } from './services/subscriptionNodeCaptureService';
@@ -103,6 +105,8 @@ export async function createApp() {
   await airportRepository.ensureSchema();
   const airportAdCampaignRepository = new AirportAdCampaignRepository(pool);
   await airportAdCampaignRepository.ensureSchema();
+  const adExpiryReminderRepository = new AdExpiryReminderRepository(pool);
+  await adExpiryReminderRepository.ensureSchema();
   const airportApplicationRepository = new AirportApplicationRepository(pool);
   await airportApplicationRepository.ensureSchema();
   const applicantAccountRepository = new ApplicantAccountRepository(pool);
@@ -195,6 +199,10 @@ export async function createApp() {
   const mailService = new MailService({
     smtpSettingsService,
   });
+  const adExpiryReminderService = new AdExpiryReminderService({
+    repository: adExpiryReminderRepository,
+    mailService,
+  });
   const userTelegramBotSettingsService = new UserTelegramBotSettingsService({
     systemSettingRepository,
   });
@@ -221,6 +229,7 @@ export async function createApp() {
     riskCheckService,
     scoreRepository,
     performanceProbeDispatchService,
+    adExpiryReminderService,
   });
   const adminSchedulerService = new AdminSchedulerService({
     schedulerTaskRepository,

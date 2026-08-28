@@ -30,8 +30,38 @@ function emptyLatestRuns(): Record<SchedulerTaskKey, SchedulerRun | null> {
     billing_listing_sync: null,
     stability_resample_guard: null,
     subscription_node_refresh: null,
+    ad_expiry_reminder: null,
   };
 }
+
+test('AdminSchedulerService describes the ad expiry reminder task', async () => {
+  const tasks = [createTask({ task_key: 'ad_expiry_reminder', name: '广告到期提醒', schedule_time: '09:00' })];
+  const service = new AdminSchedulerService({
+    schedulerTaskRepository: {
+      listAll: async () => tasks,
+      getByKey: async () => tasks[0] || null,
+      update: async () => undefined,
+      markRestarted: async () => undefined,
+    },
+    schedulerRunRepository: {
+      createRunning: async () => ({ id: 1 }),
+      markFinished: async () => undefined,
+      listLatestByTaskKeys: async () => emptyLatestRuns(),
+      listByQuery: async () => ({ items: [], total: 0 }),
+      getDailyStats: async () => [],
+    },
+    schedulerTaskExecutor: {
+      runTask: async () => ({ status: 'succeeded', message: 'ok', detail: {} }),
+    },
+    setTimeoutFn: (() => ({}) as never) as never,
+    clearTimeoutFn: () => undefined,
+  });
+
+  const [view] = await service.listTasks();
+
+  assert.equal(view?.schedule_time, '09:00');
+  assert.match(view?.description || '', /到期|临期|续费/);
+});
 
 test('AdminSchedulerService.startAll only schedules enabled tasks', async () => {
   const tasks = [

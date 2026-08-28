@@ -17,6 +17,7 @@ import {
 } from './userTelegramBotMessageService';
 import { dateDaysAgo } from '../utils/time';
 import type { PerformanceProbeDispatchResult } from './performanceProbeDispatchService';
+import { getSiteOrigin } from '../utils/siteUrl';
 
 const execFileAsync = promisify(execFile);
 const SCHEDULER_PERFORMANCE_ENV_DEFAULTS: Readonly<Record<string, string>> = {
@@ -68,6 +69,17 @@ interface SchedulerTaskExecutorDeps {
   performanceProbeDispatchService?: {
     dispatchAll(date: string, source: string): Promise<PerformanceProbeDispatchResult>;
   };
+  adExpiryReminderService?: {
+    run(date: string, portalLoginUrl: string): Promise<{
+      candidate_campaign_count: number;
+      applicant_count: number;
+      success_count: number;
+      failure_count: number;
+      skipped_count: number;
+      failures: Array<{ applicant_account_id: number; applicant_email: string; error: string }>;
+    }>;
+  };
+  siteOrigin?: string;
   mailService?: BillingMailService;
   userTelegramBotMessageService?: UserTelegramBotBillingNotificationService;
   logger?: LoggerLike;
@@ -105,6 +117,7 @@ export class SchedulerTaskExecutor {
   private readonly riskAirportGapMs: number;
   private readonly singBoxBin: string;
   private readonly runtimePath: string;
+  private readonly siteOrigin: string;
 
   constructor(private readonly deps: SchedulerTaskExecutorDeps) {
     const authConfig = getAdminAuthConfig();
@@ -126,6 +139,7 @@ export class SchedulerTaskExecutor {
     this.riskAirportGapMs = maxNumber(process.env.NIGHTLY_PIPELINE_RISK_AIRPORT_GAP_MS, 1_500);
     this.singBoxBin = resolveBinaryPath('sing-box', process.env.SING_BOX_BIN);
     this.runtimePath = augmentPathWithCommonBinaryDirs(process.env.PATH);
+    this.siteOrigin = (deps.siteOrigin || getSiteOrigin({})).replace(/\/+$/, '');
   }
 
   async runTask(taskKey: SchedulerTaskKey, date: string): Promise<SchedulerTaskExecutionResult> {
@@ -150,7 +164,44 @@ export class SchedulerTaskExecutor {
     if (taskKey === 'stability_resample_guard') {
       return this.runStabilityResampleGuard(date);
     }
+    if (taskKey === 'ad_expiry_reminder') {
+      return this.runAdExpiryReminder(date);
+    }
     return this.runAggregateRecompute(date);
+  }
+
+  async runAdExpiryReminder(date: string): Promise<SchedulerTaskExecutionResult> {
+    if (!this.deps.adExpiryReminderService) {
+      return {
+        status: 'failed',
+        message: '广告到期提醒失败：提醒服务未配置',
+        detail: { stage: 'ad_expiry_reminder', summary: 'service_not_configured' },
+      };
+    }
+    const result = await this.deps.adExpiryReminderService.run(date, `${this.siteOrigin}/portal`);
+    const failures = result.failures.map((failure) => ({
+      airport_id: null,
+      airport_name: failure.applicant_email,
+      error: failure.error,
+    }));
+    const status = result.failure_count > 0 ? 'failed' : 'succeeded';
+    return {
+      status,
+      message: status === 'succeeded'
+        ? `广告到期提醒完成：成功 ${result.success_count}，跳过 ${result.skipped_count}`
+        : `广告到期提醒存在失败：成功 ${result.success_count}，失败 ${result.failure_count}，跳过 ${result.skipped_count}`,
+      detail: {
+        stage: 'ad_expiry_reminder',
+        summary: `候选广告 ${result.candidate_campaign_count}，申请人 ${result.applicant_count}`,
+        candidate_campaign_count: result.candidate_campaign_count,
+        applicant_count: result.applicant_count,
+        total_count: result.applicant_count,
+        success_count: result.success_count,
+        failure_count: result.failure_count,
+        skipped_count: result.skipped_count,
+        failures,
+      },
+    };
   }
 
   async runStabilityCollection(date: string): Promise<SchedulerTaskExecutionResult> {

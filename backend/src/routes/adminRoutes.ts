@@ -3165,10 +3165,11 @@ function toSchedulerTaskKey(value: unknown): SchedulerTaskKey {
     || taskKey === 'aggregate_recompute'
     || taskKey === 'billing_listing_sync'
     || taskKey === 'stability_resample_guard'
+    || taskKey === 'ad_expiry_reminder'
   ) {
     return taskKey;
   }
-  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|subscription_node_refresh|performance|network_coverage|risk|aggregate_recompute|billing_listing_sync|stability_resample_guard');
+  throw new HttpError(400, 'BAD_REQUEST', 'taskKey must be stability|subscription_node_refresh|performance|network_coverage|risk|aggregate_recompute|billing_listing_sync|stability_resample_guard|ad_expiry_reminder');
 }
 
 function toSchedulerRunStatus(value: unknown): SchedulerRunStatus {
@@ -3472,8 +3473,10 @@ function parseSmtpTemplatePayload(
 
 const SMTP_TEMPLATE_KEYS: SmtpTemplateKey[] = [
   'applicant_credentials',
+  'applicant_password_reset',
   'application_approved',
   'application_reply',
+  'ad_expiry_reminder',
   'low_balance_warning',
   'airport_auto_unlisted',
   'airport_online',

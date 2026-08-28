@@ -19,6 +19,7 @@ export type SmtpTemplateKey =
   | 'applicant_password_reset'
   | 'application_approved'
   | 'application_reply'
+  | 'ad_expiry_reminder'
   | 'low_balance_warning'
   | 'airport_auto_unlisted'
   | 'airport_online';
@@ -34,6 +35,7 @@ export interface SmtpTemplateConfig {
   applicant_password_reset: SmtpTemplateConfigItem;
   application_approved: SmtpTemplateConfigItem;
   application_reply: SmtpTemplateConfigItem;
+  ad_expiry_reminder: SmtpTemplateConfigItem;
   low_balance_warning: SmtpTemplateConfigItem;
   airport_auto_unlisted: SmtpTemplateConfigItem;
   airport_online: SmtpTemplateConfigItem;
@@ -273,6 +275,32 @@ function getDefaultTemplates(): SmtpTemplateConfig {
     application_reply: {
       ...DEFAULT_APPLICATION_REPLY_TEMPLATE,
     },
+	ad_expiry_reminder: {
+	  enabled: true,
+	  subject: 'GateRank 广告即将到期提醒（共 {{campaign_count}} 项）',
+	  body: [
+	    '<!doctype html>',
+	    '<html lang="zh-CN">',
+	    '<body style="margin:0;padding:0;background:#f5f5f5;color:#171717;font-family:-apple-system,BlinkMacSystemFont,\'Segoe UI\',sans-serif;">',
+	    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#f5f5f5;padding:32px 16px;">',
+	    '<tr><td align="center">',
+	    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:640px;background:#ffffff;border:1px solid #e5e5e5;border-radius:20px;overflow:hidden;">',
+	    '<tr><td style="padding:32px;">',
+	    '<div style="font-size:12px;font-weight:700;letter-spacing:.14em;color:#6366f1;text-transform:uppercase;">GateRank</div>',
+	    '<h1 style="margin:10px 0 8px;font-size:26px;line-height:1.3;">广告即将到期</h1>',
+	    '<p style="margin:0 0 24px;color:#525252;line-height:1.7;">您有 {{campaign_count}} 项广告将在 3 天内到期，请及时续费，避免广告展示中断。</p>',
+	    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border-collapse:separate;border-spacing:0 10px;">{{campaign_items}}</table>',
+	    '<div style="margin:26px 0;text-align:center;"><a href="{{portal_login_url}}" style="display:inline-block;padding:13px 22px;border-radius:10px;background:#171717;color:#ffffff;text-decoration:none;font-weight:700;">登录申请人后台</a></div>',
+	    '<div style="padding:18px;border:1px solid #e5e5e5;border-radius:14px;background:#fafafa;">',
+	    '<div style="font-weight:700;margin-bottom:10px;">续费操作指引</div>',
+	    '<ol style="margin:0;padding-left:20px;color:#525252;line-height:1.8;"><li>登录申请人后台</li><li>打开“广告管理”</li><li>选择对应广告续费并完成支付</li></ol>',
+	    '</div>',
+	    '<p style="margin:22px 0 0;color:#737373;font-size:13px;line-height:1.6;">申请人账号：{{applicant_email}}。如已完成续费，请忽略本邮件。</p>',
+	    '</td></tr></table>',
+	    '</td></tr></table>',
+	    '</body></html>',
+	  ].join(''),
+	},
 	    low_balance_warning: {
 	      enabled: true,
 	      subject: 'GateRank 余额提醒 - {{airport_name}}',
@@ -333,6 +361,10 @@ function normalizeTemplates(
     application_reply: normalizeApplicationReplyTemplateItem(
       record.application_reply,
       fallback.application_reply || defaults.application_reply,
+    ),
+    ad_expiry_reminder: normalizeTemplateItem(
+      record.ad_expiry_reminder,
+      fallback.ad_expiry_reminder || defaults.ad_expiry_reminder,
     ),
     low_balance_warning: normalizeTemplateItem(
       record.low_balance_warning,

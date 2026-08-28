@@ -49,8 +49,100 @@ function createTemplates(
       body: '余额：{{current_balance}}',
       ...overrides.airport_online,
     },
+    ad_expiry_reminder: {
+      enabled: true,
+      subject: '广告到期提醒（{{campaign_count}} 项）',
+      body: '<html><body><h1>广告即将到期</h1><table>{{campaign_items}}</table><a href="{{portal_login_url}}">登录申请人后台</a><p>{{applicant_email}}</p></body></html>',
+      ...overrides.ad_expiry_reminder,
+    },
   };
 }
+
+test('MailService sends escaped HTML and a plain-text fallback for merged ad expiry reminders', async () => {
+  const sent: Array<Record<string, unknown>> = [];
+  const service = new MailService({
+    smtpSettingsService: {
+      getConfig: async () => ({
+        enabled: true,
+        host: 'smtp.example.com',
+        port: 465,
+        secure: true,
+        username: 'mailer',
+        password: 'secret',
+        from_name: 'GateRank',
+        from_email: 'noreply@example.com',
+        reply_to: '',
+        templates: createTemplates(),
+      }),
+    },
+    transportFactory: (() => ({
+      sendMail: async (payload: Record<string, unknown>) => {
+        sent.push(payload);
+      },
+    })) as never,
+  });
+
+  const result = await service.sendAdExpiryReminderEmail({
+    to: 'owner@example.com',
+    portalLoginUrl: 'https://gate-rank.com/portal?from=mail&kind=ad',
+    campaigns: [{
+      campaignId: 91,
+      airportName: '<大象 & 网络>',
+      placementLabel: '首页广告位 2',
+      endsAt: '2026-09-01T00:02:02+08:00',
+      daysRemaining: 3,
+    }, {
+      campaignId: 92,
+      airportName: '第二机场',
+      placementLabel: '优惠活动广告',
+      endsAt: '2026-08-31T12:00:00+08:00',
+      daysRemaining: 2,
+    }],
+  });
+
+  assert.equal(result, 'sent');
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]?.subject, '广告到期提醒（2 项）');
+  assert.match(String(sent[0]?.html || ''), /&lt;大象 &amp; 网络&gt;/);
+  assert.doesNotMatch(String(sent[0]?.html || ''), /<大象 & 网络>/);
+  assert.match(String(sent[0]?.html || ''), /还剩 3 天/);
+  assert.match(String(sent[0]?.html || ''), /href="https:\/\/gate-rank\.com\/portal\?from=mail&amp;kind=ad"/);
+  assert.match(String(sent[0]?.text || ''), /<大象 & 网络> · 首页广告位 2/);
+  assert.match(String(sent[0]?.text || ''), /还剩 3 天/);
+  assert.match(String(sent[0]?.text || ''), /登录申请人后台：https:\/\/gate-rank\.com\/portal\?from=mail&kind=ad/);
+  assert.match(String(sent[0]?.text || ''), /1\. 登录申请人后台/);
+  assert.match(String(sent[0]?.text || ''), /3\. 选择对应广告续费并完成支付/);
+});
+
+test('MailService skips a disabled ad expiry reminder template', async () => {
+  let sends = 0;
+  const service = new MailService({
+    smtpSettingsService: {
+      getConfig: async () => ({
+        enabled: true,
+        host: 'smtp.example.com',
+        port: 465,
+        secure: true,
+        username: 'mailer',
+        password: 'secret',
+        from_name: 'GateRank',
+        from_email: 'noreply@example.com',
+        reply_to: '',
+        templates: createTemplates({ ad_expiry_reminder: { enabled: false } }),
+      }),
+    },
+    transportFactory: (() => ({ sendMail: async () => { sends += 1; } })) as never,
+  });
+
+  const result = await service.sendAdExpiryReminderEmail({
+    to: 'owner@example.com',
+    portalLoginUrl: 'https://gate-rank.com/portal',
+    campaigns: [],
+  });
+
+  assert.equal(result, 'disabled');
+  assert.equal(sends, 0);
+});
 
 test('MailService renders applicant credential template variables', async () => {
   const sent: Array<Record<string, unknown>> = [];

@@ -125,7 +125,8 @@ export type SchedulerTaskKey =
   | 'risk'
   | 'aggregate_recompute'
   | 'billing_listing_sync'
-  | 'stability_resample_guard';
+  | 'stability_resample_guard'
+  | 'ad_expiry_reminder';
 export type SchedulerRunStatus = 'running' | 'succeeded' | 'failed';
 export type SchedulerRunOutcome = SchedulerRunStatus | 'partial';
 export type SchedulerTriggerSource = 'schedule' | 'restart' | 'bootstrap_recover';

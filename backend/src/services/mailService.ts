@@ -168,6 +168,45 @@ export class MailService {
     });
   }
 
+  async sendAdExpiryReminderEmail(input: {
+    to: string;
+    portalLoginUrl: string;
+    campaigns: Array<{
+      campaignId: number;
+      airportName: string;
+      placementLabel: string;
+      endsAt: string;
+      daysRemaining: 1 | 2 | 3;
+    }>;
+  }): Promise<'sent' | 'disabled'> {
+    const config = await this.smtpSettingsService.getConfig();
+    const template = config.templates.ad_expiry_reminder;
+    if (!config.enabled || !template.enabled) {
+      return 'disabled';
+    }
+    if (!config.host || !config.username || !config.password || !config.from_email) {
+      throw new HttpError(409, 'SMTP_NOT_CONFIGURED', 'SMTP 配置不完整');
+    }
+
+    const campaignItems = input.campaigns.map(renderAdExpiryCampaignRow).join('');
+    const subject = replaceTemplateVariables(template.subject, {
+      campaign_count: String(input.campaigns.length),
+      applicant_email: input.to,
+      portal_login_url: input.portalLoginUrl,
+      site_name: 'GateRank',
+    });
+    const html = replaceTemplateVariables(template.body, {
+      campaign_count: escapeHtml(String(input.campaigns.length)),
+      campaign_items: campaignItems,
+      applicant_email: escapeHtml(input.to),
+      portal_login_url: escapeHtml(input.portalLoginUrl),
+      site_name: 'GateRank',
+    });
+    const text = renderAdExpiryPlainText(input.campaigns, input.portalLoginUrl);
+    await this.sendWithConfig(config, { to: input.to, subject, text, html });
+    return 'sent';
+  }
+
   async sendLowBalanceWarningEmail(input: {
     to: string;
     airportName: string;
@@ -251,7 +290,7 @@ export class MailService {
 
   private async sendWithConfig(
     config: SmtpConfig,
-    input: { to: string; subject: string; text: string },
+    input: { to: string; subject: string; text: string; html?: string },
   ): Promise<void> {
     try {
       const transporter = this.transportFactory({
@@ -272,11 +311,78 @@ export class MailService {
         replyTo: config.reply_to || undefined,
         subject: input.subject,
         text: input.text,
+        html: input.html,
       });
     } catch (error) {
       throw normalizeSmtpSendError(error);
     }
   }
+}
+
+function renderAdExpiryCampaignRow(campaign: {
+  airportName: string;
+  placementLabel: string;
+  endsAt: string;
+  daysRemaining: 1 | 2 | 3;
+}): string {
+  return [
+    '<tr><td style="padding:16px;border:1px solid #e5e5e5;border-radius:12px;background:#fafafa;">',
+    '<table role="presentation" width="100%" cellspacing="0" cellpadding="0"><tr>',
+    `<td style="font-weight:700;color:#171717;">${escapeHtml(campaign.airportName)}</td>`,
+    `<td align="right" style="font-weight:700;color:#dc2626;white-space:nowrap;">还剩 ${campaign.daysRemaining} 天</td>`,
+    '</tr></table>',
+    `<div style="margin-top:7px;color:#525252;font-size:14px;">${escapeHtml(campaign.placementLabel)}</div>`,
+    `<div style="margin-top:4px;color:#737373;font-size:13px;">到期时间：${escapeHtml(formatAdExpiryDate(campaign.endsAt))}</div>`,
+    '</td></tr>',
+  ].join('');
+}
+
+function renderAdExpiryPlainText(
+  campaigns: Array<{ airportName: string; placementLabel: string; endsAt: string; daysRemaining: 1 | 2 | 3 }>,
+  portalLoginUrl: string,
+): string {
+  return [
+    `您好，您有 ${campaigns.length} 项 GateRank 广告将在 3 天内到期，请及时续费。`,
+    '',
+    ...campaigns.flatMap((campaign, index) => [
+      `${index + 1}. ${campaign.airportName} · ${campaign.placementLabel}`,
+      `   到期时间：${formatAdExpiryDate(campaign.endsAt)}（还剩 ${campaign.daysRemaining} 天）`,
+    ]),
+    '',
+    `登录申请人后台：${portalLoginUrl}`,
+    '',
+    '续费操作指引：',
+    '1. 登录申请人后台',
+    '2. 打开“广告管理”',
+    '3. 选择对应广告续费并完成支付',
+    '',
+    '如已完成续费，请忽略本邮件。',
+  ].join('\n');
+}
+
+function formatAdExpiryDate(value: string): string {
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+  return new Intl.DateTimeFormat('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  }).format(parsed);
+}
+
+function escapeHtml(value: string): string {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function renderTemplate(
