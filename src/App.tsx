@@ -1,4 +1,5 @@
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
+import { useLiveScoreRevision } from './site/liveScores';
 import {
   Flame,
   Trophy,
@@ -340,11 +341,11 @@ interface ReportViewResponse {
     risk_alerts_rank: number | null;
   };
   score_breakdown: {
-    s: number;
-    p: number;
+    s: number | null;
+    p: number | null;
     n: number | null;
-    c: number;
-    r: number;
+    c: number | null;
+    r: number | null;
     final_score: number | null;
     risk_penalty: number;
     domain_penalty: number;
@@ -1367,7 +1368,10 @@ function wait(ms: number): Promise<void> {
 }
 
 async function apiFetch<T>(path: string): Promise<T> {
-  const response = await fetch(`${getApiBase()}${path}`, { credentials: 'include' });
+  const response = await fetch(`${getApiBase()}${path}`, {
+    credentials: 'include',
+    cache: /^\/api\/v1\/(?:pages\/(?:home|full-ranking|risk-monitor)|airports\/)/.test(path) ? 'no-store' : 'default',
+  });
   if (!response.ok) {
     const data = (await safeJson(response)) as { message?: string } | null;
     throw new Error(data?.message || `请求失败: ${response.status}`);
@@ -3748,6 +3752,7 @@ function FullRankingPage({
   page?: number;
   filters?: FullRankingFilters;
 }) {
+  const scoreRevision = useLiveScoreRevision();
   const initialData = useMemo(
     () => getInitialPublicData<FullRankingPageResponse>(
       'full_ranking',
@@ -3764,7 +3769,7 @@ function FullRankingPage({
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (initialData) {
+    if (initialData && scoreRevision === 0) {
       setData(initialData);
       setLoading(false);
       setError('');
@@ -3801,7 +3806,7 @@ function FullRankingPage({
     return () => {
       active = false;
     };
-  }, [date, page, filters, initialData]);
+  }, [date, page, filters, initialData, scoreRevision]);
 
   const rankingDate = data?.date || date || '今日';
   const safePage = data?.page || page || 1;
@@ -4103,6 +4108,7 @@ function FullRankingPage({
 }
 
 function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
+  const scoreRevision = useLiveScoreRevision();
   const initialData = useMemo(
     () => getInitialPublicData<RiskMonitorPageResponse>(
       'risk_monitor',
@@ -4118,7 +4124,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (initialData) {
+    if (initialData && scoreRevision === 0) {
       setData(initialData);
       setLoading(false);
       setError('');
@@ -4155,7 +4161,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
     return () => {
       active = false;
     };
-  }, [date, page, initialData]);
+  }, [date, page, initialData, scoreRevision]);
 
   const rankingDate = data?.date || date || '今日';
   const safePage = data?.page || page || 1;
@@ -4430,6 +4436,7 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
 }
 
 function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airportSlug?: string; date?: string }) {
+  const scoreRevision = useLiveScoreRevision();
   const [data, setData] = useState<ReportViewResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -4471,7 +4478,7 @@ function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airp
     return () => {
       active = false;
     };
-  }, [airportId, airportSlug, date]);
+  }, [airportId, airportSlug, date, scoreRevision]);
 
   const rankPairs = useMemo(() => {
     if (!data) {
@@ -5055,7 +5062,7 @@ function ReportScoreCard({ data }: { data: ReportViewResponse }) {
 
 function ReportMethodologyCard({ data }: { data: ReportViewResponse }) {
   const methodologyHref = buildMethodologyHref();
-  const radarPoints = buildReportRadarPoints(data.score_breakdown);
+  const radarPoints = data.summary_card.score_hidden ? '' : buildReportRadarPoints(data.score_breakdown);
   const isV2 = data.score_rule_version === 'v2_spncr' && data.score_breakdown.n !== null;
   return (
     <div className="mt-6 flex flex-1 flex-col border-t border-slate-200 pt-5 text-left">

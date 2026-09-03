@@ -40,6 +40,7 @@ import {
   usePageSeo,
 } from '../../site/publicSite';
 import { createTrackedOutboundClickHandler, useMarketingImpression } from '../../site/marketing';
+import { useLiveScoreRevision } from '../../site/liveScores';
 
 type AirportStatus = 'normal' | 'risk' | 'down';
 type CardType = 'stable' | 'value' | 'risk' | 'new';
@@ -193,6 +194,7 @@ const trustItems = [
 ];
 
 export function HomePageV3({ date }: { date?: string }) {
+  const scoreRevision = useLiveScoreRevision();
   const initialData = useMemo(() => readInitialData(date), [date]);
   const [data, setData] = useState<HomePageData | null>(initialData);
   const [loading, setLoading] = useState(!initialData);
@@ -200,7 +202,7 @@ export function HomePageV3({ date }: { date?: string }) {
   const [clock, setClock] = useState(() => Date.now());
 
   useEffect(() => {
-    if (initialData) {
+    if (initialData && scoreRevision === 0) {
       setData(initialData);
       setLoading(false);
       setError('');
@@ -213,6 +215,7 @@ export function HomePageV3({ date }: { date?: string }) {
     const query = date ? `?date=${encodeURIComponent(date)}` : '';
     void fetch(`${getApiBase()}/api/v1/pages/home${query}`, {
       credentials: 'include',
+      cache: 'no-store',
       signal: controller.signal,
     })
       .then(async (response) => {
@@ -240,7 +243,7 @@ export function HomePageV3({ date }: { date?: string }) {
       });
 
     return () => controller.abort();
-  }, [date, initialData]);
+  }, [date, initialData, scoreRevision]);
 
   useEffect(() => {
     if (!data?.hero.report_time_at) return;

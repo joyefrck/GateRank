@@ -405,7 +405,7 @@ test('GET /pages/home returns public homepage view', async () => {
   }
 });
 
-test('GET /pages/home reuses cached response within ttl', async () => {
+test('GET /pages/home rechecks live score visibility on every request', async () => {
   let homeCalls = 0;
   const app = express();
   app.use(
@@ -469,7 +469,7 @@ test('GET /pages/home reuses cached response within ttl', async () => {
 
     assert.equal(first.status, 200);
     assert.equal(second.status, 200);
-    assert.equal(homeCalls, 1);
+    assert.equal(homeCalls, 2);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -714,7 +714,7 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
     assert.equal(response.status, 200);
     assert.equal(
       response.headers.get('cache-control'),
-      'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+      'no-store, max-age=0',
     );
     const data = (await response.json()) as {
       page: number;
@@ -741,7 +741,7 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
   }
 });
 
-test('GET /pages/full-ranking reuses cached response within ttl', async () => {
+test('GET /pages/full-ranking rechecks live score visibility on every request', async () => {
   let fullRankingCalls = 0;
   const app = express();
   app.use(
@@ -797,7 +797,7 @@ test('GET /pages/full-ranking reuses cached response within ttl', async () => {
 
     assert.equal(first.status, 200);
     assert.equal(second.status, 200);
-    assert.equal(fullRankingCalls, 1);
+    assert.equal(fullRankingCalls, 2);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }

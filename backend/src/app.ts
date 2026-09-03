@@ -98,6 +98,8 @@ import { XOAuthSettingsService } from './services/xOAuthSettingsService';
 import { ScoreRuleService } from './services/scoreRuleService';
 import { getNewsUploadRootDir } from './utils/newsStorage';
 import { createTimedPromiseCache, PUBLIC_PAGE_CACHE_TTL_MS } from './utils/publicCache';
+import { BillingEligibilityService } from './services/billingEligibilityService';
+import { createLiveScoreRoutes } from './routes/liveScoreRoutes';
 
 export async function createApp() {
   const pool = getDbPool();
@@ -193,6 +195,9 @@ export async function createApp() {
   const marketingSettingsService = new MarketingSettingsService({
     systemSettingRepository,
   });
+  const billingEligibility = new BillingEligibilityService(pool, marketingSettingsService, scoreRuleService);
+  scoreRepository.billingEligibility = billingEligibility;
+  applicantBillingRepository.billingEligibility = billingEligibility;
   const smtpSettingsService = new SmtpSettingsService({
     systemSettingRepository,
   });
@@ -342,6 +347,7 @@ export async function createApp() {
   app.use(privateSeoGuard);
   app.use('/uploads', express.static(getNewsUploadRootDir()));
   app.use(corsAllowlist);
+  app.use('/api/v1', createLiveScoreRoutes(billingEligibility));
 
   app.get('/healthz', (_req, res) => {
     res.json({ status: 'ok' });
@@ -357,6 +363,7 @@ export async function createApp() {
   app.use(
     '/api/v1',
     createPublicRoutes({
+      billingEligibility,
       airportRepository,
       airportApplicationRepository,
       applicantAccountRepository,

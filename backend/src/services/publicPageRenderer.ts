@@ -1358,7 +1358,7 @@ function renderReportScoreCard(view: ReportView): string {
 }
 
 function renderReportMethodologyCard(view: ReportView): string {
-  const radarPoints = buildReportRadarPoints(view.score_breakdown);
+  const radarPoints = view.summary_card.score_hidden ? '' : buildReportRadarPoints(view.score_breakdown);
   const isV2 = view.score_rule_version === 'v2_spncr' && view.score_breakdown.n !== null;
   const frame = isV2
     ? '<polygon points="60,12 105.65,45.17 88.21,98.83 31.79,98.83 14.35,45.17" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1"></polygon><polygon points="60,36 82.83,52.58 74.11,79.42 45.89,79.42 37.17,52.58" fill="none" stroke="#e2e8f0" stroke-width="1" stroke-dasharray="2 2"></polygon><path d="M60 60V12M60 60L105.65 45.17M60 60L88.21 98.83M60 60L31.79 98.83M60 60L14.35 45.17" fill="none" stroke="#e2e8f0" stroke-width="1"></path>'

@@ -660,7 +660,8 @@ function formatNullableScore(value: number | null | undefined): string {
   return value === null || value === undefined ? '暂不公开' : formatNumber(value);
 }
 
-function formatNumber(value: number): string {
+function formatNumber(value: number | null): string {
+  if (value === null) return '暂不公开';
   return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/\.?0+$/, '');
 }
 

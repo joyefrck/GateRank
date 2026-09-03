@@ -22,6 +22,7 @@ import {
 } from '../../../shared/airportFilterCatalog';
 import { EMPTY_FULL_RANKING_FILTERS, type FullRankingFilters } from '../../../shared/fullRankingFilters';
 import { AIRPORT_PROFILE_REGION_KEYS } from '../utils/airportProfile';
+import type { BillingEligibilityService } from '../services/billingEligibilityService';
 
 interface ScoreRow extends RowDataPacket {
   airport_id: number;
@@ -129,6 +130,8 @@ const LATEST_SUBSCRIPTION_NODE_SNAPSHOT_JOIN_SQL = `
 export class ScoreRepository {
   constructor(private readonly pool: Pool) {}
 
+  billingEligibility?: BillingEligibilityService;
+
   async getLatestAvailableDate(onOrBefore: string): Promise<string | null> {
     const [rows] = await this.pool.query<LatestDateRow[]>(
       `SELECT MAX(date) AS latest_date
@@ -164,6 +167,9 @@ export class ScoreRepository {
     date: string,
     clickChargeAmount: number = CLICK_CHARGE_AMOUNT,
   ): Promise<number | null> {
+    if (this.billingEligibility) {
+      return (await this.billingEligibility.getSnapshot()).get(airportId)?.billing_rank ?? null;
+    }
     const rankingFilters = buildPublicFullRankingFilters(EMPTY_FULL_RANKING_FILTERS);
     const [rows] = await this.pool.query<PublicBillingRankRow[]>(
       `SELECT
@@ -455,6 +461,7 @@ export class ScoreRepository {
     const countSnapshotJoin = filters.region.length > 0 ? LATEST_SUBSCRIPTION_NODE_SNAPSHOT_JOIN_SQL : '';
     const isV2 = scoreRuleVersion === 'v2_spncr';
     const versionExpression = "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.score_rule_version')), 'v1_spcr')";
+    const eligibilitySql = await this.billingEligibility?.getHiddenScoreSql();
 
     const [totalRows] = await this.pool.query<Array<RowDataPacket & { total: number }>>(
       `SELECT COUNT(*) AS total
@@ -492,7 +499,7 @@ export class ScoreRepository {
            CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.total_score')) AS DECIMAL(10,2)),
            s.final_score
          ) AS display_score,
-         (COALESCE(w.balance, 0) < ?) AS score_hidden
+         ${eligibilitySql || '(COALESCE(w.balance, 0) < ?)'} AS score_hidden
        FROM airports a
        ${LATEST_SUBSCRIPTION_NODE_SNAPSHOT_JOIN_SQL}
        LEFT JOIN applicant_wallets w
@@ -513,7 +520,7 @@ export class ScoreRepository {
       ORDER BY
         ${PUBLIC_FULL_RANKING_ORDER_SQL}
       LIMIT ? OFFSET ?`,
-      [clickChargeAmount, date, scoreRuleVersion, ...rankingFilters.params, safePageSize, offset],
+      [...(eligibilitySql ? [] : [clickChargeAmount]), date, scoreRuleVersion, ...rankingFilters.params, safePageSize, offset],
     );
 
     const yesterdayDate = shiftDateByDays(date, -1);
@@ -569,6 +576,7 @@ export class ScoreRepository {
     const safePage = Math.max(1, page);
     const safePageSize = Math.min(100, Math.max(1, pageSize));
     const offset = (safePage - 1) * safePageSize;
+    const eligibilitySql = await this.billingEligibility?.getHiddenScoreSql();
 
     const [totalRows] = await this.pool.query<Array<RowDataPacket & { total: number }>>(
       `SELECT COUNT(*) AS total
@@ -601,7 +609,7 @@ export class ScoreRepository {
              CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.total_score')) AS DECIMAL(10,2)),
              s.final_score
            ) AS display_score,
-           (COALESCE(w.balance, 0) < ?) AS score_hidden,
+           ${eligibilitySql || '(COALESCE(w.balance, 0) < ?)'} AS score_hidden,
            s.risk_penalty,
          s.details_json,
          m.domain_ok,
@@ -636,7 +644,7 @@ export class ScoreRepository {
         a.created_at DESC,
         a.id ASC
       LIMIT ? OFFSET ?`,
-      [clickChargeAmount, date, safePageSize, offset],
+      [...(eligibilitySql ? [] : [clickChargeAmount]), date, safePageSize, offset],
     );
 
     const yesterdayDate = shiftDateByDays(date, -1);

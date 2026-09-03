@@ -4,6 +4,7 @@ export const PUBLIC_CACHE_CONTROL = 'public, max-age=60, s-maxage=300, stale-whi
 
 export interface CacheableResponse {
   setHeader(name: string, value: string): void;
+  req?: { originalUrl?: string; path?: string };
 }
 
 export interface TimedPromiseCache {
@@ -16,7 +17,13 @@ interface TimedPromiseCacheOptions {
 }
 
 export function setPublicCacheHeaders(res: CacheableResponse): void {
-  res.setHeader('Cache-Control', PUBLIC_CACHE_CONTROL);
+  const path = (res.req?.originalUrl || res.req?.path || '').split('?')[0];
+  res.setHeader('Cache-Control', isLiveScorePath(path) ? 'no-store, max-age=0' : PUBLIC_CACHE_CONTROL);
+}
+
+export function isLiveScorePath(path: string): boolean {
+  return path === '/' || /^\/(?:rankings(?:\/|$)|risk-monitor(?:\/|$)|airports\/|report(?:\/|$))/.test(path)
+    || /^(?:\/api\/v1)?\/(?:pages\/(?:home|full-ranking|risk-monitor)(?:\/|$)|airports\/)/.test(path);
 }
 
 export function createTimedPromiseCache(
@@ -51,6 +58,8 @@ export function createTimedPromiseCache(
 
   return {
     getOrLoad<T>(key: string, loader: () => Promise<T>): Promise<T> {
+      // These views contain wallet-dependent visibility. Never retain their final payload.
+      if (/^(?:home|full-ranking|risk-monitor|report|report-view|airport-report):/.test(key)) return loader();
       const now = Date.now();
       deleteExpired(now);
       const cached = cache.get(key);

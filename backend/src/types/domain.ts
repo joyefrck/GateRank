@@ -766,11 +766,11 @@ export interface ReportView {
     risk_alerts_rank: number | null;
   };
   score_breakdown: {
-    s: number;
-    p: number;
+    s: number | null;
+    p: number | null;
     n: number | null;
-    c: number;
-    r: number;
+    c: number | null;
+    r: number | null;
     final_score: number | null;
     risk_penalty: number;
     domain_penalty: number;

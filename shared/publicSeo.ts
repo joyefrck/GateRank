@@ -119,11 +119,11 @@ export interface PublicReportSeoView {
     risk_alerts_rank: number | null;
   };
   score_breakdown: {
-    s: number;
-    p: number;
+    s: number | null;
+    p: number | null;
     n: number | null;
-    c: number;
-    r: number;
+    c: number | null;
+    r: number | null;
     final_score: number | null;
     risk_penalty: number;
     domain_penalty: number;
@@ -1532,7 +1532,8 @@ export function formatAirportStatusLabel(status: string): string {
   return status;
 }
 
-export function formatMetric(value: number): string {
+export function formatMetric(value: number | null): string {
+  if (value === null) return '暂不公开';
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 

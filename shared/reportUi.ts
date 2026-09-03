@@ -18,11 +18,11 @@ export interface ReportAnchorPosition {
 }
 
 export interface ReportRadarScores {
-  s: number;
-  p: number;
+  s: number | null;
+  p: number | null;
   n?: number | null;
-  c: number;
-  r: number;
+  c: number | null;
+  r: number | null;
 }
 
 export type SparklineDomain = readonly [number, number];
@@ -50,6 +50,7 @@ export function resolveActiveReportAnchor(
 }
 
 export function buildReportRadarPoints(scores: ReportRadarScores): string {
+  if (scores.s === null || scores.p === null || scores.c === null || scores.r === null) return '';
   if (typeof scores.n === 'number' && Number.isFinite(scores.n)) {
     return buildPolarRadarPoints([scores.s, scores.p, scores.n, scores.c, scores.r]);
   }

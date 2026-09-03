@@ -22,8 +22,10 @@ import type { AirportApplicationReviewStatus, AirportStatus } from '../types/dom
 import { parseFullRankingFilters, type FullRankingFilters } from '../../../shared/fullRankingFilters';
 import type { AirportDealDetailView, AirportDealView } from '../../../shared/airportAds';
 import { isMarketingPageKind } from '../../../shared/marketingAnalytics';
+import type { BillingEligibilityService } from '../services/billingEligibilityService';
 
 interface PublicDeps {
+  billingEligibility?: BillingEligibilityService;
   airportRepository: {
     getById(id: number): Promise<unknown | null>;
   };
@@ -368,7 +370,13 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         date,
         type as (typeof RANKING_TYPES)[number],
       );
-      res.json({ type, date, items: data });
+      const eligibility = await deps.billingEligibility?.getSnapshot();
+      const items = eligibility ? data.filter((item) => {
+        const id = Number((item as { airport_id?: number }).airport_id);
+        return eligibility.get(id)?.score_hidden === false;
+      }) : data;
+      res.setHeader('Cache-Control', 'no-store, max-age=0');
+      res.json({ type, date, items });
     } catch (error) {
       next(error);
     }
@@ -387,8 +395,10 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       const endDate = getDateInTimezone();
       const startDate = dateDaysAgo(endDate, boundedDays - 1);
       const trend = await deps.scoreRepository.getTrend(airportId, startDate, endDate);
-
-      res.json({ airport_id: airportId, start_date: startDate, end_date: endDate, items: trend });
+      const snapshot = await deps.billingEligibility?.getSnapshot();
+      const hidden = snapshot ? snapshot.get(airportId)?.score_hidden !== false : false;
+      setPublicCacheHeaders(res);
+      res.json({ airport_id: airportId, start_date: startDate, end_date: endDate, items: hidden ? [] : trend });
     } catch (error) {
       next(error);
     }
@@ -416,7 +426,10 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         );
       }
 
-      res.json({ airport, date, metrics, score });
+      const snapshot = await deps.billingEligibility?.getSnapshot();
+      const hidden = snapshot ? snapshot.get(airportId)?.score_hidden !== false : false;
+      setPublicCacheHeaders(res);
+      res.json({ airport, date, metrics, score: hidden ? null : score });
     } catch (error) {
       next(error);
     }

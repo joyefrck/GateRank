@@ -139,7 +139,7 @@ function buildStrengths(report: ReportView): string[] {
   if (report.metrics.median_download_mbps >= 80) {
     items.push(`下载速度中位数达到 ${formatMbps(report.metrics.median_download_mbps)}，性能体验具备竞争力。`);
   }
-  if (report.score_breakdown.r >= 85 && report.score_breakdown.risk_penalty <= 10) {
+  if (report.score_breakdown.r !== null && report.score_breakdown.r >= 85 && report.score_breakdown.risk_penalty <= 10) {
     items.push('风险暴露较低，域名、投诉和历史异常信号整体健康。');
   }
   if (report.capabilities.regions.length >= 3) {
@@ -258,7 +258,8 @@ function describeOverallScore(score: number | null): string {
   return '综合表现偏弱，需要优先改善短板项。';
 }
 
-function describeDimension(type: 'stability' | 'performance' | 'price' | 'risk', score: number): string {
+function describeDimension(type: 'stability' | 'performance' | 'price' | 'risk', score: number | null): string {
+  if (score === null) return '评分暂不公开';
   if (score >= 85) {
     return {
       stability: '稳定性优势明显。',

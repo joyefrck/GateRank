@@ -1,6 +1,7 @@
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import { CLICK_CHARGE_AMOUNT, CLICK_DEDUPE_HOURS } from '../config/billing';
 import { sqlDateTimeToTimezoneIso } from '../utils/time';
+import type { BillingEligibilityService } from '../services/billingEligibilityService';
 
 export const LOW_BALANCE_WARNING_THRESHOLD = 30;
 
@@ -219,6 +220,8 @@ export interface PublicScoreVisibility {
 
 export class ApplicantBillingRepository {
   constructor(private readonly pool: Pool) {}
+
+  billingEligibility?: BillingEligibilityService;
 
   async ensureSchema(): Promise<void> {
     await this.pool.query(`
@@ -1179,7 +1182,7 @@ export class ApplicantBillingRepository {
   }
 
   async processOutboundClick(input: ProcessOutboundClickInput): Promise<ProcessOutboundClickResult> {
-    const clickChargeAmount = normalizeClickChargeAmount(input.click_charge_amount);
+    let clickChargeAmount = normalizeClickChargeAmount(input.click_charge_amount);
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -1248,6 +1251,14 @@ export class ApplicantBillingRepository {
       }
 
       const balance = Number(owner.balance || 0);
+      if (this.billingEligibility) {
+        // Re-evaluate after the wallet lock, not using the pre-transaction route quote.
+        const decision = (await this.billingEligibility.getSnapshot(connection, {
+          airport_id: input.airport_id, balance,
+        })).get(input.airport_id);
+        if (!decision) throw new Error('billing eligibility unavailable');
+        clickChargeAmount = decision.click_charge_amount;
+      }
       if (balance < clickChargeAmount) {
         await this.insertClick(connection, input, owner, 'free', 0);
         await connection.commit();
@@ -1390,6 +1401,16 @@ export class ApplicantBillingRepository {
     airportIds: number[],
     clickChargeAmount: number = CLICK_CHARGE_AMOUNT,
   ): Promise<Map<number, PublicScoreVisibility>> {
+    if (this.billingEligibility) {
+      const snapshot = await this.billingEligibility.getSnapshot();
+      return new Map(airportIds.map((id) => {
+        const decision = snapshot.get(id);
+        return [id, {
+          score_hidden: decision?.score_hidden ?? true,
+          score_hidden_reason: decision?.score_hidden === false ? null : 'insufficient_balance',
+        }];
+      }));
+    }
     const uniqueAirportIds = Array.from(new Set(airportIds.map((id) => Number(id)).filter(Number.isFinite)));
     const result = new Map<number, PublicScoreVisibility>();
     for (const airportId of uniqueAirportIds) {

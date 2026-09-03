@@ -66,7 +66,9 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
       assert.match(response.headers.get('content-type') || '', /text\/html/);
       assert.equal(
         response.headers.get('cache-control'),
-        'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+        ['/', '/rankings/all', '/risk-monitor'].includes(path)
+          ? 'no-store, max-age=0'
+          : 'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
       );
       const html = await response.text();
       assert.match(html, titlePattern);
@@ -1299,7 +1301,7 @@ test('GET /rankings/all removes unsupported filter values from URL', async () =>
   }
 });
 
-test('public data routes reuse prerender view within ttl', async () => {
+test('public data routes revalidate SSR and hydration views on every request', async () => {
   let fullRankingCalls = 0;
   const app = express();
   app.use(createPublicPageRoutes({
@@ -1322,7 +1324,7 @@ test('public data routes reuse prerender view within ttl', async () => {
 
     assert.equal(first.status, 200);
     assert.equal(second.status, 200);
-    assert.equal(fullRankingCalls, 2);
+    assert.equal(fullRankingCalls, 4);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -1358,7 +1360,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.match(okResponse.headers.get('content-type') || '', /text\/html; charset=utf-8/);
     assert.equal(
       okResponse.headers.get('cache-control'),
-      'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+      'no-store, max-age=0',
     );
     const okHtml = await okResponse.text();
     assert.match(okHtml, /<title>星云机场怎么样？星云机场测评、官网入口、稳定性与跑路风险分析 \| 机场榜GateRank<\/title>/);

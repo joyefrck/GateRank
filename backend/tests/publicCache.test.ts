@@ -1,6 +1,22 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createTimedPromiseCache } from '../src/utils/publicCache';
+import { createTimedPromiseCache, setPublicCacheHeaders } from '../src/utils/publicCache';
+
+test('wallet-sensitive views bypass cached payloads, including a prewarmed score', async () => {
+  const cache = createTimedPromiseCache(300_000);
+  for (const key of ['home:today', 'full-ranking:today:1', 'risk-monitor:today:1', 'report:airport']) {
+    await cache.getOrLoad(key, async () => ({ score: 94.88 }));
+    assert.deepEqual(await cache.getOrLoad(key, async () => ({ score: null })), { score: null });
+  }
+});
+
+test('score-sensitive HTML and API responses cannot reuse browser or edge caches', () => {
+  for (const path of ['/', '/rankings/all?page=2', '/rankings/region/hk', '/airports/now', '/api/v1/pages/home', '/api/v1/airports/62/report-view']) {
+    let header = '';
+    setPublicCacheHeaders({ req: { originalUrl: path }, setHeader: (_name, value) => { header = value; } });
+    assert.equal(header, 'no-store, max-age=0', path);
+  }
+});
 
 test('createTimedPromiseCache evicts the oldest cached key when the cache reaches its limit', async () => {
   const cache = createTimedPromiseCache(60_000, { maxEntries: 2 });
