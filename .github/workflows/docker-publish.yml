@@ -44,6 +44,7 @@ jobs:
           build-args: |
             VITE_SITE_URL=${{ env.VITE_SITE_URL }}
             VITE_API_BASE=${{ env.VITE_API_BASE }}
+            PUBLIC_FRONTEND_ASSET_VERSION=${{ github.sha }}
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.WEB_IMAGE }}:main
             ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER }}/${{ env.WEB_IMAGE }}:${{ github.sha }}

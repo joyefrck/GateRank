@@ -7,6 +7,7 @@ import { DEFAULT_NEWS_CATEGORIES, DEFAULT_NEWS_TOPICS } from './shared/newsTaxon
 import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from './shared/publishTokenDocs';
 import { PUBLIC_DEALS_LASTMOD, PUBLIC_SEO_STATIC_LASTMOD } from './shared/publicSeo';
 import { getIndexableFullRankingFilterPaths } from './shared/fullRankingFilters';
+import { frontendAssetDirectory } from './shared/frontendAssetPaths';
 
 function emitSeoAssets(siteUrl: string): Plugin {
   const normalizedSiteUrl = siteUrl.replace(/\/+$/, '');
@@ -96,6 +97,7 @@ function serveNewsMermaidEntry(): Plugin {
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
   const siteUrl = (env.VITE_SITE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+  const assetDirectory = frontendAssetDirectory(process.env.PUBLIC_FRONTEND_ASSET_VERSION);
 
   return {
     plugins: [react(), tailwindcss(), serveNewsMermaidEntry(), emitSeoAssets(siteUrl)],
@@ -112,9 +114,9 @@ export default defineConfig(({mode}) => {
           'news-mermaid': path.resolve(__dirname, 'src/news/mermaidEnhancer.ts'),
         },
         output: {
-          entryFileNames: 'assets/[name].js',
-          chunkFileNames: 'assets/[name].js',
-          assetFileNames: 'assets/[name][extname]',
+          entryFileNames: `${assetDirectory}/[name].js`,
+          chunkFileNames: `${assetDirectory}/[name].js`,
+          assetFileNames: `${assetDirectory}/[name][extname]`,
         },
       },
     },
