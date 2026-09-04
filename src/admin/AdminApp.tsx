@@ -1,3 +1,5 @@
+import { RevenuePage } from './revenue/RevenuePage';
+import { Wallet } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Shield,
@@ -1351,6 +1353,12 @@ const ADMIN_NAV_ITEMS = [
     isActive: (path: string) => path === '/admin/marketing-settings' || path === '/admin/marketing-statistics',
   },
   {
+    path: '/admin/revenue',
+    label: '收入统计',
+    icon: Wallet,
+    isActive: (path: string) => path === '/admin/revenue',
+  },
+  {
     path: '/admin/airports',
     label: '机场管理',
     icon: Database,
@@ -1905,6 +1913,7 @@ export default function AdminApp() {
               onEdit={(id) => navigate(`/admin/monthly-reports/${id}`)}
             />
           )}
+          {path === '/admin/revenue' && <RevenuePage routeSearch={search} fetchJson={apiFetch} onUpdateUrl={(to, mode) => mode === 'replace' ? replaceNavigate(to) : navigate(to)} />}
           {path === '/admin/marketing' && <MarketingPage />}
           {path === '/admin/marketing-settings' && <MarketingSettingsPage onNavigateTab={navigate} />}
           {path === '/admin/marketing-statistics' && (

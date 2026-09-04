@@ -1,3 +1,6 @@
+import { RevenueRepository } from './repositories/revenueRepository';
+import { RevenueService } from './services/revenueService';
+import { createRevenueRoutes } from './routes/revenueRoutes';
 import express from 'express';
 import helmet from 'helmet';
 import { getDbPool } from './db/mysql';
@@ -455,7 +458,10 @@ export async function createApp() {
     }),
   );
 
+  const revenueRepository = new RevenueRepository(pool);
+  await revenueRepository.ensureSchema();
   app.use('/api/v1/admin', createAdminAuthRoutes(authService));
+  app.use('/api/v1/admin', adminAuth, createRevenueRoutes(new RevenueService(revenueRepository)));
 
   app.use(
     '/api/v1/admin',
