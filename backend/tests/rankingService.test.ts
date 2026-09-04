@@ -153,3 +153,15 @@ test('buildRankings sorts new airports by entry date instead of score', () => {
 
   assert.deepEqual(rankings.new.map((item) => item.airport_id), [3, 2, 1]);
 });
+
+test('rankings use effective component overrides without changing raw samples or risk ordering', () => {
+  const first = createRow(1, { s: 95, displayScore: 90 });
+  const second = createRow(2, { s: 70, displayScore: 91 });
+  Object.assign(first.score.details, { manual_score_s: 0, manual_score_c: 0 });
+  Object.assign(second.score.details, { manual_score_s: 100, manual_score_c: 100 });
+  const rankings = buildRankings('2026-03-24', [first, second]);
+  assert.deepEqual(rankings.stable.map((row) => row.airport_id), [2, 1]);
+  assert.deepEqual(rankings.value.map((row) => row.airport_id), [2, 1]);
+  assert.equal(rankings.stable[0].details.s, 100);
+  assert.equal(first.score.s, 95);
+});

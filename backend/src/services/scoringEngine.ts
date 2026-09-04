@@ -1,7 +1,6 @@
+import { weightedGateRankScore as sharedWeightedScore } from '../../../shared/gateRankScore';
 import {
   STABILITY_RULES,
-  FINAL_ENGINE_WEIGHTS,
-  FINAL_ENGINE_WEIGHTS_V2,
   SCORE_WEIGHTS,
   THRESHOLDS,
   TIME_DECAY_LAMBDA,
@@ -34,16 +33,7 @@ function weightedGateRankScore(
   scores: { s: number; p: number; n?: number | null; c: number; r: number },
   ruleVersion: GateRankScoreRuleVersion,
 ): number {
-  return ruleVersion === SCORE_RULE_V2
-    ? FINAL_ENGINE_WEIGHTS_V2.s * scores.s
-      + FINAL_ENGINE_WEIGHTS_V2.p * scores.p
-      + FINAL_ENGINE_WEIGHTS_V2.n * Number(scores.n ?? 0)
-      + FINAL_ENGINE_WEIGHTS_V2.c * scores.c
-      + FINAL_ENGINE_WEIGHTS_V2.r * scores.r
-    : FINAL_ENGINE_WEIGHTS.s * scores.s
-      + FINAL_ENGINE_WEIGHTS.p * scores.p
-      + FINAL_ENGINE_WEIGHTS.c * scores.c
-      + FINAL_ENGINE_WEIGHTS.r * scores.r;
+  return sharedWeightedScore({ ...scores, n: scores.n ?? null }, ruleVersion);
 }
 
 export function normalizeLinear(

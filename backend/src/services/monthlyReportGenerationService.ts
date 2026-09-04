@@ -1,3 +1,4 @@
+import { displayScore } from './scoreComponents';
 import type {
   Airport,
   AirportScoreDaily,
@@ -327,8 +328,7 @@ function buildExcerpt(year: number, month: number, sourceDate: string, rows: Rep
 }
 
 function getDisplayScore(score: AirportScoreDaily): number {
-  const manual = score.details?.manual_total_score;
-  return typeof manual === 'number' ? manual : score.final_score;
+  return displayScore(score);
 }
 
 function airportNames(rows: ReportRow[], limit: number): string {

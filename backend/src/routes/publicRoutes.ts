@@ -1,3 +1,4 @@
+import { publicScoreSummary } from '../services/scoreComponents';
 import { Router } from 'express';
 import { APPLICATION_FEE_AMOUNT } from '../config/billing';
 import { RANKING_TYPES } from '../config/scoring';
@@ -398,7 +399,7 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       const snapshot = await deps.billingEligibility?.getSnapshot();
       const hidden = snapshot ? snapshot.get(airportId)?.score_hidden !== false : false;
       setPublicCacheHeaders(res);
-      res.json({ airport_id: airportId, start_date: startDate, end_date: endDate, items: hidden ? [] : trend });
+      res.json({ airport_id: airportId, start_date: startDate, end_date: endDate, items: hidden ? [] : trend.map(publicScoreSummary) });
     } catch (error) {
       next(error);
     }
@@ -429,7 +430,7 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       const snapshot = await deps.billingEligibility?.getSnapshot();
       const hidden = snapshot ? snapshot.get(airportId)?.score_hidden !== false : false;
       setPublicCacheHeaders(res);
-      res.json({ airport, date, metrics, score: hidden ? null : score });
+      res.json({ airport, date, metrics, score: hidden ? null : publicScoreSummary(score) });
     } catch (error) {
       next(error);
     }

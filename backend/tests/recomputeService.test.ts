@@ -203,7 +203,8 @@ test('recomputeForDate computes scores and replaces rankings idempotently', asyn
   assert.ok((replaced.get('today') || 0) >= 1);
   assert.equal(storedScores.get('1:2026-03-22')?.historical_score, 92.62);
   assert.equal(storedScores.get('1:2026-03-22')?.final_score, 90.14);
-  assert.equal(storedScores.get('1:2026-03-22')?.details.total_score, 38.14);
+  // The stale current-day row returned by getTrend must be replaced with freshly computed inputs.
+  assert.equal(storedScores.get('1:2026-03-22')?.details.total_score, 36.13);
 });
 
 test('recomputeForDate preserves manual total score while refreshing formula score for rankings', async () => {
@@ -274,7 +275,7 @@ test('recomputeForDate preserves manual total score while refreshing formula sco
       recent_score: 18,
       historical_score: 18,
       final_score: 18,
-      details: { total_score: 12.34, manual_total_score: 88.88 },
+      details: { total_score: 12.34, manual_total_score: 88.88, manual_score_p: 0 },
     }],
   ]);
   const rankingsByType = new Map<string, Array<{ airport_id: number; rank: number; score: number; details: Record<string, unknown> }>>();
@@ -362,6 +363,7 @@ test('recomputeForDate preserves manual total score while refreshing formula sco
 
   const manualScore = storedScores.get('1:2026-03-24');
   assert.equal(manualScore?.details.manual_total_score, 88.88);
+  assert.equal(manualScore?.details.manual_score_p, 0);
   assert.equal(typeof manualScore?.details.total_score, 'number');
   assert.notEqual(manualScore?.details.total_score, 12.34);
   assert.notEqual(manualScore?.details.total_score, manualScore?.details.manual_total_score);

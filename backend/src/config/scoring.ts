@@ -12,20 +12,7 @@ export const SCORE_WEIGHTS = {
 } as const;
 
 export const TIME_DECAY_LAMBDA = 0.1;
-export const FINAL_ENGINE_WEIGHTS = {
-  s: 0.4,
-  p: 0.3,
-  c: 0.1,
-  r: 0.2,
-} as const;
-
-export const FINAL_ENGINE_WEIGHTS_V2 = {
-  s: 0.3,
-  p: 0.3,
-  n: 0.2,
-  c: 0.1,
-  r: 0.1,
-} as const;
+export { FINAL_ENGINE_WEIGHTS, FINAL_ENGINE_WEIGHTS_V2 } from '../../../shared/gateRankScore';
 
 export const STABILITY_RULES = {
   uptimeBaseline: 95,

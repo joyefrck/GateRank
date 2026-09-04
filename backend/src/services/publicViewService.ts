@@ -1,3 +1,4 @@
+import { effectiveComponent } from './scoreComponents';
 import { NEW_AIRPORT_DAYS, SHANGHAI_TIMEZONE } from '../config/scoring';
 import { CLICK_CHARGE_AMOUNT } from '../config/billing';
 import type { PublicScoreVisibility } from '../repositories/applicantBillingRepository';
@@ -974,11 +975,11 @@ export class PublicViewService {
         airport,
         metrics,
         score: {
-          s: score.s,
-          p: score.p,
-          n: score.n ?? null,
-          c: score.c,
-          r: score.r,
+          s: effectiveComponent(score, 's'),
+          p: effectiveComponent(score, 'p'),
+          n: score.n != null || score.details?.score_rule_version === 'v2_spncr' ? effectiveComponent(score, 'n') : null,
+          c: effectiveComponent(score, 'c'),
+          r: effectiveComponent(score, 'r'),
           risk_penalty: score.risk_penalty,
           final_score: score.final_score,
           display_score: scoreVisibility.score_hidden ? null : getDisplayScore(score),
@@ -1031,11 +1032,11 @@ export class PublicViewService {
       airport,
       metrics,
       score: {
-        s: score.s,
-        p: score.p,
-        n: score.n ?? null,
-        c: score.c,
-        r: score.r,
+        s: effectiveComponent(score, 's'),
+        p: effectiveComponent(score, 'p'),
+        n: score.n != null || score.details?.score_rule_version === 'v2_spncr' ? effectiveComponent(score, 'n') : null,
+        c: effectiveComponent(score, 'c'),
+        r: effectiveComponent(score, 'r'),
         risk_penalty: score.risk_penalty,
         final_score: score.final_score,
         display_score: scoreVisibility.score_hidden ? null : getDisplayScore(score),
@@ -1737,11 +1738,11 @@ function toHomeNewsUpdate(item: NewsArticleListItem): HomeNewsUpdateView {
 }
 
 function getDisplayScore(score: { final_score: number; details?: Record<string, unknown> }): number {
-  const manualTotalScore = Number(score.details?.manual_total_score);
+  const manualTotalScore = score.details?.manual_total_score == null ? NaN : Number(score.details.manual_total_score);
   if (Number.isFinite(manualTotalScore)) {
     return manualTotalScore;
   }
-  const totalScore = Number(score.details?.total_score);
+  const totalScore = score.details?.total_score == null ? NaN : Number(score.details.total_score);
   return Number.isFinite(totalScore) ? totalScore : score.final_score;
 }
 

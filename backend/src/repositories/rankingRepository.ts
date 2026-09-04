@@ -16,8 +16,42 @@ interface LatestDateRow extends RowDataPacket {
   latest_date: unknown;
 }
 
+export interface RankingWriter {
+  replaceForDate(date: string, listType: RankingType,
+    rows: Array<{ airport_id: number; rank: number; score: number; details: Record<string, unknown> }>): Promise<void>;
+}
+
 export class RankingRepository {
   constructor(private readonly pool: Pool) {}
+
+  private snapshotQueue: Promise<void> = Promise.resolve();
+
+  /** Serialize rebuilds, read fresh scores after acquiring the lock, and publish all lists atomically. */
+  async withSnapshotLock(date: string, work: (writer: RankingWriter) => Promise<void>): Promise<void> {
+    const run = this.snapshotQueue.catch(() => undefined).then(async () => {
+      const connection = await this.pool.getConnection();
+      const lockName = `gaterank:rankings:${date}`;
+      let locked = false;
+      try {
+        const [rows] = await connection.query<Array<RowDataPacket & { acquired: number }>>(
+          'SELECT GET_LOCK(?, 30) AS acquired', [lockName],
+        );
+        if (Number(rows[0]?.acquired) !== 1) throw new Error('排行榜正在更新，请稍后重试');
+        locked = true;
+        await connection.beginTransaction();
+        await work(new RankingRepository(connection as unknown as Pool));
+        await connection.commit();
+      } catch (error) {
+        await connection.rollback();
+        throw error;
+      } finally {
+        try { if (locked) await connection.query('SELECT RELEASE_LOCK(?)', [lockName]); }
+        finally { connection.release(); }
+      }
+    });
+    this.snapshotQueue = run.catch(() => undefined);
+    await run;
+  }
 
   async getLatestAvailableDate(onOrBefore: string): Promise<string | null> {
     const [rows] = await this.pool.query<LatestDateRow[]>(

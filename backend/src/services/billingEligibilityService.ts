@@ -6,6 +6,7 @@ import { SystemSettingRepository } from '../repositories/systemSettingRepository
 import { ScoreRuleService } from './scoreRuleService';
 
 export interface BillingEligibility {
+  score_revision?: string;
   rank: number | null;
   /** A rejected candidate retains the attempted tier; never fall back to a cheaper price. */
   billing_rank: number | null;
@@ -15,6 +16,7 @@ export interface BillingEligibility {
 }
 
 interface Candidate {
+  score_revision?: string;
   airport_id: number;
   balance: number | null;
   display_score: number | null;
@@ -37,6 +39,7 @@ export function allocateBillingEligibility(
     const price = resolveClickChargeAmount(config, billingRank);
     const hidden = Math.round(Number(candidate.balance || 0) * 100) < Math.round(price * 100);
     result.set(Number(candidate.airport_id), {
+      ...(candidate.score_revision ? { score_revision: candidate.score_revision } : {}),
       rank: ranked && !hidden ? nextRank++ : null,
       billing_rank: billingRank,
       click_charge_amount: price,
@@ -72,6 +75,10 @@ export class BillingEligibilityService {
     const [config, version] = await Promise.all([settings.getConfig(), rules.resolveRuleVersion(date)]);
     const [rows] = await connection.query<Array<RowDataPacket & Candidate>>(
       `SELECT a.id AS airport_id, w.balance,
+              SHA2(CONCAT_WS(':', s.date, s.final_score, s.details_json,
+                (SELECT GROUP_CONCAT(CONCAT_WS(':', r.list_type, r.rank_no, r.score) ORDER BY r.list_type SEPARATOR '|')
+                   FROM airport_rankings_daily r WHERE r.airport_id = a.id AND r.date = s.date)
+              ), 256) AS score_revision,
               (a.status IN ('normal', 'risk')) AS rankable,
               COALESCE(
                 CAST(JSON_UNQUOTE(JSON_EXTRACT(s.details_json, '$.manual_total_score')) AS DECIMAL(10,2)),

@@ -1,3 +1,6 @@
+import type { RankingWriter } from '../repositories/rankingRepository';
+import { SCORE_COMPONENT_KEYS } from '../../../shared/gateRankScore';
+import { storeComponentCalculation } from './scoreComponents';
 import { RANKING_TYPES } from '../config/scoring';
 import type { Airport, AirportScoreDaily, DailyMetrics, NetworkCoverageRun, ScoreBreakdown } from '../types/domain';
 import { computeFinalEngineScore, computeScore, computeWeightedScore } from './scoringEngine';
@@ -27,6 +30,7 @@ export interface RecomputeDependencies {
     deleteDaily(airportId: number, date: string): Promise<void>;
   };
   rankingRepository: {
+    withSnapshotLock?(date: string, work: (writer: RankingWriter) => Promise<void>): Promise<void>;
     replaceForDate(
       date: string,
       listType: (typeof RANKING_TYPES)[number],
@@ -91,19 +95,19 @@ export class RecomputeService {
       score.historical_score = historicalScore;
       score.final_score = finalScore;
 
-      await this.deps.scoreRepository.upsertDaily(airport.id, date, score);
       const scoreTrend = await this.deps.scoreRepository.getTrend(airport.id, airport.created_at, date);
-      preserveManualTotalScore(score, scoreTrend, date);
-      const totalScore = computeFinalEngineScore({
-        sSeries: scoreTrend.map((row) => ({ date: row.date, score: row.s })),
-        pSeries: scoreTrend.map((row) => ({ date: row.date, score: row.p })),
-        rSeries: scoreTrend.map((row) => ({ date: row.date, score: row.r })),
+      preserveManualOverrides(score, scoreTrend, date);
+      const calculationTrend = [...scoreTrend.filter((row) => row.date !== date), { ...score, date }];
+      const automatic = computeFinalEngineScore({
+        sSeries: calculationTrend.map((row) => ({ date: row.date, score: row.s })),
+        pSeries: calculationTrend.map((row) => ({ date: row.date, score: row.p })),
+        rSeries: calculationTrend.map((row) => ({ date: row.date, score: row.r })),
         pricePer100gb: airport.plan_price_month,
         referenceDate: date,
         ruleVersion,
         networkCoverageScore: coverage?.score_n ?? null,
-      }).final_score;
-      score.details.total_score = totalScore;
+      });
+      storeComponentCalculation(score, automatic);
       await this.deps.scoreRepository.upsertDaily(airport.id, date, score);
       scoredRows.push({ airport, metrics: m, score });
     }
@@ -123,10 +127,7 @@ export class RecomputeService {
       await this.deps.airportRepository.setAutoTags(airportId, ['不推荐']);
     }
 
-    const rankings = buildRankings(date, scoredRows);
-    for (const rankingType of RANKING_TYPES) {
-      await this.deps.rankingRepository.replaceForDate(date, rankingType, rankings[rankingType]);
-    }
+    await this.rebuildRankingsForDate(date);
 
     return { recomputed: scoredRows.length };
   }
@@ -179,6 +180,14 @@ export class RecomputeService {
   }
 
   async rebuildRankingsForDate(date: string): Promise<void> {
+    if (this.deps.rankingRepository.withSnapshotLock) {
+      await this.deps.rankingRepository.withSnapshotLock(date, (writer) => this.writeRankingsForDate(date, writer));
+    } else {
+      await this.writeRankingsForDate(date, this.deps.rankingRepository);
+    }
+  }
+
+  private async writeRankingsForDate(date: string, writer: RankingWriter): Promise<void> {
     const [airports, metrics, scores] = await Promise.all([
       this.deps.airportRepository.listAll(),
       this.deps.metricsRepository.getByDate(date),
@@ -209,7 +218,7 @@ export class RecomputeService {
 
     const rankings = buildRankings(date, rows);
     for (const rankingType of RANKING_TYPES) {
-      await this.deps.rankingRepository.replaceForDate(date, rankingType, rankings[rankingType]);
+      await writer.replaceForDate(date, rankingType, rankings[rankingType]);
     }
   }
 
@@ -234,19 +243,19 @@ export class RecomputeService {
     score.historical_score = historicalScore;
     score.final_score = finalScore;
 
-    await this.deps.scoreRepository.upsertDaily(airport.id, date, score);
     const scoreTrend = await this.deps.scoreRepository.getTrend(airport.id, airport.created_at, date);
-    preserveManualTotalScore(score, scoreTrend, date);
-    const totalScore = computeFinalEngineScore({
-      sSeries: scoreTrend.map((row) => ({ date: row.date, score: row.s })),
-      pSeries: scoreTrend.map((row) => ({ date: row.date, score: row.p })),
-      rSeries: scoreTrend.map((row) => ({ date: row.date, score: row.r })),
+    preserveManualOverrides(score, scoreTrend, date);
+    const calculationTrend = [...scoreTrend.filter((row) => row.date !== date), { ...score, date }];
+    const automatic = computeFinalEngineScore({
+      sSeries: calculationTrend.map((row) => ({ date: row.date, score: row.s })),
+      pSeries: calculationTrend.map((row) => ({ date: row.date, score: row.p })),
+      rSeries: calculationTrend.map((row) => ({ date: row.date, score: row.r })),
       pricePer100gb: airport.plan_price_month,
       referenceDate: date,
       ruleVersion,
       networkCoverageScore: coverage?.score_n ?? null,
-    }).final_score;
-    score.details.total_score = totalScore;
+    });
+    storeComponentCalculation(score, automatic);
     await this.deps.scoreRepository.upsertDaily(airport.id, date, score);
     return score;
   }
@@ -281,11 +290,12 @@ function attachCoverageDetails(score: ScoreBreakdown, coverage: NetworkCoverageR
   score.details.network_balance_score = coverage.balance_score;
 }
 
-function preserveManualTotalScore(score: ScoreBreakdown, scoreTrend: AirportScoreDaily[], date: string): void {
+function preserveManualOverrides(score: ScoreBreakdown, scoreTrend: AirportScoreDaily[], date: string): void {
   const currentScore = scoreTrend.find((row) => row.date === date);
-  const manualTotalScore = currentScore?.details.manual_total_score;
-  if (typeof manualTotalScore === 'number' && Number.isFinite(manualTotalScore)) {
-    score.details.manual_total_score = manualTotalScore;
+  for (const key of ['manual_total_score', ...SCORE_COMPONENT_KEYS.map((key) => `manual_score_${key}`)]) {
+    const value = currentScore?.details[key];
+    delete score.details[key];
+    if (typeof value === 'number' && Number.isFinite(value)) score.details[key] = value;
   }
 }
 

@@ -40,7 +40,8 @@ import {
   getMarketingPageKindLabel,
   type MarketingPageKind,
 } from '../../shared/marketingAnalytics';
-import { manualTotalScoreInputValue } from './scoreInput';
+import { ScoreComponentsField } from './ScoreComponentsField';
+import type { ManualScoreComponents, ScoreComponentEditorState } from '../../shared/gateRankScore';
 import {
   buildSubscriptionNodeViewRows,
   type SubscriptionNodeSnapshotViewNode,
@@ -199,6 +200,7 @@ interface Airport {
   created_at: string;
   total_score?: number | null;
   formula_total_score?: number | null;
+  component_scores?: ScoreComponentEditorState | null;
   manual_total_score?: number | null;
   total_score_source?: 'manual' | 'formula' | null;
   price_score?: number | null;
@@ -10667,8 +10669,6 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
   const [job, setJob] = useState<ManualJobRecord | null>(null);
   const [jobMessage, setJobMessage] = useState('');
   const [jobTone, setJobTone] = useState<'neutral' | 'success' | 'error'>('neutral');
-  const [manualTotalScoreInput, setManualTotalScoreInput] = useState('');
-  const [manualTotalScoreSaving, setManualTotalScoreSaving] = useState(false);
   const [performanceNodeSelection, setPerformanceNodeSelection] = useState<PerformanceNodeSelectionView | null>(null);
   const [performanceNodeSelectionLoading, setPerformanceNodeSelectionLoading] = useState(false);
   const [performanceNodeSelectionSaving, setPerformanceNodeSelectionSaving] = useState(false);
@@ -10773,9 +10773,6 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
     void load();
   }, [airportId, date]);
 
-  useEffect(() => {
-    setManualTotalScoreInput(manualTotalScoreInputValue(dashboard?.base.manual_total_score));
-  }, [dashboard?.date, dashboard?.base.id, dashboard?.base.manual_total_score]);
 
   useEffect(() => {
     if (!job || (job.status !== 'queued' && job.status !== 'running')) {
@@ -10925,49 +10922,14 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
     }
   };
 
-  const saveManualTotalScore = async () => {
-    if (!dashboard) return;
-    const trimmed = manualTotalScoreInput.trim();
-    const parsed = Number(trimmed);
-    if (trimmed === '' || !Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
-      setError('总分必须是 0 到 100 之间的数字');
-      return;
-    }
-
-    setManualTotalScoreSaving(true);
-    setError('');
-    setMessage('');
-    try {
-      await apiFetch(`/api/v1/admin/airports/${airportId}/scores/${date}/manual-total-score`, {
-        method: 'PATCH',
-        body: JSON.stringify({ total_score: Math.round(parsed * 100) / 100 }),
-      });
-      setMessage('总分已保存为人工覆盖');
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '总分保存失败');
-    } finally {
-      setManualTotalScoreSaving(false);
-    }
-  };
-
-  const clearManualTotalScore = async () => {
-    if (!dashboard) return;
-    setManualTotalScoreSaving(true);
-    setError('');
-    setMessage('');
-    try {
-      await apiFetch(`/api/v1/admin/airports/${airportId}/scores/${date}/manual-total-score`, {
-        method: 'PATCH',
-        body: JSON.stringify({ total_score: null }),
-      });
-      setMessage('已恢复公式分');
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : '恢复公式分失败');
-    } finally {
-      setManualTotalScoreSaving(false);
-    }
+  const saveScoreComponents = async (patch: ManualScoreComponents) => {
+    const result = await apiFetch(`/api/v1/admin/airports/${airportId}/scores/${date}/manual-components`, {
+      method: 'PATCH', body: JSON.stringify(patch),
+    }) as ScoreComponentEditorState;
+    setDashboard((current) => current && current.date === date && current.base.id === airportId ? {
+      ...current, base: { ...current.base, component_scores: result, total_score: result.total_score,
+        formula_total_score: result.formula_total_score, manual_total_score: null, total_score_source: 'formula' },
+    } : current);
   };
 
   const moveDate = (offsetDays: number) => {
@@ -11213,19 +11175,11 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
             <ReadField label="官网" value={formatWebsiteList(dashboard.base.websites, dashboard.base.website)} />
             <ReadField label="状态" value={dashboard.base.status} />
             <ReadField label="月价" value={dashboard.base.plan_price_month} />
-            <TotalScoreField
-              value={manualTotalScoreInput}
-              displayScore={dashboard.base.total_score ?? null}
-              formulaScore={dashboard.base.formula_total_score ?? null}
-              manualScore={dashboard.base.manual_total_score ?? null}
-              source={dashboard.base.total_score_source ?? null}
-              disabled={manualTotalScoreSaving || !dashboard.pipeline.has_score}
-              saving={manualTotalScoreSaving}
-              onChange={setManualTotalScoreInput}
-              onSave={() => void saveManualTotalScore()}
-              onClear={() => void clearManualTotalScore()}
+            <ScoreComponentsField
+              key={`${airportId}:${date}`}
+              state={dashboard.base.component_scores ?? null}
+              onSave={saveScoreComponents}
             />
-            <ReadField label="价格评分 (C)" value={valueOrDash(dashboard.base.price_score)} />
             <ReadField label="试用" value={dashboard.base.has_trial ? '是' : '否'} />
             <ReadField label="有效数据天数" value={valueOrDash(dashboard.base.score_data_days)} />
             <ReadField label="订阅链接" value={dashboard.base.subscription_url || '-'} />
@@ -11972,80 +11926,6 @@ function performanceReviewReasonLabel(reason: string): string {
   if (reason === 'legacy_mainland_ratio_over_3x') return '中心对照与大陆结果差异较大';
   if (reason === 'cohort_target_degraded') return '测速目标同期整体退化';
   return '存在待复核证据';
-}
-
-function TotalScoreField({
-  value,
-  displayScore,
-  formulaScore,
-  manualScore,
-  source,
-  disabled,
-  saving,
-  onChange,
-  onSave,
-  onClear,
-}: {
-  value: string;
-  displayScore: number | null;
-  formulaScore: number | null;
-  manualScore: number | null;
-  source: 'manual' | 'formula' | null;
-  disabled: boolean;
-  saving: boolean;
-  onChange: (value: string) => void;
-  onSave: () => void;
-  onClear: () => void;
-}) {
-  const hasManualScore = manualScore !== null && manualScore !== undefined;
-
-  return (
-    <div className="border rounded p-3 bg-neutral-50">
-      <div className="flex items-center justify-between gap-2">
-        <div className="text-xs text-neutral-500">总分</div>
-        <span className={`rounded-full px-2 py-0.5 text-[11px] ${source === 'manual' ? 'bg-amber-100 text-amber-700' : 'bg-neutral-200 text-neutral-600'}`}>
-          {source === 'manual' ? '人工覆盖' : source === 'formula' ? '公式分' : '无评分'}
-        </span>
-      </div>
-      <div className="mt-2 flex items-center gap-2">
-        <input
-          className="min-w-0 flex-1 rounded border border-neutral-300 bg-white px-3 py-2 font-mono text-sm outline-none focus:border-neutral-900 disabled:bg-neutral-100"
-          type="number"
-          min="0"
-          max="100"
-          step="0.01"
-          value={value}
-          disabled={disabled}
-          onChange={(event) => onChange(event.target.value)}
-        />
-        <button
-          type="button"
-          className="rounded bg-neutral-900 px-3 py-2 text-sm text-white disabled:opacity-50"
-          disabled={disabled}
-          onClick={onSave}
-        >
-          {saving ? '保存中...' : '保存'}
-        </button>
-      </div>
-      <div className="mt-2 space-y-1 text-xs text-neutral-500">
-        <div>当前展示：{valueOrDash(displayScore)}</div>
-        <div>公式分：{valueOrDash(formulaScore)}</div>
-      </div>
-      {hasManualScore && (
-        <button
-          type="button"
-          className="mt-3 rounded border border-neutral-300 px-3 py-1.5 text-xs text-neutral-700 disabled:opacity-50"
-          disabled={saving}
-          onClick={onClear}
-        >
-          恢复公式分
-        </button>
-      )}
-      {source === null && (
-        <div className="mt-2 text-xs text-amber-700">当前日期没有评分记录，暂不能修改总分。</div>
-      )}
-    </div>
-  );
 }
 
 function ReadField({ label, value }: { label: string; value: React.ReactNode }) {

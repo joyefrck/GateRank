@@ -1,3 +1,4 @@
+import { effectiveComponent } from './scoreComponents';
 import { LIST_LIMIT, NEW_AIRPORT_DAYS } from '../config/scoring';
 import { dateDaysAgo } from '../utils/time';
 import type { Airport, DailyMetrics, RankingType, ScoreBreakdown } from '../types/domain';
@@ -20,12 +21,12 @@ export function buildRankings(
 
   const stable = activeRows
     .slice()
-    .sort((a, b) => b.score.s - a.score.s)
+    .sort((a, b) => effectiveComponent(b.score, 's') - effectiveComponent(a.score, 's'))
     .slice(0, LIST_LIMIT);
 
   const value = activeRows
     .slice()
-    .sort((a, b) => b.score.c - a.score.c)
+    .sort((a, b) => effectiveComponent(b.score, 'c') - effectiveComponent(a.score, 'c'))
     .slice(0, LIST_LIMIT);
 
   const newSince = dateDaysAgo(date, NEW_AIRPORT_DAYS);
@@ -73,7 +74,7 @@ export function compareByTodayPickScore(left: RankedAirportInput, right: RankedA
     rankingScoreOf(right) - rankingScoreOf(left) ||
     Number(right.metrics.healthy_days_streak ?? right.metrics.stable_days_streak ?? 0) -
       Number(left.metrics.healthy_days_streak ?? left.metrics.stable_days_streak ?? 0) ||
-    right.score.s - left.score.s ||
+    effectiveComponent(right.score, 's') - effectiveComponent(left.score, 's') ||
     left.airport.id - right.airport.id
   );
 }
@@ -96,7 +97,7 @@ function toRows(
     score:
       scoreKey === 'ranking_score'
         ? rankingScoreOf(row)
-        : row.score[scoreKey],
+        : scoreKey === 'risk_penalty' ? row.score.risk_penalty : effectiveComponent(row.score, scoreKey),
     details: {
       airport_name: row.airport.name,
       status: row.airport.status,
@@ -104,10 +105,10 @@ function toRows(
       median_latency_ms: row.metrics.median_latency_ms,
       median_download_mbps: row.metrics.median_download_mbps,
       packet_loss_percent: row.metrics.packet_loss_percent,
-      s: row.score.s,
-      p: row.score.p,
-      c: row.score.c,
-      r: row.score.r,
+      s: effectiveComponent(row.score, 's'),
+      p: effectiveComponent(row.score, 'p'),
+      c: effectiveComponent(row.score, 'c'),
+      r: effectiveComponent(row.score, 'r'),
       total_score: rankingScoreOf(row),
       final_score: row.score.final_score,
       risk_penalty: row.score.risk_penalty,

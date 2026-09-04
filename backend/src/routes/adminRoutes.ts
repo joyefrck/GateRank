@@ -1,3 +1,6 @@
+import { SCORE_COMPONENT_KEYS, type ManualScoreComponents, type ScoreComponentEditorState } from '../../../shared/gateRankScore';
+import { componentEditorState } from '../services/scoreComponents';
+import type { ScoreDetailValue } from '../types/domain';
 import { Router } from 'express';
 import { STABILITY_RULES } from '../config/scoring';
 import { HttpError } from '../middleware/errorHandler';
@@ -333,11 +336,13 @@ interface AdminDeps {
   scoreRepository: {
     getByAirportAndDate(airportId: number, date: string): Promise<unknown | null>;
     getTrend(airportId: number, startDate: string, endDate: string): Promise<unknown[]>;
+    updateManualComponents?(airportId: number, date: string, patch: ManualScoreComponents): Promise<{ before: ScoreComponentEditorState; after: ScoreComponentEditorState }>;
     updateManualTotalScore?(airportId: number, date: string, totalScore: number | null): Promise<boolean>;
     getLatestAvailableDate?(onOrBefore: string): Promise<string | null>;
     getPublicDisplayScoresByDate?(airportIds: number[], date: string): Promise<Map<number, number>>;
   };
   recomputeService: {
+    rebuildRankingsForDate?(date: string): Promise<void>;
     recomputeForDate(date: string): Promise<{ recomputed: number }>;
     recomputeAirportForDate(date: string, airportId: number): Promise<{ recomputed: number }>;
   };
@@ -2254,6 +2259,34 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     }
   });
 
+  router.patch('/airports/:id/scores/:date/manual-components', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const date = parseDate(req.params.date);
+      const payload = req.body;
+      if (!payload || typeof payload !== 'object' || Array.isArray(payload)
+        || Object.keys(payload).some((key) => !SCORE_COMPONENT_KEYS.includes(key as typeof SCORE_COMPONENT_KEYS[number]))) {
+        throw new HttpError(400, 'INVALID_SCORE_COMPONENT', '仅支持 S/P/N/C/R 分项');
+      }
+      const patch: ManualScoreComponents = {};
+      for (const key of SCORE_COMPONENT_KEYS) {
+        if (!(key in payload)) continue;
+        const value = payload[key];
+        if (value !== null && (typeof value !== 'number' || !Number.isFinite(value) || value < 0 || value > 100)) {
+          throw new HttpError(400, 'INVALID_SCORE_COMPONENT', '分项必须是 0 到 100 之间的数字');
+        }
+        patch[key] = value === null ? null : Math.round(value * 100) / 100;
+      }
+      if (!deps.scoreRepository.updateManualComponents) throw new HttpError(500, 'SCORE_REPOSITORY_UNAVAILABLE', '分项保存不可用');
+      const result = await deps.scoreRepository.updateManualComponents(airportId, date, patch);
+      await deps.auditRepository.log('update_manual_score_components', actorFromReq(req), req.requestId, {
+        airport_id: airportId, date, before: result.before, after: result.after,
+      });
+      await deps.recomputeService.rebuildRankingsForDate?.(date);
+      res.json({ airport_id: airportId, date, ...result.after });
+    } catch (error) { next(error); }
+  });
+
   router.patch('/airports/:id/scores/:date/manual-total-score', async (req, res, next) => {
     try {
       const airportId = toAirportId(req.params.id);
@@ -2263,6 +2296,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       if (!existingScore) {
         throw new HttpError(404, 'SCORE_NOT_FOUND', `score not found for ${airportId}`);
       }
+      if (totalScore !== null) throw new HttpError(410, 'MANUAL_TOTAL_SCORE_RETIRED', '请改用分项评分');
       if (!deps.scoreRepository.updateManualTotalScore) {
         throw new HttpError(500, 'SCORE_REPOSITORY_UNAVAILABLE', 'manual score update is unavailable');
       }
@@ -2277,6 +2311,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         date,
         manual_total_score: totalScore,
       });
+      await deps.recomputeService.rebuildRankingsForDate?.(date);
       res.json({ airport_id: airportId, date, manual_total_score: totalScore });
     } catch (error) {
       next(error);
@@ -2361,7 +2396,8 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           networkCoverageScore: numberOrNull(scoreObj.n),
         })
         : null;
-      const formulaTotalScore = finalEngineScore?.final_score ?? null;
+      const componentScores = finalEngineScore ? componentEditorState(finalEngineScore, details as Record<string, ScoreDetailValue>) : null;
+      const formulaTotalScore = componentScores?.formula_total_score ?? null;
       const manualTotalScore = numberOrNull(details.manual_total_score);
       const displayTotalScore = manualTotalScore ?? formulaTotalScore;
       const hasMetrics = Boolean(metrics);
@@ -2431,6 +2467,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           score_rule_version: scoreRuleVersion,
           total_score: displayTotalScore,
           formula_total_score: formulaTotalScore,
+          component_scores: componentScores,
           manual_total_score: manualTotalScore,
           total_score_source: manualTotalScore !== null ? 'manual' : formulaTotalScore !== null ? 'formula' : null,
           price_score: calcPriceScore(Number(baseObj.plan_price_month || 0)),

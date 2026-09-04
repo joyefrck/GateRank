@@ -7,9 +7,10 @@ import { allocateBillingEligibility } from '../src/services/billingEligibilitySe
 
 test('SSE emits a private-data-free invalidation when a wallet loses eligibility', async () => {
   let balance = 10;
+  let scoreRevision = 'first-score';
   const app = express();
   app.use(createLiveScoreRoutes({ getSnapshot: async () => allocateBillingEligibility([
-    { airport_id: 102, balance, display_score: 94, rankable: true },
+    { airport_id: 102, balance, display_score: 94, rankable: true, score_revision: scoreRevision },
   ], { click_charge_amount: 1.5 }) }));
   const server = app.listen(0);
   const controller = new AbortController();
@@ -32,8 +33,11 @@ test('SSE emits a private-data-free invalidation when a wallet loses eligibility
       return text.match(/data: ([a-f0-9]{64})/)![1];
     }
     const before = await nextVersion();
+    scoreRevision = 'changed-score-same-rank';
+    const afterScore = await nextVersion();
+    assert.notEqual(afterScore, before);
     balance = 0.9;
-    assert.notEqual(await nextVersion(), before);
+    assert.notEqual(await nextVersion(), afterScore);
   } finally {
     clearTimeout(deadline);
     controller.abort();

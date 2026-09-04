@@ -3110,7 +3110,7 @@ test('GET /airports/:id/dashboard exposes performance run diagnostics', async ()
   }
 });
 
-test('PATCH /airports/:id/scores/:date/manual-total-score saves and clears manual override', async () => {
+test('PATCH /airports/:id/scores/:date/manual-total-score rejects new totals and clears legacy override', async () => {
   const updates: Array<{ airportId: number; date: string; totalScore: number | null }> = [];
   const app = express();
   app.use(express.json());
@@ -3168,9 +3168,7 @@ test('PATCH /airports/:id/scores/:date/manual-total-score saves and clears manua
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ total_score: 77.936 }),
     });
-    assert.equal(saveResponse.status, 200);
-    const saveData = (await saveResponse.json()) as { manual_total_score: number };
-    assert.equal(saveData.manual_total_score, 77.94);
+    assert.equal(saveResponse.status, 410);
 
     const clearResponse = await fetch(`http://127.0.0.1:${port}/airports/1/scores/2026-03-22/manual-total-score`, {
       method: 'PATCH',
@@ -3180,7 +3178,6 @@ test('PATCH /airports/:id/scores/:date/manual-total-score saves and clears manua
     assert.equal(clearResponse.status, 200);
 
     assert.deepEqual(updates, [
-      { airportId: 1, date: '2026-03-22', totalScore: 77.94 },
       { airportId: 1, date: '2026-03-22', totalScore: null },
     ]);
   } finally {

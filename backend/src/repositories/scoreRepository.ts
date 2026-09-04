@@ -1,4 +1,8 @@
-import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import { SCORE_COMPONENT_KEYS, type ManualScoreComponents, type ScoreComponentEditorState } from '../../../shared/gateRankScore';
+import { computeFinalEngineScore } from '../services/scoringEngine';
+import { componentEditorState, storeComponentCalculation } from '../services/scoreComponents';
+import { HttpError } from '../middleware/errorHandler';
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type {
   AirportScoreDaily,
   AirportStatus,
@@ -222,48 +226,118 @@ export class ScoreRepository {
     }));
   }
 
-  async upsertDaily(airportId: number, date: string, score: ScoreBreakdown): Promise<void> {
-    await this.pool.execute<ResultSetHeader>(
-      `INSERT INTO airport_scores_daily (
-        airport_id, date, score_s, score_p, score_n, score_c, score_r,
-        risk_penalty, score, recent_score, historical_score, final_score, details_json
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        score_s = VALUES(score_s),
-        score_p = VALUES(score_p),
-        score_n = VALUES(score_n),
-        score_c = VALUES(score_c),
-        score_r = VALUES(score_r),
-        risk_penalty = VALUES(risk_penalty),
-        score = VALUES(score),
-        recent_score = VALUES(recent_score),
-        historical_score = VALUES(historical_score),
-        final_score = VALUES(final_score),
-        details_json =
-          CASE
-            WHEN JSON_EXTRACT(details_json, '$.manual_total_score') IS NULL THEN VALUES(details_json)
-            ELSE JSON_SET(
-              VALUES(details_json),
-              '$.manual_total_score',
-              CAST(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.manual_total_score')) AS DECIMAL(10,2))
-            )
-          END`,
-      [
-        airportId,
-        date,
-        score.s,
-        score.p,
-        score.n ?? null,
-        score.c,
-        score.r,
-        score.risk_penalty,
-        score.score,
-        score.recent_score,
-        score.historical_score,
-        score.final_score,
-        JSON.stringify(score.details),
-      ],
+  /** Lock the airport before reading score history: all writers for this airport serialize. */
+  private async withScoreLock<T>(airportId: number, work: (connection: PoolConnection) => Promise<T>): Promise<T> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await connection.query('SELECT id FROM airports WHERE id = ? FOR UPDATE', [airportId]);
+      const result = await work(connection);
+      await connection.commit();
+      return result;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+  }
+
+  private async readCalculationContext(connection: PoolConnection, airportId: number, date: string) {
+    const [airports] = await connection.query<Array<RowDataPacket & { plan_price_month: number; created_at: unknown }>>(
+      'SELECT plan_price_month, created_at FROM airports WHERE id = ?', [airportId],
     );
+    if (!airports[0]) throw new HttpError(404, 'AIRPORT_NOT_FOUND', 'airport not found');
+    const [rows] = await connection.query<ScoreRow[]>(
+      `SELECT airport_id, date, score_s, score_p, score_n, score_c, score_r,
+              risk_penalty, score, recent_score, historical_score, final_score, details_json
+         FROM airport_scores_daily WHERE airport_id = ? AND date >= ? AND date <= ? ORDER BY date`,
+      [airportId, formatDateOnly(airports[0].created_at), date],
+    );
+    return { airport: airports[0], history: rows.map(toAirportScoreDaily) };
+  }
+
+  private calculateComponents(context: Awaited<ReturnType<ScoreRepository['readCalculationContext']>>, date: string, score: ScoreBreakdown) {
+    const history = [...context.history.filter((row) => row.date !== date), { ...score, date }];
+    return computeFinalEngineScore({
+      sSeries: history.map((row) => ({ date: row.date, score: row.s })),
+      pSeries: history.map((row) => ({ date: row.date, score: row.p })),
+      rSeries: history.map((row) => ({ date: row.date, score: row.r })),
+      pricePer100gb: Number(context.airport.plan_price_month), referenceDate: date,
+      ruleVersion: score.details.score_rule_version === 'v2_spncr' ? 'v2_spncr' : 'v1_spcr',
+      networkCoverageScore: score.n,
+    });
+  }
+
+  async updateManualComponents(airportId: number, date: string, patch: ManualScoreComponents): Promise<{ before: ScoreComponentEditorState; after: ScoreComponentEditorState }> {
+    return this.withScoreLock(airportId, async (connection) => {
+      const context = await this.readCalculationContext(connection, airportId, date);
+      const score = context.history.find((row) => row.date === date);
+      if (!score) throw new HttpError(404, 'SCORE_NOT_FOUND', '当前日期没有评分记录');
+      if (score.details.score_rule_version !== 'v2_spncr' && patch.n != null) {
+        throw new HttpError(400, 'INVALID_SCORE_COMPONENT', '历史 v1 评分不支持网络覆盖分');
+      }
+      const automatic = this.calculateComponents(context, date, score);
+      const before = componentEditorState(automatic, score.details);
+      for (const key of SCORE_COMPONENT_KEYS) {
+        if (!(key in patch)) continue;
+        if (patch[key] === null) delete score.details[`manual_score_${key}`];
+        else score.details[`manual_score_${key}`] = patch[key]!;
+      }
+      delete score.details.manual_total_score;
+      const after = storeComponentCalculation(score, automatic);
+      await connection.execute(
+        'UPDATE airport_scores_daily SET details_json = ? WHERE airport_id = ? AND date = ?',
+        [JSON.stringify(score.details), airportId, date],
+      );
+      return { before, after };
+    });
+  }
+
+  async upsertDaily(airportId: number, date: string, score: ScoreBreakdown): Promise<void> {
+    await this.withScoreLock(airportId, async (connection) => {
+      const context = await this.readCalculationContext(connection, airportId, date);
+      const previous = context.history.find((row) => row.date === date)?.details ?? {};
+      // Never resurrect stale overrides supplied by an in-flight recomputation.
+      for (const key of ['manual_total_score', ...SCORE_COMPONENT_KEYS.map((key) => `manual_score_${key}`)]) {
+        delete score.details[key];
+        if (typeof previous[key] === 'number') score.details[key] = previous[key];
+      }
+      storeComponentCalculation(score, this.calculateComponents(context, date, score));
+      await connection.execute<ResultSetHeader>(
+        `INSERT INTO airport_scores_daily (
+          airport_id, date, score_s, score_p, score_n, score_c, score_r,
+          risk_penalty, score, recent_score, historical_score, final_score, details_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          score_s = VALUES(score_s),
+          score_p = VALUES(score_p),
+          score_n = VALUES(score_n),
+          score_c = VALUES(score_c),
+          score_r = VALUES(score_r),
+          risk_penalty = VALUES(risk_penalty),
+          score = VALUES(score),
+          recent_score = VALUES(recent_score),
+          historical_score = VALUES(historical_score),
+          final_score = VALUES(final_score),
+          details_json = VALUES(details_json)`,
+        [
+          airportId,
+          date,
+          score.s,
+          score.p,
+          score.n ?? null,
+          score.c,
+          score.r,
+          score.risk_penalty,
+          score.score,
+          score.recent_score,
+          score.historical_score,
+          score.final_score,
+          JSON.stringify(score.details),
+        ],
+      );
+    });
   }
 
   async deleteDaily(airportId: number, date: string): Promise<void> {
@@ -279,20 +353,9 @@ export class ScoreRepository {
     date: string,
     totalScore: number | null,
   ): Promise<boolean> {
-    const sql = totalScore === null
-      ? `UPDATE airport_scores_daily
-            SET details_json = JSON_REMOVE(COALESCE(details_json, JSON_OBJECT()), '$.manual_total_score')
-          WHERE airport_id = ? AND date = ?`
-      : `UPDATE airport_scores_daily
-            SET details_json = JSON_SET(
-              COALESCE(details_json, JSON_OBJECT()),
-              '$.manual_total_score',
-              ?
-            )
-          WHERE airport_id = ? AND date = ?`;
-    const params = totalScore === null ? [airportId, date] : [totalScore, airportId, date];
-    const [result] = await this.pool.execute<ResultSetHeader>(sql, params);
-    return result.affectedRows > 0;
+    if (totalScore !== null) throw new HttpError(410, 'MANUAL_TOTAL_SCORE_RETIRED', '请改用分项评分');
+    await this.updateManualComponents(airportId, date, {});
+    return true;
   }
 
   async getByAirportAndDate(airportId: number, date: string): Promise<AirportScoreDaily | null> {

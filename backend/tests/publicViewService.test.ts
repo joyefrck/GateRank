@@ -2697,6 +2697,8 @@ test('PublicViewService.getReportView derives today pick rank from public full r
         final_score: 79,
         details: {
           manual_total_score: 92,
+          manual_score_p: 0,
+          manual_score_s: 95,
           total_score: 83,
         },
       }),
@@ -2715,6 +2717,8 @@ test('PublicViewService.getReportView derives today pick rank from public full r
         final_score: 79,
         details: {
           manual_total_score: 92,
+          manual_score_p: 0,
+          manual_score_s: 95,
           total_score: 83,
         },
       }],
@@ -2748,6 +2752,9 @@ test('PublicViewService.getReportView derives today pick rank from public full r
 
   const result = await service.getReportView(1, '2026-03-24');
   assert.ok(result);
+  assert.equal(result.score_breakdown.p, 0);
+  assert.equal(result.score_breakdown.s, 95);
+  assert.equal(result.score_breakdown.final_score, 92);
   assert.equal(result.ranking.today_pick_rank, 2);
   assert.deepEqual(fullRankingCalls, ['2026-03-24:1:3']);
 });
