@@ -124,12 +124,13 @@ test('nginx proxies API routes and delegates editable public paths to backend lo
   assert.doesNotMatch(catchAll, /\/index\.html/);
 });
 
-test('nginx keeps stable frontend assets and SPA entry revalidated', async () => {
+test('nginx caches release-isolated frontend assets and revalidates the SPA entry', async () => {
   const config = await readFile(path.join(process.cwd(), 'nginx.conf'), 'utf8');
 
   const assets = getLocationBlock(config, '^~ /assets/');
-  assert.match(assets, /expires\s+-1;/);
-  assert.match(assets, /Cache-Control\s+"no-cache"/);
+  assert.match(assets, /expires\s+off;/);
+  assert.match(assets, /Cache-Control\s+"public, max-age=31536000, immutable"/);
+  assert.doesNotMatch(assets, /Cache-Control\s+"no-cache"/);
 
   const indexHtml = getLocationBlock(config, '= /index.html');
   assert.match(indexHtml, /expires\s+-1;/);

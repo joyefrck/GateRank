@@ -70,6 +70,10 @@ function versionAssetPath(assetPath: string): string {
   if (!version) {
     return assetPath;
   }
+  const pathname = assetPath.split('?', 1)[0];
+  if (pathname.startsWith(`/assets/${version}/`)) {
+    return assetPath;
+  }
   const separator = assetPath.includes('?') ? '&' : '?';
   return `${assetPath}${separator}v=${encodeURIComponent(version)}`;
 }

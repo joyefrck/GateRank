@@ -37,6 +37,34 @@ test('readManifestAssets resolves Vite entry script and stylesheet with deploy v
   }
 });
 
+test('readManifestAssets preserves one module URL for release-isolated Vite assets', async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), 'gaterank-manifest-'));
+  const manifestPath = path.join(dir, 'manifest.json');
+  const previousVersion = process.env.PUBLIC_FRONTEND_ASSET_VERSION;
+  process.env.PUBLIC_FRONTEND_ASSET_VERSION = 'commit-sha-123';
+  try {
+    await writeFile(manifestPath, JSON.stringify({
+      'index.html': {
+        file: 'assets/commit-sha-123/index.js',
+        css: ['assets/commit-sha-123/index.css'],
+        isEntry: true,
+      },
+    }));
+
+    assert.deepEqual(readManifestAssets(manifestPath), {
+      script: '/assets/commit-sha-123/index.js',
+      stylesheet: '/assets/commit-sha-123/index.css',
+    });
+  } finally {
+    if (previousVersion === undefined) {
+      delete process.env.PUBLIC_FRONTEND_ASSET_VERSION;
+    } else {
+      process.env.PUBLIC_FRONTEND_ASSET_VERSION = previousVersion;
+    }
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('resolvePublicFrontendAssets falls back when Vite manifest is absent', () => {
   const previousVersion = process.env.PUBLIC_FRONTEND_ASSET_VERSION;
   delete process.env.PUBLIC_FRONTEND_ASSET_VERSION;
