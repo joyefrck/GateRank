@@ -741,6 +741,50 @@ test('GET /pages/full-ranking returns paged full ranking payload', async () => {
   }
 });
 
+test('GET /pages/full-ranking rejects an excessive combination burst before loading data', async () => {
+  let fullRankingCalls = 0;
+  const app = express();
+  app.use(createPublicRoutes({
+    airportRepository: { getById: async () => null },
+    airportApplicationRepository: { create: async () => 1 },
+    metricsRepository: { getByAirportAndDate: async () => null },
+    scoreRepository: {
+      getByAirportAndDate: async () => null,
+      getTrend: async () => [],
+    },
+    rankingRepository: { getRanking: async () => [] },
+    publicViewService: {
+      getHomePageView: async () => ({}),
+      getFullRankingView: async () => {
+        fullRankingCalls += 1;
+        return {};
+      },
+      getRiskMonitorView: async () => ({}),
+      getReportView: async () => null,
+    },
+    fullRankingLoadGate: {
+      check: () => ({ allowed: false, retryAfterSeconds: 6 }),
+    },
+  }));
+  app.use(errorHandler);
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(
+      `http://127.0.0.1:${port}/pages/full-ranking?client=clash&client=shadowrocket&region=hong_kong&streaming=chatgpt`,
+    );
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('retry-after'), '6');
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    const payload = await response.json() as { code: string };
+    assert.equal(payload.code, 'RANKING_FILTER_RATE_LIMITED');
+    assert.equal(fullRankingCalls, 0);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /pages/full-ranking rechecks live score visibility on every request', async () => {
   let fullRankingCalls = 0;
   const app = express();

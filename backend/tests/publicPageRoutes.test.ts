@@ -1241,6 +1241,40 @@ test('GET /rankings/all noindexes search and combination filters', async () => {
   }
 });
 
+test('GET /rankings/all returns a lightweight 429 before loading an excessive combination burst', async () => {
+  let fullRankingCalls = 0;
+  const app = express();
+  app.use(createPublicPageRoutes({
+    publicViewService: {
+      ...createPublicViewServiceStub(),
+      getFullRankingView: async (): Promise<FullRankingView> => {
+        fullRankingCalls += 1;
+        return fullRankingView;
+      },
+    },
+    fullRankingLoadGate: {
+      check: () => ({ allowed: false, retryAfterSeconds: 7 }),
+    },
+  }));
+
+  const server = app.listen(0);
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(
+      `http://127.0.0.1:${port}/rankings/all?client=clash&client=shadowrocket&region=hong_kong&streaming=chatgpt`,
+    );
+    assert.equal(response.status, 429);
+    assert.equal(response.headers.get('retry-after'), '7');
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+    const html = await response.text();
+    assert.match(html, /筛选请求较多/);
+    assert.ok(Buffer.byteLength(html) < 2_000);
+    assert.equal(fullRankingCalls, 0);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
 test('GET /rankings/all keeps newly recognized region filters query-only and noindexed', async () => {
   const app = express();
   app.use(createPublicPageRoutes({

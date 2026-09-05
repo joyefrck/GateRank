@@ -112,6 +112,7 @@ import { getNewsUploadRootDir } from './utils/newsStorage';
 import { createTimedPromiseCache, PUBLIC_PAGE_CACHE_TTL_MS } from './utils/publicCache';
 import { BillingEligibilityService } from './services/billingEligibilityService';
 import { createLiveScoreRoutes } from './routes/liveScoreRoutes';
+import { createFullRankingLoadGate } from './utils/fullRankingLoadGate';
 
 export async function createApp() {
   const pool = getDbPool();
@@ -338,6 +339,7 @@ export async function createApp() {
     systemSettingRepository,
   });
   const publicPageCache = createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
+  const fullRankingLoadGate = createFullRankingLoadGate();
   const performanceAnomalyService = new PerformanceAnomalyService({
     runRepository: performanceRunRepository,
     targetRepository: performanceRunTargetRepository,
@@ -394,6 +396,7 @@ export async function createApp() {
       pageCache: publicPageCache,
       marketingRepository: marketingEventRepository,
       marketingSettingsService,
+      fullRankingLoadGate,
     }),
   );
   app.use(
@@ -583,6 +586,7 @@ export async function createApp() {
       monthlyReportPublicService,
       toolsDownloadService,
       pageCache: publicPageCache,
+      fullRankingLoadGate,
     }),
   );
 

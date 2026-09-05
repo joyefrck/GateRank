@@ -1,5 +1,5 @@
 import { DEFAULT_IP_PURITY_CONFIG } from '../../../shared/ipPurity';
-import { Router } from 'express';
+import { Router, type Response } from 'express';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../types/domain';
 import type { AirportDealDetailView, AirportDealView } from '../../../shared/airportAds';
 import { getSiteOrigin } from '../utils/siteUrl';
@@ -45,6 +45,7 @@ import type { MonthlyReportPublicService } from '../services/monthlyReportPublic
 import type { ToolsDownloadService } from '../services/toolsDownloadService';
 import { isToolDownloadPlatform } from '../../../shared/toolDownloads';
 import { sendError } from '../utils/http';
+import { createFullRankingLoadGate, type FullRankingLoadGate } from '../utils/fullRankingLoadGate';
 
 interface PublicPageDeps {
   publicViewService: {
@@ -64,6 +65,7 @@ interface PublicPageDeps {
   toolsDownloadService?: Pick<ToolsDownloadService, 'getDownloadPageView' | 'getDownloadFileTarget' | 'recordDownload'>;
   pageCache?: TimedPromiseCache;
   frontendAssets?: PublicFrontendAssets;
+  fullRankingLoadGate?: FullRankingLoadGate;
 }
 
 const FULL_RANKING_PUBLIC_PAGE_SIZE = 100;
@@ -73,6 +75,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   const router = Router();
   const pageCache = deps.pageCache || createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
   const frontendAssets = deps.frontendAssets || resolvePublicFrontendAssets();
+  const fullRankingLoadGate = deps.fullRankingLoadGate || createFullRankingLoadGate();
 
   router.get('/', async (req, res) => {
     const siteUrl = getSiteOrigin(req);
@@ -98,6 +101,11 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       const page = toPositiveInt(req.query.page, 1);
       const filters = parseFullRankingFilters(req.query);
       if (redirectFullRankingQuery(req, res, requestedDate, page, filters)) {
+        return;
+      }
+      const gate = fullRankingLoadGate.check(filters);
+      if (!gate.allowed) {
+        sendFullRankingRateLimitedPage(res, gate.retryAfterSeconds || 1);
         return;
       }
       const renderDate = requestedDate || getDateInTimezone();
@@ -610,4 +618,13 @@ function parseDateQuery(input: unknown): string | undefined {
 function toPositiveInt(value: unknown, fallback: number): number {
   const num = Number(value ?? fallback);
   return Number.isInteger(num) && num > 0 ? num : fallback;
+}
+
+function sendFullRankingRateLimitedPage(
+  res: Response,
+  retryAfterSeconds: number,
+): void {
+  res.setHeader('Cache-Control', 'no-store, max-age=0');
+  res.setHeader('Retry-After', String(retryAfterSeconds));
+  res.status(429).type('html').send(`<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>筛选请求较多 | GateRank</title><style>body{margin:0;background:#fafafa;color:#171717;font-family:system-ui,sans-serif}main{width:min(560px,calc(100% - 32px));margin:12vh auto;padding:32px;border:1px solid #e5e5e5;border-radius:20px;background:#fff}h1{font-size:26px}p{color:#525252;line-height:1.8}a{color:#be123c;font-weight:700}</style></head><body><main><h1>筛选请求较多</h1><p>组合筛选正在被频繁访问，请稍后重试。完整榜单和单项筛选仍可正常使用。</p><a href="/rankings/all">返回机场排行</a></main></body></html>`);
 }

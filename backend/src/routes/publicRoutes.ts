@@ -24,6 +24,8 @@ import { parseFullRankingFilters, type FullRankingFilters } from '../../../share
 import type { AirportDealDetailView, AirportDealView } from '../../../shared/airportAds';
 import { isMarketingPageKind } from '../../../shared/marketingAnalytics';
 import type { BillingEligibilityService } from '../services/billingEligibilityService';
+import { createFullRankingLoadGate, type FullRankingLoadGate } from '../utils/fullRankingLoadGate';
+import { sendError } from '../utils/http';
 
 interface PublicDeps {
   billingEligibility?: BillingEligibilityService;
@@ -116,6 +118,7 @@ interface PublicDeps {
       application_fee_amount: number;
     }>;
   };
+  fullRankingLoadGate?: FullRankingLoadGate;
 }
 
 const MARKETING_EVENT_TYPES: MarketingEventType[] = ['page_view', 'airport_impression', 'outbound_click'];
@@ -131,6 +134,7 @@ const MARKETING_TARGET_KINDS: MarketingTargetKind[] = ['website', 'subscription_
 export function createPublicRoutes(deps: PublicDeps): Router {
   const router = Router();
   const pageCache = deps.pageCache || createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
+  const fullRankingLoadGate = deps.fullRankingLoadGate || createFullRankingLoadGate();
 
   router.get('/application-config', async (_req, res, next) => {
     try {
@@ -332,6 +336,13 @@ export function createPublicRoutes(deps: PublicDeps): Router {
       const page = toPositiveInt(req.query.page, 1);
       const pageSize = 20;
       const filters = parseFullRankingFilters(req.query);
+      const gate = fullRankingLoadGate.check(filters);
+      if (!gate.allowed) {
+        res.setHeader('Cache-Control', 'no-store, max-age=0');
+        res.setHeader('Retry-After', String(gate.retryAfterSeconds || 1));
+        sendError(res, 429, 'RANKING_FILTER_RATE_LIMITED', '组合筛选请求过于频繁，请稍后再试', req.requestId || 'unknown');
+        return;
+      }
       const data = await pageCache.getOrLoad(
         `full-ranking:${date}:${page}:${pageSize}:${JSON.stringify(filters)}`,
         () => deps.publicViewService.getFullRankingView(date, page, pageSize, filters),
