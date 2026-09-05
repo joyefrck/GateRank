@@ -1,6 +1,7 @@
+import { DEFAULT_IP_PURITY_CONFIG, IP_PURITY_PATH } from './ipPurity';
 import { withPublicBrandTitle } from './publicBrand';
 
-export type PublicToolKey = 'download' | 'streaming_check' | 'ip_check' | 'dns_leak_test';
+export type PublicToolKey = 'download' | 'streaming_check' | 'ip_check' | 'dns_leak_test' | 'ip_purity';
 
 export interface PublicToolDefinition {
   key: PublicToolKey;
@@ -21,8 +22,8 @@ export const PUBLIC_TOOLS_DOWNLOAD_PATH = '/tools/download';
 
 export const PUBLIC_TOOLS_INDEX_SEO = {
   title: withPublicBrandTitle('网络检测与科学上网工具箱'),
-  description: 'GateRank 工具箱集中提供翻墙客户端下载、流媒体解锁检测、IP 地理位置查询与 DNS 泄漏检测，帮助用户检查代理客户端和当前网络环境。',
-  keywords: 'GateRank工具箱,翻墙工具下载,流媒体解锁检测,IP检测,DNS泄漏检测,科学上网工具',
+  description: 'GateRank 工具箱集中提供翻墙客户端下载、流媒体解锁检测、IP 地理位置查询、IP 纯净度与 DNS 泄漏检测，帮助用户检查代理客户端和当前网络环境。',
+  keywords: 'GateRank工具箱,翻墙工具下载,流媒体解锁检测,IP检测,DNS泄漏检测,IP纯净度检测,科学上网工具',
 } as const;
 
 export const PUBLIC_TOOL_DEFINITIONS: readonly PublicToolDefinition[] = [
@@ -64,6 +65,15 @@ export const PUBLIC_TOOL_DEFINITIONS: readonly PublicToolDefinition[] = [
       description: '免费查询当前出口 IP、IPv4、IPv6 或域名的国家地区、城市、经纬度、时区、ISP、组织与 ASN 信息。',
       keywords: 'IP检测,IP地址查询,IP归属地,域名查询,IPv6查询,ISP查询,ASN查询',
     },
+  },
+  {
+    key: 'ip_purity',
+    label: 'IP 纯净度检测',
+    href: IP_PURITY_PATH,
+    eyebrow: 'IP risk intelligence',
+    summary: '查询原生 IP、网络归属、ASN 路由历史与注册分配记录。',
+    features: ['原生 IP', 'ASN 历史', '注册记录'],
+    seo: { title: DEFAULT_IP_PURITY_CONFIG.seo_title, description: DEFAULT_IP_PURITY_CONFIG.seo_description, keywords: DEFAULT_IP_PURITY_CONFIG.seo_keywords },
   },
   {
     key: 'dns_leak_test',

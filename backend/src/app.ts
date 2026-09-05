@@ -1,3 +1,8 @@
+import { IpPurityGeoService } from './services/ipPurityGeoService';
+import { IpHistoryService } from './services/ipHistoryService';
+import { NativeIpService } from './services/nativeIpService';
+import { IpPurityService } from './services/ipPurityService';
+import { createIpPurityPublicRoutes } from './routes/ipPurityRoutes';
 import { RevenueRepository } from './repositories/revenueRepository';
 import { RevenueService } from './services/revenueService';
 import { createRevenueRoutes } from './routes/revenueRoutes';
@@ -255,6 +260,7 @@ export async function createApp() {
   await manualJobService.initialize();
   const toolsDownloadService = new ToolsDownloadService(toolDownloadRepository, systemSettingRepository);
   const ipCheckService = new IpGeolocationService();
+  const ipPurityService = new IpPurityService({ geoService: new IpPurityGeoService(ipCheckService), nativeService: new NativeIpService(), historyService: new IpHistoryService() });
   const dnsLeakTestService = new DnsLeakTestService({
     ipCheckService,
     zone: process.env.DNS_LEAK_TEST_ZONE,
@@ -392,6 +398,8 @@ export async function createApp() {
       dnsLeakTestService,
     }),
   );
+  app.use('/api/v1', createIpPurityPublicRoutes(ipPurityService));
+
   app.use(
     '/api/v1/internal',
     createDnsLeakInternalRoutes(dnsLeakTestService),

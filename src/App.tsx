@@ -1,3 +1,4 @@
+import { IpPurityPage } from './pages/ipPurity/IpPurityPage';
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveScoreRevision } from './site/liveScores';
 import {
@@ -1597,6 +1598,7 @@ function parseRoute(): RouteState {
   }
 
   if (streamingCheckMatch) return { kind: 'streaming_check' };
+  if (/^\/tools\/ip-purity-check\/?$/.test(path)) return { kind: 'ip_purity' };
   if (ipCheckMatch) return { kind: 'ip_check' };
   if (dnsLeakTestMatch) return { kind: 'dns_leak_test' };
 
@@ -9349,6 +9351,7 @@ export default function App() {
 
   if (route.kind === 'tools_index') return <ToolsIndexPage />;
   if (route.kind === 'streaming_check') return <StreamingCheckPage />;
+  if (route.kind === 'ip_purity') return <IpPurityPage />;
   if (route.kind === 'ip_check') return <IPCheckPage />;
   if (route.kind === 'dns_leak_test') return <DNSLeakTestPage />;
 

@@ -1,5 +1,6 @@
 import {
   Download,
+  ShieldCheck,
   MapPin,
   Network,
   Tv2,
@@ -24,6 +25,7 @@ const TOOL_ICONS: Record<PublicToolKey, LucideIcon> = {
   download: Download,
   streaming_check: Tv2,
   ip_check: MapPin,
+  ip_purity: ShieldCheck,
   dns_leak_test: Network,
 };
 

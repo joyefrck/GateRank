@@ -45,6 +45,7 @@ export interface PublicSummaryData {
     tool_downloads: string;
     streaming_check: string;
     ip_check: string;
+    ip_purity: string;
     dns_leak_test: string;
   };
   data_files: {
@@ -156,6 +157,7 @@ export function buildSummaryData(siteUrl: string, home: HomePageView, risk: Risk
       tool_downloads: `${siteUrl}/tools/download`,
       streaming_check: `${siteUrl}/tools/streaming-check`,
       ip_check: `${siteUrl}/tools/ip-check`,
+      ip_purity: `${siteUrl}/tools/ip-purity-check`,
       dns_leak_test: `${siteUrl}/tools/dns-leak-test`,
     },
     data_files: {

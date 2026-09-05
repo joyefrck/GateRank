@@ -31,6 +31,7 @@ function emitSeoAssets(siteUrl: string): Plugin {
         ['/tools/download', '2026-07-25T00:00:00+08:00'],
         ['/tools/streaming-check', '2026-07-10T00:00:00+08:00'],
         ['/tools/ip-check', '2026-07-24T00:00:00+08:00'],
+        ['/tools/ip-purity-check', '2026-09-05T00:00:00+08:00'],
         ['/tools/dns-leak-test', '2026-07-25T00:00:00+08:00'],
         ...DEFAULT_NEWS_CATEGORIES.map((item) => [`/news/category/${item.slug}`, PUBLIC_SEO_STATIC_LASTMOD] as const),
         ...DEFAULT_NEWS_TOPICS.map((item) => [`/news/topic/${item.slug}`, PUBLIC_SEO_STATIC_LASTMOD] as const),

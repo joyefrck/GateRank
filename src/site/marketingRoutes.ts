@@ -17,6 +17,7 @@ export type AppRouteKind =
   | 'tools_index'
   | 'tools_download'
   | 'streaming_check'
+  | 'ip_purity'
   | 'ip_check'
   | 'dns_leak_test'
   | 'not_found';
@@ -39,6 +40,7 @@ export const MARKETING_PAGE_KIND_BY_ROUTE = {
   tools_download: 'tools_download',
   streaming_check: 'streaming_check',
   ip_check: 'ip_check',
+  ip_purity: 'ip_purity',
   dns_leak_test: 'dns_leak_test',
   not_found: null,
 } as const satisfies Record<AppRouteKind, MarketingPageKind | null>;

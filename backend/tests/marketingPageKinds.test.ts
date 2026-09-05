@@ -30,6 +30,7 @@ test('marketing page kind registry covers every public HTML module', () => {
     'tools_download',
     'streaming_check',
     'ip_check',
+    'ip_purity',
     'dns_leak_test',
     'for_ai',
   ]);
@@ -60,6 +61,7 @@ test('React route mapping explicitly classifies or excludes every route kind', (
     tools_download: 'tools_download',
     streaming_check: 'streaming_check',
     ip_check: 'ip_check',
+    ip_purity: 'ip_purity',
     dns_leak_test: 'dns_leak_test',
     not_found: null,
   });

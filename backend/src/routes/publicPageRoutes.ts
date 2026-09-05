@@ -1,3 +1,4 @@
+import { DEFAULT_IP_PURITY_CONFIG } from '../../../shared/ipPurity';
 import { Router } from 'express';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../types/domain';
 import type { AirportDealDetailView, AirportDealView } from '../../../shared/airportAds';
@@ -23,6 +24,7 @@ import {
   renderReportPublicPage,
   renderRiskMonitorPublicPage,
   renderIpCheckPublicPage,
+  renderIpPurityPublicPage,
   renderStreamingCheckPublicPage,
   renderDnsLeakTestPublicPage,
   renderToolsIndexPublicPage,
@@ -323,6 +325,14 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
     const siteUrl = getSiteOrigin(req);
     setPublicCacheHeaders(res);
     res.status(200).type('html').send(renderStreamingCheckPublicPage(siteUrl, frontendAssets));
+  });
+
+  router.get('/tools/ip-purity-check', async (req, res, next) => {
+    try {
+      const config = DEFAULT_IP_PURITY_CONFIG;
+      res.setHeader('Cache-Control', 'no-store');
+      res.type('html').send(renderIpPurityPublicPage(getSiteOrigin(req), config, frontendAssets));
+    } catch (error) { next(error); }
   });
 
   router.get('/tools/ip-check', (req, res) => {

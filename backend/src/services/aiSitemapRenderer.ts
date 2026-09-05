@@ -17,6 +17,7 @@ const AI_SITEMAP_STATIC_PATHS = [
   '/tools/download',
   '/tools/streaming-check',
   '/tools/ip-check',
+      '/tools/ip-purity-check',
   '/tools/dns-leak-test',
 ] as const;
 

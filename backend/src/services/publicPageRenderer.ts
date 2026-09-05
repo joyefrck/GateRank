@@ -1,3 +1,4 @@
+import { buildIpPuritySeo, IP_PURITY_FAQ, type IpPurityPageConfig } from '../../../shared/ipPurity';
 import type {
   FullRankingItem,
   FullRankingView,
@@ -134,7 +135,7 @@ interface DynamicOgImage {
 }
 
 interface PublicInitialData {
-  kind: 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'deal_detail' | 'monthly_reports' | 'monthly_report' | 'tools_download';
+  kind: 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'deal_detail' | 'monthly_reports' | 'monthly_report' | 'tools_download' | 'ip_purity';
   params: {
     date?: string | null;
     page?: number | null;
@@ -831,6 +832,24 @@ function sanitizeToolsDownloadPageViewForPublicPayload(view: ToolsDownloadPageVi
     items: view.items.map(sanitizeItem),
     hotItems: view.hotItems.map(sanitizeItem),
   };
+}
+
+export function renderIpPurityPublicPage(siteUrl: string, config: IpPurityPageConfig, frontendAssets?: PublicFrontendAssets): string {
+  const seo = buildIpPuritySeo(config, siteUrl);
+  return renderPublicDocument({
+    siteUrl, canonicalPath: seo.canonicalPath, seo, active: 'tools', jsonLd: seo.structuredData,
+    ogImage: seo.ogImage, frontendAssets,
+    initialData: { kind: 'ip_purity', params: {}, payload: config },
+    body: `<main class="page-main">
+      <section class="hero"><div class="eyebrow">IP RISK INTELLIGENCE</div><h1>IP 纯净度检测</h1>
+      <p>查询原生 IP、网络归属与历史记录，了解你的出口网络。</p>
+      <form aria-label="IP 纯净度查询"><label>公网 IP 地址 <input placeholder="输入 IPv4 或 IPv6 地址" disabled /></label><button type="button" disabled>等待页面初始化</button></form>
+      <p>正在准备检测。请启用 JavaScript 查看当前出口或指定 IP 的风险结果。</p></section>
+      <section><h2>网络档案与历史记录</h2><p>查询原生 IP、归属地、ISP 和 ASN。原生标签由 IPOK 提供，RIPE NCC 注册国家与定位国家用于一致性参考。</p><h3>ASN 历史</h3><p>查看 RIPE NCC 路由观测中的网段和首末观测时间。</p><h3>企业登记记录</h3><p>查看 WHOIS 当前企业和网络登记资料及记录日期。</p><h3>注册地历史</h3><p>查看区域注册局分配历史。历史记录在查询 IP 后加载。</p></section>
+      <section><h2>常见问题</h2>${IP_PURITY_FAQ.map(({question, answer}) => `<article><h3>${escapeHtml(question)}</h3><p>${escapeHtml(answer)}</p></article>`).join('')}</section>
+      <p><a href="/tools/ip-check">IP 地理位置查询</a> · <a href="/tools/dns-leak-test">DNS 泄漏检测</a> · <a href="/tools/streaming-check">流媒体解锁检测</a></p>
+    </main>`,
+  });
 }
 
 export function renderIpCheckPublicPage(
@@ -2038,7 +2057,7 @@ function renderPublicDocument(options: RenderOptions): string {
     ${twitterImageMeta}
     <link rel="stylesheet" href="${escapeAttribute(frontendAssets.stylesheet)}" />
     <style>${PUBLIC_TOP_NAV_STYLES}${styles}</style>
-    <script type="application/ld+json">${JSON.stringify(options.jsonLd)}</script>
+    <script type="application/ld+json">${escapeJsonScript(options.jsonLd)}</script>
   </head>
   <body>
     <div id="root">

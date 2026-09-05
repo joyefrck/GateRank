@@ -297,6 +297,7 @@ export const PUBLIC_SEO_PATHS = {
   download: '/tools/download',
   streamingCheck: '/tools/streaming-check',
   ipCheck: '/tools/ip-check',
+  ipPurity: '/tools/ip-purity-check',
   dnsLeakTest: '/tools/dns-leak-test',
   monthlyReports: '/monthly-reports',
   deals: '/deals',
@@ -479,6 +480,7 @@ export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | 
   if (pathname === PUBLIC_SEO_PATHS.tools) return PUBLIC_CORE_OG_IMAGES.tools;
   if (pathname === PUBLIC_SEO_PATHS.download) return PUBLIC_CORE_OG_IMAGES.download;
   if (pathname === PUBLIC_SEO_PATHS.streamingCheck) return PUBLIC_CORE_OG_IMAGES.streamingCheck;
+  if (pathname === PUBLIC_SEO_PATHS.ipPurity) return PUBLIC_CORE_OG_IMAGES.tools;
   if (pathname === PUBLIC_SEO_PATHS.ipCheck) return PUBLIC_CORE_OG_IMAGES.ipCheck;
   if (pathname === PUBLIC_SEO_PATHS.dnsLeakTest) return PUBLIC_CORE_OG_IMAGES.dnsLeakTest;
   if (pathname === PUBLIC_SEO_PATHS.monthlyReports || pathname.startsWith(`${PUBLIC_SEO_PATHS.monthlyReports}/`)) {

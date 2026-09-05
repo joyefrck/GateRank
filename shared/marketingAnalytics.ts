@@ -15,6 +15,7 @@ export const MARKETING_PAGE_KIND_LABELS = {
   tools_download: '工具下载',
   streaming_check: '流媒体检测',
   ip_check: 'IP 检测',
+  ip_purity: 'IP 纯净度检测',
   dns_leak_test: 'DNS 泄漏检测',
   for_ai: 'AI 数据入口',
 } as const;
