@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AnimatePresence, motion } from 'motion/react';
 import {
   AlertTriangle,
   ArrowRight,
@@ -349,10 +348,7 @@ function HomeHero({ data, reportTime }: { data: HomePageData | null; reportTime:
       <div className="absolute inset-0 z-0 bg-[radial-gradient(#f0f0f0_1px,transparent_1px)] [background-size:20px_20px] opacity-70" />
       <div className="relative z-10 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 items-center gap-6 lg:grid-cols-12">
-          <motion.div
-            initial={{ opacity: 0, y: 15 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6 }}
+          <div
             className="flex flex-col justify-center lg:col-span-8"
           >
             <div className="space-y-2.5">
@@ -385,12 +381,9 @@ function HomeHero({ data, reportTime }: { data: HomePageData | null; reportTime:
                 </p>
               ) : null}
             </div>
-          </motion.div>
+          </div>
 
-          <motion.div
-            initial={{ opacity: 0, x: 15 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
+          <div
             className="flex h-full flex-col justify-end gap-3 lg:col-span-4 lg:items-end"
           >
             <div className="grid w-full min-w-0 grid-cols-2 gap-2 lg:w-auto lg:min-w-[220px] lg:grid-cols-1">
@@ -408,7 +401,7 @@ function HomeHero({ data, reportTime }: { data: HomePageData | null; reportTime:
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
         </div>
       </div>
     </header>
@@ -447,7 +440,7 @@ function MetricCard({
 function SponsoredDeals({ deals }: { deals: SponsoredDeal[] }) {
   const dealsBySlot = new Map(deals.map((deal) => [deal.home_slot, deal]));
   return (
-    <section id="today-discovery-section" aria-labelledby="sponsored-deals-title" className="space-y-4 rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+    <section id="today-discovery-section" aria-labelledby="sponsored-deals-title" className="home-deferred-section space-y-4 rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
       <div className="space-y-3 border-b border-gray-100 pb-4">
         <div className="flex flex-wrap items-center gap-2.5">
           <h2 id="sponsored-deals-title" className="text-[17px] font-black tracking-tight text-gray-900 sm:text-[18px]">商业合作专区</h2>
@@ -485,7 +478,7 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
     ref,
   });
   return (
-    <motion.a
+    <a
       ref={ref}
       href={websiteHref}
       target="_blank"
@@ -499,10 +492,7 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
         targetKind: 'website',
         targetUrl: websiteHref,
       })}
-      whileHover={{ y: -2 }}
-      whileTap={{ scale: 0.99 }}
-      transition={{ duration: 0.2 }}
-      className="group relative flex min-h-[88px] flex-col justify-center overflow-hidden rounded-[18px] border border-gray-200 bg-gradient-to-b from-slate-50/60 to-white p-3 no-underline shadow-sm transition-all duration-200 hover:border-indigo-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 motion-reduce:transform-none"
+      className="group relative flex min-h-[88px] flex-col justify-center overflow-hidden rounded-[18px] border border-gray-200 bg-gradient-to-b from-slate-50/60 to-white p-3 no-underline shadow-sm transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.99] hover:border-indigo-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-300 focus-visible:ring-offset-2 motion-reduce:transform-none"
     >
       <div className="flex min-w-0 items-center gap-2">
         <AirportMark name={deal.name} compact />
@@ -514,7 +504,7 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
       <p className="mt-2 truncate text-[11.5px] font-medium leading-snug text-gray-500">
         {deal.discount_title || '查看官网了解当前优惠活动。'}
       </p>
-    </motion.a>
+    </a>
   );
 }
 
@@ -557,9 +547,7 @@ function RankingPreview({ items, date }: { items: FullRankingItem[]; date: strin
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                <AnimatePresence mode="popLayout">
-                  {items.slice(0, 10).map((item, index) => <RankingTableRow key={item.airport_id} item={item} index={index} date={date} />)}
-                </AnimatePresence>
+                {items.slice(0, 10).map((item, index) => <RankingTableRow key={item.airport_id} item={item} index={index} date={date} />)}
               </tbody>
             </table>
           </div>
@@ -588,11 +576,8 @@ function RankingTableRow({ item, index, date }: { item: FullRankingItem; index: 
     ref,
   });
   return (
-    <motion.tr
+    <tr
       ref={ref}
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.3, delay: index * 0.02 }}
       className="group transition-colors hover:bg-gray-50/50"
     >
       <td className="align-middle px-4 py-4 text-center"><RankBadge rank={item.rank} /></td>
@@ -651,7 +636,7 @@ function RankingTableRow({ item, index, date }: { item: FullRankingItem; index: 
           </a>
         </div>
       </td>
-    </motion.tr>
+    </tr>
   );
 }
 
@@ -699,7 +684,7 @@ function HomeSidebar({ news, deals }: { news: NewsUpdate[]; deals: SponsoredDeal
 
       <SponsoredDeals deals={deals} />
 
-      <section className="space-y-4 rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+      <section className="home-deferred-section space-y-4 rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between border-b border-gray-50 pb-3">
           <h2 className="flex items-center gap-2 font-sans text-[16px] font-black tracking-tight text-gray-900 sm:text-[17px]"><Briefcase className="h-[18px] w-[18px] text-indigo-500" />实用工具</h2>
           <RouteLink href="/tools" className="text-[12.5px] font-bold text-gray-400 hover:text-indigo-600">更多工具</RouteLink>
@@ -730,7 +715,7 @@ function HomeSidebar({ news, deals }: { news: NewsUpdate[]; deals: SponsoredDeal
         </div>
       </section>
 
-      <section id="announcement-dynamics-section" className="space-y-4 rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
+      <section id="announcement-dynamics-section" className="home-deferred-section space-y-4 rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
         <div className="flex items-center justify-between border-b border-gray-50 pb-3">
           <h2 className="flex items-center gap-2 font-sans text-[16px] font-black tracking-tight text-gray-900 sm:text-[17px]"><Megaphone className="h-[18px] w-[18px] text-indigo-500" />公告与动态</h2>
           <a href="/news" className="flex items-center gap-0.5 text-[12.5px] font-bold text-gray-400 hover:text-indigo-600">更多 <ChevronRight className="h-3 w-3" /></a>
@@ -854,20 +839,18 @@ function FaqSection() {
             const open = openIds.includes(item.id);
             return (
               <article key={item.question} className={`overflow-hidden rounded-2xl border bg-white transition-all ${open ? 'border-indigo-200/90 shadow-sm' : 'border-gray-200/80 hover:border-gray-300'}`}>
-                <button type="button" onClick={() => setOpenIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} className="group flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left">
+                <button type="button" aria-expanded={open} onClick={() => setOpenIds((current) => current.includes(item.id) ? current.filter((id) => id !== item.id) : [...current, item.id])} className="group flex w-full cursor-pointer items-center justify-between gap-3 p-4 text-left">
                   <span className="flex items-start gap-2.5">
                     <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md bg-indigo-50 text-[11px] font-black text-indigo-600">Q</span>
                     <span className="text-[13.5px] font-extrabold leading-snug text-gray-800 transition-colors group-hover:text-indigo-600">{item.question}</span>
                   </span>
                   <span className={`shrink-0 rounded-lg p-1 text-gray-400 transition-transform ${open ? 'rotate-180 bg-gray-100 text-gray-700' : ''}`}><ChevronDown className="h-4 w-4" /></span>
                 </button>
-                <AnimatePresence initial={false}>
-                  {open ? (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ duration: 0.2, ease: 'easeInOut' }}>
-                      <p className="border-t border-gray-100 bg-gray-50/40 px-4 pb-4 pt-3 text-xs font-normal leading-relaxed text-gray-600">{item.answer}</p>
-                    </motion.div>
-                  ) : null}
-                </AnimatePresence>
+                {open ? (
+                  <div>
+                    <p className="border-t border-gray-100 bg-gray-50/40 px-4 pb-4 pt-3 text-xs font-normal leading-relaxed text-gray-600">{item.answer}</p>
+                  </div>
+                ) : null}
               </article>
             );
           })}

@@ -115,7 +115,6 @@ import { MethodologyPage } from './pages/methodology/MethodologyPage';
 import { DealsPage } from './pages/deals/DealsPage';
 import { DealDetailPage } from './pages/deals/DealDetailPage';
 import { StreamingCheckPage } from './pages/streamingCheck/StreamingCheckPage';
-import { IPCheckPage } from './pages/ipCheck/IPCheckPage';
 import { DNSLeakTestPage } from './pages/dnsLeakTest/DNSLeakTestPage';
 import { ToolsIndexPage } from './pages/tools/ToolsIndexPage';
 import { HomePageV3 } from './pages/home/HomePageV3';
@@ -161,6 +160,11 @@ import { getCampaignMonthlyPrice, getRenewalEndsAt } from './portal/adCampaignUi
 const LazyPublishTokenDocsPage = lazy(async () => {
   const module = await import('./pages/publishTokenDocs/PublishTokenDocsPage');
   return { default: module.PublishTokenDocsPage };
+});
+
+const LazyIPCheckPage = lazy(async () => {
+  const module = await import('./pages/ipCheck/IPCheckPage');
+  return { default: module.IPCheckPage };
 });
 
 const primaryCtaTextStyle: React.CSSProperties = {
@@ -9352,7 +9356,7 @@ export default function App() {
   if (route.kind === 'tools_index') return <ToolsIndexPage />;
   if (route.kind === 'streaming_check') return <StreamingCheckPage />;
   if (route.kind === 'ip_purity') return <IpPurityPage />;
-  if (route.kind === 'ip_check') return <IPCheckPage />;
+  if (route.kind === 'ip_check') return <Suspense fallback={<RouteLoadingFallback />}><LazyIPCheckPage /></Suspense>;
   if (route.kind === 'dns_leak_test') return <DNSLeakTestPage />;
 
   if (route.kind === 'home') {

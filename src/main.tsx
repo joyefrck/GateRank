@@ -1,6 +1,6 @@
 import {StrictMode, type ComponentType} from 'react';
 import {createRoot} from 'react-dom/client';
-import App from './App.tsx';
+import PublicEntry, { preloadPublicRoute } from './site/PublicEntry.tsx';
 import './index.css';
 import { initializeAnalytics } from './site/analytics.ts';
 
@@ -38,8 +38,15 @@ async function bootstrap(): Promise<void> {
     return;
   }
 
+  await preloadPublicRoute();
   initializeAnalytics();
-  renderApp(App);
+  renderApp(PublicEntry);
 }
 
-void bootstrap();
+void bootstrap().catch(() => {
+  // Keep useful SSR content and links available if a route chunk cannot load.
+  const notice = document.createElement('p');
+  notice.setAttribute('role', 'alert');
+  notice.textContent = '交互功能加载失败，请刷新页面重试。';
+  document.getElementById('root')?.appendChild(notice);
+});

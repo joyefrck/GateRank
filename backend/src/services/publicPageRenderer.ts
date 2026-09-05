@@ -3851,6 +3851,8 @@ const styles = `
   .home-v3-explore h2 { margin: 10px 0 0; color: #fff; font-size: 20px; line-height: 1.2; }
   .home-v3-explore p { margin: 10px 0 0; color: #e0e7ff; font-size: 12px; line-height: 1.7; }
   .home-v3-explore > a { display: inline-flex; min-height: 40px; align-items: center; gap: 5px; margin-top: 14px; border: 1px solid rgba(255,255,255,.12); border-radius: 12px; background: rgba(255,255,255,.08); padding: 0 16px; color: #c7d2fe; font-size: 12px; font-weight: 900; text-decoration: none; }
+  .home-v3-sidebar > section:not(.home-v3-explore) { content-visibility: auto; contain-intrinsic-size: auto 500px; }
+  @media print { .home-v3-sidebar > section { content-visibility: visible; } }
   .home-v3-tools { display: grid; gap: 7px; }
   .home-v3-tools a { position: relative; display: block; border: 1px solid #f1f1f1; border-radius: 12px; background: #fafafa; padding: 10px 34px 10px 12px; text-decoration: none; }
   .home-v3-tools strong, .home-v3-tools span { display: block; }

@@ -322,7 +322,7 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
   assert.match(rankingTableRowSource, /href=\{websiteHref\}/);
   assert.match(rankingTableRowSource, /createTrackedOutboundClickHandler\(\{[\s\S]*pageKind: 'home',[\s\S]*placement: 'home_card',[\s\S]*targetUrl: item\.website/);
   assert.match(rankingTableRowSource, /dedupeKey: `home\|ranking\|\$\{item\.airport_id\}`/);
-  assert.match(rankingTableRowSource, /<motion\.tr[\s\S]*ref=\{ref\}/);
+  assert.match(rankingTableRowSource, /<tr[\s\S]*ref=\{ref\}/);
   assert.doesNotMatch(rankingTableRowSource, /href=\{item\.website\}/);
   assert.match(summaryBoardsSource, /<SummaryBoardItem/);
   assert.match(summaryBoardsSource, /sectionKey=\{config\.key\}/);
@@ -379,7 +379,7 @@ test('React homepage uses shared five-slot commercial cards and plain summary sc
   assert.match(sponsoredDealsSource, /grid grid-cols-1 gap-3/);
   assert.doesNotMatch(sponsoredDealsSource, /sm:grid-cols-2|lg:grid-cols-5/);
   assert.match(sponsoredDealCardSource, /useRef<HTMLAnchorElement>\(null\)/);
-  assert.match(sponsoredDealCardSource, /<motion\.a/);
+  assert.match(sponsoredDealCardSource, /<a\s/);
   assert.match(sponsoredDealCardSource, /href=\{websiteHref\}/);
   assert.match(sponsoredDealCardSource, /target="_blank"/);
   assert.match(sponsoredDealCardSource, /rel="nofollow sponsored noopener noreferrer"/);
@@ -393,7 +393,7 @@ test('React homepage uses shared five-slot commercial cards and plain summary sc
   assert.match(source, /compact \? 'h-\[30px\] w-\[30px\] rounded-lg text-\[11px\]'/);
   assert.doesNotMatch(sponsoredDealCardSource, /deal\.tags|<FeatureTag\b/);
   assert.match(sponsoredDealCardSource, /truncate text-\[11\.5px\]/);
-  assert.match(sponsoredDealCardSource, /whileTap=\{\{ scale: 0\.99 \}\}/);
+  assert.match(sponsoredDealCardSource, /active:scale-\[0\.99\]/);
   assert.doesNotMatch(sponsoredDealCardSource, /deal\.plan_price_month|起步月付|\/起/);
   assert.doesNotMatch(sponsoredDealCardSource, /<RouteLink|deal\.report_url|查看报告|官网 <ExternalLink|grid-cols-2/);
   assert.match(sponsoredEmptySlotSource, /href="\/apply"/);
@@ -401,7 +401,7 @@ test('React homepage uses shared five-slot commercial cards and plain summary sc
   assert.match(sponsoredEmptySlotSource, /p-2\.5/);
   assert.match(sponsoredEmptySlotSource, />申请入驻<\/span>/);
   assert.doesNotMatch(sponsoredEmptySlotSource, /<Sparkles|min-h-10|border-gray-200 bg-white/);
-  assert.match(sponsoredDealCardSource, /whileHover=\{\{ y: -2 \}\}/);
+  assert.match(sponsoredDealCardSource, /hover:-translate-y-0\.5/);
 
   assert.match(summaryBoardItemSource, /bg-rose-600[^>]*>风险<\/span>/);
   assert.doesNotMatch(summaryBoardItemSource, /<Star/);
