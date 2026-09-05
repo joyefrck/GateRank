@@ -209,7 +209,11 @@ export function HomePageV3({ date }: { date?: string }) {
     }
 
     const controller = new AbortController();
-    setLoading(true);
+    // Keep the server-rendered page visible while live score eligibility is
+    // revalidated. The SSE connection opens immediately after hydration, so a
+    // blocking loader here would replace valid SSR content with a skeleton on
+    // every page load.
+    setLoading(!initialData);
     setError('');
     const query = date ? `?date=${encodeURIComponent(date)}` : '';
     void fetch(`${getApiBase()}/api/v1/pages/home${query}`, {
@@ -227,14 +231,16 @@ export function HomePageV3({ date }: { date?: string }) {
       .then(setData)
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          setData(null);
-          setError(
-            reason instanceof TypeError || (reason instanceof Error && reason.message === 'Failed to fetch')
-              ? '网络连接失败，请稍后重试。'
-              : reason instanceof Error
-                ? reason.message
-                : '首页加载失败',
-          );
+          if (!initialData) {
+            setData(null);
+            setError(
+              reason instanceof TypeError || (reason instanceof Error && reason.message === 'Failed to fetch')
+                ? '网络连接失败，请稍后重试。'
+                : reason instanceof Error
+                  ? reason.message
+                  : '首页加载失败',
+            );
+          }
         }
       })
       .finally(() => {

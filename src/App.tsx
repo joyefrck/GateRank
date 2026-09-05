@@ -3785,7 +3785,9 @@ function FullRankingPage({
     }
 
     let active = true;
-    setLoading(true);
+    // Live-score revalidation starts as soon as SSE connects. Preserve the
+    // server-rendered ranking instead of replacing it with a blocking loader.
+    setLoading(!initialData);
     setError('');
 
     const filterQuery = buildFullRankingQuery(filters, {
@@ -3801,8 +3803,10 @@ function FullRankingPage({
       })
       .catch((err: unknown) => {
         if (active) {
-          setData(null);
-          setError(err instanceof Error ? err.message : '机场排行加载失败');
+          if (!initialData) {
+            setData(null);
+            setError(err instanceof Error ? err.message : '机场排行加载失败');
+          }
         }
       })
       .finally(() => {
@@ -4141,7 +4145,8 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
     }
 
     let active = true;
-    setLoading(true);
+    // Preserve SSR content while the first live-score refresh runs.
+    setLoading(!initialData);
     setError('');
 
     const query = buildQuery({
@@ -4157,8 +4162,10 @@ function RiskMonitorPage({ date, page = 1 }: { date?: string; page?: number }) {
       })
       .catch((err: unknown) => {
         if (active) {
-          setData(null);
-          setError(err instanceof Error ? err.message : '跑路监测加载失败');
+          if (!initialData) {
+            setData(null);
+            setError(err instanceof Error ? err.message : '跑路监测加载失败');
+          }
         }
       })
       .finally(() => {
