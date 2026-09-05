@@ -318,7 +318,7 @@ export function renderFullRankingPublicPage(
         </section>
         ${renderFullRankingFilters(filters)}
         ${renderToolDownloadCta(view.tool_download_cta, { context: 'ranking' })}
-        ${renderFullRankingTopicContent(topicContent)}
+        <!--topic-ranking-->${renderFullRankingTopicContent(topicContent)}
         ${renderRankingTable(view.items)}
       </main>
     `,
@@ -2092,7 +2092,7 @@ function renderFooter(): string {
       <span class="footer-mark" aria-hidden="true">ϟ</span>
       <strong>${escapeHtml(PUBLIC_SITE_BRAND_NAME)}</strong>
       <p>以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在推荐、排行与测评报告之间完成交叉判断。</p>
-      <nav aria-label="页脚导航">
+      <nav aria-label="页脚导航"><!--topic-footer-->
         ${PUBLIC_NAVIGATION_ITEMS.filter((item) => item.href).map((item) => `<a href="${escapeAttribute(item.href || '/')}">${escapeHtml(item.label)}</a>`).join('')}
         <a href="/apply">申请入驻</a>
       </nav>

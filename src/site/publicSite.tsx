@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Zap } from 'lucide-react';
 
 import { PUBLIC_SITE_BRAND_NAME } from '../../shared/publicBrand';
@@ -243,6 +243,72 @@ export function navigate(to: string, options: { scrollToTop?: boolean } = {}) {
   }
 }
 
+function useTopicHub(): string | null {
+  const [hub, setHub] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    const refresh = () => {
+      const base = (
+        (import.meta as ImportMeta & { env?: Record<string, string> }).env
+          ?.VITE_API_BASE || ''
+      ).replace(/\/$/, '');
+      void fetch(`${base}/api/v1/topics/navigation`, {
+        signal: controller.signal,
+        cache: 'no-store',
+      })
+        .then((response) => (response.ok ? response.json() : { hub: null }))
+        .then((data) => setHub(data.hub?.path || null))
+        .catch(() => {});
+    };
+    refresh();
+    window.addEventListener('focus', refresh);
+    return () => {
+      controller.abort();
+      window.removeEventListener('focus', refresh);
+    };
+  }, []);
+  return hub;
+}
+
+export function TopicHubLink() {
+  const hub = useTopicHub();
+  return hub ? (
+    <a
+      href={hub}
+      className="inline-flex min-h-10 items-center text-sm font-semibold text-indigo-700"
+    >
+      机场推荐与选购指南 →
+    </a>
+  ) : null;
+}
+
+function topicNavigationHtml(html: string, hub: string | null): string {
+  const href = hub?.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[character]!,
+  );
+  return html
+    .replace(
+      '<!--topic-nav-->',
+      href
+        ? `<a class="public-top-nav-link" data-topic-nav="true" href="${href}">机场推荐</a>`
+        : '',
+    )
+    .replace(
+      '<!--topic-mobile-nav-->',
+      href
+        ? `<a class="public-top-nav-mobile-link" href="${href}">机场推荐</a>`
+        : '',
+    );
+}
+
 export function PageFrame({
   active,
   children,
@@ -260,6 +326,7 @@ export function PageFrame({
 }
 
 function PublicTopNav({ active }: { active: NavigationKind }) {
+  const hub = useTopicHub();
   const resolvedActive: PublicNavigationKind = active === 'docs' ? 'home' : active;
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -333,13 +400,16 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
           document.documentElement.style.overflow = '';
           summary.focus();
         }}
-        dangerouslySetInnerHTML={{ __html: renderPublicTopNav(resolvedActive) }}
+        dangerouslySetInnerHTML={{
+          __html: topicNavigationHtml(renderPublicTopNav(resolvedActive), hub),
+        }}
       />
     </>
   );
 }
 
 function SiteFooter() {
+  const hub = useTopicHub();
   const footerNavigation = PUBLIC_NAVIGATION_ITEMS.filter((item) => item.href);
   return (
     <footer
@@ -363,6 +433,11 @@ function SiteFooter() {
         </p>
 
         <nav aria-label="页脚导航" className="flex flex-wrap justify-center gap-x-8 gap-y-3 pt-2 text-[14px] font-semibold text-gray-700">
+          {hub && (
+            <a href={hub} className="transition-colors hover:text-black">
+              机场推荐
+            </a>
+          )}
           {footerNavigation.map((item) => item.kind === 'news' ? (
             <a key={item.kind} href={item.href} className="transition-colors hover:text-black">{item.label}</a>
           ) : (

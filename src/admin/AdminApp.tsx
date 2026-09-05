@@ -1,3 +1,4 @@
+import { TopicPages } from './topics/TopicPages';
 import { RevenuePage } from './revenue/RevenuePage';
 import { Wallet } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -1371,6 +1372,12 @@ const ADMIN_NAV_ITEMS = [
     isActive: (path: string) => path.startsWith('/admin/applications'),
   },
   {
+    path: '/admin/topics',
+    label: '专题管理',
+    icon: FileText,
+    isActive: (path: string) => path.startsWith('/admin/topics'),
+  },
+  {
     path: '/admin/news',
     label: 'News',
     icon: Newspaper,
@@ -1887,6 +1894,7 @@ export default function AdminApp() {
         </aside>
 
         <main className="max-h-full min-w-0 self-start overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl border border-neutral-200 bg-white p-4 md:p-6">
+          {/^\/admin\/topics(?:\/(?:new|\d+))?$/.test(path) && <TopicPages path={path} navigate={navigate} />}
           {path === '/admin/airports' && (
             <AirportsPage
               routeSearch={search}

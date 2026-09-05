@@ -1,3 +1,4 @@
+import { TopicHubLink } from './site/publicSite';
 import { ToolDownloadDialog } from './pages/tools/ToolDownloadDialog';
 import { IpPurityPage } from './pages/ipPurity/IpPurityPage';
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
@@ -3911,6 +3912,7 @@ function FullRankingPage({
           ]}
         />
 
+        <TopicHubLink />
         <FullRankingFilterPanel date={date} filters={activeFilters} />
         <ToolDownloadCta cta={data?.tool_download_cta} context="ranking" className="mt-8" />
         <FullRankingTopicSection topicContent={topicContent} />

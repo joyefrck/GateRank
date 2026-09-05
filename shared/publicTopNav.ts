@@ -86,6 +86,7 @@ export const PUBLIC_TOP_NAV_STYLES = `
     line-height: 20px;
     letter-spacing: 0;
   }
+  .public-top-nav-links:has([data-topic-nav]) .public-top-nav-link { padding-left: 11px; padding-right: 11px; }
   .public-top-nav-link {
     position: relative;
     display: inline-flex;
@@ -424,7 +425,7 @@ export function renderPublicTopNav(active: PublicNavigationKind | null): string 
             <span class="public-top-nav-brand-title">${escapeHtml(PUBLIC_SITE_BRAND_NAME)}</span>
           </a>
           <div class="public-top-nav-links">
-            ${PUBLIC_NAVIGATION_ITEMS.map((item) => renderTopNavItem(item, active)).join('')}
+            ${PUBLIC_NAVIGATION_ITEMS.map((item) => renderTopNavItem(item, active)).join('')}<!--topic-nav-->
           </div>
         </div>
         <div class="public-top-nav-actions">
@@ -441,7 +442,7 @@ export function renderPublicTopNav(active: PublicNavigationKind | null): string 
             </summary>
             <div class="public-top-nav-mobile-panel">
               <div class="public-top-nav-mobile-list">
-                ${PUBLIC_NAVIGATION_ITEMS.map((item) => renderMobileNavItem(item, active)).join('')}
+                ${PUBLIC_NAVIGATION_ITEMS.map((item) => renderMobileNavItem(item, active)).join('')}<!--topic-mobile-nav-->
                 <a class="public-top-nav-mobile-link public-top-nav-mobile-apply" href="/apply" data-client-nav="true">申请入驻测试 ${renderExternalLinkIcon()}</a>
               </div>
             </div>

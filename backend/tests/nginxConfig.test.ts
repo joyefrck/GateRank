@@ -107,7 +107,7 @@ test('nginx reserves private SPA fallbacks with noindex headers', async () => {
   }
 });
 
-test('nginx proxies API routes and returns hard 404 for unknown public paths', async () => {
+test('nginx proxies API routes and delegates editable public paths to backend lookup', async () => {
   const config = await readFile(path.join(process.cwd(), 'nginx.conf'), 'utf8');
   const apiBlock = getLocationBlock(config, '^~ /api/');
   assert.match(apiBlock, /proxy_pass\s+http:\/\/gaterank-api:8787;/);
@@ -120,7 +120,7 @@ test('nginx proxies API routes and returns hard 404 for unknown public paths', a
   assert.match(getLocationBlock(config, '^~ /uploads/'), /proxy_pass\s+http:\/\/gaterank-api:8787\/uploads\/;/);
 
   const catchAll = getLocationBlock(config, '/');
-  assert.match(catchAll, /return\s+404;/);
+  assert.match(catchAll, /proxy_pass\s+http:\/\/gaterank-api:8787;/);
   assert.doesNotMatch(catchAll, /\/index\.html/);
 });
 

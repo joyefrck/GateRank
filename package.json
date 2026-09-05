@@ -18,7 +18,8 @@
     "news:repair-publication-time": "tsx scripts/repair-news-publication-time.ts",
     "dns-probe:start": "tsx backend/src/dnsProbeServer.ts",
     "dns-probe:healthcheck": "tsx backend/src/dnsProbeHealthcheck.ts",
-    "test:backend": "tsx --test backend/tests/**/*.test.ts"
+    "test:backend": "tsx --test backend/tests/**/*.test.ts",
+    "topics:seed": "tsx scripts/seed-seo-topics.ts"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.14",

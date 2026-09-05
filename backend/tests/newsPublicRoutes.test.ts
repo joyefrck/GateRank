@@ -1100,7 +1100,7 @@ test('GET /sitemap.xml includes published news urls', async () => {
     assert.equal(response.status, 200);
     assert.equal(
       response.headers.get('cache-control'),
-      'public, max-age=60, s-maxage=300, stale-while-revalidate=600',
+      'no-store',
     );
     const xml = await response.text();
     const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) || [];

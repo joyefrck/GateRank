@@ -1,3 +1,7 @@
+import { TopicRepository } from './topics/topicRepository';
+import { TopicService } from './topics/topicService';
+import { seedTopics } from './topics/topicSeeds';
+import { createTopicAdminRoutes, createTopicPublicRoutes, topicNavigationMiddleware } from './topics/topicRoutes';
 import { IpPurityGeoService } from './services/ipPurityGeoService';
 import { IpHistoryService } from './services/ipHistoryService';
 import { NativeIpService } from './services/nativeIpService';
@@ -168,6 +172,8 @@ export async function createApp() {
   await accessTokenRepository.ensureSchema();
   const marketingEventRepository = new MarketingEventRepository(pool);
   await marketingEventRepository.ensureSchema();
+  const topicRepository = new TopicRepository(pool);
+  await topicRepository.ensureSchema();
   const newsRepository = new NewsRepository(pool);
   await newsRepository.ensureSchema();
   const monthlyReportRepository = new MonthlyReportRepository(pool);
@@ -457,8 +463,12 @@ export async function createApp() {
       userTelegramBotMessageService,
     }),
   );
+  const topicService = new TopicService(topicRepository, publicViewService);
+  await seedTopics(topicService);
+  app.use(topicNavigationMiddleware(topicService));
   app.use(
     createNewsPublicRoutes({
+      topicRepository,
       newsPublicService,
       publicViewService,
       monthlyReportPublicService,
@@ -576,6 +586,20 @@ export async function createApp() {
     }),
   );
 
+  app.use(
+    '/api/v1/admin',
+    adminAuth,
+    createTopicAdminRoutes(
+      topicService,
+      auditRepository,
+      () => publicPageCache.clear(),
+      {
+        handleUploadedImage: (file) =>
+          newsCoverImageService.compressUploadedBodyImage(file.path),
+      },
+    ),
+  );
+  app.use(createTopicPublicRoutes(topicService));
   app.use(notFoundHandler);
   app.use(errorHandler);
 
@@ -586,5 +610,6 @@ export async function createApp() {
     aggregationService,
     riskCheckService,
     adminSchedulerService,
+    topicService,
   };
 }

@@ -1,3 +1,4 @@
+import type { TopicRepository } from '../topics/topicRepository';
 import { Router, type Request, type Response } from 'express';
 import { HttpError } from '../middleware/errorHandler';
 import type { NewsArticleListItem } from '../types/domain';
@@ -17,6 +18,7 @@ import { getIndexableFullRankingFilterPaths } from '../../../shared/fullRankingF
 import { buildAirportDealDetailPath, type AirportDealSitemapUpdate } from '../../../shared/airportAds';
 
 interface NewsPublicDeps {
+  topicRepository?: Pick<TopicRepository, 'list'>;
   newsPublicService: NewsPublicService;
   publicViewService?: {
     getFullRankingView(date: string, page: number, pageSize: number): Promise<{
@@ -216,7 +218,9 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
     const newsLastmod = getNewsIndexLastmod(items);
     const activeCategories = taxonomy.categories.filter((item) => item.is_active !== false);
     const activeTopics = taxonomy.topics.filter((item) => item.is_active !== false);
+    const seoTopics = deps.topicRepository ? await deps.topicRepository.list(true) : [];
     const urls = [
+      ...seoTopics.map(topic => topic.path),
       '/',
       '/rankings/all',
       ...getIndexableFullRankingFilterPaths(),
@@ -243,6 +247,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       ...items.map((item) => `/news/${item.slug}`),
     ];
     const staticLastmodByPath = {
+      ...Object.fromEntries(seoTopics.map(topic => [topic.path, topic.updated_at])),
       '/': dataLastmod,
       '/rankings/all': dataLastmod,
       ...Object.fromEntries(getIndexableFullRankingFilterPaths().map((path) => [path, dataLastmod])),
@@ -269,7 +274,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
     };
     const xml = buildSitemapXml(siteUrl, urls, items, staticLastmodByPath);
     setPublicCacheHeaders(res);
-    res.type('application/xml').send(xml);
+    res.set('Cache-Control', 'no-store').type('application/xml').send(xml);
   });
 
   return router;

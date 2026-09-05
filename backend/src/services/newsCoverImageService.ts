@@ -9,6 +9,8 @@ import { getNewsUploadDir } from '../utils/newsStorage';
 const DEFAULT_MAX_WIDTH = 1280;
 const DEFAULT_MAX_HEIGHT = 720;
 const DEFAULT_WEBP_QUALITY = 72;
+const DEFAULT_BODY_MAX_WIDTH = 1200;
+const DEFAULT_BODY_WEBP_QUALITY = 78;
 
 export interface NewsCoverCompressionOptions {
   contextSlug?: string;
@@ -42,6 +44,37 @@ export class NewsCoverImageService {
     } catch {
       await unlink(inputPath).catch(() => undefined);
       throw new HttpError(400, 'BAD_REQUEST', '封面图片处理失败，请更换图片后重试');
+    }
+  }
+
+  async compressUploadedBodyImage(inputPath: string): Promise<{ url: string }> {
+    try {
+      const buffer = await sharp(inputPath, { animated: true })
+        .rotate()
+        .resize({
+          width: DEFAULT_BODY_MAX_WIDTH,
+          fit: 'inside',
+          withoutEnlargement: true,
+        })
+        .webp({
+          quality: DEFAULT_BODY_WEBP_QUALITY,
+          effort: 6,
+          smartSubsample: true,
+        })
+        .toBuffer();
+
+      const result = await this.writeCompressedCover(buffer, {
+        alt: 'topic-body',
+      });
+      await unlink(inputPath).catch(() => undefined);
+      return result;
+    } catch {
+      await unlink(inputPath).catch(() => undefined);
+      throw new HttpError(
+        400,
+        'BAD_REQUEST',
+        '正文图片处理失败，请更换图片后重试',
+      );
     }
   }
 
