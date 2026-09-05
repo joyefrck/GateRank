@@ -132,6 +132,12 @@ test('nginx caches release-isolated frontend assets and revalidates the SPA entr
   assert.match(assets, /Cache-Control\s+"public, max-age=31536000, immutable"/);
   assert.doesNotMatch(assets, /Cache-Control\s+"no-cache"/);
 
+  for (const entrypoint of ['/assets/index.js', '/assets/index.css']) {
+    const compatibilityAsset = getLocationBlock(config, `= ${entrypoint}`);
+    assert.match(compatibilityAsset, /expires\s+-1;/);
+    assert.match(compatibilityAsset, /Cache-Control\s+"no-cache"/);
+  }
+
   const indexHtml = getLocationBlock(config, '= /index.html');
   assert.match(indexHtml, /expires\s+-1;/);
   assert.match(indexHtml, /Cache-Control\s+"no-cache"/);

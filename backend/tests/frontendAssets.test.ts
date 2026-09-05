@@ -80,17 +80,17 @@ test('resolvePublicFrontendAssets falls back when Vite manifest is absent', () =
   }
 });
 
-test('resolvePublicFrontendAssets versions fallback assets when configured', () => {
+test('resolvePublicFrontendAssets falls back to the configured release directory', () => {
   const previousVersion = process.env.PUBLIC_FRONTEND_ASSET_VERSION;
-  process.env.PUBLIC_FRONTEND_ASSET_VERSION = 'deploy 42';
+  process.env.PUBLIC_FRONTEND_ASSET_VERSION = 'deploy-42';
   try {
-  assert.deepEqual(
-    resolvePublicFrontendAssets(path.join(os.tmpdir(), 'gaterank-missing-manifest.json')),
-    {
-      script: '/assets/index.js?v=deploy%2042',
-      stylesheet: '/assets/index.css?v=deploy%2042',
-    },
-  );
+    assert.deepEqual(
+      resolvePublicFrontendAssets(path.join(os.tmpdir(), 'gaterank-missing-manifest.json')),
+      {
+        script: '/assets/deploy-42/index.js',
+        stylesheet: '/assets/deploy-42/index.css',
+      },
+    );
   } finally {
     if (previousVersion === undefined) {
       delete process.env.PUBLIC_FRONTEND_ASSET_VERSION;

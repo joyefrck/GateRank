@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { frontendAssetDirectory } from '../../../shared/frontendAssetPaths';
 
 export interface PublicFrontendAssets {
   script: string;
@@ -26,7 +27,7 @@ export function resolvePublicFrontendAssets(manifestPath = getDefaultManifestPat
     return cachedAssets;
   }
 
-  const assets = readManifestAssets(manifestPath) || versionFrontendAssets(FALLBACK_PUBLIC_FRONTEND_ASSETS);
+  const assets = readManifestAssets(manifestPath) || resolveFallbackFrontendAssets();
   if (manifestPath === getDefaultManifestPath()) {
     cachedAssets = assets;
   }
@@ -58,10 +59,13 @@ function toPublicAssetPath(file: string): string {
   return file.startsWith('/') ? file : `/${file}`;
 }
 
-function versionFrontendAssets(assets: PublicFrontendAssets): PublicFrontendAssets {
+function resolveFallbackFrontendAssets(): PublicFrontendAssets {
+  const version = process.env.PUBLIC_FRONTEND_ASSET_VERSION?.trim();
+  if (!version) return FALLBACK_PUBLIC_FRONTEND_ASSETS;
+  const assetDirectory = frontendAssetDirectory(version);
   return {
-    script: versionAssetPath(assets.script),
-    stylesheet: versionAssetPath(assets.stylesheet),
+    script: `/${assetDirectory}/index.js`,
+    stylesheet: `/${assetDirectory}/index.css`,
   };
 }
 
