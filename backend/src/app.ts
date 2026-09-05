@@ -393,6 +393,7 @@ export async function createApp() {
   app.use(
     '/api/v1',
     createToolsPublicRoutes({
+      airportAdCampaignRepository,
       toolsDownloadService,
       ipCheckService,
       dnsLeakTestService,

@@ -383,7 +383,8 @@ test('React homepage uses shared five-slot commercial cards and plain summary sc
   assert.match(sponsoredDealCardSource, /href=\{websiteHref\}/);
   assert.match(sponsoredDealCardSource, /target="_blank"/);
   assert.match(sponsoredDealCardSource, /rel="nofollow sponsored noopener noreferrer"/);
-  assert.match(sponsoredDealCardSource, /aria-label=\{`访问 \$\{deal\.name\} 官网（新标签页）`\}/);
+  assert.ok(sponsoredDealCardSource.includes("aria-label={`${showAdLabel ? '广告：' : ''}访问 ${deal.name} 官网（新标签页）`}"));
+  assert.match(sponsoredDealCardSource, /showAdLabel = false/);
   assert.match(sponsoredDealCardSource, /onClick=\{createTrackedOutboundClickHandler\(\{/);
   assert.match(sponsoredDealCardSource, /min-h-\[88px\]/);
   assert.match(sponsoredDealCardSource, /rounded-\[18px\]/);

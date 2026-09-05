@@ -1,3 +1,4 @@
+import { ToolDownloadDialog } from './pages/tools/ToolDownloadDialog';
 import { IpPurityPage } from './pages/ipPurity/IpPurityPage';
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
 import { useLiveScoreRevision } from './site/liveScores';
@@ -4581,6 +4582,7 @@ function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airp
 }
 
 function ToolsDownloadPage({ platform }: { platform?: ToolDownloadPlatform }) {
+  const [download, setDownload] = useState<{ item: ToolDownloadItem; platform: ToolDownloadPlatform } | null>(null);
   const initialData = useMemo(
     () => getInitialPublicData<ToolsDownloadPageView>('tools_download', () => true),
     [],
@@ -4627,6 +4629,7 @@ function ToolsDownloadPage({ platform }: { platform?: ToolDownloadPlatform }) {
 
   return (
     <PageFrame active="tools">
+      {download && <ToolDownloadDialog item={download.item} platform={download.platform} onClose={() => setDownload(null)} />}
       <main className="mx-auto grid w-full max-w-7xl gap-8 overflow-x-hidden px-4 py-10 text-slate-950">
         <section className="rounded-[8px] border border-sky-100 bg-[linear-gradient(135deg,#f8fafc_0%,#ecfeff_48%,#fff7ed_100%)] p-6 shadow-[0_18px_44px_rgba(14,116,144,0.08)] md:p-7">
           <div className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">翻墙工具下载</div>
@@ -4646,7 +4649,7 @@ function ToolsDownloadPage({ platform }: { platform?: ToolDownloadPlatform }) {
               <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))]">
                 {items.map((item) => (
                   <React.Fragment key={`${groupPlatform}-${item.slug}`}>
-                    <ToolDownloadCard item={item} platform={groupPlatform} />
+                    <ToolDownloadCard item={item} platform={groupPlatform} onDownload={() => setDownload((current) => current || { item, platform: groupPlatform })} />
                   </React.Fragment>
                 ))}
               </div>
@@ -4703,7 +4706,7 @@ function getToolDownloadSupportVersion(item: ToolDownloadItem, platform: ToolDow
   return item.platform_versions?.[platform] || item.version || '待补充';
 }
 
-function ToolDownloadCard({ item, platform }: { item: ToolDownloadItem; platform: ToolDownloadPlatform }) {
+function ToolDownloadCard({ item, platform, onDownload }: { item: ToolDownloadItem; platform: ToolDownloadPlatform; onDownload: () => void }) {
   const hasLocalFile = Boolean(item.local_file_url);
   const iconTone = [
     'bg-[linear-gradient(135deg,#0891b2,#14b8a6)]',
@@ -4731,7 +4734,7 @@ function ToolDownloadCard({ item, platform }: { item: ToolDownloadItem; platform
       <p className="mt-4 border-t border-slate-200 pt-3 text-xs font-extrabold text-slate-500">支持版本：{supportVersion}{item.file_size_label ? ` · 大小：${item.file_size_label}` : ''}</p>
       <div className="mt-auto grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 pt-5">
         {hasLocalFile ? (
-          <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,#0891b2,#10b981)] px-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(8,145,178,0.18)] transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(8,145,178,0.28)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100" href={buildToolControlledDownloadUrl(item, platform)}>
+          <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,#0891b2,#10b981)] px-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(8,145,178,0.18)] transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(8,145,178,0.28)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100" href={buildToolControlledDownloadUrl(item, platform)} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onDownload(); }}>
             <Download size={15} />
             立即下载
           </a>

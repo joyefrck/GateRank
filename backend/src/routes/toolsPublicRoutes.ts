@@ -1,3 +1,7 @@
+import type { AirportAdCampaignRepository } from '../repositories/airportAdCampaignRepository';
+import { calculateObservationDays } from '../../../shared/observationDays';
+import { getDateInTimezone } from '../utils/time';
+import type { DownloadAdView } from '../../../shared/airportAds';
 import { Router } from 'express';
 import { ipKeyGenerator, rateLimit } from 'express-rate-limit';
 import {
@@ -27,6 +31,7 @@ import {
 } from '../../../shared/streamingCheck';
 
 interface ToolsPublicDeps {
+  airportAdCampaignRepository?: Pick<AirportAdCampaignRepository, 'listActiveHomeDeals'>;
   toolsDownloadService: Pick<ToolsDownloadService, 'getDownloadPageView'>;
   ipCheckService?: IpCheckService;
   dnsLeakTestService?: DnsLeakTestService;
@@ -38,6 +43,26 @@ export function createToolsPublicRoutes(deps: ToolsPublicDeps): Router {
   const ipCheckRateLimit = createIpCheckRateLimit();
   const dnsLeakStartRateLimit = createDnsLeakStartRateLimit();
   const dnsLeakResultRateLimit = createDnsLeakResultRateLimit();
+
+  router.get('/tools/download-ads', async (_req, res, next) => {
+    try {
+      const now = new Date();
+      const deals = await deps.airportAdCampaignRepository?.listActiveHomeDeals(now) || [];
+      const items: DownloadAdView[] = deals.filter((deal) => deal.home_slot != null).map((deal) => ({
+        campaign_id: deal.campaign_id,
+        airport_id: deal.airport_id,
+        home_slot: deal.home_slot!,
+        name: deal.airport_name,
+        website: deal.website,
+        discount_title: deal.discount_title,
+        tracking_days: calculateObservationDays(deal.airport_created_at, getDateInTimezone('Asia/Shanghai', now)) ?? 0,
+      }));
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.json({ items });
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get('/tools/downloads', async (req, res, next) => {
     try {

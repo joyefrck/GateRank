@@ -38,7 +38,7 @@ import {
   PageFrame,
   usePageSeo,
 } from '../../site/publicSite';
-import { createTrackedOutboundClickHandler, useMarketingImpression } from '../../site/marketing';
+import { createTrackedOutboundClickHandler, useMarketingImpression, type MarketingPageKind } from '../../site/marketing';
 import { useLiveScoreRevision } from '../../site/liveScores';
 
 type AirportStatus = 'normal' | 'risk' | 'down';
@@ -466,15 +466,20 @@ function SponsoredDeals({ deals }: { deals: SponsoredDeal[] }) {
   );
 }
 
-function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
+export function SponsoredDealCard({ deal, pageKind = 'home', showAdLabel = false }: {
+  deal: Pick<SponsoredDeal, 'campaign_id' | 'airport_id' | 'name' | 'website' | 'discount_title' | 'tracking_days'>;
+  pageKind?: MarketingPageKind;
+  showAdLabel?: boolean;
+  key?: React.Key;
+}) {
   const ref = useRef<HTMLAnchorElement>(null);
   const websiteHref = normalizeExternalHref(deal.website);
   useMarketingImpression({
     airportId: deal.airport_id,
     campaignId: deal.campaign_id,
-    pageKind: 'home',
+    pageKind,
     placement: 'deal_card',
-    dedupeKey: `home|deal_card|${deal.campaign_id}`,
+    dedupeKey: `${pageKind}|deal_card|${deal.campaign_id}`,
     ref,
   });
   return (
@@ -483,11 +488,11 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
       href={websiteHref}
       target="_blank"
       rel="nofollow sponsored noopener noreferrer"
-      aria-label={`访问 ${deal.name} 官网（新标签页）`}
+      aria-label={`${showAdLabel ? '广告：' : ''}访问 ${deal.name} 官网（新标签页）`}
       onClick={createTrackedOutboundClickHandler({
         airportId: deal.airport_id,
         campaignId: deal.campaign_id,
-        pageKind: 'home',
+        pageKind,
         placement: 'deal_card',
         targetKind: 'website',
         targetUrl: websiteHref,
@@ -501,9 +506,10 @@ function SponsoredDealCard({ deal }: { deal: SponsoredDeal; key?: React.Key }) {
           <span className="mt-1 block font-mono text-[11.5px] leading-none text-gray-400">{deal.tracking_days} 天观察</span>
         </div>
       </div>
-      <p className="mt-2 truncate text-[11.5px] font-medium leading-snug text-gray-500">
+      <p className={`mt-2 truncate text-[11.5px] font-medium leading-snug text-gray-500 ${showAdLabel ? 'pr-10' : ''}`}>
         {deal.discount_title || '查看官网了解当前优惠活动。'}
       </p>
+      {showAdLabel && <span className="pointer-events-none absolute bottom-3 right-3 rounded border border-slate-300/60 bg-slate-100/60 px-1 py-0.5 text-[10px] leading-none text-slate-500/70">广告</span>}
     </a>
   );
 }

@@ -161,3 +161,14 @@ export interface AdminAirportAdStatsView extends PortalAirportAdStatsView {
   purchased_months: number;
   status: AdminAirportAdDerivedStatus;
 }
+
+/** Public, non-billing fields used by sponsored cards on the download dialog. */
+export interface DownloadAdView {
+  campaign_id: number;
+  airport_id: number;
+  home_slot: AirportHomeAdSlot;
+  name: string;
+  website: string;
+  discount_title: string;
+  tracking_days: number;
+}
