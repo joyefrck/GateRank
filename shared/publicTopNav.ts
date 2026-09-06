@@ -86,7 +86,6 @@ export const PUBLIC_TOP_NAV_STYLES = `
     line-height: 20px;
     letter-spacing: 0;
   }
-  .public-top-nav-links:has([data-topic-nav]) .public-top-nav-link { padding-left: 11px; padding-right: 11px; }
   .public-top-nav-link {
     position: relative;
     display: inline-flex;

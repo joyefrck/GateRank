@@ -409,7 +409,16 @@ test("sitemap and shared navigation only expose published topics and update on u
     assert.match(xml, /\/test-topic<\/loc>/);
     assert.doesNotMatch(xml, /\/draft<\/loc>/);
     assert.match(xml, /2026-09-05T00:00:00.000Z/);
-    assert.match(await (await fetch(base + "/shell")).text(), /href="\/hub"/);
+    const shell = await (await fetch(base + "/shell")).text();
+    assert.doesNotMatch(shell, /data-topic-nav|public-top-nav-mobile-link/);
+    assert.match(
+      shell,
+      /<main><p><a href="\/hub">机场推荐与选购指南 →<\/a><\/p><\/main>/,
+    );
+    assert.match(
+      shell,
+      /<footer><a href="\/hub">机场推荐<\/a><\/footer>/,
+    );
     topics[1].status = "archived";
     assert.doesNotMatch(
       await (await fetch(base + "/shell")).text(),

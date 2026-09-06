@@ -222,18 +222,8 @@ export function topicNavigationMiddleware(
         if (typeof body === "string" && /<!doctype html>/i.test(body)) {
           const href = hub ? topicEscape(hub.path) : "";
           body = body
-            .replaceAll(
-              "<!--topic-nav-->",
-              hub
-                ? `<a class="public-top-nav-link" data-topic-nav="true" href="${href}">机场推荐</a>`
-                : "",
-            )
-            .replaceAll(
-              "<!--topic-mobile-nav-->",
-              hub
-                ? `<a class="public-top-nav-mobile-link" href="${href}">机场推荐</a>`
-                : "",
-            )
+            .replaceAll("<!--topic-nav-->", "")
+            .replaceAll("<!--topic-mobile-nav-->", "")
             .replaceAll(
               "<!--topic-ranking-->",
               hub ? `<p><a href="${href}">机场推荐与选购指南 →</a></p>` : "",

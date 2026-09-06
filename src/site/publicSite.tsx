@@ -282,33 +282,6 @@ export function TopicHubLink() {
   ) : null;
 }
 
-function topicNavigationHtml(html: string, hub: string | null): string {
-  const href = hub?.replace(
-    /[&<>"']/g,
-    (character) =>
-      ({
-        '&': '&amp;',
-        '<': '&lt;',
-        '>': '&gt;',
-        '"': '&quot;',
-        "'": '&#39;',
-      })[character]!,
-  );
-  return html
-    .replace(
-      '<!--topic-nav-->',
-      href
-        ? `<a class="public-top-nav-link" data-topic-nav="true" href="${href}">机场推荐</a>`
-        : '',
-    )
-    .replace(
-      '<!--topic-mobile-nav-->',
-      href
-        ? `<a class="public-top-nav-mobile-link" href="${href}">机场推荐</a>`
-        : '',
-    );
-}
-
 export function PageFrame({
   active,
   children,
@@ -326,7 +299,6 @@ export function PageFrame({
 }
 
 function PublicTopNav({ active }: { active: NavigationKind }) {
-  const hub = useTopicHub();
   const resolvedActive: PublicNavigationKind = active === 'docs' ? 'home' : active;
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -401,7 +373,7 @@ function PublicTopNav({ active }: { active: NavigationKind }) {
           summary.focus();
         }}
         dangerouslySetInnerHTML={{
-          __html: topicNavigationHtml(renderPublicTopNav(resolvedActive), hub),
+          __html: renderPublicTopNav(resolvedActive),
         }}
       />
     </>
