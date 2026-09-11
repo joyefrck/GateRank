@@ -92,6 +92,11 @@ test('PerformanceProbeJobService leases only the reusable snapshot payload', asy
 });
 
 test('PerformanceProbeJobService derives structured run identity from the leased job', async () => {
+  const latencyEvidence = {
+    latency_measurement: 'proxy_http_warmup2_median5_v1',
+    latency_nodes: [{ name: 'HK-A', warmup_samples_ms: [900, 800], samples_ms: [100, 120, 140],
+      sampled_at: ['t1', 't2', 't3'], failures: 2, attempts: 5, median_ms: 120 }],
+  };
   const insertedRuns: PerformanceRunInput[] = [];
   let insertedTargets: PerformanceRunTarget[] = [];
   let completed: unknown[] = [];
@@ -125,6 +130,7 @@ test('PerformanceProbeJobService derives structured run identity from the leased
     calibration_status: 'not_required',
     calibration_mbps: null,
     median_download_mbps: 120,
+    diagnostics: latencyEvidence,
     target_results: [{
       node_key: 'node-a',
       target_key: 'target-a',
@@ -140,6 +146,7 @@ test('PerformanceProbeJobService derives structured run identity from the leased
   assert.equal(insertedRuns[0]?.probe_id, 'cn-shanghai');
   assert.equal(insertedRuns[0]?.run_mode, 'shadow');
   assert.equal(insertedRuns[0]?.config_version, 3);
+  assert.deepEqual(insertedRuns[0]?.diagnostics, latencyEvidence);
   assert.equal(insertedTargets[0]?.run_id, 44);
   assert.deepEqual(completed, ['job-1', 'cn-shanghai', 44]);
 });

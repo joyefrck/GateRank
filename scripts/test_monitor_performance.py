@@ -513,7 +513,7 @@ proxies:
             ),
             patch(
                 "scripts.monitor_performance.test_proxy_real_latency",
-                return_value=([180.0, 150.0], ["p1", "p2"], 0, 2),
+                return_value=([180.0, 150.0, 210.0], ["p1", "p2", "p3"], 2, 5),
             ),
             patch(
                 "scripts.monitor_performance.test_speed_targets",
@@ -530,30 +530,73 @@ proxies:
         self.assertEqual(result.connect_failures, 0)
         self.assertEqual(result.connect_total_attempts, 3)
         self.assertEqual(result.connect_latency_samples_ms, [21.0, 22.0, 23.0])
-        self.assertEqual(result.latency_samples_ms, [150.0])
-        self.assertEqual(result.latency_sampled_at, ["p2"])
+        self.assertEqual(result.latency_samples_ms, [180.0])
+        self.assertEqual(result.latency_sampled_at, ["p3"])
         self.assertEqual(result.download_mbps, 80.0)
 
-    def test_proxy_real_latency_uses_minimum_of_two_proxy_requests(self) -> None:
+    def measure_proxy_requests(self, durations):
         config = self.make_config()
         response = MagicMock()
         response.__enter__.return_value = response
         opener = MagicMock()
-        opener.open.return_value = response
+        clock = [0.0]
+        outcomes = iter(durations)
+        def request(*args, **kwargs):
+            outcome = next(outcomes)
+            clock[0] += 1 if isinstance(outcome, Exception) else outcome / 1000
+            if isinstance(outcome, Exception):
+                raise outcome
+            return response
+        opener.open.side_effect = request
+        diagnostics = {}
 
         with (
             patch("scripts.monitor_performance.build_proxy_opener", return_value=opener),
-            patch("scripts.monitor_performance.time.perf_counter", side_effect=[0.0, 0.12, 1.0, 1.07]),
+            patch("scripts.monitor_performance.time.perf_counter", side_effect=lambda: clock[0]),
             patch("scripts.monitor_performance.time.sleep"),
-            patch("scripts.monitor_performance.shanghai_now_iso", side_effect=["t1", "t2"]),
+            patch("scripts.monitor_performance.shanghai_now_iso", return_value="2026-09-12T08:00:00+08:00"),
         ):
-            samples, sampled_at, failures, attempts = test_proxy_real_latency(config)
+            result = test_proxy_real_latency(config, diagnostics=diagnostics)
+        self.assertEqual(opener.open.call_count, 7)
+        return result, diagnostics
 
-        self.assertEqual(samples, [120.0, 70.0])
-        self.assertEqual(sampled_at, ["t1", "t2"])
+    def test_proxy_latency_excludes_warmup_and_keeps_formal_samples(self) -> None:
+        (samples, sampled_at, failures, attempts), evidence = self.measure_proxy_requests(
+            [900, 800, 100, 110, 120, 130, 400],
+        )
+        self.assertEqual(samples, [100, 110, 120, 130, 400])
+        self.assertEqual(len(sampled_at), 5)
         self.assertEqual(failures, 0)
-        self.assertEqual(attempts, 2)
-        self.assertEqual(min(samples), 70.0)
+        self.assertEqual(attempts, 5)
+        self.assertEqual(evidence["warmup_samples_ms"], [900, 800])
+        self.assertEqual(evidence["samples_ms"], samples)
+        self.assertEqual(evidence["median_ms"], 120)
+        self.assertEqual(evidence["measurement"], "proxy_http_warmup2_median5_v1")
+
+    def test_proxy_latency_requires_three_successes_without_using_warmup(self) -> None:
+        (samples, timestamps, failures, attempts), evidence = self.measure_proxy_requests(
+            [80, 90, 100, TimeoutError(), TimeoutError(), 120, TimeoutError()],
+        )
+        self.assertEqual((samples, timestamps, failures, attempts), ([], [], 3, 5))
+        self.assertEqual(evidence["samples_ms"], [100, 120])
+        self.assertEqual(evidence["failures"], 3)
+        self.assertIsNone(evidence["median_ms"])
+
+    def test_proxy_latency_keeps_failures_when_three_formal_samples_succeed(self) -> None:
+        (samples, _, failures, _), evidence = self.measure_proxy_requests(
+            [TimeoutError(), 800, 100, TimeoutError(), 200, TimeoutError(), 300],
+        )
+        self.assertEqual(samples, [100, 200, 300])
+        self.assertEqual(failures, 2)
+        self.assertEqual(evidence["warmup_failures"], 1)
+        self.assertEqual(evidence["median_ms"], 200)
+
+    def test_proxy_latency_all_failures_do_not_become_zero_latency(self) -> None:
+        (samples, _, failures, _), evidence = self.measure_proxy_requests([TimeoutError()] * 7)
+        self.assertEqual(samples, [])
+        self.assertEqual(failures, 5)
+        self.assertEqual(evidence["warmup_failures"], 2)
+        self.assertIsNone(evidence["median_ms"])
 
     def test_speed_targets_keep_raw_evidence_and_use_valid_median(self) -> None:
         config = self.make_config()
@@ -723,6 +766,7 @@ proxies:
                 failures=0,
                 total_attempts=1,
                 connect_latency_samples_ms=[21, 22, 23],
+                latency_diagnostics={"samples_ms": [90, 100, 110], "warmup_samples_ms": [800, 700], "failures": 2},
                 target_results=[
                     SpeedTargetResult("cachefly-50mb", 40.0, True, None, 5_000_000, 1000),
                     SpeedTargetResult("cloudflare-50mb", 60.0, True, None, 7_500_000, 1000),
@@ -754,6 +798,11 @@ proxies:
         self.assertEqual(payload["test_profile"], "proxy_multi_target_v2")
         self.assertEqual(payload["calibration_status"], "not_required")
         self.assertEqual(payload["median_latency_ms"], 100.0)
+        self.assertEqual(payload["diagnostics"]["latency_measurement"], "proxy_http_warmup2_median5_v1")
+        self.assertEqual(payload["diagnostics"]["latency_nodes"], [{
+            "name": "HK-1", "region": "HK", "samples_ms": [90, 100, 110],
+            "warmup_samples_ms": [800, 700], "failures": 2,
+        }])
         self.assertEqual(payload["target_results"][0]["node_key"], performance_node_key(nodes_from_snapshot(snapshot)[0][0]))
         self.assertEqual(
             [row["target_key"] for row in payload["target_results"]],

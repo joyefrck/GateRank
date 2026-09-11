@@ -50,6 +50,10 @@ DEFAULT_PROXY_PORT = 7890
 DEFAULT_PROXY_STARTUP_TIMEOUT = 8
 DEFAULT_LATENCY_ATTEMPTS = 3
 DEFAULT_LATENCY_SAMPLE_INTERVAL_SECONDS = 3
+PROXY_LATENCY_MEASUREMENT = "proxy_http_warmup2_median5_v1"
+PROXY_LATENCY_WARMUP_ATTEMPTS = 2
+PROXY_LATENCY_ATTEMPTS = 5
+PROXY_LATENCY_MIN_SUCCESSES = 3
 DEFAULT_REQUEST_LOSS_ATTEMPTS = 10
 DEFAULT_REQUEST_LOSS_SAMPLE_INTERVAL_SECONDS = 0.5
 DEFAULT_SPEED_TIMEOUT = 10
@@ -157,6 +161,7 @@ class NodeProbeResult:
     connect_total_attempts: int = 0
     connect_latency_samples_ms: list[float] = field(default_factory=list)
     target_results: list[SpeedTargetResult] = field(default_factory=list)
+    latency_diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -586,6 +591,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
     latency_samples: list[float] = []
     latency_sampled_at: list[str] = []
     proxy_latency_samples: list[float] = []
+    latency_nodes: list[dict[str, Any]] = []
     download_samples: list[float] = []
     target_results: list[dict[str, Any]] = []
     total_attempts = 0
@@ -629,6 +635,7 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
 
     for node in selected_nodes:
         probe = probe_node(config, node)
+        latency_nodes.append({"name": node.name, "region": node.region, **probe.latency_diagnostics})
         tested_nodes.append(
             {
                 **node_to_summary(node),
@@ -711,7 +718,8 @@ def run_for_airport(config: Config, airport: dict[str, Any], sampled_at: str) ->
         diagnostics={
             **diagnostics,
             "subscription_url": subscription_url,
-            "latency_measurement": "proxy_http_real_ping_min_of_two_via_sing_box",
+            "latency_measurement": PROXY_LATENCY_MEASUREMENT,
+            "latency_nodes": latency_nodes,
             "latency_probe_target": config.test_url_latency,
             "tcp_connect_latency_measurement": "tcp_connect_to_node_server_diagnostic_only",
             "proxy_http_latency_measurement": "http_get_via_local_proxy",
@@ -1753,19 +1761,17 @@ def summarize_availability_errors(results: list[NodeAvailabilityResult]) -> list
 def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
     config_path = ""
     proc: subprocess.Popen[Any] | None = None
+    latency_diagnostics: dict[str, Any] = {}
     try:
         proc, config_path = run_sing_box(config, node)
         connect_latency_samples, _connect_sampled_at, connect_failures, connect_total_attempts = test_node_connect_latency(config, node)
-        proxy_latency_samples, proxy_latency_sampled_at, _real_failures, _real_attempts = test_proxy_real_latency(config)
+        proxy_latency_samples, proxy_latency_sampled_at, _real_failures, _real_attempts = test_proxy_real_latency(
+            config, diagnostics=latency_diagnostics,
+        )
         _loss_latency_samples, proxy_failures, proxy_total_attempts = test_proxy_http_latency(config)
         target_results = test_speed_targets(config, PROXY_SPEED_TARGETS_V2)
         download_mbps = target_download_median(target_results)
-        latency_samples: list[float] = []
-        latency_sampled_at: list[str] = []
-        if proxy_latency_samples:
-            fastest_index = min(range(len(proxy_latency_samples)), key=proxy_latency_samples.__getitem__)
-            latency_samples = [proxy_latency_samples[fastest_index]]
-            latency_sampled_at = [proxy_latency_sampled_at[fastest_index]]
+        latency_samples, latency_sampled_at = representative_proxy_latency(proxy_latency_samples, proxy_latency_sampled_at)
         error_code = None
         valid_target_count = sum(1 for target in target_results if target.valid)
         if not latency_samples or download_mbps is None or valid_target_count < len(PROXY_SPEED_TARGETS_V2):
@@ -1783,6 +1789,7 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
             connect_total_attempts=connect_total_attempts,
             connect_latency_samples_ms=connect_latency_samples,
             target_results=target_results,
+            latency_diagnostics=latency_diagnostics,
         )
     except Exception as exc:
         return NodeProbeResult(
@@ -1798,6 +1805,7 @@ def probe_node(config: Config, node: ParsedNode) -> NodeProbeResult:
             connect_total_attempts=config.latency_attempts,
             connect_latency_samples_ms=[],
             target_results=[],
+            latency_diagnostics=latency_diagnostics,
         )
     finally:
         stop_sing_box(proc, config_path)
@@ -1902,24 +1910,65 @@ def test_proxy_http_latency(config: Config) -> tuple[list[float], int, int]:
     return latencies, failures, config.request_loss_attempts
 
 
-def test_proxy_real_latency(config: Config) -> tuple[list[float], list[str], int, int]:
+def representative_proxy_latency(samples: list[float], sampled_at: list[str]) -> tuple[list[float], list[str]]:
+    """Each sufficiently sampled node contributes one equally weighted value."""
+    if len(samples) < PROXY_LATENCY_MIN_SUCCESSES or len(samples) != len(sampled_at):
+        return [], []
+    return [round(float(median(samples)), 2)], [sampled_at[-1]]
+
+
+def test_proxy_real_latency(
+    config: Config, *, diagnostics: dict[str, Any] | None = None,
+) -> tuple[list[float], list[str], int, int]:
+    """Measure HTTPS response latency after warmup, preserving both phases as evidence.
+
+    Warmup primes the proxy/tunnel and target path; requests still include HTTPS
+    setup and response time. This does not measure bare TCP RTT or promise reuse
+    of the same HTTPS connection.
+    """
     opener = build_proxy_opener(config)
     samples: list[float] = []
     sampled_at: list[str] = []
+    warmup_samples: list[float] = []
+    warmup_sampled_at: list[str] = []
+    warmup_failures = 0
     failures = 0
-    attempts = 2
+    attempts = PROXY_LATENCY_ATTEMPTS
     request = Request(config.test_url_latency, method="GET", headers={"User-Agent": "GateRank-Performance-Monitor/1.0"})
-    for index in range(attempts):
+    total_attempts = PROXY_LATENCY_WARMUP_ATTEMPTS + attempts
+    for index in range(total_attempts):
+        warming_up = index < PROXY_LATENCY_WARMUP_ATTEMPTS
         started = time.perf_counter()
         try:
             with opener.open(request, timeout=config.http_timeout) as response:
                 response.read(1)
-            samples.append(round((time.perf_counter() - started) * 1000, 2))
-            sampled_at.append(shanghai_now_iso())
+            duration_ms = round((time.perf_counter() - started) * 1000, 2)
+            (warmup_samples if warming_up else samples).append(duration_ms)
+            (warmup_sampled_at if warming_up else sampled_at).append(shanghai_now_iso())
         except Exception:
-            failures += 1
-        if index < attempts - 1:
+            if warming_up:
+                warmup_failures += 1
+            else:
+                failures += 1
+        if index < total_attempts - 1:
             time.sleep(0.1)
+    representative, _ = representative_proxy_latency(samples, sampled_at)
+    if diagnostics is not None:
+        diagnostics.update({
+            "measurement": PROXY_LATENCY_MEASUREMENT,
+            "warmup_attempts": PROXY_LATENCY_WARMUP_ATTEMPTS,
+            "warmup_samples_ms": warmup_samples,
+            "warmup_sampled_at": warmup_sampled_at,
+            "warmup_failures": warmup_failures,
+            "attempts": attempts,
+            "samples_ms": samples,
+            "sampled_at": sampled_at,
+            "failures": failures,
+            "minimum_successes": PROXY_LATENCY_MIN_SUCCESSES,
+            "median_ms": representative[0] if representative else None,
+        })
+    if not representative:
+        return [], [], failures, attempts
     return samples, sampled_at, failures, attempts
 
 

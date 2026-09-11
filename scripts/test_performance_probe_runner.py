@@ -10,6 +10,8 @@ from scripts.performance_probe_runner import (
     ProbeRunnerConfig,
     TargetResult,
     build_node_summary,
+    build_success_payload,
+    measure_node,
     request_probe_json,
     run_once,
 )
@@ -42,6 +44,36 @@ class PerformanceProbeRunnerTests(unittest.TestCase):
         self.assertEqual(summary.download_mbps, 70.0)
         self.assertEqual(summary.valid_target_count, 2)
 
+    def test_regional_latency_uses_node_medians_and_retains_measurement_evidence(self) -> None:
+        config = self.make_config()
+        node = ParsedNode("HK-A", "trojan", "HK", {}, "trojan://secret")
+        measurements = []
+        for values in ([100, 110, 120, 130, 900], [300, 400, 500]):
+            def sample(_config, *, diagnostics):
+                diagnostics.update({"samples_ms": list(values), "warmup_samples_ms": [950, 850],
+                                    "failures": 5 - len(values), "attempts": 5})
+                return list(values), [f"t{i}" for i in range(len(values))], 5 - len(values), 5
+            with (
+                patch("scripts.performance_probe_runner.run_sing_box", return_value=(MagicMock(), "/tmp/test.json")),
+                patch("scripts.performance_probe_runner.stop_sing_box"),
+                patch("scripts.performance_probe_runner.test_node_connect_latency", return_value=([10], ["t"], 0, 1)),
+                patch("scripts.performance_probe_runner.test_proxy_real_latency", side_effect=sample),
+                patch("scripts.performance_probe_runner.test_proxy_http_latency", return_value=([80], 1, 10)),
+                patch("scripts.performance_probe_runner.test_speed_targets", return_value=[
+                    TargetResult("a", 100, True, None, 1000, 1000),
+                ]),
+            ):
+                measurements.append(measure_node(config, node, [{"target_key": "a", "url": "https://example.com"}]))
+        self.assertEqual(measurements[0].latency_samples_ms, [120])
+        self.assertEqual(measurements[1].latency_samples_ms, [400])
+        payload = build_success_payload({"job_id": "job-1", "airport_id": 9}, config, [node, node], measurements, [])
+        self.assertEqual(payload["median_latency_ms"], 260)
+        self.assertEqual(payload["packet_loss_percent"], 10)
+        self.assertEqual(payload["diagnostics"]["latency_measurement"], "proxy_http_warmup2_median5_v1")
+        self.assertEqual(payload["diagnostics"]["latency_nodes"][0]["samples_ms"], [100, 110, 120, 130, 900])
+        self.assertEqual(payload["diagnostics"]["latency_nodes"][1]["failures"], 2)
+        self.assertNotIn("secret", json.dumps(payload["diagnostics"]))
+
     def test_request_probe_json_sends_bearer_token_without_logging_it(self) -> None:
         config = self.make_config()
         response = MagicMock()
@@ -55,6 +87,18 @@ class PerformanceProbeRunnerTests(unittest.TestCase):
         request = urlopen_mock.call_args.args[0]
         self.assertEqual(request.get_header("Authorization"), f"Bearer {config.api_token}")
         self.assertEqual(result, {"job_id": "job-1"})
+
+    def test_insufficient_node_latency_stays_null_in_uploaded_run(self) -> None:
+        config = self.make_config()
+        node = ParsedNode("HK-A", "trojan", "HK", {}, "trojan://secret")
+        evidence = {"samples_ms": [100, 120], "failures": 3, "median_ms": None}
+        measurement = NodeMeasurement(node, [], [], [110], 0, 10, 0, 3,
+                                      [TargetResult("a", 100, True, None, 1000, 1000)],
+                                      "node_probe_partial", latency_diagnostics=evidence)
+        payload = build_success_payload({"job_id": "job-1", "airport_id": 9}, config, [node], [measurement], [])
+        self.assertIsNone(payload["median_latency_ms"])
+        self.assertEqual(payload["status"], "partial")
+        self.assertEqual(payload["diagnostics"]["latency_nodes"][0]["samples_ms"], [100, 120])
 
     def test_run_once_exits_cleanly_when_queue_is_empty(self) -> None:
         config = self.make_config()

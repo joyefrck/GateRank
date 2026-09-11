@@ -22,9 +22,11 @@ if str(REPO_ROOT) not in sys.path:
 from scripts.monitor_performance import (
     Config,
     ParsedNode,
+    PROXY_LATENCY_MEASUREMENT,
     SpeedTargetResult,
     nodes_from_snapshot,
     performance_node_key,
+    representative_proxy_latency,
     run_sing_box,
     select_nodes,
     shanghai_now_iso,
@@ -74,6 +76,7 @@ class NodeMeasurement:
     targets: list[TargetResult]
     error_code: str | None
     connect_latency_samples_ms: list[float] = field(default_factory=list)
+    latency_diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
 class ProbeRunnerError(RuntimeError):
@@ -142,10 +145,14 @@ def measure_node(
     config = legacy_config(runner_config, targets[0]["url"] if targets else "https://invalid.local")
     proc = None
     config_path = ""
+    latency_diagnostics: dict[str, Any] = {}
     try:
         proc, config_path = run_sing_box(config, node)
         connect_latencies, _connect_sampled_at, connect_failures, connect_attempts = test_node_connect_latency(config, node)
-        latency_samples, latency_sampled_at, _real_failures, _real_attempts = test_proxy_real_latency(config)
+        latency_samples, latency_sampled_at, _real_failures, _real_attempts = test_proxy_real_latency(
+            config, diagnostics=latency_diagnostics,
+        )
+        latency_samples, latency_sampled_at = representative_proxy_latency(latency_samples, latency_sampled_at)
         proxy_latencies, proxy_failures, proxy_attempts = test_proxy_http_latency(config)
         target_results = test_speed_targets(config, targets)
         summary = build_node_summary(target_results)
@@ -164,9 +171,10 @@ def measure_node(
             targets=target_results,
             error_code=error_code,
             connect_latency_samples_ms=connect_latencies,
+            latency_diagnostics=latency_diagnostics,
         )
     except Exception:
-        return NodeMeasurement(node, [], [], [], 1, 1, 1, 1, [], "node_probe_failed")
+        return NodeMeasurement(node, [], [], [], 1, 1, 1, 1, [], "node_probe_failed", latency_diagnostics=latency_diagnostics)
     finally:
         stop_sing_box(proc, config_path)
 
@@ -228,6 +236,12 @@ def build_success_payload(
         "packet_loss_percent": round(total_proxy_failures / total_proxy_attempts * 100, 2) if total_proxy_attempts else 100,
         "target_results": target_results,
         "diagnostics": {
+            "latency_measurement": PROXY_LATENCY_MEASUREMENT,
+            "latency_probe_target": "https://www.google.com/generate_204",
+            "latency_nodes": [
+                {"name": item.node.name, "region": item.node.region, **item.latency_diagnostics}
+                for item in measurements
+            ],
             "invalid_snapshot_nodes_count": len(invalid_nodes),
             "target_count": len(speed_targets(job.get("speed_targets"))),
             "test_profile": str(job.get("test_profile") or "proxy_multi_target_v2"),
