@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
 import express from 'express';
 import { errorHandler, HttpError } from '../src/middleware/errorHandler';
+import { PerformanceProbeSettingRepository } from '../src/repositories/performanceProbeSettingRepository';
 import { createAdminRoutes } from '../src/routes/adminRoutes';
 import { SmtpSendError } from '../src/services/mailService';
 import { TelegramSendError } from '../src/services/telegramNotificationService';
@@ -89,7 +90,16 @@ test('GET and PATCH performance probe settings expose sanitized per-airport swit
       getByAirport: async () => currentView,
       saveAll: async (input) => {
         savedInput = input;
-        return { ...currentView, config_version: 2, settings: input.settings.map((row) => ({ ...row, updated_by: 'tester', updated_at: null })) };
+        return new PerformanceProbeSettingRepository({
+          getConnection: async () => ({
+            beginTransaction: async () => undefined,
+            query: async () => [[{ config_version: 1 }]],
+            execute: async () => [{ affectedRows: 1 }],
+            commit: async () => undefined,
+            rollback: async () => undefined,
+            release: () => undefined,
+          }),
+        } as never).saveAll(input);
       },
     },
     metricsRepository: stubMetricsRepository(),
@@ -131,6 +141,35 @@ test('GET and PATCH performance probe settings expose sanitized per-airport swit
     assert.ok(savedInput);
     assert.equal(audits[0]?.action, 'update_performance_probe_settings');
     assert.doesNotMatch(JSON.stringify(audits), /token_hash|raw_uri|password/i);
+
+    const shadowSettings = currentView.settings.map((row) => ({
+      probe_id: row.probe_id,
+      test_enabled: row.probe_id !== 'legacy-control',
+      include_in_result: false,
+    }));
+    const save = (settings: unknown) => fetch(`http://127.0.0.1:${port}/airports/9/performance-probe-settings`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ date: today, expected_config_version: 1, settings }),
+    });
+    const shadowResponse = await save(shadowSettings);
+    assert.equal(shadowResponse.status, 200);
+    const shadowBody = await shadowResponse.json() as typeof currentView;
+    assert.equal(shadowBody.config_version, 2);
+    assert.ok(shadowBody.settings.every((row) => !row.include_in_result));
+    assert.equal(audits.length, 2);
+
+    for (const invalid of [
+      shadowSettings.slice(1),
+      [...shadowSettings, shadowSettings[0]],
+      shadowSettings.map((row) => row.probe_id === 'legacy-control' ? { ...row, include_in_result: true } : row),
+    ]) {
+      const invalidResponse = await save(invalid);
+      assert.equal(invalidResponse.status, 400);
+      assert.match(JSON.stringify(await invalidResponse.json()), /INVALID_PERFORMANCE_PROBE_SETTINGS/);
+    }
+    assert.equal(audits.length, 2);
+
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }

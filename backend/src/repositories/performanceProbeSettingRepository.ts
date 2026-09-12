@@ -19,6 +19,13 @@ interface PerformanceProbeSettingRow extends RowDataPacket {
   updated_at: string;
 }
 
+export class PerformanceProbeSettingsValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'PerformanceProbeSettingsValidationError';
+  }
+}
+
 export class PerformanceProbeSettingsConflictError extends Error {
   constructor() {
     super('performance probe settings were updated by another request');
@@ -149,13 +156,13 @@ function validateAndNormalizeSettings(
   const received = new Map<PerformanceProbeId, AirportPerformanceProbeSettingsInput['settings'][number]>();
   for (const setting of settings) {
     if (received.has(setting.probe_id)) {
-      throw new Error(`duplicate probe setting: ${setting.probe_id}`);
+      throw new PerformanceProbeSettingsValidationError(`测试地区重复：${setting.probe_id}`);
     }
     received.set(setting.probe_id, setting);
   }
   const expectedIds = PERFORMANCE_PROBE_DEFINITIONS.map((definition) => definition.probe_id);
   if (received.size !== expectedIds.length || expectedIds.some((probeId) => !received.has(probeId))) {
-    throw new Error('settings must include every registered performance probe exactly once');
+    throw new PerformanceProbeSettingsValidationError('请提交完整的测试地区配置，每个地区只能出现一次');
   }
 
   const normalized = expectedIds.map((probeId) => {
@@ -163,7 +170,7 @@ function validateAndNormalizeSettings(
     const testEnabled = Boolean(setting.test_enabled);
     const includeInResult = Boolean(setting.include_in_result);
     if (includeInResult && !testEnabled) {
-      throw new Error(`include_in_result requires test_enabled for ${probeId}`);
+      throw new PerformanceProbeSettingsValidationError(`请先开启 ${probeId} 的测试，再并入测试结果`);
     }
     return {
       probe_id: probeId,
@@ -171,9 +178,7 @@ function validateAndNormalizeSettings(
       include_in_result: includeInResult,
     };
   });
-  if (!normalized.some((setting) => setting.test_enabled && setting.include_in_result)) {
-    throw new Error('at least one probe must be included in performance results');
-  }
+  // Shadow-only testing is valid: collect evidence before opting a region into scoring.
   return normalized;
 }
 

@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import {
   PerformanceProbeSettingRepository,
   PerformanceProbeSettingsConflictError,
+  PerformanceProbeSettingsValidationError,
 } from '../src/repositories/performanceProbeSettingRepository';
 
 test('PerformanceProbeSettingRepository returns safe migration defaults', async () => {
@@ -47,25 +48,11 @@ test('PerformanceProbeSettingRepository validates switch invariants before openi
         { probe_id: 'cn-guangzhou', test_enabled: false, include_in_result: false },
       ],
     }),
-    /include_in_result requires test_enabled/,
-  );
-
-  await assert.rejects(
-    repository.saveAll({
-      airport_id: 9,
-      expected_config_version: 0,
-      updated_by: 'ops',
-      settings: [
-        { probe_id: 'legacy-control', test_enabled: false, include_in_result: false },
-        { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: false },
-        { probe_id: 'cn-guangzhou', test_enabled: true, include_in_result: false },
-      ],
-    }),
-    /at least one probe must be included/,
+    PerformanceProbeSettingsValidationError,
   );
 });
 
-test('PerformanceProbeSettingRepository saves all rows with one optimistic config version', async () => {
+test('PerformanceProbeSettingRepository saves shadow-only rows with one optimistic config version', async () => {
   const statements: Array<{ sql: string; params?: unknown[] }> = [];
   let committed = false;
   let rolledBack = false;
@@ -96,13 +83,19 @@ test('PerformanceProbeSettingRepository saves all rows with one optimistic confi
     expected_config_version: 2,
     updated_by: 'ops',
     settings: [
-      { probe_id: 'legacy-control', test_enabled: true, include_in_result: true },
+      { probe_id: 'legacy-control', test_enabled: false, include_in_result: false },
       { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: false },
       { probe_id: 'cn-guangzhou', test_enabled: true, include_in_result: false },
     ],
   });
 
   assert.equal(saved.config_version, 3);
+  assert.ok(saved.settings.every((row) => !row.include_in_result));
+  assert.deepEqual(statements.filter((item) => item.sql.includes('INSERT INTO')).map((item) => item.params?.slice(0, 5)), [
+    [9, 'legacy-control', 0, 0, 3],
+    [9, 'cn-shanghai', 1, 0, 3],
+    [9, 'cn-guangzhou', 1, 0, 3],
+  ]);
   assert.equal(statements.filter((item) => item.sql.includes('INSERT INTO airport_performance_probe_settings')).length, 3);
   assert.equal(committed, true);
   assert.equal(rolledBack, false);

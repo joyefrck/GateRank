@@ -40,7 +40,7 @@ test('PerformanceProbeDispatchService creates enabled shadow jobs with identical
         airport_id: 9,
         config_version: 3,
         settings: [
-          { probe_id: 'legacy-control', test_enabled: true, include_in_result: true, updated_by: null, updated_at: null },
+          { probe_id: 'legacy-control', test_enabled: false, include_in_result: false, updated_by: null, updated_at: null },
           { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: false, updated_by: null, updated_at: null },
           { probe_id: 'cn-guangzhou', test_enabled: true, include_in_result: false, updated_by: null, updated_at: null },
         ],

@@ -34,7 +34,7 @@ import {
 } from '../services/userTelegramBotSettingsService';
 import type { XOAuthSettingsInput } from '../services/xOAuthSettingsService';
 import type { SchedulerDailyStat } from '../repositories/schedulerRunRepository';
-import { PerformanceProbeSettingsConflictError } from '../repositories/performanceProbeSettingRepository';
+import { PerformanceProbeSettingsConflictError, PerformanceProbeSettingsValidationError } from '../repositories/performanceProbeSettingRepository';
 import type {
   RechargeOrderView,
   WalletTransactionType,
@@ -2132,6 +2132,9 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           settings,
         });
       } catch (error) {
+        if (error instanceof PerformanceProbeSettingsValidationError) {
+          throw new HttpError(400, 'INVALID_PERFORMANCE_PROBE_SETTINGS', error.message);
+        }
         if (error instanceof PerformanceProbeSettingsConflictError) {
           throw new HttpError(409, 'PERFORMANCE_PROBE_SETTINGS_CONFLICT', '配置已被其他管理员更新，请重新加载');
         }
