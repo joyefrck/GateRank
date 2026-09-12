@@ -3,13 +3,14 @@
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import argparse
 import json
 import os
 import random
 from pathlib import Path
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from statistics import median
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -25,6 +26,8 @@ from scripts.monitor_performance import (
     PROXY_LATENCY_MEASUREMENT,
     SpeedTargetResult,
     nodes_from_snapshot,
+    ensure_sing_box,
+    probe_node_proxy_http_availability,
     performance_node_key,
     representative_proxy_latency,
     run_sing_box,
@@ -129,12 +132,47 @@ def run_once(config: ProbeRunnerConfig) -> dict[str, Any]:
     job_id = require_string(job.get("job_id"), "job_id")
     snapshot = object_value(job.get("snapshot"))
     nodes, invalid_nodes = nodes_from_snapshot(snapshot)
+    if job.get("test_profile") == "network_coverage_proxy_http_v1":
+        payload = measure_network_coverage(job, config, nodes, invalid_nodes)
+        request_probe_json(config, "POST", "/runs", payload)
+        return {"status": payload["status"], "job_id": job_id}
+    if job.get("test_profile") not in (None, "proxy_multi_target_v2"):
+        raise ProbeRunnerError("unsupported_test_profile")
     selected = resolve_job_nodes(job, nodes)
     targets = speed_targets(job.get("speed_targets"))
     measurements = [measure_node(config, node, targets) for node in selected]
     payload = build_success_payload(job, config, selected, measurements, invalid_nodes)
     request_probe_json(config, "POST", "/runs", payload)
     return {"status": payload["status"], "job_id": job_id}
+
+
+def measure_network_coverage(job: dict[str, Any], runner_config: ProbeRunnerConfig,
+                             nodes: list[ParsedNode], invalid_nodes: list[dict[str, str]]) -> dict[str, Any]:
+    payload = {"job_id": job["job_id"], "sampled_at": shanghai_now_iso(), "status": "failed", "nodes": []}
+    if invalid_nodes or not nodes:
+        return payload
+    try:
+        ensure_sing_box(runner_config.sing_box_bin)
+        config = legacy_config(runner_config, "https://www.google.com/generate_204")
+        # One dedicated local inbound per thread; P and N never share an active job.
+        def measure_partition(index: int) -> list[dict[str, Any]]:
+            local = replace(config, proxy_port=config.proxy_port + index, http_timeout=min(config.http_timeout, 5))
+            rows = []
+            for node in nodes[index::4]:
+                result = probe_node_proxy_http_availability(local, node)
+                code = (result.error_code or "").split(":")[0]
+                rows.append({"key": performance_node_key(node), "healthy": result.available,
+                             "error_code": code or None})
+            return rows
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            rows = [row for partition in pool.map(measure_partition, range(4)) for row in partition]
+        # A broken local proxy process is a collector failure, not an unhealthy subscription.
+        if any(row["error_code"] == "proxy_start_failed" for row in rows):
+            return payload
+        payload.update({"status": "success", "nodes": rows})
+        return payload
+    except Exception:
+        return payload
 
 
 def measure_node(
@@ -312,6 +350,7 @@ def request_probe_json(
         "Accept": "application/json",
         "Authorization": f"Bearer {config.api_token}",
         "User-Agent": "GateRank-Performance-Probe/1.0",
+        "x-probe-capabilities": "network_coverage_proxy_http_v1",
     }
     if body is not None:
         headers["Content-Type"] = "application/json"

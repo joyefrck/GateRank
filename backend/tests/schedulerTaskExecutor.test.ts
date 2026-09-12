@@ -826,3 +826,16 @@ test('SchedulerTaskExecutor.runStabilityResampleGuard continues after one airpor
   assert.equal(aggregateCount, 1);
   assert.equal(recomputeCount, 1);
 });
+
+
+test('scheduled N dispatches mainland batches and does not run a central script', async () => {
+  let dispatched = false;
+  const executor = createSchedulerTaskExecutor({
+    networkCoverageProbeService: { dispatchAll: async () => { dispatched = true; return { created: 2, failures: [] }; } },
+    execFileAsync: async () => { throw new Error('central must not run'); },
+  });
+  const result = await executor.runNetworkCoverageCollection();
+  assert.equal(dispatched, true);
+  assert.equal(result.status, 'succeeded');
+  assert.match(result.message, /已派发 2 家/);
+});

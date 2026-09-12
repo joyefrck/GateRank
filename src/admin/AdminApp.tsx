@@ -571,6 +571,13 @@ interface AirportDashboardView {
     rule_version: string;
     error_code: string | null;
     error_message: string | null;
+    diagnostics?: {
+      health_check?: string;
+      regional_results?: Array<{
+        probe_id: string; sampled_at: string; healthy_nodes_count: number; detected_nodes_count: number;
+        nodes: Array<{ key: string; name: string; healthy: boolean; error_code: string | null }>;
+      }>;
+    };
     nodes: Array<{
       key: string;
       name: string;
@@ -11056,7 +11063,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
       return {
         title: '网络覆盖手动执行',
         description: isTodayDate
-          ? '逐节点执行一次真实代理 HTTP 检查，完成后写入 N 并重算当前机场。'
+          ? '由已启用的大陆探针检查全部节点；同一节点任一地区成功即计为可用，两地结果收齐后更新 N。'
           : 'N 只使用当天真实采集结果，历史日期保持原始快照，不允许补采或重算。',
         buttonLabel: isTodayDate ? '重新采集并重算网络覆盖' : '历史 N 不可重跑',
         kind: 'network_coverage' as const,
@@ -11656,6 +11663,33 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <ReadField label="错误码" value={valueOrDash(dashboard.network_coverage.error_code)} />
               <ReadField label="脱敏错误摘要" value={valueOrDash(dashboard.network_coverage.error_message)} />
             </div>
+
+            {dashboard.network_coverage.diagnostics?.regional_results?.length ? (
+              <section className="rounded border border-neutral-200 bg-white p-4" aria-label="大陆地区采集证据">
+                <h3 className="text-sm font-semibold text-neutral-900">大陆地区采集证据</h3>
+                <p className="mt-2 text-xs text-neutral-500">各地区检查同一份完整节点列表；任一地区成功即计为可用。以下保留每个地区的原始检查结果。</p>
+                <div className="mt-3 divide-y divide-neutral-200">
+                  {dashboard.network_coverage.diagnostics.regional_results.map((region) => (
+                    <details key={region.probe_id} className="py-2">
+                      <summary className="flex min-h-10 cursor-pointer flex-wrap items-center gap-3 text-sm">
+                        <span className="font-medium">{region.probe_id === 'cn-shanghai' ? '上海' : region.probe_id === 'cn-guangzhou' ? '广州' : region.probe_id}</span>
+                        <span className="text-emerald-700">可用 {region.healthy_nodes_count} / {region.detected_nodes_count}</span>
+                        <span className="text-xs text-neutral-500">{formatDateTimeInBeijing(region.sampled_at)}</span>
+                        <span className="text-xs text-neutral-500">展开逐节点结果</span>
+                      </summary>
+                      <div className="mt-2 divide-y divide-neutral-100">
+                        {region.nodes.map((node) => (
+                          <div key={node.key} className="flex flex-wrap justify-between gap-2 py-2 text-sm">
+                            <span>{node.name}</span>
+                            <span className={node.healthy ? 'text-emerald-700' : 'text-rose-700'}>{node.healthy ? '可用' : node.error_code || '不可用'}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
+                </div>
+              </section>
+            ) : null}
 
             <div className="overflow-hidden rounded border border-neutral-200 bg-white">
               <div className="border-b border-neutral-200 px-4 py-3 text-sm font-semibold text-neutral-900">逐节点真实代理检查</div>

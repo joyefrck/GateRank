@@ -78,8 +78,8 @@ export class PerformanceProbeJobRepository {
     await this.ensureColumn('selected_node_keys_json', "JSON NULL AFTER scoring_rule_version");
   }
 
-  async create(input: PerformanceProbeJobInput): Promise<boolean> {
-    const [result] = await this.pool.execute<ResultSetHeader>(
+  async create(input: PerformanceProbeJobInput, executor: Pool | PoolConnection = this.pool): Promise<boolean> {
+    const [result] = await executor.execute<ResultSetHeader>(
       `INSERT IGNORE INTO performance_probe_jobs (
          job_id, airport_id, probe_id, node_snapshot_id, config_version,
          test_enabled_snapshot, include_in_result_snapshot, test_profile,
@@ -107,6 +107,7 @@ export class PerformanceProbeJobRepository {
     probeId: PerformanceProbeId,
     leaseOwner: string,
     leaseSeconds: number,
+    supportsCoverage = false,
   ): Promise<PerformanceProbeJob | null> {
     const connection = await this.pool.getConnection();
     try {
@@ -121,17 +122,19 @@ export class PerformanceProbeJobRepository {
         `SELECT ${SELECT_COLUMNS}
            FROM performance_probe_jobs
           WHERE probe_id = ? AND status = 'queued'
-          ORDER BY created_at ASC
+            AND (? = 1 OR test_profile <> 'network_coverage_proxy_http_v1')
+          ORDER BY (source LIKE 'manual-%') DESC, created_at ASC
           LIMIT 1
           FOR UPDATE`,
-        [probeId],
+        [probeId, supportsCoverage ? 1 : 0],
       );
       const row = rows[0];
       if (!row) {
         await connection.commit();
         return null;
       }
-      const seconds = Math.max(30, Math.min(Math.floor(leaseSeconds), 3600));
+      const seconds = row.test_profile === 'network_coverage_proxy_http_v1'
+        ? 3600 : Math.max(30, Math.min(Math.floor(leaseSeconds), 3600));
       await connection.execute<ResultSetHeader>(
         `UPDATE performance_probe_jobs
             SET status = 'leased', lease_owner = ?,

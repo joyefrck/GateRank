@@ -1,3 +1,5 @@
+import { COVERAGE_PROBE_PROFILE } from '../repositories/networkCoverageProbeRepository';
+import type { NetworkCoverageProbeService } from './networkCoverageProbeService';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolConnection } from 'mysql2/promise';
 
@@ -14,8 +16,9 @@ import type {
 } from '../types/domain';
 
 interface PerformanceProbeJobServiceDeps {
+  networkCoverageProbeService?: Pick<NetworkCoverageProbeService, 'submitRun'>;
   jobRepository: {
-    leaseNext(probeId: PerformanceProbeId, leaseOwner: string, leaseSeconds: number): Promise<PerformanceProbeJob | null>;
+    leaseNext(probeId: PerformanceProbeId, leaseOwner: string, leaseSeconds: number, supportsCoverage?: boolean): Promise<PerformanceProbeJob | null>;
     getById(jobId: string): Promise<PerformanceProbeJob | null>;
     markCompleted(
       jobId: string,
@@ -52,9 +55,9 @@ interface PerformanceProbeJobServiceDeps {
 export class PerformanceProbeJobService {
   constructor(private readonly deps: PerformanceProbeJobServiceDeps) {}
 
-  async leaseNextJob(probeId: PerformanceProbeId, workerId?: string): Promise<Record<string, unknown> | null> {
+  async leaseNextJob(probeId: PerformanceProbeId, workerId?: string, supportsCoverage = false): Promise<Record<string, unknown> | null> {
     const leaseOwner = sanitizeWorkerId(workerId) || `${probeId}:${randomUUID()}`;
-    const job = await this.deps.jobRepository.leaseNext(probeId, leaseOwner, 900);
+    const job = await this.deps.jobRepository.leaseNext(probeId, leaseOwner, 900, supportsCoverage);
     if (!job) return null;
     const snapshot = await this.deps.snapshotRepository.getById(job.node_snapshot_id);
     if (!snapshot || snapshot.airport_id !== job.airport_id) {
@@ -92,6 +95,10 @@ export class PerformanceProbeJobService {
     if (!job || job.probe_id !== probeId) {
       throw new HttpError(403, 'PROBE_JOB_FORBIDDEN', 'Performance probe job does not belong to this probe');
     }
+    if (job.test_profile === COVERAGE_PROBE_PROFILE) {
+      if (!this.deps.networkCoverageProbeService) throw new HttpError(503, 'COVERAGE_UNAVAILABLE', 'Coverage service is unavailable');
+      return this.deps.networkCoverageProbeService.submitRun(job, payload);
+    }
     if (job.status === 'completed' && job.run_id !== null) {
       return { run_id: job.run_id, job_id: job.job_id, duplicate: true };
     }
@@ -107,6 +114,7 @@ export class PerformanceProbeJobService {
 
     const definition = PERFORMANCE_PROBE_DEFINITIONS.find((item) => item.probe_id === probeId);
     if (!definition) throw new HttpError(400, 'PROBE_UNKNOWN', 'Unknown performance probe');
+    if (job.scoring_rule_version === 'network_coverage_v1') throw new HttpError(400, 'PROBE_RUN_INVALID', 'Coverage scoring requires a coverage job');
     const calibrationStatus = calibrationStatusValue(payload.calibration_status);
     const calibrationMbps = optionalNumber(payload.calibration_mbps);
     if (calibrationStatus === 'passed' && calibrationMbps === null) {

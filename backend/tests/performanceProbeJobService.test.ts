@@ -390,3 +390,18 @@ test('PerformanceProbeJobService resumes finalization from persisted evidence af
   assert.equal(inserted, false);
   assert.deepEqual(events, ['anomaly:assess', 'aggregate', 'job:complete']);
 });
+
+
+test('coverage submissions route to coverage service, preserving authenticated probe ownership', async () => {
+  let calls = 0;
+  const job = { ...leasedJob, test_profile: 'network_coverage_proxy_http_v1', scoring_rule_version: 'network_coverage_v1' };
+  const service = new PerformanceProbeJobService({
+    jobRepository: { getById: async () => job },
+    networkCoverageProbeService: { submitRun: async () => { calls++; return { run_id: 1, job_id: job.job_id, duplicate: false }; } },
+    runRepository: { insert: async () => { throw new Error('must not write P'); } },
+  } as never);
+  await service.submitRun('cn-shanghai', { job_id: job.job_id });
+  assert.equal(calls, 1);
+  await assert.rejects(service.submitRun('cn-guangzhou', { job_id: job.job_id }), /does not belong/);
+  assert.equal(calls, 1);
+});

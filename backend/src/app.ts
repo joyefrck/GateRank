@@ -53,6 +53,8 @@ import { SubscriptionNodeSnapshotRepository } from './repositories/subscriptionN
 import { ManualJobRepository } from './repositories/manualJobRepository';
 import { MarketingEventRepository } from './repositories/marketingEventRepository';
 import { SystemSettingRepository } from './repositories/systemSettingRepository';
+import { NetworkCoverageProbeRepository } from './repositories/networkCoverageProbeRepository';
+import { NetworkCoverageProbeService } from './services/networkCoverageProbeService';
 import { NetworkCoverageRunRepository } from './repositories/networkCoverageRunRepository';
 import { createAdminAuthRoutes } from './routes/adminAuthRoutes';
 import { createAdminRoutes } from './routes/adminRoutes';
@@ -238,7 +240,16 @@ export async function createApp() {
     preferenceRepository: performanceNodePreferenceRepository,
     jobRepository: performanceProbeJobRepository,
   });
+  const networkCoverageProbeRepository = new NetworkCoverageProbeRepository(pool);
+  await networkCoverageProbeRepository.ensureSchema();
+  const networkCoverageProbeService = new NetworkCoverageProbeService({
+    batchRepository: networkCoverageProbeRepository, jobRepository: performanceProbeJobRepository,
+    runRepository: networkCoverageRunRepository, snapshotRepository: subscriptionNodeSnapshotRepository,
+    probeRepository: performanceProbeRepository, airportRepository, dispatchService: performanceProbeDispatchService,
+    recomputeService,
+  });
   const schedulerTaskExecutor = new SchedulerTaskExecutor({
+    networkCoverageProbeService,
     airportRepository,
     aggregationService,
     applicantBillingRepository,
@@ -257,6 +268,7 @@ export async function createApp() {
     schedulerTaskExecutor,
   });
   const manualJobService = new ManualJobService({
+    networkCoverageProbeService,
     manualJobRepository,
     aggregationService,
     recomputeService,
@@ -346,6 +358,7 @@ export async function createApp() {
     metricsRepository,
   });
   const performanceProbeJobService = new PerformanceProbeJobService({
+    networkCoverageProbeService,
     jobRepository: performanceProbeJobRepository,
     snapshotRepository: subscriptionNodeSnapshotRepository,
     runRepository: performanceRunRepository,

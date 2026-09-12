@@ -71,6 +71,11 @@ test('PerformanceProbeJobRepository creates immutable jobs and leases the oldest
   });
   const leased = await repository.leaseNext('cn-shanghai', 'worker-a', 120);
 
+  const oldLease = calls.find((call) => call.sql.includes('ORDER BY'))!;
+  assert.match(oldLease.sql, /test_profile <> 'network_coverage_proxy_http_v1'/);
+  assert.deepEqual(oldLease.params, ['cn-shanghai', 0]);
+  await repository.leaseNext('cn-shanghai', 'new-worker', 120, true);
+  assert.deepEqual(calls.filter((call) => call.sql.includes('ORDER BY')).at(-1)?.params, ['cn-shanghai', 1]);
   assert.equal(created, true);
   assert.equal(leased?.probe_id, 'cn-shanghai');
   assert.equal(leased?.include_in_result_snapshot, false);

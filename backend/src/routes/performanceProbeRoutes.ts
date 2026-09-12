@@ -17,6 +17,7 @@ export function createPerformanceProbeRoutes(deps: PerformanceProbeRoutesDeps): 
       const job = await deps.jobService.leaseNextJob(
         identity.probe_id,
         req.header('x-probe-worker') || undefined,
+        (req.header('x-probe-capabilities') || '').split(',').includes('network_coverage_proxy_http_v1'),
       );
       if (!job) {
         res.status(204).end();

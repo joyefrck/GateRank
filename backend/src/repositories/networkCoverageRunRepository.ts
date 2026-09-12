@@ -1,4 +1,4 @@
-import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
+import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type {
   NetworkCoverageRun,
   NetworkCoverageRunInput,
@@ -96,9 +96,9 @@ export class NetworkCoverageRunRepository {
     await this.ensureScoreNColumn();
   }
 
-  async insert(input: NetworkCoverageRunInput): Promise<NetworkCoverageRun> {
+  async insert(input: NetworkCoverageRunInput, executor: Pool | PoolConnection = this.pool): Promise<NetworkCoverageRun> {
     const score = computeNetworkCoverageScore(input.nodes || [], input.unsupported_nodes_count || 0);
-    const [result] = await this.pool.execute<ResultSetHeader>(
+    const [result] = await executor.execute<ResultSetHeader>(
       `INSERT INTO airport_network_coverage_runs (
          airport_id, sampled_at, sampled_date, source, status, subscription_format,
          detected_nodes_count, healthy_nodes_count, unhealthy_nodes_count, unsupported_nodes_count,
@@ -139,13 +139,13 @@ export class NetworkCoverageRunRepository {
         JSON.stringify(input.diagnostics || {}),
       ],
     );
-    const created = await this.getById(result.insertId);
+    const created = await this.getById(result.insertId, executor);
     if (!created) throw new Error(`network coverage run ${result.insertId} not found after insert`);
     return created;
   }
 
-  async getById(id: number): Promise<NetworkCoverageRun | null> {
-    const [rows] = await this.pool.query<NetworkCoverageRunRow[]>(
+  async getById(id: number, executor: Pool | PoolConnection = this.pool): Promise<NetworkCoverageRun | null> {
+    const [rows] = await executor.query<NetworkCoverageRunRow[]>(
       `SELECT ${SELECT_COLUMNS} FROM airport_network_coverage_runs WHERE id = ? LIMIT 1`,
       [id],
     );

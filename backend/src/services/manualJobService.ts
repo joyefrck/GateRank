@@ -1,3 +1,4 @@
+import type { NetworkCoverageProbeService } from './networkCoverageProbeService';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -18,6 +19,7 @@ import type {
 const execFileAsync = promisify(execFile);
 
 interface ManualJobServiceDeps {
+  networkCoverageProbeService?: Pick<NetworkCoverageProbeService, 'collectAirport'>;
   manualJobRepository: {
     create(input: {
       airport_id: number;
@@ -312,6 +314,10 @@ export class ManualJobService {
   }
 
   private async runNetworkCoverageScript(airportId: number, source: string): Promise<void> {
+    if (this.deps.networkCoverageProbeService) {
+      await this.deps.networkCoverageProbeService.collectAirport(airportId, getDateInTimezone(), source);
+      return;
+    }
     await this.runPythonScript('monitor_network_coverage.py', airportId, source);
   }
 

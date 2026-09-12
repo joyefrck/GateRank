@@ -12,10 +12,13 @@ from scripts.performance_probe_runner import (
     build_node_summary,
     build_success_payload,
     measure_node,
+    measure_network_coverage,
+    legacy_config,
+    run_sing_box,
     request_probe_json,
     run_once,
 )
-from scripts.monitor_performance import ParsedNode
+from scripts.monitor_performance import ParsedNode, NodeAvailabilityResult, performance_node_key
 
 
 class PerformanceProbeRunnerTests(unittest.TestCase):
@@ -33,6 +36,54 @@ class PerformanceProbeRunnerTests(unittest.TestCase):
             speed_connections=1,
             sing_box_bin="sing-box",
         )
+
+    def test_coverage_checks_all_nodes_without_speed_or_p_selection(self) -> None:
+        nodes = [ParsedNode(f"node-{i}", "vless", "HK", {"server": "node.example", "server_port": 443}, f"vless://secret-{i}") for i in range(9)]
+        snapshot = {"nodes": [{"name": n.name, "type": n.node_type, "region": n.region, "outbound": n.outbound, "raw_uri": n.raw_uri} for n in nodes]}
+        job = {"job_id": "coverage-1", "test_profile": "network_coverage_proxy_http_v1", "snapshot": snapshot,
+               "selected_node_keys": [performance_node_key(nodes[0])]}
+        def check(config, node):
+            return NodeAvailabilityResult(node=node, available=node.name != "node-2", error_code="tcp_unreachable:secret" if node.name == "node-2" else None)
+        with (
+            patch("scripts.performance_probe_runner.request_probe_json", side_effect=[job, {}]) as request,
+            patch("scripts.performance_probe_runner.ensure_sing_box"),
+            patch("scripts.performance_probe_runner.probe_node_proxy_http_availability", side_effect=check) as probe,
+            patch("scripts.performance_probe_runner.measure_node") as speed,
+        ):
+            result = run_once(self.make_config())
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(probe.call_count, 9)
+        speed.assert_not_called()
+        payload = request.call_args_list[-1].args[3]
+        self.assertEqual(len(payload["nodes"]), 9)
+        self.assertEqual(sum(n["healthy"] for n in payload["nodes"]), 8)
+        self.assertNotIn("secret", json.dumps(payload))
+
+    def test_coverage_infrastructure_failure_is_not_all_unhealthy(self) -> None:
+        node = ParsedNode("HK", "vless", "HK", {}, "vless://secret")
+        with patch("scripts.performance_probe_runner.ensure_sing_box", side_effect=RuntimeError("singbox_not_found")):
+            result = measure_network_coverage({"job_id": "1"}, self.make_config(), [node], [])
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["nodes"], [])
+        with (
+            patch("scripts.performance_probe_runner.ensure_sing_box"),
+            patch("scripts.performance_probe_runner.probe_node_proxy_http_availability", return_value=NodeAvailabilityResult(node=node, available=False, error_code="proxy_start_failed")),
+        ):
+            self.assertEqual(measure_network_coverage({"job_id": "1"}, self.make_config(), [node], [])["status"], "failed")
+
+    def test_proxy_start_failure_cleans_process_and_sensitive_temp_config(self) -> None:
+        node = ParsedNode("HK", "vless", "HK", {"server": "example.com", "password": "secret"}, "vless://secret")
+        proc = MagicMock()
+        proc.poll.return_value = None
+        with (
+            patch("scripts.monitor_performance.shutil.which", return_value="/bin/sing-box"),
+            patch("scripts.monitor_performance.subprocess.Popen", return_value=proc) as spawn,
+            patch("scripts.monitor_performance.wait_for_port", side_effect=RuntimeError("singbox_start_failed")),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "singbox_start_failed"):
+                run_sing_box(legacy_config(self.make_config(), "https://example.com"), node)
+        proc.terminate.assert_called_once()
+        self.assertFalse(Path(spawn.call_args.args[0][-1]).exists())
 
     def test_build_node_summary_uses_only_valid_target_median(self) -> None:
         summary = build_node_summary([

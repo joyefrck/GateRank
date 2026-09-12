@@ -168,3 +168,15 @@ test('manual performance job dispatches uniquely keyed mainland jobs and reports
   ]);
   assert.match(message, /地区测试完成 2\/2/);
 });
+
+
+test('manual N waits for mainland publication and never invokes the central collector', async () => {
+  const events: string[] = [];
+  const service = new ManualJobService({
+    networkCoverageProbeService: { collectAirport: async (id: number, _date: string, source: string) => { events.push(`mainland:${id}:${source}`); } },
+    recomputeService: { recomputeAirportForDate: async () => { events.push('recompute'); return { recomputed: 1 }; } },
+  } as never);
+  (service as any).runPythonScript = async () => { throw new Error('central must not run'); };
+  await (service as any).executeJob({ id: 7, airport_id: 61, date: getDateInTimezone(), kind: 'network_coverage' });
+  assert.deepEqual(events, ['mainland:61:manual-network-coverage:7', 'recompute']);
+});

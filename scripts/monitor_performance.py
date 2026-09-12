@@ -1836,13 +1836,18 @@ def run_sing_box(config: Config, node: ParsedNode) -> tuple[subprocess.Popen[Any
     with temp_file:
         json.dump(sing_box_config, temp_file, ensure_ascii=False)
 
-    proc = subprocess.Popen(
-        [sing_box_path, "run", "-c", temp_file.name],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    wait_for_port("127.0.0.1", config.proxy_port, config.proxy_startup_timeout)
-    return proc, temp_file.name
+    proc = None
+    try:
+        proc = subprocess.Popen(
+            [sing_box_path, "run", "-c", temp_file.name],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        wait_for_port("127.0.0.1", config.proxy_port, config.proxy_startup_timeout)
+        return proc, temp_file.name
+    except Exception:
+        stop_sing_box(proc, temp_file.name)
+        raise
 
 
 def stop_sing_box(proc: subprocess.Popen[Any] | None, config_path: str) -> None:

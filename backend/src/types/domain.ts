@@ -331,7 +331,7 @@ export interface PerformanceProbeJob {
   test_enabled_snapshot: boolean;
   include_in_result_snapshot: boolean;
   test_profile: string;
-  scoring_rule_version: PerformanceScoringRuleVersion;
+  scoring_rule_version: PerformanceScoringRuleVersion | 'network_coverage_v1';
   selected_node_keys: string[];
   source: string;
   status: PerformanceProbeJobStatus;
@@ -354,7 +354,7 @@ export interface PerformanceProbeJobInput {
   test_enabled_snapshot: boolean;
   include_in_result_snapshot: boolean;
   test_profile: string;
-  scoring_rule_version: PerformanceScoringRuleVersion;
+  scoring_rule_version: PerformanceScoringRuleVersion | 'network_coverage_v1';
   selected_node_keys: string[];
   source: string;
   idempotency_key: string;

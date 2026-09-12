@@ -1,3 +1,4 @@
+import type { NetworkCoverageProbeService } from './networkCoverageProbeService';
 import { execFile } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
@@ -15,7 +16,7 @@ import {
   sendUserTelegramBotBillingNotificationsSafely,
   type UserTelegramBotBillingNotificationService,
 } from './userTelegramBotMessageService';
-import { dateDaysAgo } from '../utils/time';
+import { dateDaysAgo, getDateInTimezone } from '../utils/time';
 import type { PerformanceProbeDispatchResult } from './performanceProbeDispatchService';
 import { getSiteOrigin } from '../utils/siteUrl';
 
@@ -37,6 +38,7 @@ interface LoggerLike {
 }
 
 interface SchedulerTaskExecutorDeps {
+  networkCoverageProbeService?: Pick<NetworkCoverageProbeService, 'dispatchAll'>;
   airportRepository: {
     listAll(): Promise<Array<{ id: number; name?: string; status?: string; is_listed?: boolean }>>;
   };
@@ -281,6 +283,14 @@ export class SchedulerTaskExecutor {
   }
 
   async runNetworkCoverageCollection(): Promise<SchedulerTaskExecutionResult> {
+    if (this.deps.networkCoverageProbeService) {
+      const result = await this.deps.networkCoverageProbeService.dispatchAll(getDateInTimezone(), 'scheduler-network-coverage');
+      return {
+        status: result.failures.length ? 'failed' : 'succeeded',
+        message: `大陆网络覆盖已派发 ${result.created} 家，派发失败 ${result.failures.length} 家；各地区回传后自动评分`,
+        detail: { stage: 'network_coverage', regional_dispatch: result },
+      };
+    }
     const result = await this.runScriptStage(
       'network_coverage',
       'monitor_network_coverage.py',
