@@ -1,3 +1,4 @@
+import type { HomeAirportRotationInfo } from '../../../shared/homeAirportRotation';
 import type { FullRankingFilters } from '../../../shared/fullRankingFilters';
 import type { MarketingPageKind } from '../../../shared/marketingAnalytics';
 import type { HomeToolDownloadCta } from '../../../shared/toolDownloads';
@@ -610,6 +611,7 @@ export interface HomePageView {
   };
   tool_download_cta: HomeToolDownloadCta;
   ranking_preview?: {
+    rotation?: HomeAirportRotationInfo;
     total: number;
     items: FullRankingItem[];
   };
@@ -629,6 +631,7 @@ export interface HomePageView {
 }
 
 export interface FullRankingItem {
+  node_count?: number | null;
   airport_id: number;
   rank: number;
   name: string;

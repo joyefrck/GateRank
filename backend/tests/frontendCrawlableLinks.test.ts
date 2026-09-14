@@ -25,7 +25,7 @@ test('React ranking cards hide tags for risk and down airports', async () => {
 test('Admin homepage settings label the legacy today-pick key as ranking count', async () => {
   const adminSource = await readFile(path.join(process.cwd(), 'src/admin/AdminApp.tsx'), 'utf8');
 
-  assert.match(adminSource, /\{ key: 'today_pick', label: '排行榜数量' \}/);
+  assert.match(adminSource, /\{ key: 'today_pick', label: '优秀机场展示数量' \}/);
 });
 
 test('Admin and applicant interfaces expose all shared homepage ad slots', async () => {
@@ -257,7 +257,7 @@ test('React homepage renders the 3.0 trust and FAQ content without a duplicated 
 
   assert.match(source, /<h1 className="[^"]*sm:whitespace-nowrap[^"]*">/);
   assert.match(source, />商业合作专区<\/h2>/);
-  assert.match(source, />🏆 GateRank 排行榜<\/h2>/);
+  assert.match(source, />🏆 GateRank 优秀机场<\/h2>/);
   assert.match(source, /公告与动态<\/h2>/);
   assert.match(source, /HOME_FAQ_ITEMS/);
   assert.match(source, /function TrustSection/);
@@ -298,7 +298,7 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
   const verticallyCenteredRankingCells = rankingTableRowSource.match(/<td className="align-middle px-4 py-4(?: text-center)?">/g) || [];
 
   assert.match(source, /<table className="w-full border-collapse text-left">/);
-  assert.match(source, /排名每日更新，基于真实数据和客观多节点测速得出<\/p>/);
+  assert.doesNotMatch(source, /homeAirportRotationDescription|>GateRank分<|<Delta |>公平轮换</);
   assert.doesNotMatch(source, /共收录 \{total\} 个机场/);
   assert.match(source, /hover:scale-\[1\.02\].*hover:bg-stone-800.*active:scale-\[0\.98\].*focus-visible:ring-2/);
   assert.match(source, /data-testid="home-ranking-mobile"/);
@@ -311,7 +311,7 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
   assert.doesNotMatch(source, /observationDays\(item\.founded_on/);
   assert.match(source, /if \(hidden \|\| value === null\) return '未公开'/);
   assert.match(source, /当前暂无有效广告/);
-  assert.match(source, /综合榜暂无数据/);
+  assert.match(source, /暂无符合展示条件的机场/);
   assert.match(source, /暂无已发布 News/);
   assert.match(source, /rel="nofollow sponsored noopener noreferrer"/);
   assert.match(source, /placement: 'deal_card'/);

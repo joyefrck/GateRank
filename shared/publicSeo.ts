@@ -30,7 +30,7 @@ export interface PublicSeoText {
 
 export const HOME_HERO_HIGHLIGHT_TEXT = '行业首创，每日更新';
 export const HOME_HERO_SUPPORTING_TEXT =
-  '基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单，帮助用户快速筛选值得关注的机场 VPN 与测评报告。';
+  '基于公开监测数据，结合优秀机场轮换展示及长期稳定、性价比、新入榜与风险预警榜单，帮助用户快速筛选值得关注的机场 VPN 与测评报告。';
 
 export const HOME_SEO_CONTENT_SECTIONS: PublicHomeSeoContentSection[] = [
   {
@@ -564,8 +564,8 @@ export function buildHomeSeo(input?: {
     title: `${PUBLIC_SITE_BRAND_NAME} | 机场 VPN 推荐、科学上网机场测评与可靠性榜单`,
     description:
       input && typeof input.monitoredAirports === 'number' && typeof input.realtimeTests === 'number'
-        ? `${HOME_HERO_HIGHLIGHT_TEXT}。${input.dateLabel || '今日'} 机场 VPN 榜单基于公开监测数据生成，当前监测 ${formatCount(input.monitoredAirports)} 个机场、累计实时测速 ${formatCount(input.realtimeTests)} 次，覆盖今日推荐、长期稳定、性价比、新入榜与风险预警。`
-        : `${HOME_HERO_HIGHLIGHT_TEXT}。${PUBLIC_SITE_BRAND_NAME} 基于公开监测数据提供今日推荐、长期稳定、性价比、新入榜与风险预警等多维机场 VPN 榜单。`,
+        ? `${HOME_HERO_HIGHLIGHT_TEXT}。${input.dateLabel || '今日'} 机场 VPN 榜单基于公开监测数据生成，当前监测 ${formatCount(input.monitoredAirports)} 个机场、累计实时测速 ${formatCount(input.realtimeTests)} 次，首页优秀机场公平轮换，并提供长期稳定、性价比、新入榜与风险预警榜单。`
+        : `${HOME_HERO_HIGHLIGHT_TEXT}。${PUBLIC_SITE_BRAND_NAME} 提供优秀机场公平轮换展示，以及基于公开监测数据的长期稳定、性价比、新入榜与风险预警榜单。`,
     keywords: '机场榜GateRank,机场榜,机场推荐,机场VPN,机场VPN排名,VPN推荐,梯子推荐,科学上网,魔法,梯子,今日推荐机场,机场测评,稳定机场,风险预警,GateRank',
   };
 }
@@ -1392,7 +1392,7 @@ export const RANKING_TRANSPARENCY_ARTICLE: {
     {
       index: 1,
       title: '我们为什么公开这份声明',
-      body: 'GateRank 的职责，是把机场服务的公开监测结果、长期表现和风险信号整理成可解释的榜单，而不是替任何机场售卖名次。我们以平台管理人的身份明确说明：机场是否付费、付费多少、是否购买广告、是否提供优惠码，都不进入 GateRank Score，也不改变机场在今日推荐、全量排行、长期稳定、性价比、新入榜和风险预警中的排序。',
+      body: 'GateRank 的职责，是把机场服务的公开监测结果、长期表现和风险信号整理成可解释的榜单，而不是替任何机场售卖名次。我们以平台管理人的身份明确说明：机场是否付费、付费多少、是否购买广告、是否提供优惠码，都不进入 GateRank Score，综合评分榜继续按原有评分规则排序。首页“GateRank 优秀机场”面向已付费入驻、成功充值且余额满足扣费规则的机场公平轮换，每轮各机场依次获得首位，展示顺序不代表评分高低，也不改变分数或扣费档位。',
     },
     {
       index: 2,
@@ -1402,12 +1402,12 @@ export const RANKING_TRANSPARENCY_ARTICLE: {
     {
       index: 3,
       title: '数据多久更新一次',
-      body: '数据采集按监测任务滚动进行，公开榜单每日重算并展示对应数据日期。测速、可用性、官网状态、SSL 与风险信号会在不同任务批次中更新；当采样异常、订阅失效、官网不可访问或出现投诉线索时，我们会保留人工复核空间，避免把短时波动误写成长期结论，也避免让历史高分掩盖新的风险。',
+      body: '数据采集按监测任务滚动进行，评分榜单每日重算并展示对应数据日期。首页优秀机场展示顺序独立轮换，默认每 2 小时一次，实际间隔以页面说明为准。测速、可用性、官网状态、SSL 与风险信号会在不同任务批次中更新；当采样异常、订阅失效、官网不可访问或出现投诉线索时，我们会保留人工复核空间，避免把短时波动误写成长期结论，也避免让历史高分掩盖新的风险。',
     },
     {
       index: 4,
       title: '机场主充值到底用于什么',
-      body: '首先入驻商家支付的是测试、采集、账号维护和页面维护成本，不是排名费用。付费只代表该机场进入持续维护流程，并不代表获得推荐资格，更不代表分数保底、排名保底或负面信息豁免。机场主后续充值，本质上是为持续测评和公开维护支付成本，不是购买排名。费用用于维持测试账号或订阅样本、自动监控任务、测速与可用性采集、异常复核、资料更新、报告页面维护、沟通通知以及必要的人工处理。充值只能让机场具备被持续观察和维护的条件，不能换取推荐、保分、提分、压低风险或删除负面记录。',
+      body: '首先入驻商家支付的是测试、采集、账号维护和页面维护成本，不是排名费用。付费只代表该机场进入持续维护流程，并不代表获得推荐资格，更不代表分数保底、排名保底或负面信息豁免。机场主后续充值，本质上是为持续测评和公开维护支付成本，不是购买排名。费用用于维持测试账号或订阅样本、自动监控任务、测速与可用性采集、异常复核、资料更新、报告页面维护、沟通通知以及必要的人工处理。符合条件的付费机场可参与首页优秀机场公平轮换；充值金额不增加轮换权重，也不能换取保分、提分、压低风险或删除负面记录。',
     },
     {
       index: 5,

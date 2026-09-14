@@ -16,6 +16,7 @@ export interface MarketingSettingsInput {
   home_ad_slot_monthly_prices?: Partial<AirportHomeAdSlotPrices>;
   recharge_amounts?: number[];
   admin_telegram_username?: string | null;
+  home_rotation_interval_minutes?: number;
   home_section_limits?: Partial<HomeSectionLimits>;
 }
 
@@ -39,6 +40,7 @@ export interface MarketingSettingsView {
   home_ad_slot_monthly_prices: AirportHomeAdSlotPrices;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
+  home_rotation_interval_minutes: number;
   home_section_limits: HomeSectionLimits;
   updated_at: string | null;
   updated_by: string | null;
@@ -52,6 +54,7 @@ export interface MarketingBillingConfig {
   home_ad_slot_monthly_prices: AirportHomeAdSlotPrices;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
+  home_rotation_interval_minutes: number;
   home_section_limits: HomeSectionLimits;
 }
 
@@ -146,6 +149,9 @@ export class MarketingSettingsService {
         input.admin_telegram_username === undefined
           ? base.admin_telegram_username
           : normalizeTelegramUsername(input.admin_telegram_username),
+      home_rotation_interval_minutes: input.home_rotation_interval_minutes === undefined
+        ? base.home_rotation_interval_minutes
+        : normalizeHomeRotationInterval(input.home_rotation_interval_minutes, true),
       home_section_limits:
         input.home_section_limits === undefined
           ? base.home_section_limits
@@ -206,6 +212,7 @@ function getBaseDefaults(): MarketingBillingConfig {
     home_ad_slot_monthly_prices: createDefaultHomeAdSlotMonthlyPrices(),
     recharge_amounts: [...DEFAULT_MARKETING_RECHARGE_AMOUNTS],
     admin_telegram_username: null,
+    home_rotation_interval_minutes: 120,
     home_section_limits: { ...DEFAULT_HOME_SECTION_LIMITS },
   };
 }
@@ -243,6 +250,7 @@ function normalizeConfig(value: unknown, defaults: MarketingBillingConfig): Mark
       false,
     ),
     admin_telegram_username: normalizeStoredTelegramUsername(record.admin_telegram_username),
+    home_rotation_interval_minutes: normalizeHomeRotationInterval(record.home_rotation_interval_minutes),
     home_section_limits: normalizeHomeSectionLimits(
       record.home_section_limits,
       defaults.home_section_limits,
@@ -515,4 +523,10 @@ function normalizeStoredUpdatedAt(value: unknown): string {
   }
   const parsed = new Date(raw);
   return Number.isNaN(parsed.getTime()) ? raw : formatDateTimeInTimezoneIso(parsed);
+}
+
+export function normalizeHomeRotationInterval(value: unknown, strict = false): number {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 10080) return value;
+  if (strict) throw new HttpError(400, 'BAD_REQUEST', 'home_rotation_interval_minutes must be an integer between 1 and 10080');
+  return 120;
 }

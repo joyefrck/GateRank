@@ -147,6 +147,7 @@ test('MarketingSettingsService saves application, click fees, ad monthly price, 
     },
     recharge_amounts: [100, 300, 500],
     admin_telegram_username: 'GateRank_Admin',
+    home_rotation_interval_minutes: 120,
     home_section_limits: {
       today_pick: 6,
       most_stable: 4,
@@ -419,4 +420,17 @@ test('MarketingSettingsService rejects invalid Telegram username on update', asy
       return true;
     },
   );
+});
+
+
+test('homepage rotation interval defaults, persists, and survives unrelated partial updates', async () => {
+  const { repository } = createSettingsRepository();
+  const service = new MarketingSettingsService({ systemSettingRepository: repository });
+  assert.equal((await service.getConfig()).home_rotation_interval_minutes, 120);
+  assert.equal((await service.updateAdminSettings({ home_rotation_interval_minutes: 30 }, 'admin')).home_rotation_interval_minutes, 30);
+  assert.equal((await service.updateAdminSettings({ click_charge_amount: 2 }, 'admin')).home_rotation_interval_minutes, 30);
+  for (const value of [0, -1, 0.5, 10081, NaN, Infinity]) {
+    await assert.rejects(service.updateAdminSettings({ home_rotation_interval_minutes: value }, 'admin'), /home_rotation_interval_minutes/);
+  }
+  assert.equal((await service.getConfig()).home_rotation_interval_minutes, 30);
 });

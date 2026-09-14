@@ -1,3 +1,4 @@
+import { HomeAirportRotationService } from './services/homeAirportRotationService';
 import { TopicRepository } from './topics/topicRepository';
 import { TopicService } from './topics/topicService';
 import { seedTopics } from './topics/topicSeeds';
@@ -287,7 +288,10 @@ export async function createApp() {
     callbackSecret: process.env.DNS_PROBE_CALLBACK_SECRET,
     maxSessions: Number(process.env.DNS_LEAK_TEST_MAX_SESSIONS || 5_000),
   });
+    const homeAirportRotationService = new HomeAirportRotationService(pool, billingEligibility);
+    await homeAirportRotationService.ensureSchema();
     const publicViewService = new PublicViewService({
+      homeAirportRotationService,
       airportRepository,
       metricsRepository,
       scoreRepository,

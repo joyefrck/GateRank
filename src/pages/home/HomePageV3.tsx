@@ -1,3 +1,4 @@
+import type { HomeAirportRotationInfo } from '../../../shared/homeAirportRotation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -16,7 +17,6 @@ import {
   ShieldAlert,
   ShieldCheck,
   Sparkles,
-  Star,
   TrendingUp,
   Tv,
   Zap,
@@ -65,6 +65,7 @@ interface HomeCardItem {
 }
 
 interface FullRankingItem {
+  node_count?: number | null;
   airport_id: number;
   rank: number;
   name: string;
@@ -118,6 +119,7 @@ interface HomePageData {
     realtime_tests: number;
   };
   ranking_preview?: {
+    rotation?: HomeAirportRotationInfo;
     total: number;
     items: FullRankingItem[];
   };
@@ -185,7 +187,7 @@ const summaryConfig: Array<{
 ];
 
 const trustItems = [
-  { title: '公正客观', body: '排名完全基于算法，彻底剔除所有外部广告包榜及恶意商业干预。', icon: ShieldCheck, tone: 'bg-orange-50 text-orange-600' },
+  { title: '公正客观', body: '机场排行按评分排序；首页优秀机场公平轮换，展示位置不影响评分。', icon: ShieldCheck, tone: 'bg-orange-50 text-orange-600' },
   { title: '真实数据', body: '全球探针不间断巡航测速，丢包率延迟数据全景透明。', icon: TrendingUp, tone: 'bg-blue-50 text-blue-600' },
   { title: '持续更新', body: '每日重组测速基准计算，规避突发故障波动干扰。', icon: Zap, tone: 'bg-purple-50 text-purple-600' },
   { title: '隐私保护', body: '订阅规则与工具检测不保存用户敏感数据。', icon: ShieldCheck, tone: 'bg-teal-50 text-teal-600' },
@@ -199,9 +201,11 @@ export function HomePageV3({ date }: { date?: string }) {
   const [loading, setLoading] = useState(!initialData);
   const [error, setError] = useState('');
   const [clock, setClock] = useState(() => Date.now());
+  const [rotationRevision, setRotationRevision] = useState(0);
+  const latestData = useRef(initialData);
 
   useEffect(() => {
-    if (initialData && scoreRevision === 0) {
+    if (initialData && scoreRevision === 0 && rotationRevision === 0) {
       setData(initialData);
       setLoading(false);
       setError('');
@@ -213,7 +217,7 @@ export function HomePageV3({ date }: { date?: string }) {
     // revalidated. The SSE connection opens immediately after hydration, so a
     // blocking loader here would replace valid SSR content with a skeleton on
     // every page load.
-    setLoading(!initialData);
+    setLoading(!latestData.current);
     setError('');
     const query = date ? `?date=${encodeURIComponent(date)}` : '';
     void fetch(`${getApiBase()}/api/v1/pages/home${query}`, {
@@ -228,10 +232,10 @@ export function HomePageV3({ date }: { date?: string }) {
         }
         return response.json() as Promise<HomePageData>;
       })
-      .then(setData)
+      .then((view) => { latestData.current = view; setData(view); })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
-          if (!initialData) {
+          if (!latestData.current) {
             setData(null);
             setError(
               reason instanceof TypeError || (reason instanceof Error && reason.message === 'Failed to fetch')
@@ -248,7 +252,15 @@ export function HomePageV3({ date }: { date?: string }) {
       });
 
     return () => controller.abort();
-  }, [date, initialData, scoreRevision]);
+  }, [date, initialData, scoreRevision, rotationRevision]);
+
+  useEffect(() => {
+    const next = Date.parse(data?.ranking_preview?.rotation?.next_rotation_at || '');
+    if (!Number.isFinite(next)) return;
+    // Also retry a failed refresh; an expired timestamp must never create a tight loop.
+    const timer = window.setTimeout(() => setRotationRevision(value => value + 1), Math.max(5_000, next - Date.now() + 100));
+    return () => window.clearTimeout(timer);
+  }, [data?.ranking_preview?.rotation?.next_rotation_at, rotationRevision]);
 
   useEffect(() => {
     if (!data?.hero.report_time_at) return;
@@ -379,7 +391,7 @@ function HomeHero({ data, reportTime }: { data: HomePageData | null; reportTime:
                 </span>
               </h1>
               <p className="max-w-2xl text-[13.5px] leading-relaxed text-gray-500 sm:text-[14.5px]">
-                首页默认聚焦今日推荐，同时结合 <span className="font-semibold text-gray-800">长期稳定、性价比、新入榜与风险预警</span> 五类榜单，帮助用户从不同角度快速筛选。
+                首页轮换展示优秀机场，结合 <span className="font-semibold text-gray-800">长期稳定、性价比、新入榜与风险预警</span>，帮助用户从不同角度快速筛选。
               </p>
               {data?.resolved_from_fallback && data.fallback_notice ? (
                 <p className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
@@ -534,37 +546,35 @@ function RankingPreview({ items, date }: { items: FullRankingItem[]; date: strin
     <section id="gaterank-ranking-section" aria-labelledby="ranking-preview-title" className="space-y-6 rounded-[24px] border border-gray-100 bg-white p-5 shadow-[0_6px_24px_rgba(0,0,0,0.015)]">
       <div className="flex flex-col gap-3 border-b border-gray-50 pb-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <h2 id="ranking-preview-title" className="font-sans text-[19px] font-black tracking-tight text-gray-900 sm:text-[21px]">🏆 GateRank 排行榜</h2>
-            <span className="rounded bg-indigo-50 px-2 py-0.5 text-[11.5px] font-bold uppercase tracking-wide text-indigo-600">综合排名</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 id="ranking-preview-title" className="font-sans text-[19px] font-black tracking-tight text-gray-900 sm:text-[21px]">🏆 GateRank 优秀机场</h2>
           </div>
-          <p className="text-[13.5px] font-medium text-gray-500">排名每日更新，基于真实数据和客观多节点测速得出</p>
         </div>
       </div>
       {items.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm font-medium text-gray-400">综合榜暂无数据</div>
+        <div className="rounded-2xl border border-dashed border-gray-200 py-12 text-center text-sm font-medium text-gray-400">暂无符合展示条件的机场</div>
       ) : (
         <>
           <div className="overflow-x-auto rounded-2xl border border-gray-100">
             <table className="w-full border-collapse text-left">
-              <caption className="sr-only">GateRank 综合实力排行榜前十名</caption>
+              <caption className="sr-only">GateRank 优秀机场当前轮换展示</caption>
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-[12.5px] font-extrabold uppercase leading-none tracking-widest text-gray-500">
-                  <th scope="col" className="w-14 whitespace-nowrap px-4 py-4 text-center">排名</th>
+                  <th scope="col" className="w-14 whitespace-nowrap px-4 py-4 text-center">展示顺序</th>
                   <th scope="col" className="whitespace-nowrap px-4 py-4">机场名称</th>
-                  <th scope="col" className="whitespace-nowrap px-4 py-4">GateRank分</th>
+                  <th scope="col" className="whitespace-nowrap px-4 py-4">节点数量</th>
                   <th scope="col" className="whitespace-nowrap px-4 py-4">月付价格</th>
                   <th scope="col" className="w-28 whitespace-nowrap px-4 py-4">观察时长</th>
                   <th scope="col" className="w-28 whitespace-nowrap px-4 py-4 text-center">操作</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
-                {items.slice(0, 10).map((item, index) => <RankingTableRow key={item.airport_id} item={item} index={index} date={date} />)}
+                {items.map((item, index) => <RankingTableRow key={item.airport_id} item={item} index={index} date={date} />)}
               </tbody>
             </table>
           </div>
           <div className="hidden" data-testid="home-ranking-mobile" aria-hidden="true">
-            {items.slice(0, 10).map((item, index) => <RankingMobileCard key={item.airport_id} item={item} index={index} date={date} />)}
+            {items.map((item, index) => <RankingMobileCard key={item.airport_id} item={item} index={index} date={date} />)}
           </div>
         </>
       )}
@@ -592,7 +602,7 @@ function RankingTableRow({ item, index, date }: { item: FullRankingItem; index: 
       ref={ref}
       className="group transition-colors hover:bg-gray-50/50"
     >
-      <td className="align-middle px-4 py-4 text-center"><RankBadge rank={item.rank} /></td>
+      <td className="align-middle px-4 py-4 text-center"><RankBadge rank={index + 1} /></td>
       <td className="px-4 py-4">
         <div className="flex items-center gap-3">
           <AirportMark name={item.name} />
@@ -604,18 +614,7 @@ function RankingTableRow({ item, index, date }: { item: FullRankingItem; index: 
           </div>
         </div>
       </td>
-      <td className="align-middle px-4 py-4">
-        <div className="flex flex-col justify-center">
-          <div className="flex items-center gap-1.5">
-            <Star className="h-[18px] w-[18px] fill-amber-300 text-amber-400" />
-            <span className="font-mono text-[15.5px] font-black leading-none text-gray-800">{scoreLabel(item.score, item.score_hidden)}</span>
-          </div>
-          <div className="mt-1.5 flex w-full flex-col items-start border-t border-gray-100 pt-1.5">
-            <span className="text-[11px] font-bold leading-normal text-gray-400">对比昨天</span>
-            <Delta delta={item.score_delta_vs_yesterday} />
-          </div>
-        </div>
-      </td>
+      <td className="align-middle px-4 py-4"><span className="whitespace-nowrap font-mono text-[14.5px] font-bold text-gray-700">{item.node_count == null ? '—' : `${item.node_count} 个`}</span></td>
       <td className="align-middle px-4 py-4">
         <div className="flex flex-col">
           <span className="font-mono text-[15.5px] font-black leading-none text-gray-900">¥{formatPrice(item.plan_price_month)}</span>
@@ -657,7 +656,7 @@ function RankingMobileCard({ item, index, date }: { item: FullRankingItem; index
   return (
     <article className="rounded-2xl border border-gray-100 bg-gray-50/40 p-3">
       <div className="flex items-start gap-3">
-        <RankBadge rank={item.rank || index + 1} />
+        <RankBadge rank={index + 1} />
         <AirportMark name={item.name} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
@@ -665,13 +664,9 @@ function RankingMobileCard({ item, index, date }: { item: FullRankingItem; index
               <h3 className="font-black text-gray-900">{item.name}</h3>
               <div className="mt-1.5 flex flex-wrap gap-1">{item.tags.slice(0, 2).map((tag) => <FeatureTag key={tag} tag={tag} />)}</div>
             </div>
-            <div className="text-right">
-              <strong className="font-mono text-base text-gray-900">{scoreLabel(item.score, item.score_hidden)}</strong>
-              <Delta delta={item.score_delta_vs_yesterday} />
-            </div>
           </div>
           <div className="mt-3 flex items-center justify-between rounded-xl bg-white px-3 py-2 text-[11px] text-gray-500">
-            <span>¥{formatPrice(item.plan_price_month)}/月 · {observationDays(item.created_at, date, true)}</span>
+            <span>节点 {item.node_count ?? '—'} · ¥{formatPrice(item.plan_price_month)}/月 · {observationDays(item.created_at, date, true)}</span>
             <RouteLink href={href} className="font-black text-gray-900">查看报告 <ArrowRight className="inline h-3 w-3" /></RouteLink>
           </div>
         </div>
@@ -952,11 +947,6 @@ function AirportMark({ name, compact = false }: { name: string; compact?: boolea
   const hue = Array.from(name).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 360;
   const size = compact ? 'h-[30px] w-[30px] rounded-lg text-[11px]' : 'h-9 w-9 rounded-xl text-xs';
   return <span className={`flex shrink-0 items-center justify-center font-black text-white shadow-sm ${size}`} style={{ background: `linear-gradient(135deg, hsl(${hue} 72% 56%), hsl(${(hue + 30) % 360} 72% 44%))` }} aria-hidden="true">{name.trim().charAt(0).toUpperCase() || 'G'}</span>;
-}
-
-function Delta({ delta }: { delta: ScoreDeltaView }) {
-  if (delta.value === null) return <span className="mt-0.5 block font-mono text-[12px] font-black leading-none text-gray-400">—</span>;
-  return <span className={`mt-0.5 block font-mono text-[12px] font-black leading-none ${delta.value > 0 ? 'text-emerald-600' : delta.value < 0 ? 'text-rose-500' : 'text-gray-400'}`}>{delta.value > 0 ? '+' : ''}{delta.value.toFixed(2)}</span>;
 }
 
 function PageState({ message, tone = 'neutral' }: { message: string; tone?: 'neutral' | 'error' }) {

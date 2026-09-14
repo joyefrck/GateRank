@@ -77,6 +77,7 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
           website: 'https://alpha.example.com',
           status: 'risk',
           tags_json: '["稳定","热门"]',
+          node_count: 128,
           founded_on: new Date('2024-01-10T00:00:00.000Z'),
           plan_price_month: 15,
           has_trial: 1,
@@ -94,6 +95,8 @@ test('ScoreRepository.getPublicFullRankingByDate returns filtered paged ranking 
   assert.equal(result.total, 25);
   assert.equal(result.items.length, 1);
   assert.equal(result.items[0].rank, 21);
+  assert.equal(result.items[0].node_count, 128);
+  assert.ok(calls.some((call) => call.sql.includes('sns.parsed_nodes_count AS node_count')));
   assert.equal(result.items[0].status, 'risk');
 	  assert.equal(result.items[0].score, 93.2);
 	  assert.equal(result.items[0].score_hidden, false);

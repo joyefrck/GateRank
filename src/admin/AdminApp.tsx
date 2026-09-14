@@ -1057,6 +1057,7 @@ interface PaymentGatewaySettingsFormState {
 }
 
 interface MarketingSettingsView {
+  home_rotation_interval_minutes: number;
   application_fee_amount: number;
   click_charge_amount: number;
   rank_click_charge_amounts: Record<MarketingClickChargeRank, number | null>;
@@ -1076,6 +1077,7 @@ interface MarketingSettingsView {
 }
 
 interface MarketingSettingsFormState {
+  home_rotation_interval_minutes: string;
   application_fee_amount: string;
   click_charge_amount: string;
   rank_click_charge_amounts: Record<MarketingClickChargeRank, string>;
@@ -4662,7 +4664,7 @@ function MarketingTrendChart({
 }
 
 const homeSectionLimitFields = [
-  { key: 'today_pick', label: '排行榜数量' },
+  { key: 'today_pick', label: '优秀机场展示数量' },
   { key: 'most_stable', label: '长期稳定' },
   { key: 'best_value', label: '性价比' },
   { key: 'new_entries', label: '新入榜' },
@@ -4693,6 +4695,7 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
     home_ad_slot_monthly_prices: { ...defaultHomeAdSlotMonthlyPriceForm },
     recharge_amounts: defaultRechargeAmountForm,
     admin_telegram_username: '',
+    home_rotation_interval_minutes: '120',
     home_section_limits: defaultHomeSectionLimitForm,
   });
 
@@ -4727,6 +4730,7 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
       ) as Record<MarketingHomeAdSlot, string>,
       recharge_amounts: rechargeAmounts.map((amount) => String(amount)),
       admin_telegram_username: view.admin_telegram_username ? `@${view.admin_telegram_username}` : '',
+      home_rotation_interval_minutes: String(view.home_rotation_interval_minutes ?? 120),
       home_section_limits: {
         today_pick: String(view.home_section_limits?.today_pick || 3),
         most_stable: String(view.home_section_limits?.most_stable || 3),
@@ -4781,6 +4785,7 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
           ),
           recharge_amounts: form.recharge_amounts.map((amount) => Number(amount)),
           admin_telegram_username: form.admin_telegram_username,
+          home_rotation_interval_minutes: Number(form.home_rotation_interval_minutes),
           home_section_limits: {
             today_pick: Number(form.home_section_limits.today_pick),
             most_stable: Number(form.home_section_limits.most_stable),
@@ -5034,8 +5039,20 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
 
             <MarketingSettingsSection
               title="首页展示"
-              description="控制公开首页排行榜与四个摘要模块的展示数量，范围 1-12。"
+              description="配置首页优秀机场轮换间隔及各模块展示数量；机场排行页仍按评分排序。"
             >
+              <div className="mb-5 max-w-md">
+                <FormField label="优秀机场轮换间隔（分钟）" hint="默认 120 分钟（2 小时），可设 1–10080 分钟。修改后保留本轮进度，重新计时。">
+                  <input
+                    className="w-full rounded-xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                    aria-label="优秀机场轮换间隔（分钟）"
+                    type="number" min="1" max="10080" step="1" required
+                    value={form.home_rotation_interval_minutes}
+                    onChange={(e) => setForm({ ...form, home_rotation_interval_minutes: e.target.value })}
+                  />
+                </FormField>
+              </div>
+              <p className="mb-5 text-sm leading-6 text-neutral-500">已付费入驻、已充值且余额足够扣费的机场参与轮换。所有候选每轮依次获得一次首位；展示数量只限制当前显示几家。评分和点击扣费档位保持原有规则。</p>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                 {homeSectionLimitFields.map((item) => (
                   <div key={item.key}>

@@ -1,3 +1,6 @@
+import type { HomeAirportRotationService } from './homeAirportRotationService';
+import { homeAirportRotationDescription } from '../../../shared/homeAirportRotation';
+import { normalizeHomeRotationInterval } from './marketingSettingsService';
 import { effectiveComponent } from './scoreComponents';
 import { NEW_AIRPORT_DAYS, SHANGHAI_TIMEZONE } from '../config/scoring';
 import { CLICK_CHARGE_AMOUNT } from '../config/billing';
@@ -174,6 +177,7 @@ interface PublicViewDeps {
         filters?: FullRankingFilters,
         clickChargeAmount?: number,
         scoreRuleVersion?: 'v1_spcr' | 'v2_spncr',
+        airportIds?: number[],
       ): Promise<{
         total: number;
         items: FullRankingView['items'];
@@ -194,10 +198,12 @@ interface PublicViewDeps {
         clickChargeAmount?: number,
       ): Promise<Map<number, PublicScoreVisibility>>;
     };
+    homeAirportRotationService?: Pick<HomeAirportRotationService, 'getSelection'>;
     marketingSettingsService?: {
       getConfig(): Promise<{
         click_charge_amount: number;
         home_section_limits?: Partial<HomeSectionLimits>;
+        home_rotation_interval_minutes?: number;
       }>;
     };
     rankingRepository: {
@@ -322,6 +328,9 @@ export class PublicViewService {
       const marketingConfig = await this.getMarketingConfig();
       const clickChargeAmount = marketingConfig.click_charge_amount;
       const sectionLimits = marketingConfig.home_section_limits;
+      const selection = await this.deps.homeAirportRotationService?.getSelection(
+        sectionLimits.today_pick, marketingConfig.home_rotation_interval_minutes,
+      );
       const scoreRuleVersion = await this.resolveActiveScoreRuleVersion(resolvedDate);
       const [
       stats,
@@ -343,6 +352,7 @@ export class PublicViewService {
           EMPTY_FULL_RANKING_FILTERS,
           clickChargeAmount,
           scoreRuleVersion,
+          selection?.airport_ids,
         ),
       this.deps.rankingRepository.getRanking(resolvedDate, 'stable'),
       this.deps.rankingRepository.getRanking(resolvedDate, 'value'),
@@ -365,6 +375,14 @@ export class PublicViewService {
       this.deps.newsRepository?.listPublished({ page: 1, pageSize: HOME_NEWS_UPDATE_LIMIT })
         ?? Promise.resolve({ items: [], total: 0 }),
     ]);
+    if (selection) {
+      const byId = new Map(fullRankingPreview.items.map(item => [item.airport_id, item]));
+      fullRankingPreview.items = selection.airport_ids.flatMap((id) => {
+        const item = byId.get(id);
+        return item ? [{ ...item }] : [];
+      }).map((item, index) => ({ ...item, rank: index + 1 }));
+      fullRankingPreview.total = selection.total;
+    }
     const preloadedContexts = await this.preloadCardContexts(
       collectRankingAirportIds(
         fullRankingPreview.items,
@@ -450,6 +468,7 @@ export class PublicViewService {
       },
       tool_download_cta: toolDownloadCta,
       ranking_preview: {
+        ...(selection ? { rotation: selection.rotation } : {}),
         total: fullRankingPreview.total,
         items: fullRankingPreview.items.slice(0, sectionLimits.today_pick),
       },
@@ -461,9 +480,9 @@ export class PublicViewService {
       news_updates: newsResult.items.slice(0, HOME_NEWS_UPDATE_LIMIT).map(toHomeNewsUpdate),
       sections: {
         today_pick: {
-          title: SECTION_CONFIG.today_pick.title,
-          subtitle: SECTION_CONFIG.today_pick.subtitle,
-          items: todayPickItems.length > 0 ? todayPickItems : (fallbackSections?.today_pick ?? []),
+          title: 'GateRank 优秀机场',
+          subtitle: homeAirportRotationDescription(marketingConfig.home_rotation_interval_minutes),
+          items: selection ? todayPickItems : (todayPickItems.length > 0 ? todayPickItems : (fallbackSections?.today_pick ?? [])),
         },
         most_stable: {
           title: SECTION_CONFIG.most_stable.title,
@@ -702,11 +721,13 @@ export class PublicViewService {
   private async getMarketingConfig(): Promise<{
     click_charge_amount: number;
     home_section_limits: HomeSectionLimits;
+    home_rotation_interval_minutes: number;
   }> {
     if (!this.deps.marketingSettingsService) {
       return {
         click_charge_amount: CLICK_CHARGE_AMOUNT,
         home_section_limits: { ...DEFAULT_HOME_SECTION_LIMITS },
+        home_rotation_interval_minutes: 120,
       };
     }
     const config = await this.deps.marketingSettingsService.getConfig();
@@ -714,6 +735,7 @@ export class PublicViewService {
     return {
       click_charge_amount: Number.isFinite(amount) && amount > 0 ? amount : CLICK_CHARGE_AMOUNT,
       home_section_limits: normalizeHomeSectionLimits(config.home_section_limits),
+      home_rotation_interval_minutes: normalizeHomeRotationInterval(config.home_rotation_interval_minutes),
     };
   }
 

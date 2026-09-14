@@ -245,3 +245,13 @@
 @media print {
   .home-deferred-section { content-visibility: visible; }
 }
+
+/* Keep the homepage rotation heading consistent after SSR's unlayered h2 styles load. */
+#ranking-preview-title {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.35;
+}
+@media (min-width: 640px) {
+  #ranking-preview-title { font-size: 21px; }
+}

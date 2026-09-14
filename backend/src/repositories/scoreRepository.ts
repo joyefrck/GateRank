@@ -68,6 +68,7 @@ interface PublicFullRankingRow extends RowDataPacket {
   has_lifetime_plan: number | null;
   airport_profile_json: unknown;
   region_counts_json: unknown;
+  node_count: number | null;
   founded_on: unknown;
   plan_price_month: number;
   has_trial: number;
@@ -516,11 +517,17 @@ export class ScoreRepository {
     filters: FullRankingFilters = EMPTY_FULL_RANKING_FILTERS,
     clickChargeAmount: number = CLICK_CHARGE_AMOUNT,
     scoreRuleVersion: 'v1_spcr' | 'v2_spncr' = 'v1_spcr',
+    airportIds?: number[],
   ): Promise<{ total: number; items: FullRankingItem[] }> {
+    if (airportIds?.length === 0) return { total: 0, items: [] };
     const safePage = Math.max(1, page);
     const safePageSize = Math.min(100, Math.max(1, pageSize));
     const offset = (safePage - 1) * safePageSize;
     const rankingFilters = buildPublicFullRankingFilters(filters);
+    if (airportIds) {
+      rankingFilters.whereSql += ` AND a.id IN (${airportIds.map(() => '?').join(',')})`;
+      rankingFilters.params.push(...airportIds);
+    }
     const countSnapshotJoin = filters.region.length > 0 ? LATEST_SUBSCRIPTION_NODE_SNAPSHOT_JOIN_SQL : '';
     const isV2 = scoreRuleVersion === 'v2_spncr';
     const versionExpression = "COALESCE(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.score_rule_version')), 'v1_spcr')";
@@ -551,6 +558,7 @@ export class ScoreRepository {
          a.has_lifetime_plan,
          a.airport_profile_json,
          sns.region_counts_json,
+         sns.parsed_nodes_count AS node_count,
          a.founded_on,
          a.plan_price_month,
          a.has_trial,
@@ -607,6 +615,7 @@ export class ScoreRepository {
           website: row.website,
           status: row.status,
           tags: safeJsonArray(row.tags_json),
+          node_count: row.node_count == null ? null : Number(row.node_count),
           founded_on: row.founded_on ? formatDateOnly(row.founded_on) : null,
           plan_price_month: Number(row.plan_price_month),
           has_trial: !!row.has_trial,

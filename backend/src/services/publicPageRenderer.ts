@@ -2096,7 +2096,7 @@ function renderFooter(): string {
         ${PUBLIC_NAVIGATION_ITEMS.filter((item) => item.href).map((item) => `<a href="${escapeAttribute(item.href || '/')}">${escapeHtml(item.label)}</a>`).join('')}
         <a href="/apply">申请入驻</a>
       </nav>
-      <small>© 2026 ${escapeHtml(PUBLIC_SITE_BRAND_NAME)}. All rights reserved. 评分独立性声明：本站不含任何付费推广排名。</small>
+      <small>© 2026 ${escapeHtml(PUBLIC_SITE_BRAND_NAME)}. All rights reserved. 评分独立性声明：机场排行按评分排序，首页优秀机场公平轮换。</small>
     </footer>
   `;
 }
@@ -2262,7 +2262,7 @@ function renderHomeV3SectionHead(eyebrow: string, title: string, subtitle: strin
       <div>
         <span>${escapeHtml(eyebrow)}</span>
         <h2>${escapeHtml(title)}</h2>
-        <p>${escapeHtml(subtitle)}</p>
+        ${subtitle ? `<p>${escapeHtml(subtitle)}</p>` : ''}
       </div>
       ${action}
     </div>
@@ -2319,24 +2319,24 @@ function renderHomeV3Ranking(view: HomePageView): string {
   return `
     <section class="home-v3-ranking" aria-labelledby="home-v3-ranking-title">
       ${renderHomeV3SectionHead(
-        `Daily ranking · ${view.date}`,
-        '🏆 GateRank 排行榜',
-        '前 10 名真实数据',
+        `Airport rotation · ${view.date}`,
+        '🏆 GateRank 优秀机场',
+        '',
         `<a href="/rankings/all?date=${encodeURIComponent(view.date)}">全量榜单 →</a>`,
       ).replace('<h2>', '<h2 id="home-v3-ranking-title">')}
       ${items.length > 0 ? `
         <div class="home-v3-table-wrap">
           <table>
-            <caption>GateRank 综合实力排行榜前十名</caption>
-            <thead><tr><th scope="col">排名</th><th scope="col">机场</th><th scope="col">评分 / 涨跌</th><th scope="col">月付 / 观察</th><th scope="col">入口</th></tr></thead>
+            <caption>GateRank 优秀机场当前轮换展示</caption>
+            <thead><tr><th scope="col">展示顺序</th><th scope="col">机场名称</th><th scope="col">节点数量</th><th scope="col">月付 / 观察</th><th scope="col">入口</th></tr></thead>
             <tbody>
-              ${items.slice(0, 10).map((item) => {
+              ${items.map((item, index) => {
                 const reportUrl = item.report_url || `/reports/${item.airport_id}?date=${encodeURIComponent(view.date)}`;
                 return `
                   <tr>
-                    <td><b class="home-v3-rank home-v3-rank-${item.rank}">${item.rank}</b></td>
+                    <td><b class="home-v3-rank home-v3-rank-${index + 1}">${index + 1}</b></td>
                     <td><a class="home-v3-airport-name" href="${escapeAttribute(reportUrl)}">${escapeHtml(item.name)}</a><div class="home-v3-tags">${item.tags.slice(0, 2).map((tag) => `<span>${escapeHtml(tag)}</span>`).join('')}</div></td>
-                    <td><strong>${escapeHtml(formatPublicListScore(item))}</strong><small>${escapeHtml(formatHomeV3Delta(item.score_delta_vs_yesterday.value))}</small></td>
+                    <td><strong>${item.node_count == null ? '—' : `${escapeHtml(String(item.node_count))} 个`}</strong></td>
                     <td><strong>¥${escapeHtml(formatPublicPrice(item.plan_price_month))}/月</strong><small>${escapeHtml(formatHomeV3Observation(item.created_at, view.date))}</small></td>
                     <td><a class="home-v3-row-action" href="${escapeAttribute(reportUrl)}">报告</a></td>
                   </tr>
@@ -2345,7 +2345,7 @@ function renderHomeV3Ranking(view: HomePageView): string {
             </tbody>
           </table>
         </div>
-      ` : '<div class="home-v3-empty"><strong>综合榜暂无数据</strong><p>当前日期尚未生成可公开展示的排名。</p></div>'}
+      ` : '<div class="home-v3-empty"><strong>暂无符合展示条件的机场</strong><p>符合条件的机场将自动加入轮换。</p></div>'}
     </section>
   `;
 }
@@ -2456,11 +2456,6 @@ function renderHomeV3Faq(): string {
 function formatPublicPrice(value: number): string {
   if (!Number.isFinite(value)) return '—';
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
-}
-
-function formatHomeV3Delta(value: number | null): string {
-  if (value === null) return '—';
-  return `${value > 0 ? '+' : ''}${value.toFixed(2)}`;
 }
 
 function formatHomeV3Observation(onboardedAt: string | null | undefined, date: string): string {

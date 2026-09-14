@@ -401,7 +401,7 @@ function SiteFooter() {
         </div>
         <p className="mx-auto max-w-3xl text-sm leading-relaxed text-gray-400">
             {PUBLIC_SITE_BRAND_NAME}
-            以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在今日推荐、机场排行与测评报告之间完成交叉判断。
+            以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在优秀机场、机场排行与测评报告之间完成交叉判断。
         </p>
 
         <nav aria-label="页脚导航" className="flex flex-wrap justify-center gap-x-8 gap-y-3 pt-2 text-[14px] font-semibold text-gray-700">
@@ -421,7 +421,7 @@ function SiteFooter() {
         <div className="mx-auto max-w-5xl border-t border-gray-100" />
         <div className="text-[12px] font-medium tracking-wide text-gray-400">
           <span>© 2026 {PUBLIC_SITE_BRAND_NAME}. All rights reserved. </span>
-          <span className="mt-1 block font-normal text-gray-300 sm:mt-0 sm:inline">评分独立性声明：本站不含任何付费推广排名。</span>
+          <span className="mt-1 block font-normal text-gray-300 sm:mt-0 sm:inline">评分独立性声明：机场排行按评分排序，首页优秀机场公平轮换。</span>
         </div>
       </div>
     </footer>

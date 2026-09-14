@@ -3373,6 +3373,9 @@ function parseMarketingSettingsPayload(
       payload.admin_telegram_username === undefined
         ? undefined
         : optionalString(payload.admin_telegram_username),
+    home_rotation_interval_minutes: payload.home_rotation_interval_minutes === undefined
+      ? undefined
+      : mustNumber(payload.home_rotation_interval_minutes, 'home_rotation_interval_minutes'),
     home_section_limits:
       payload.home_section_limits === undefined
         ? undefined

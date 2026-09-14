@@ -103,7 +103,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.match(html, /\.home-v3-table-wrap td\s*\{[^}]*vertical-align:\s*middle;/);
         assert.match(html, /#gaterank-ranking-section td\.align-middle\s*\{[^}]*vertical-align:\s*middle;/);
         assert.doesNotMatch(html, /aria-label="查看(?:长期稳定|性价比榜|新入榜|风险预警)"/);
-        assert.match(html, /基于公开监测数据，结合今日推荐、长期稳定、性价比、新入榜与风险预警五类榜单/);
+        assert.match(html, /基于公开监测数据，结合优秀机场轮换展示及长期稳定、性价比、新入榜与风险预警榜单/);
         assert.match(html, /<h2 id="home-v3-sponsored-title">商业合作专区<\/h2>/);
         assert.doesNotMatch(html, /<h2 id="home-v3-sponsored-title">今日赞助推荐<\/h2>/);
         const sidebarStart = html.indexOf('<aside class="home-v3-sidebar"');
@@ -159,7 +159,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.doesNotMatch(html, /\.home-v3-summary-grid li strong\.home-v3-risk-status\s*\{[^}]*\b(?:background|border|mask|content):/);
         assert.doesNotMatch(html, /广告位空缺不会由普通优惠活动补位/);
         assert.match(html, /rel="nofollow sponsored noopener noreferrer"/);
-        assert.match(html, /<h2 id="home-v3-ranking-title">🏆 GateRank 排行榜<\/h2>/);
+        assert.match(html, /<h2 id="home-v3-ranking-title">🏆 GateRank 优秀机场<\/h2>/);
         assert.doesNotMatch(html, /<h2 id="home-v3-ranking-title">综合实力排行<\/h2>/);
         assert.doesNotMatch(html, /共收录 \d+ 个机场/);
         assert.match(html, /星云机场/);
