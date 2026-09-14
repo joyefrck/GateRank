@@ -270,18 +270,6 @@ function useTopicHub(): string | null {
   return hub;
 }
 
-export function TopicHubLink() {
-  const hub = useTopicHub();
-  return hub ? (
-    <a
-      href={hub}
-      className="inline-flex min-h-10 items-center text-sm font-semibold text-indigo-700"
-    >
-      机场推荐与选购指南 →
-    </a>
-  ) : null;
-}
-
 export function PageFrame({
   active,
   children,

@@ -224,10 +224,7 @@ export function topicNavigationMiddleware(
           body = body
             .replaceAll("<!--topic-nav-->", "")
             .replaceAll("<!--topic-mobile-nav-->", "")
-            .replaceAll(
-              "<!--topic-ranking-->",
-              hub ? `<p><a href="${href}">机场推荐与选购指南 →</a></p>` : "",
-            )
+            .replaceAll("<!--topic-ranking-->", "")
             .replaceAll(
               "<!--topic-footer-->",
               hub ? `<a href="${href}">机场推荐</a>` : "",

@@ -411,10 +411,8 @@ test("sitemap and shared navigation only expose published topics and update on u
     assert.match(xml, /2026-09-05T00:00:00.000Z/);
     const shell = await (await fetch(base + "/shell")).text();
     assert.doesNotMatch(shell, /data-topic-nav|public-top-nav-mobile-link/);
-    assert.match(
-      shell,
-      /<main><p><a href="\/hub">机场推荐与选购指南 →<\/a><\/p><\/main>/,
-    );
+    assert.match(shell, /<main><\/main>/);
+    assert.doesNotMatch(shell, /机场推荐与选购指南/);
     assert.match(
       shell,
       /<footer><a href="\/hub">机场推荐<\/a><\/footer>/,

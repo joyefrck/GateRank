@@ -318,7 +318,7 @@ export function renderFullRankingPublicPage(
         </section>
         ${renderFullRankingFilters(filters)}
         ${renderToolDownloadCta(view.tool_download_cta, { context: 'ranking' })}
-        <!--topic-ranking-->${renderFullRankingTopicContent(topicContent)}
+        ${renderFullRankingTopicContent(topicContent)}
         ${renderRankingTable(view.items)}
       </main>
     `,
