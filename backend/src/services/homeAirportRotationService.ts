@@ -46,6 +46,13 @@ export class HomeAirportRotationService {
           JOIN applicant_wallets w ON w.applicant_account_id = aa.id AND w.airport_id = a.id
          WHERE a.is_listed = 1 AND a.status IN ('normal', 'risk')
            AND ap.payment_status = 'paid'
+           AND (
+             SELECT sns.parsed_nodes_count
+               FROM airport_subscription_node_snapshots sns
+              WHERE sns.airport_id = a.id
+              ORDER BY sns.captured_at DESC, sns.id DESC
+              LIMIT 1
+           ) > 0
            AND EXISTS (
              SELECT 1 FROM applicant_wallet_transactions t
               WHERE t.wallet_id = w.id AND t.transaction_type = 'recharge' AND t.amount > 0

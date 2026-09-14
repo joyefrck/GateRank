@@ -18,6 +18,7 @@ test('homepage rotation MySQL: eligibility, concurrency, persistence and balance
   try {
     const ddl = [
       'CREATE TABLE airports (id INT PRIMARY KEY, is_listed TINYINT, status VARCHAR(20), created_at DATETIME DEFAULT CURRENT_TIMESTAMP)',
+      'CREATE TABLE airport_subscription_node_snapshots (id INT AUTO_INCREMENT PRIMARY KEY, airport_id INT, captured_at DATETIME, parsed_nodes_count INT)',
       'CREATE TABLE airport_applications (id INT PRIMARY KEY, approved_airport_id INT, payment_status VARCHAR(20))',
       'CREATE TABLE applicant_accounts (id INT PRIMARY KEY, application_id INT)',
       'CREATE TABLE applicant_wallets (id INT PRIMARY KEY, applicant_account_id INT, airport_id INT, balance DECIMAL(10,2))',
@@ -30,11 +31,13 @@ test('homepage rotation MySQL: eligibility, concurrency, persistence and balance
     await repository.ensureSchema();
     const settings = new MarketingSettingsService({ systemSettingRepository: repository });
     await settings.updateAdminSettings({ click_charge_amount: 1, rank_click_charge_amounts: { 1: 2 } }, 'test');
-    for (let id = 1; id <= 10; id++) {
+    for (let id = 1; id <= 13; id++) {
       await pool.execute('INSERT INTO airports (id, is_listed, status) VALUES (?, ?, ?)', [id, id === 9 ? 0 : 1, id === 10 ? 'down' : 'normal']);
       await pool.execute('INSERT INTO airport_applications VALUES (?, ?, ?)', [id, id, id === 6 ? 'unpaid' : 'paid']);
       await pool.execute('INSERT INTO applicant_accounts VALUES (?, ?)', [id, id]);
       await pool.execute('INSERT INTO applicant_wallets VALUES (?, ?, ?, ?)', [id, id, id, id === 8 ? 0.5 : 100]);
+      if (id !== 11) await pool.execute("INSERT INTO airport_subscription_node_snapshots (airport_id, captured_at, parsed_nodes_count) VALUES (?, '2026-09-14 00:00:00', ?)", [id, id === 12 ? 0 : 20]);
+      if (id === 13) await pool.execute("INSERT INTO airport_subscription_node_snapshots (airport_id, captured_at, parsed_nodes_count) VALUES (?, '2026-09-14 00:00:00', 0)", [id]);
       if (id !== 7) await pool.execute("INSERT INTO applicant_wallet_transactions VALUES (?, 'recharge', 100)", [id]);
       await pool.execute("INSERT INTO airport_scores_daily VALUES (?, CURRENT_DATE, ?, JSON_OBJECT('score_rule_version', 'v1_spcr'))", [id, 100-id]);
     }
@@ -74,6 +77,13 @@ test('homepage rotation MySQL: eligibility, concurrency, persistence and balance
     const changed = await service.getSelection(12, 30);
     assert.equal(changed.airport_ids.length, 5);
     assert.equal(changed.rotation.interval_minutes, 30);
+    const missingNodesId = changed.airport_ids[0];
+    await pool.execute("INSERT INTO airport_subscription_node_snapshots (airport_id, captured_at, parsed_nodes_count) VALUES (?, '2026-09-15 00:00:00', 0)", [missingNodesId]);
+    const withoutNodes = await service.getSelection(12, 30);
+    assert.equal(withoutNodes.total, 4);
+    assert.ok(!withoutNodes.airport_ids.includes(missingNodesId), 'latest empty snapshot removes the airport from the entire queue');
+    await pool.execute("INSERT INTO airport_subscription_node_snapshots (airport_id, captured_at, parsed_nodes_count) VALUES (?, '2026-09-15 01:00:00', 30)", [missingNodesId]);
+    assert.equal((await service.getSelection(12, 30)).total, 5, 'new valid nodes restore eligibility');
     await pool.query('UPDATE applicant_wallets SET balance = 0');
     const empty = await service.getSelection(4, 120);
     assert.deepEqual(empty.airport_ids, []);

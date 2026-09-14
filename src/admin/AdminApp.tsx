@@ -5052,7 +5052,7 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
                   />
                 </FormField>
               </div>
-              <p className="mb-5 text-sm leading-6 text-neutral-500">已付费入驻、已充值且余额足够扣费的机场参与轮换。所有候选每轮依次获得一次首位；展示数量只限制当前显示几家。评分和点击扣费档位保持原有规则。</p>
+              <p className="mb-5 text-sm leading-6 text-neutral-500">已付费入驻、已充值、余额足够扣费且最新订阅节点数量大于 0 的机场参与轮换。所有候选每轮依次获得一次首位；展示数量只限制当前显示几家。评分和点击扣费档位保持原有规则。</p>
               <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                 {homeSectionLimitFields.map((item) => (
                   <div key={item.key}>
