@@ -47,6 +47,13 @@ export function createApplicationRateLimit() {
     limit: numberFromEnv('APPLICATION_RATE_LIMIT_MAX', 10),
     standardHeaders: true,
     legacyHeaders: false,
+    // Keep applicants behind the same reverse proxy or shared network independent.
+    keyGenerator: (req) => {
+      const email = typeof req.body?.applicant_email === 'string'
+        ? req.body.applicant_email.trim().toLowerCase().slice(0, 320)
+        : '';
+      return `${ipKeyGenerator(req.ip || '')}:${email}`;
+    },
     handler: rateLimitHandler,
   });
 }

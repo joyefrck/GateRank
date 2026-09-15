@@ -39,3 +39,24 @@ for (const token of [undefined, 'forged-token']) {
     } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
   });
 }
+
+test('application limiting isolates applicants sharing a reverse proxy and normalizes email', async () => {
+  const { createApplicationRateLimit } = await import('../src/middleware/rateLimit');
+  const previous = process.env.APPLICATION_RATE_LIMIT_MAX;
+  process.env.APPLICATION_RATE_LIMIT_MAX = '1';
+  const limiter = createApplicationRateLimit();
+  if (previous === undefined) delete process.env.APPLICATION_RATE_LIMIT_MAX;
+  else process.env.APPLICATION_RATE_LIMIT_MAX = previous;
+  const app = express();
+  app.use(express.json());
+  app.post('/apply', limiter, (_req, res) => res.json({ ok: true }));
+  const server = app.listen(0, '127.0.0.1');
+  try {
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/apply`;
+    const send = (email: string) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ applicant_email: email }) });
+    assert.equal((await send('alice@example.com')).status, 200);
+    assert.equal((await send('bob@example.com')).status, 200);
+    assert.equal((await send(' ALICE@example.com ')).status, 429);
+  } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
+});
