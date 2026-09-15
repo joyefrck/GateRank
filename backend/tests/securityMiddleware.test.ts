@@ -146,6 +146,19 @@ test('portal login sets HttpOnly cookie and portalAuth still accepts cookie and 
     assert.match(setCookie, /^gaterank_portal_token=/);
     assert.match(setCookie, /HttpOnly/i);
 
+    const anonymousAccess = await fetch(`http://127.0.0.1:${port}/portal/me`);
+    assert.equal(anonymousAccess.status, 401);
+    assert.equal(((await anonymousAccess.json()) as { code: string }).code, 'PORTAL_AUTH_REQUIRED');
+
+    const expired = signApplicantToken('portal-cookie-secret', 1, 'user@example.com', -1);
+    for (const invalidToken of ['invalid-token', expired.token]) {
+      const rejected = await fetch(`http://127.0.0.1:${port}/portal/me`, {
+        headers: { Cookie: `gaterank_portal_token=${invalidToken}` },
+      });
+      assert.equal(rejected.status, 401);
+      assert.equal(((await rejected.json()) as { code: string }).code, 'UNAUTHORIZED');
+    }
+
     const cookieAccess = await fetch(`http://127.0.0.1:${port}/portal/me`, {
       headers: { Cookie: cookieHeader(setCookie) },
     });

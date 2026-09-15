@@ -1,3 +1,4 @@
+import { portalLoadError, readPortalResponse } from './portal/session';
 import { TurnstileWidget, useTurnstile } from './components/TurnstileWidget';
 import { ToolDownloadDialog } from './pages/tools/ToolDownloadDialog';
 import { IpPurityPage } from './pages/ipPurity/IpPurityPage';
@@ -1407,13 +1408,8 @@ async function portalApiRequest<T>(path: string, init: RequestInit = {}): Promis
   const response = await fetch(`${getApiBase()}${path}`, { ...init, credentials: 'include', headers });
   if (response.status === 401) {
     clearPortalToken();
-    throw new Error('登录已失效，请重新登录');
   }
-  if (!response.ok) {
-    const data = (await safeJson(response)) as { message?: string } | null;
-    throw new Error(data?.message || `请求失败: ${response.status}`);
-  }
-  return (await safeJson(response)) as T;
+  return readPortalResponse<T>(response);
 }
 
 async function safeJson(response: Response): Promise<unknown> {
@@ -6167,11 +6163,15 @@ function PortalPage() {
     },
   });
 
-  const loadView = async (billingPages?: Partial<Record<'recharge' | 'transactions' | 'clicks', number>>) => {
+  const loadView = async (
+    billingPages?: Partial<Record<'recharge' | 'transactions' | 'clicks', number>>,
+    allowAnonymous = false,
+  ) => {
     setLoading(true);
     setError('');
     try {
       let data = await portalApiRequest<PortalViewResponse>('/api/v1/portal/me');
+      allowAnonymous = false;
       data = await syncPendingApplicationPayment(data);
       setView(data);
       setLoginEmail(data.account.email);
@@ -6179,7 +6179,7 @@ function PortalPage() {
     } catch (err) {
       clearPortalToken();
       setView(null);
-      setError(err instanceof Error ? err.message : '加载失败');
+      setError(portalLoadError(err, allowAnonymous));
     } finally {
       setLoading(false);
     }
@@ -6361,7 +6361,7 @@ function PortalPage() {
       }
     }
 
-    await loadView();
+    await loadView(undefined, !xLoginCode);
   };
 
   const login = async (event: React.FormEvent) => {
