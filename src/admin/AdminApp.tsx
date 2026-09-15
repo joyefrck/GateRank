@@ -11081,7 +11081,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
         title: '网络覆盖手动执行',
         description: isTodayDate
           ? '由已启用的大陆探针检查全部节点；同一节点任一地区成功即计为可用，两地结果收齐后更新 N。'
-          : 'N 只使用当天真实采集结果，历史日期保持原始快照，不允许补采或重算。',
+          : '历史日期的覆盖采集快照保持不变，不允许补采；评分使用截至所选日期的有效原始 N 做时间衰减。',
         buttonLabel: isTodayDate ? '重新采集并重算网络覆盖' : '历史 N 不可重跑',
         kind: 'network_coverage' as const,
       };
@@ -11200,7 +11200,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               {'w = exp(-0.1 * days_diff)\n'}
               {'S = 时间衰减加权后的稳定性分\n'}
               {'P = 时间衰减加权后的性能分\n'}
-              {'N = 所选日期当天的网络覆盖分，不做历史衰减\n'}
+              {'N = 有效原始日分经时间衰减加权后的网络覆盖分，同日只计一次\n'}
               {'R = 时间衰减加权后的风险分\n'}
               {'C = PriceScore 三档分：1-30元=100，>30-50元=80，>50元=60\n'}
               {'有效数据天数 = min(S序列天数, P序列天数)\n'}
@@ -11654,9 +11654,10 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
             <div className="rounded border border-neutral-200 bg-white p-4">
               <div className="text-sm font-semibold text-neutral-900">评分公式</div>
               <div className="mt-2 text-xs text-neutral-500 whitespace-pre-wrap">
-                {'N = 节点数量分 × 30% + 地区覆盖分 × 45% + 健康率分 × 15% + 均衡度分 × 10%\n'}
+                {'原始 N = 节点数量分 × 30% + 地区覆盖分 × 45% + 健康率分 × 15% + 均衡度分 × 10%\n'}
                 {'Detected 只含可解析、可检测节点；每个节点必须完成真实代理 HTTP 尝试。unsupported 不参与评分。\n'}
-                {'UNKNOWN 参与节点数、健康率与保守均衡桶，但不计有效地区；N 使用当天结果且不做历史衰减。'}
+                {'UNKNOWN 参与节点数、健康率与保守均衡桶，但不计有效地区。\n'}
+                {'参与总分的 N = 有效原始日分按 exp(-0.1 × 距所选日期天数) 加权平均；涨跌均平滑，同日只计一次，缺失不按零分处理。'}
               </div>
             </div>
 
@@ -11665,7 +11666,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
               <ReadField label="规则版本" value={dashboard.network_coverage.rule_version} />
               <ReadField label="采集时间" value={formatDateTimeInBeijing(dashboard.network_coverage.sampled_at)} />
               <ReadField label="采集来源" value={dashboard.network_coverage.source} />
-              <ReadField label="网络覆盖分 (N)" value={dashboard.network_coverage.score_n} />
+              <ReadField label="采集原始分 (N)" value={dashboard.network_coverage.score_n} />
               <ReadField label="Healthy / Detected" value={`${dashboard.network_coverage.healthy_nodes_count} / ${dashboard.network_coverage.detected_nodes_count}`} />
               <ReadField label="健康率" value={`${dashboard.network_coverage.healthy_node_rate}%`} />
               <ReadField label="unsupported" value={dashboard.network_coverage.unsupported_nodes_count} />

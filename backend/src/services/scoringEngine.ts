@@ -252,6 +252,8 @@ export interface FinalEngineScoreInput {
   sSeries: TimeSeriesScorePoint[];
   pSeries: TimeSeriesScorePoint[];
   rSeries: TimeSeriesScorePoint[];
+  /** Raw daily N observations, never previously smoothed or manually overridden values. */
+  nSeries?: Array<{ date: string; score: number | null | undefined }>;
   pricePer100gb: number;
   referenceDate: string;
   ruleVersion?: GateRankScoreRuleVersion;
@@ -293,7 +295,7 @@ export function computeFinalEngineScore(input: FinalEngineScoreInput): FinalEngi
   const c = calcPriceScore(input.pricePer100gb);
   const ruleVersion = input.ruleVersion ?? SCORE_RULE_V1;
   const n = ruleVersion === SCORE_RULE_V2
-    ? round2(clamp(Number(input.networkCoverageScore ?? 0), 0, 100))
+    ? computeNetworkCoverageHistoryScore(input)
     : null;
   const dataDays = Math.min(input.sSeries.length, input.pSeries.length);
   const factor = coldStartFactor(dataDays);
@@ -310,6 +312,23 @@ export function computeFinalEngineScore(input: FinalEngineScoreInput): FinalEngi
     data_days: dataDays,
     cold_start_factor: factor,
   };
+}
+
+function computeNetworkCoverageHistoryScore(input: FinalEngineScoreInput): number {
+  const referenceTime = parseDateOnlyUtc(input.referenceDate);
+  const byDate = new Map<string, number>();
+  const observations = [...(input.nSeries ?? []), {
+    date: input.referenceDate, score: input.networkCoverageScore,
+  }];
+  for (const { date, score } of observations) {
+    // Missing/failed collection is not a zero. A successful all-unhealthy run is.
+    if (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 100) continue;
+    const time = parseDateOnlyUtc(date);
+    if (!Number.isFinite(time) || time > referenceTime || new Date(time).toISOString().slice(0, 10) !== date) continue;
+    // The fresh current-day observation replaces any stale same-day history.
+    byDate.set(date, score);
+  }
+  return computeWeightedScore(Array.from(byDate, ([date, score]) => ({ date, score })), input.referenceDate);
 }
 
 export function calcDomainPenalty(domainOk: boolean): number {

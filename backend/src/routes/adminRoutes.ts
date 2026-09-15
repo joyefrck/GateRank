@@ -2393,6 +2393,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           rSeries: scoreTrendRows
             .filter((row) => numberOrNull(row.r) !== null)
             .map((row) => ({ date: String(row.date), score: Number(row.r) })),
+          nSeries: scoreTrendRows.map((row) => ({ date: String(row.date), score: numberOrNull(row.n) })),
           pricePer100gb: Number(baseObj.plan_price_month || 0),
           referenceDate: date,
           ruleVersion: scoreRuleVersion,

@@ -1,4 +1,4 @@
-/** Final formula inputs: S/P/R have already been time-decay weighted. */
+/** Final formula inputs: S/P/N/R have already been time-decay weighted. */
 export const SCORE_COMPONENT_KEYS = ['s', 'p', 'n', 'c', 'r'] as const;
 export type ScoreComponentKey = typeof SCORE_COMPONENT_KEYS[number];
 export type ScoreRuleVersion = 'v1_spcr' | 'v2_spncr';

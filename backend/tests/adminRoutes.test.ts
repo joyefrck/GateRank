@@ -3280,6 +3280,61 @@ test('PATCH /airports/:id/scores/:date/manual-total-score validates score input 
   }
 });
 
+test('GET /airports/:id/dashboard previews decayed N while preserving coverage observations and manual overrides', async () => {
+  const trend = Array.from({ length: 30 }, (_, i) => ({
+    date: new Date(Date.UTC(2026, 7, 17 + i)).toISOString().slice(0, 10),
+    s: 90, p: 90, r: 90, n: 90,
+    details: { automatic_score_n: 10, manual_score_n: 0 },
+  }));
+  let manualN: number | undefined;
+  const app = express();
+  app.use(express.json());
+  app.use(createAdminRoutes({
+    airportRepository: stubAirportRepository(),
+    airportApplicationRepository: stubAirportApplicationRepository(),
+    probeSampleRepository: {
+      insertProbeSample: async () => 1, insertPacketLossSample: async () => 1,
+      listProbeSamples: async () => [], listLatestProbeSamples: async () => [],
+    },
+    performanceRunRepository: {
+      insert: async () => 1, getLatestByAirportAndDate: async () => null,
+      getLatestByAirportBeforeDate: async () => null,
+    },
+    metricsRepository: stubMetricsRepository(),
+    scoreRepository: {
+      getByAirportAndDate: async () => ({ airport_id: 1, date: '2026-09-15',
+        s: 90, p: 90, n: 60, c: 100, r: 90,
+        risk_penalty: 10, score: 85, recent_score: 85, historical_score: 91, final_score: 85,
+        details: { score_rule_version: 'v2_spncr', manual_score_n: manualN },
+      }),
+      getTrend: async () => trend,
+    },
+    recomputeService: stubRecomputeService(), aggregationService: stubAggregationService(),
+    manualJobService: stubManualJobService(), auditRepository: { log: async () => undefined },
+    publicViewService: stubPublicViewService(),
+  }));
+  app.use(errorHandler);
+  const server = app.listen(0);
+  try {
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/airports/1/dashboard?date=2026-09-15`;
+    for (const override of [undefined, 80]) {
+      manualN = override;
+      const response = await fetch(url);
+      assert.equal(response.status, 200);
+      const data = await response.json() as { base: {
+        total_score: number; component_scores: { automatic: { n: number }; effective: { n: number } };
+      } };
+      assert.equal(data.base.component_scores.automatic.n, 87);
+      assert.equal(data.base.component_scores.effective.n, override ?? 87);
+      assert.equal(data.base.total_score, override === undefined ? 90.4 : 89);
+    }
+    assert.equal(trend.at(-1)!.n, 90, 'preview must not mutate raw observations');
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});
+
 test('GET /airports/:id/dashboard exposes manual total score override metadata', async () => {
   const app = express();
   app.use(express.json());

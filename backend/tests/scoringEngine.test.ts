@@ -67,7 +67,7 @@ test('computeFinalEngineScore combines S/P/R and price with cold start factor', 
   assert.equal(out.final_score, 11.34);
 });
 
-test('computeFinalEngineScore applies v2 weights with current-day N and unchanged cold start days', () => {
+test('computeFinalEngineScore uses current-day N when no history is supplied and preserves cold start days', () => {
   const sevenDays = Array.from({ length: 7 }, (_, index) => ({
     date: `2026-08-${String(index + 5).padStart(2, '0')}`,
     score: 0,
@@ -85,6 +85,87 @@ test('computeFinalEngineScore applies v2 weights with current-day N and unchange
   assert.equal(out.data_days, 7);
   assert.equal(out.cold_start_factor, 1);
   assert.equal(out.final_score, 72);
+});
+
+const coverageDates = Array.from({ length: 30 }, (_, index) =>
+  new Date(Date.UTC(2026, 7, 17 + index)).toISOString().slice(0, 10));
+const coverageBaseline = coverageDates.map((date) => ({ date, score: 90 }));
+const coverageInput = {
+  sSeries: coverageBaseline, pSeries: coverageBaseline, rSeries: coverageBaseline,
+  pricePer100gb: 20, referenceDate: '2026-09-15', ruleVersion: 'v2_spncr' as const,
+};
+
+test('N smooths a single-day drop from 90 to 60 while preserving its 20 percent weight', () => {
+  const out = computeFinalEngineScore({ ...coverageInput,
+    nSeries: coverageBaseline, networkCoverageScore: 60,
+  });
+  assert.equal(out.n, 87);
+  assert.equal(out.final_score, 90.4);
+  assert.equal(out.data_days, 30);
+  assert.equal(out.cold_start_factor, 1);
+});
+
+test('N smooths recovery symmetrically and counts a valid zero', () => {
+  const recovering = computeFinalEngineScore({ ...coverageInput,
+    nSeries: coverageBaseline.map((row) => ({ ...row, score: 60 })), networkCoverageScore: 90,
+  });
+  assert.equal(recovering.n, 63);
+  const unavailable = computeFinalEngineScore({ ...coverageInput,
+    nSeries: coverageBaseline, networkCoverageScore: 0,
+  });
+  assert.equal(unavailable.n, 80.99);
+  assert.equal(computeFinalEngineScore({ ...coverageInput, nSeries: [], networkCoverageScore: 0 }).n, 0);
+});
+
+test('N keeps falling during sustained outages instead of freezing the previous score', () => {
+  const nSeries = [...coverageBaseline];
+  let previous = 90;
+  for (let day = 1; day <= 30; day += 1) {
+    const date = new Date(Date.UTC(2026, 8, 15 + day)).toISOString().slice(0, 10);
+    nSeries.push({ date, score: 0 });
+    const out = computeFinalEngineScore({ ...coverageInput, referenceDate: date, nSeries });
+    assert.ok(out.n! < previous);
+    previous = out.n!;
+  }
+  assert.ok(previous < 5);
+});
+
+test('N ignores missing, invalid and future samples without converting them to zero', () => {
+  const out = computeFinalEngineScore({ ...coverageInput, networkCoverageScore: null,
+    nSeries: [
+      { date: '2026-09-01', score: 90 },
+      { date: '2026-09-02', score: null },
+      { date: '2026-09-03', score: undefined },
+      { date: '2026-09-04', score: NaN },
+      { date: '2026-09-05', score: Infinity },
+      { date: '2026-09-06', score: -1 },
+      { date: '2026-09-07', score: 101 },
+      { date: '2026-09-16', score: 0 },
+      { date: 'invalid', score: 0 },
+      { date: '2026-02-30', score: 0 },
+    ],
+  });
+  assert.equal(out.n, 90);
+});
+
+test('N counts one observation per day and repeated calculations are idempotent', () => {
+  const input = { ...coverageInput, networkCoverageScore: 60,
+    nSeries: [...coverageBaseline, { date: '2026-09-15', score: 0 }, { date: '2026-09-15', score: 100 }],
+  };
+  const before = structuredClone(input);
+  const first = computeFinalEngineScore(input);
+  assert.equal(first.n, 87);
+  assert.deepEqual(computeFinalEngineScore(input), first);
+  assert.deepEqual(input, before);
+});
+
+test('N uses elapsed calendar days for sparse history and remains absent in v1', () => {
+  const input = { ...coverageInput,
+    nSeries: [{ date: '2026-09-01', score: 90 }], networkCoverageScore: 60,
+  };
+  assert.equal(computeFinalEngineScore(input).n, 65.93);
+  assert.equal(computeFinalEngineScore({ ...input, ruleVersion: 'v1_spcr' }).n, null);
+  assert.equal(computeFinalEngineScore({ ...coverageInput, nSeries: [], networkCoverageScore: 60 }).n, 60);
 });
 
 test('v2 weighted example S80 P70 N60 C90 R50 equals 71', () => {

@@ -264,6 +264,7 @@ export class ScoreRepository {
       sSeries: history.map((row) => ({ date: row.date, score: row.s })),
       pSeries: history.map((row) => ({ date: row.date, score: row.p })),
       rSeries: history.map((row) => ({ date: row.date, score: row.r })),
+      nSeries: history.map((row) => ({ date: row.date, score: row.n })),
       pricePer100gb: Number(context.airport.plan_price_month), referenceDate: date,
       ruleVersion: score.details.score_rule_version === 'v2_spncr' ? 'v2_spncr' : 'v1_spcr',
       networkCoverageScore: score.n,
