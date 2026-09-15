@@ -1,3 +1,5 @@
+import { createTurnstileService, type TurnstileVerifier } from '../services/turnstileService';
+import { createApplicationRateLimit } from '../middleware/rateLimit';
 import { publicScoreSummary } from '../services/scoreComponents';
 import { Router } from 'express';
 import { APPLICATION_FEE_AMOUNT } from '../config/billing';
@@ -28,6 +30,7 @@ import { createFullRankingLoadGate, type FullRankingLoadGate } from '../utils/fu
 import { sendError } from '../utils/http';
 
 interface PublicDeps {
+  turnstile?: TurnstileVerifier;
   billingEligibility?: BillingEligibilityService;
   airportRepository: {
     getById(id: number): Promise<unknown | null>;
@@ -133,6 +136,11 @@ const MARKETING_PLACEMENTS: MarketingPlacement[] = [
 const MARKETING_TARGET_KINDS: MarketingTargetKind[] = ['website', 'subscription_url'];
 export function createPublicRoutes(deps: PublicDeps): Router {
   const router = Router();
+  const turnstile = deps.turnstile || createTurnstileService();
+  router.get('/security/turnstile', (_req, res, next) => {
+    res.setHeader('Cache-Control', 'no-store');
+    try { res.json(turnstile.publicConfig()); } catch (error) { next(error); }
+  });
   const pageCache = deps.pageCache || createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
   const fullRankingLoadGate = deps.fullRankingLoadGate || createFullRankingLoadGate();
 
@@ -186,9 +194,10 @@ export function createPublicRoutes(deps: PublicDeps): Router {
     }
   });
 
-  router.post('/airport-applications', async (req, res, next) => {
+  router.post('/airport-applications', createApplicationRateLimit(), async (req, res, next) => {
     try {
       const payload = (req.body ?? {}) as Record<string, unknown>;
+      await turnstile.verify(payload.turnstile_token, 'airport_apply');
       const websiteBundle = parseWebsiteFields(payload, true);
       const foundedOn = mustDate(payload.founded_on, 'founded_on');
       const today = getDateInTimezone();

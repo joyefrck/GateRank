@@ -41,6 +41,16 @@ export function createPortalLoginFlowRateLimit() {
   });
 }
 
+export function createApplicationRateLimit() {
+  return rateLimit({
+    windowMs: FIFTEEN_MINUTES_MS,
+    limit: numberFromEnv('APPLICATION_RATE_LIMIT_MAX', 10),
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: rateLimitHandler,
+  });
+}
+
 export function createPerformanceProbeRateLimit() {
   return rateLimit({
     windowMs: numberFromEnv('PERFORMANCE_PROBE_RATE_LIMIT_WINDOW_MS', 60 * 1000),

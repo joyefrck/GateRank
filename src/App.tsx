@@ -1,3 +1,4 @@
+import { TurnstileWidget, useTurnstile } from './components/TurnstileWidget';
 import { ToolDownloadDialog } from './pages/tools/ToolDownloadDialog';
 import { IpPurityPage } from './pages/ipPurity/IpPurityPage';
 import React, { Suspense, lazy, useEffect, useMemo, useRef, useState } from 'react';
@@ -5638,6 +5639,7 @@ function formatTelegramFootnote(data: ReportViewResponse): string | null {
 }
 
 function ApplicationPage() {
+  const turnstile = useTurnstile();
   const [form, setForm] = useState<ApplicationFormState>(() => createApplicationForm());
   const [error, setError] = useState('');
   const [successPayload, setSuccessPayload] = useState<ApplicationSubmitResponse | null>(null);
@@ -5755,6 +5757,7 @@ function ApplicationPage() {
       return;
     }
 
+    if (!turnstile.ready) { setError('请先完成人机验证'); return; }
     setSubmitting(true);
     setError('');
     setSuccessPayload(null);
@@ -5763,6 +5766,7 @@ function ApplicationPage() {
       const result = await apiRequest<ApplicationSubmitResponse>('/api/v1/airport-applications', {
         method: 'POST',
         body: JSON.stringify({
+          turnstile_token: turnstile.token,
           name: form.name.trim(),
           website: websites[0],
           websites,
@@ -5782,6 +5786,7 @@ function ApplicationPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : '提交失败');
     } finally {
+      turnstile.reset();
       setSubmitting(false);
     }
   };
@@ -6008,11 +6013,12 @@ function ApplicationPage() {
 
           {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
-          <div className="flex items-center justify-end">
+          <div className="flex flex-col items-end justify-end gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <TurnstileWidget action="airport_apply" generation={turnstile.generation} onChange={turnstile.onChange} />
             <button
               type="submit"
               className="min-h-12 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white disabled:opacity-50"
-              disabled={submitting}
+              disabled={submitting || !turnstile.ready}
             >
               {submitting ? '提交中...' : '提交申请'}
             </button>
@@ -6079,6 +6085,7 @@ function OfficialApplicationNoticeModal({
 }
 
 function PortalPage() {
+  const turnstile = useTurnstile();
   const createEmptyPortalPage = <T,>(): PortalPaginatedResponse<T> => ({
     items: [],
     total: 0,
@@ -6359,6 +6366,7 @@ function PortalPage() {
 
   const login = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!turnstile.ready) { setError('请先完成人机验证'); return; }
     setLoggingIn(true);
     setError('');
     setSuccess('');
@@ -6366,6 +6374,7 @@ function PortalPage() {
       const data = await apiRequest<PortalLoginResponse>('/api/v1/portal/login', {
         method: 'POST',
         body: JSON.stringify({
+          turnstile_token: turnstile.token,
           email: loginEmail.trim(),
           password: loginPassword,
         }),
@@ -6377,27 +6386,32 @@ function PortalPage() {
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败');
     } finally {
+      turnstile.reset();
       setLoggingIn(false);
     }
   };
 
   const startXLogin = async () => {
+    if (!turnstile.ready) { setError('请先完成人机验证'); return; }
     setXOAuthAction('login');
     setError('');
     setSuccess('');
     try {
       const data = await apiRequest<{ authorization_url: string }>('/api/v1/portal/x-oauth/login/start', {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({ turnstile_token: turnstile.token }),
       });
       window.location.href = data.authorization_url;
     } catch (err) {
       setError(err instanceof Error ? err.message : '发起 X 登录失败');
       setXOAuthAction('');
+    } finally {
+      turnstile.reset();
     }
   };
 
   const startTelegramLogin = async () => {
+    if (!turnstile.ready) { setError('请先完成人机验证'); return; }
     const runId = telegramLoginRunRef.current + 1;
     telegramLoginRunRef.current = runId;
     setTelegramLoginAction(true);
@@ -6407,7 +6421,7 @@ function PortalPage() {
     try {
       const flow = await apiRequest<PortalTelegramLoginStartResponse>('/api/v1/portal/telegram-login/start', {
         method: 'POST',
-        body: JSON.stringify({}),
+        body: JSON.stringify({ turnstile_token: turnstile.token }),
       });
       window.open(flow.login_url, '_blank', 'noopener,noreferrer');
       setTelegramLoginStatus('请在 Telegram 中点击 Bot 的开始按钮，页面会自动完成登录。');
@@ -6448,6 +6462,7 @@ function PortalPage() {
         setError(err instanceof Error ? err.message : 'Telegram 登录失败');
       }
     } finally {
+      turnstile.reset();
       if (telegramLoginRunRef.current === runId) {
         setTelegramLoginAction(false);
         setTelegramLoginStatus('');
@@ -8351,11 +8366,12 @@ function PortalPage() {
                 </button>
               </div>
             </PublicFormField>
+            <TurnstileWidget action="portal_login" generation={turnstile.generation} onChange={turnstile.onChange} />
             <div className="flex flex-wrap items-center gap-x-6 gap-y-3 pt-2">
               <button
                 type="submit"
                 className={portalLoginSubmitButtonClass}
-                disabled={loggingIn}
+                disabled={loggingIn || Boolean(xOAuthAction) || telegramLoginAction || !turnstile.ready}
               >
                 <LogIn className="h-4 w-4" />
                 {loggingIn ? '登录中...' : '登录后台'}
@@ -8364,7 +8380,7 @@ function PortalPage() {
                 type="button"
                 className={portalLoginXButtonClass}
                 onClick={() => void startXLogin()}
-                disabled={Boolean(xOAuthAction) || telegramLoginAction}
+                disabled={loggingIn || Boolean(xOAuthAction) || telegramLoginAction || !turnstile.ready}
               >
                 <XLogo className="h-4 w-4" />
                 {xOAuthAction === 'login' ? '跳转中...' : '使用 X 登录'}
@@ -8373,7 +8389,7 @@ function PortalPage() {
                 type="button"
                 className={portalLoginTelegramButtonClass}
                 onClick={() => void startTelegramLogin()}
-                disabled={telegramLoginAction || Boolean(xOAuthAction)}
+                disabled={loggingIn || telegramLoginAction || Boolean(xOAuthAction) || !turnstile.ready}
               >
                 <Send className="h-4 w-4" />
                 {telegramLoginAction ? '等待确认...' : '使用电报登录'}

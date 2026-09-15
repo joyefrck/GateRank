@@ -1,3 +1,4 @@
+import { createTurnstileService, type TurnstileVerifier } from '../services/turnstileService';
 import { randomInt, randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { APPLICATION_FEE_AMOUNT, CLICK_CHARGE_AMOUNT, RECHARGE_AMOUNTS } from '../config/billing';
@@ -63,6 +64,7 @@ import {
 } from '../../../shared/airportAds';
 
 interface PortalDeps {
+  turnstile?: TurnstileVerifier;
   applicantAccountRepository: {
     getById(id: number): Promise<ApplicantAccount | null>;
     getByEmail?(email: string): Promise<ApplicantAccount | null>;
@@ -313,12 +315,14 @@ interface ApplicantApplicationOperationsInput {
 
 export function createPortalRoutes(deps: PortalDeps): Router {
   const router = Router();
+  const turnstile = deps.turnstile || createTurnstileService();
   const portalLoginRateLimit = createPortalLoginRateLimit();
   const portalLoginFlowRateLimit = createPortalLoginFlowRateLimit();
 
   router.post('/portal/login', portalLoginRateLimit, async (req, res, next) => {
     try {
       const payload = toPlainObject(req.body ?? {}, 'body');
+      await turnstile.verify(payload.turnstile_token, 'portal_login');
       const email = mustEmail(payload.email, 'email');
       const password = mustString(payload.password, 'password');
       const auth = await deps.applicantPortalAuthService.login(email, password);
@@ -333,8 +337,9 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
   });
 
-  router.post('/portal/x-oauth/login/start', portalLoginFlowRateLimit, async (_req, res, next) => {
+  router.post('/portal/x-oauth/login/start', portalLoginFlowRateLimit, async (req, res, next) => {
     try {
+      await turnstile.verify(req.body?.turnstile_token, 'portal_login');
       res.status(201).json(await requireApplicantXOAuthService(deps).startLogin());
     } catch (error) {
       next(error);
@@ -360,8 +365,9 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
   });
 
-  router.post('/portal/telegram-login/start', portalLoginFlowRateLimit, async (_req, res, next) => {
+  router.post('/portal/telegram-login/start', portalLoginFlowRateLimit, async (req, res, next) => {
     try {
+      await turnstile.verify(req.body?.turnstile_token, 'portal_login');
       const config = await requireUserTelegramBotSettingsService(deps).getConfig();
       if (!isUserTelegramBotConfigReady(config) || !config.bot_username) {
         throw new HttpError(409, 'USER_TELEGRAM_BOT_NOT_CONFIGURED', '用户服务 Bot 尚未完成 Webhook 配置');
