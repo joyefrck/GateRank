@@ -1,5 +1,6 @@
 import nodemailer from 'nodemailer';
 import { HttpError } from '../middleware/errorHandler';
+import { renderBalanceReminderEmail, type BalanceReminderEmailInput } from './balanceReminderEmail';
 import type {
   SmtpConfig,
   SmtpSettingsInput,
@@ -205,6 +206,11 @@ export class MailService {
     const text = renderAdExpiryPlainText(input.campaigns, input.portalLoginUrl);
     await this.sendWithConfig(config, { to: input.to, subject, text, html });
     return 'sent';
+  }
+
+  async sendBalanceReminderEmail(input: BalanceReminderEmailInput): Promise<void> {
+    const config = await this.requireConfigured();
+    await this.sendWithConfig(config, { to: input.to, ...renderBalanceReminderEmail(input) });
   }
 
   async sendLowBalanceWarningEmail(input: {

@@ -2,6 +2,8 @@ import { SCORE_COMPONENT_KEYS, type ManualScoreComponents, type ScoreComponentEd
 import { componentEditorState } from '../services/scoreComponents';
 import type { ScoreDetailValue } from '../types/domain';
 import { Router } from 'express';
+import { rateLimit } from 'express-rate-limit';
+import type { BalanceReminderEmailInput } from '../services/balanceReminderEmail';
 import { STABILITY_RULES } from '../config/scoring';
 import { HttpError } from '../middleware/errorHandler';
 import { calcPriceScore, computeFinalEngineScore } from '../services/scoringEngine';
@@ -412,6 +414,7 @@ interface AdminDeps {
     updateAdminSettings(input: XOAuthSettingsInput, updatedBy: string): Promise<unknown>;
   };
   mailService?: {
+    sendBalanceReminderEmail?(input: BalanceReminderEmailInput): Promise<void>;
     sendTestMail(input: SmtpSettingsInput & { test_to: string }): Promise<void>;
     sendApplicationApprovedEmail(input: { to: string; airportName: string }): Promise<void>;
     sendApplicantPasswordResetEmail?(input: {
@@ -1716,6 +1719,65 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       });
     } catch (error) {
       next(error);
+    }
+  });
+
+  const balanceReminderLimit = rateLimit({
+    windowMs: 60_000,
+    limit: 1,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skipFailedRequests: true,
+    keyGenerator: (req) => String(Number(req.params.id)),
+    handler: (_req, _res, next) => next(new HttpError(429, 'BALANCE_REMINDER_RATE_LIMITED', '该机场刚刚已发送催促邮件，请一分钟后再试')),
+  });
+
+  router.post('/airports/:id/balance-reminder', balanceReminderLimit, async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      const airport = await deps.airportRepository.getById(airportId);
+      if (!airport) {
+        throw new HttpError(404, 'AIRPORT_NOT_FOUND', '机场不存在');
+      }
+      const billingRepository = deps.applicantBillingRepository;
+      if (!billingRepository?.listWalletsByAirportIds) {
+        throw new Error('applicantBillingRepository.listWalletsByAirportIds is not configured');
+      }
+      const wallet = (await billingRepository.listWalletsByAirportIds([airportId])).get(airportId);
+      if (!wallet) {
+        throw new HttpError(409, 'AIRPORT_WALLET_NOT_FOUND', '该机场未绑定钱包，无法发送余额催促邮件');
+      }
+      let toEmail = optionalString((airport as { applicant_email?: string | null }).applicant_email);
+      if (!toEmail) {
+        const account = await deps.applicantAccountRepository?.getByAirportId?.(airportId);
+        toEmail = optionalString(account?.email);
+      }
+      if (!toEmail) {
+        throw new HttpError(409, 'AIRPORT_REMINDER_EMAIL_NOT_CONFIGURED', '未配置机场主收件邮箱，无法发送催促邮件');
+      }
+      const mailService = getMailService(deps);
+      if (!mailService.sendBalanceReminderEmail) {
+        throw new Error('mailService.sendBalanceReminderEmail is not configured');
+      }
+      await mailService.sendBalanceReminderEmail({
+        to: toEmail,
+        airportName: getAirportNameForMail(airport, airportId),
+        balance: wallet.balance,
+        portalLoginUrl: buildPortalLoginUrl(req),
+      });
+      // SMTP has accepted the email: an audit failure must not invite a duplicate send.
+      try {
+        await deps.auditRepository.log('send_airport_balance_reminder', actorFromReq(req), req.requestId, {
+          airport_id: airportId, wallet_id: wallet.id, balance: wallet.balance,
+        });
+      } catch (error) {
+        console.error('[admin] balance reminder sent but audit failed', { airportId, requestId: req.requestId, error });
+      }
+      res.json({ ok: true, airport_id: airportId, to_email: toEmail, balance: wallet.balance });
+    } catch (error) {
+      next(error instanceof SmtpSendError
+        ? new HttpError(error.status, 'BALANCE_REMINDER_EMAIL_FAILED', error.message)
+        : error);
     }
   });
 

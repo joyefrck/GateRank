@@ -2000,6 +2000,107 @@ test('POST /airports/:id/wallet/adjustments rejects excessive deductions', async
   }
 });
 
+test('POST /airports/:id/balance-reminder resolves server data, handles errors and limits duplicate sends', async (t) => {
+  const scenarios = [
+    { name: 'contact email and current wallet, ignoring client overrides', status: 200, to: 'ops@example.com' },
+    { name: 'account email fallback', status: 200, contact: '', to: 'owner@example.com' },
+    { name: 'missing recipient', status: 409, contact: '', account: false, code: 'AIRPORT_REMINDER_EMAIL_NOT_CONFIGURED' },
+    { name: 'missing wallet', status: 409, wallet: false, code: 'AIRPORT_WALLET_NOT_FOUND' },
+    { name: 'missing airport', status: 404, airport: false, code: 'AIRPORT_NOT_FOUND' },
+    { name: 'SMTP failure allows retry', status: 502, smtpFailure: true, code: 'BALANCE_REMINDER_EMAIL_FAILED' },
+    { name: 'SMTP disabled allows retry', status: 409, smtpDisabled: true, code: 'SMTP_NOT_ENABLED' },
+    { name: 'audit failure does not report an accepted email as failed', status: 200, auditFailure: true, to: 'ops@example.com' },
+  ];
+  for (const scenario of scenarios) {
+    await t.test(scenario.name, async () => {
+      const messages: unknown[] = [];
+      const audits: Array<{ action: string; payload: unknown }> = [];
+      let failSend = Boolean(scenario.smtpFailure || scenario.smtpDisabled);
+      const app = express();
+      app.use(express.json());
+      app.use(createAdminRoutes({
+        airportRepository: {
+          ...stubAirportRepository(),
+          getById: async () => scenario.airport === false ? null : ({
+            ...(await stubAirportRepository().getById()), applicant_email: scenario.contact ?? 'ops@example.com',
+          }),
+        },
+        airportApplicationRepository: stubAirportApplicationRepository(),
+        applicantBillingRepository: {
+          linkAirportByApplicationId: async () => undefined,
+          listWalletsByAirportIds: async (ids) => {
+            assert.deepEqual(ids, [1]);
+            return new Map(scenario.wallet === false ? [] : [[1, { id: 11, balance: 1.1 }]]);
+          },
+        },
+        applicantAccountRepository: {
+          getByAirportId: async () => scenario.account === false ? null : ({
+            id: 22, application_id: 7, email: 'owner@example.com', password_hash: 'unused', must_change_password: false,
+          }),
+        },
+        mailService: {
+          sendTestMail: async () => undefined,
+          sendApplicationApprovedEmail: async () => undefined,
+          sendBalanceReminderEmail: async (input) => {
+            if (failSend) {
+              if (scenario.smtpDisabled) throw new HttpError(409, 'SMTP_NOT_ENABLED', 'SMTP 邮件发送未启用');
+              throw new SmtpSendError('SMTP 服务器连接失败');
+            }
+            messages.push(input);
+          },
+        },
+        probeSampleRepository: stubProbeSampleRepository(),
+        performanceRunRepository: stubPerformanceRunRepository(),
+        metricsRepository: stubMetricsRepository(),
+        scoreRepository: { getByAirportAndDate: async () => null, getTrend: async () => [] },
+        recomputeService: stubRecomputeService(), aggregationService: stubAggregationService(),
+        manualJobService: stubManualJobService(), publicViewService: stubPublicViewService(),
+        auditRepository: { log: async (action, _actor, _requestId, payload) => {
+          if (scenario.auditFailure) throw new Error('simulated audit failure');
+          audits.push({ action, payload });
+        } },
+      }));
+      app.use(errorHandler);
+      const server = app.listen(0);
+      try {
+        const port = (server.address() as AddressInfo).port;
+        const send = () => fetch(`http://127.0.0.1:${port}/airports/1/balance-reminder`, {
+          method: 'POST', headers: { Origin: 'https://gate-rank.com', 'Content-Type': 'application/json' },
+          body: JSON.stringify({ to_email: 'wrong@example.com', balance: 999, portalLoginUrl: 'https://wrong.example.com' }),
+        });
+        const response = await send();
+        const data = await response.json() as Record<string, unknown>;
+        assert.equal(response.status, scenario.status);
+        if (scenario.status === 200) {
+          assert.equal(data.to_email, scenario.to);
+          assert.equal(data.balance, 1.1);
+          assert.deepEqual(messages, [{
+            to: scenario.to, airportName: 'Airport', balance: 1.1, portalLoginUrl: 'https://gate-rank.com/portal',
+          }]);
+          if (!scenario.auditFailure) assert.deepEqual(audits, [{
+            action: 'send_airport_balance_reminder', payload: { airport_id: 1, wallet_id: 11, balance: 1.1 },
+          }]);
+          const duplicate = await send();
+          assert.equal(duplicate.status, 429);
+          assert.ok(duplicate.headers.get('retry-after'));
+          assert.equal(messages.length, 1);
+        } else {
+          assert.equal(data.code, scenario.code);
+          assert.equal(messages.length, 0);
+          assert.equal(audits.length, 0);
+          if (scenario.smtpFailure || scenario.smtpDisabled) {
+            failSend = false;
+            assert.equal((await send()).status, 200);
+            assert.equal(messages.length, 1);
+          }
+        }
+      } finally {
+        await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+      }
+    });
+  }
+});
+
 test('POST /airports/:id/applicant-password-reset prefers airport contact email and audits without secrets', async () => {
   const passwordUpdates: Array<{ id: number; passwordHash: string; mustChangePassword: boolean }> = [];
   const sentMessages: Array<{

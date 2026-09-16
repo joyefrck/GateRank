@@ -3,6 +3,38 @@ import assert from 'node:assert/strict';
 import { MailService, SmtpSendError } from '../src/services/mailService';
 import type { SmtpTemplateConfig } from '../src/services/smtpSettingsService';
 
+test('MailService sends a styled balance reminder with escaped content and clickable portal links', async () => {
+  const sent: Array<Record<string, unknown>> = [];
+  const service = new MailService({
+    smtpSettingsService: { getConfig: async () => ({
+      enabled: true, host: 'smtp.example.com', port: 465, secure: true,
+      username: 'mailer', password: 'secret', from_name: 'GateRank',
+      from_email: 'noreply@example.com', reply_to: '', templates: createTemplates(),
+    }) },
+    transportFactory: (() => ({ sendMail: async (mail: Record<string, unknown>) => { sent.push(mail); } })) as never,
+  });
+  await service.sendBalanceReminderEmail({
+    to: 'owner@example.com', airportName: '<机场 & "测试">', balance: 1.1,
+    portalLoginUrl: 'https://gate-rank.com/portal?from=mail&kind=balance',
+  });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, 'owner@example.com');
+  assert.match(String(sent[0].subject), /余额提醒/);
+  const html = String(sent[0].html);
+  assert.match(html, /<!doctype html>/i);
+  assert.match(html, /style=/);
+  assert.match(html, /&lt;机场 &amp; &quot;测试&quot;&gt;/);
+  assert.doesNotMatch(html, /<机场/);
+  assert.match(html, /¥1\.10/);
+  assert.match(html, /登录后台充值/);
+  assert.equal((html.match(/href="https:\/\/gate-rank\.com\/portal\?from=mail&amp;kind=balance"/g) || []).length, 2);
+  assert.match(String(sent[0].text), /https:\/\/gate-rank\.com\/portal\?from=mail&kind=balance/);
+  await assert.rejects(service.sendBalanceReminderEmail({
+    to: 'owner@example.com', airportName: '机场', balance: 0, portalLoginUrl: 'javascript:alert(1)',
+  }));
+  assert.equal(sent.length, 1);
+});
+
 function createTemplates(
   overrides: Partial<Record<keyof SmtpTemplateConfig, Partial<SmtpTemplateConfig[keyof SmtpTemplateConfig]>>> = {},
 ): SmtpTemplateConfig {

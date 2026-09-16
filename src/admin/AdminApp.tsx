@@ -1,4 +1,5 @@
 import { TopicPages } from './topics/TopicPages';
+import { BalanceReminderButton } from './BalanceReminderButton';
 import { RevenuePage } from './revenue/RevenuePage';
 import { Wallet } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -8558,13 +8559,15 @@ function AirportsPage({
         <div className="fixed inset-0 z-50 flex items-center justify-center overflow-x-hidden bg-black/45 p-4 backdrop-blur-sm">
           <div className="flex max-h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-[28px] border border-neutral-200 bg-white shadow-[0_32px_120px_-40px_rgba(0,0,0,0.55)]">
             <div className="border-b border-neutral-200 px-6 py-5 flex items-start justify-between gap-4">
-              <div className="space-y-1">
-                <h3 className="text-2xl font-bold tracking-tight">余额明细 - {billingAirport.name}</h3>
+              <div className="min-w-0 flex-1 space-y-1">
+                <h3 className="break-words text-2xl font-bold tracking-tight">余额明细 - {billingAirport.name}</h3>
                 <p className="text-sm text-neutral-500">当前用户余额：{formatMoneyOrDash(billingAirport.wallet_balance)}</p>
+                <BalanceReminderButton key={billingAirport.id} airportId={billingAirport.id} request={apiFetch} />
               </div>
               <button
                 type="button"
-                className="w-10 h-10 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-900"
+                className="w-10 h-10 shrink-0 rounded-full border border-neutral-200 flex items-center justify-center text-neutral-500 hover:text-neutral-900"
+                aria-label="关闭余额明细"
                 onClick={closeBillingDetail}
               >
                 <X size={16} />
