@@ -1,3 +1,4 @@
+import { HOME_SUMMARY_COPY } from '../../../shared/homeAirportRotation';
 import { AIRPORT_DIRECTORY_SEO, buildAirportDirectoryStructuredData, type AirportDirectoryView } from '../../../shared/airportDirectory';
 import { buildIpPuritySeo, IP_PURITY_FAQ, type IpPurityPageConfig } from '../../../shared/ipPurity';
 import type {
@@ -2444,23 +2445,23 @@ function renderHomeV3LatestNews(view: HomePageView): string {
 
 function renderHomeV3Summaries(view: HomePageView): string {
   const configurations: Array<{ key: keyof HomePageView['sections']; title: string; risk?: boolean }> = [
-    { key: 'most_stable', title: '长期稳定' },
-    { key: 'best_value', title: '性价比榜' },
+    { key: 'most_stable', ...HOME_SUMMARY_COPY.most_stable },
+    { key: 'best_value', ...HOME_SUMMARY_COPY.best_value },
     { key: 'new_entries', title: '新入榜' },
     { key: 'risk_alerts', title: '风险预警', risk: true },
   ];
   return `
     <section aria-labelledby="home-v3-summary-title">
-      ${renderHomeV3SectionHead('Multiple signals', '从不同维度交叉判断', '展示真实榜单数据，不足时保持空缺。').replace('<h2>', '<h2 id="home-v3-summary-title">')}
+      ${renderHomeV3SectionHead('Multiple signals', '从不同维度交叉判断', '稳定与性价比达标后公平轮换，展示顺序不代表评分排名。').replace('<h2>', '<h2 id="home-v3-summary-title">')}
       <div class="home-v3-summary-grid">
         ${configurations.map((config) => {
           const section = view.sections[config.key];
           return `
             <article>
               <div class="home-v3-summary-title"><h3>${escapeHtml(config.title)}</h3></div>
-              <p>${escapeHtml(section.subtitle)}</p>
+              <p>${escapeHtml('subtitle' in config ? String(config.subtitle) : section.subtitle)}</p>
               ${section.items.length > 0 ? `
-                <ol>${section.items.map((item, index) => `
+                <ol aria-label="展示顺序，非评分排名">${section.items.map((item, index) => `
                   <li><span>${String(index + 1).padStart(2, '0')}</span><a href="${escapeAttribute(item.report_url)}">${escapeHtml(item.name)}</a><strong${config.risk ? ' class="home-v3-risk-status"' : ''}>${config.risk ? '风险' : escapeHtml(formatPublicListScore(item))}</strong></li>
                 `).join('')}</ol>
               ` : '<p class="home-v3-muted">当前没有可展示数据</p>'}

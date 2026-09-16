@@ -1,7 +1,8 @@
 import type { HomeAirportRotationService } from './homeAirportRotationService';
-import { homeAirportRotationDescription } from '../../../shared/homeAirportRotation';
+import { homeAirportRotationDescription, HOME_SUMMARY_COPY } from '../../../shared/homeAirportRotation';
 import { normalizeHomeRotationInterval } from './marketingSettingsService';
 import { effectiveComponent } from './scoreComponents';
+import { isHomeSummaryEligible } from '../utils/homeSummaryEligibility';
 import { NEW_AIRPORT_DAYS, SHANGHAI_TIMEZONE } from '../config/scoring';
 import { CLICK_CHARGE_AMOUNT } from '../config/billing';
 import type { PublicScoreVisibility } from '../repositories/applicantBillingRepository';
@@ -203,7 +204,7 @@ interface PublicViewDeps {
         clickChargeAmount?: number,
       ): Promise<Map<number, PublicScoreVisibility>>;
     };
-    homeAirportRotationService?: Pick<HomeAirportRotationService, 'getSelection'>;
+    homeAirportRotationService?: Pick<HomeAirportRotationService, 'getSelection'> & Partial<Pick<HomeAirportRotationService, 'getSummarySelections'>>;
     marketingSettingsService?: {
       getConfig(): Promise<{
         click_charge_amount: number;
@@ -288,15 +289,13 @@ const SECTION_CONFIG: Record<
   },
   most_stable: {
     rankingType: 'stable',
-    title: '长期稳定机场',
-    subtitle: 'Most Stable',
+    ...HOME_SUMMARY_COPY.most_stable,
     type: 'stable',
     limit: 3,
   },
   best_value: {
     rankingType: 'value',
-    title: '性价比最佳',
-    subtitle: 'Best Value',
+    ...HOME_SUMMARY_COPY.best_value,
     type: 'value',
     limit: 3,
   },
@@ -340,8 +339,7 @@ export class PublicViewService {
       const [
       stats,
       fullRankingPreview,
-      stable,
-      value,
+      summaries,
       newest,
       latestApprovedApplicationAirports,
       riskMonitor,
@@ -359,8 +357,9 @@ export class PublicViewService {
           scoreRuleVersion,
           selection?.airport_ids,
         ),
-      this.deps.rankingRepository.getRanking(resolvedDate, 'stable'),
-      this.deps.rankingRepository.getRanking(resolvedDate, 'value'),
+      this.deps.homeAirportRotationService?.getSummarySelections?.(
+        resolvedDate, sectionLimits, marketingConfig.home_rotation_interval_minutes, scoreRuleVersion,
+      ) ?? Promise.resolve(null),
       this.deps.rankingRepository.getRanking(resolvedDate, 'new'),
       this.deps.airportRepository.listLatestApprovedApplicationAirports
         ? this.deps.airportRepository.listLatestApprovedApplicationAirports(
@@ -391,8 +390,8 @@ export class PublicViewService {
     const preloadedContexts = await this.preloadCardContexts(
       collectRankingAirportIds(
         fullRankingPreview.items,
-        stable,
-        value,
+        (summaries?.most_stable.airport_ids ?? []).map(airport_id => ({ airport_id })),
+        (summaries?.best_value.airport_ids ?? []).map(airport_id => ({ airport_id })),
         newest,
         latestApprovedApplicationAirports.map((airport) => ({ airport_id: airport.id })),
         activeDeals.map((deal) => ({ airport_id: deal.airport_id })),
@@ -416,12 +415,10 @@ export class PublicViewService {
         loadCardContext,
         sectionLimits,
       ),
-      stable.length > 0
-        ? this.buildHomeSectionItems('most_stable', stable, resolvedDate, loadCardContext, sectionLimits)
-        : Promise.resolve([]),
-      value.length > 0
-        ? this.buildHomeSectionItems('best_value', value, resolvedDate, loadCardContext, sectionLimits)
-        : Promise.resolve([]),
+      this.buildHomeSectionItems('most_stable',
+        (summaries?.most_stable.airport_ids ?? []).map(airport_id => ({ airport_id })), resolvedDate, loadCardContext, sectionLimits),
+      this.buildHomeSectionItems('best_value',
+        (summaries?.best_value.airport_ids ?? []).map(airport_id => ({ airport_id })), resolvedDate, loadCardContext, sectionLimits),
       newest.length > 0
         ? this.buildHomeSectionItems('new_entries', newest, resolvedDate, loadCardContext, sectionLimits)
         : Promise.resolve([]),
@@ -443,8 +440,6 @@ export class PublicViewService {
     );
     const fallbackSections =
       todayPickItems.length === 0 ||
-      stable.length === 0 ||
-      value.length === 0 ||
       newEntryItems.length < sectionLimits.new_entries
           ? await this.buildFallbackHomeSections(
               resolvedDate,
@@ -492,12 +487,14 @@ export class PublicViewService {
         most_stable: {
           title: SECTION_CONFIG.most_stable.title,
           subtitle: SECTION_CONFIG.most_stable.subtitle,
-          items: stable.length > 0 ? stableItems : (fallbackSections?.most_stable ?? []),
+          rotation: summaries?.most_stable.rotation,
+          items: stableItems,
         },
         best_value: {
           title: SECTION_CONFIG.best_value.title,
           subtitle: SECTION_CONFIG.best_value.subtitle,
-          items: value.length > 0 ? valueItems : (fallbackSections?.best_value ?? []),
+          rotation: summaries?.best_value.rotation,
+          items: valueItems,
         },
         new_entries: {
           title: SECTION_CONFIG.new_entries.title,
@@ -851,6 +848,8 @@ export class PublicViewService {
         if (section === 'new_entries' && !isVisibleNewEntryContext(context)) {
           return null;
         }
+        if ((section === 'most_stable' || section === 'best_value') &&
+            (context.score.score_hidden || !isHomeSummaryEligible(context, section))) return null;
         return this.buildCard(section, context, date);
       }),
     );
@@ -900,8 +899,6 @@ export class PublicViewService {
     ).filter((context): context is CardContext => context !== null);
 
     const byScore = [...contexts].sort(compareByDisplayScoreDesc);
-    const byStable = [...contexts].sort(compareByStabilityDesc);
-    const byValue = [...contexts].sort(compareByValueDesc);
     const byNew = [...contexts]
       .filter((context) => isNewAirportContext(context, date) && isVisibleNewEntryContext(context))
       .sort(compareByNewAirportEntryDesc);
@@ -913,12 +910,8 @@ export class PublicViewService {
       today_pick: byScore
         .slice(0, sectionLimits.today_pick)
         .map((context) => this.buildCard('today_pick', context, date)),
-      most_stable: byStable
-        .slice(0, sectionLimits.most_stable)
-        .map((context) => this.buildCard('most_stable', context, date)),
-      best_value: byValue
-        .slice(0, sectionLimits.best_value)
-        .map((context) => this.buildCard('best_value', context, date)),
+      most_stable: [],
+      best_value: [],
       new_entries: byNew
         .slice(0, sectionLimits.new_entries)
         .map((context) => this.buildCard('new_entries', context, date)),
@@ -1411,20 +1404,6 @@ function compareByDisplayScoreDesc(left: CardContext, right: CardContext): numbe
     Number(left.score.score_hidden) - Number(right.score.score_hidden) ||
     getSortableDisplayScore(right) - getSortableDisplayScore(left)
   );
-}
-
-function compareByStabilityDesc(left: CardContext, right: CardContext): number {
-  return (
-    Number(right.metrics.stable_days_streak || 0) - Number(left.metrics.stable_days_streak || 0) ||
-    Number(right.metrics.uptime_percent_30d || 0) - Number(left.metrics.uptime_percent_30d || 0) ||
-    compareByDisplayScoreDesc(left, right)
-  );
-}
-
-function compareByValueDesc(left: CardContext, right: CardContext): number {
-  const leftValueScore = getSortableDisplayScore(left) / Math.max(left.airport.plan_price_month || 1, 1);
-  const rightValueScore = getSortableDisplayScore(right) / Math.max(right.airport.plan_price_month || 1, 1);
-  return rightValueScore - leftValueScore || compareByDisplayScoreDesc(left, right);
 }
 
 function getSortableDisplayScore(context: CardContext): number {

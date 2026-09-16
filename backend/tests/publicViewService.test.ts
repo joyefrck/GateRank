@@ -54,8 +54,6 @@ test('PublicViewService.getHomePageView falls back to latest ranking date', asyn
   assert.deepEqual(statsDates, ['2026-03-24']);
   assert.deepEqual(rankingDates, [
     '2026-03-24',
-    '2026-03-24',
-    '2026-03-24',
   ]);
 });
 
@@ -455,6 +453,13 @@ test('PublicViewService.getHomePageView reuses card context across sections for 
     },
   };
   const service = new PublicViewService({
+    homeAirportRotationService: {
+      getSelection: async () => ({ airport_ids: [1], total: 1, rotation: { interval_minutes: 120, round: 1, started_at: '2026-03-24T00:00:00Z', next_rotation_at: '2026-03-24T02:00:00Z' } }),
+      getSummarySelections: async () => {
+        const selection = { airport_ids: [1], total: 1, rotation: { interval_minutes: 120, round: 1, started_at: '2026-03-24T00:00:00Z', next_rotation_at: '2026-03-24T02:00:00Z' } };
+        return { most_stable: selection, best_value: selection };
+      },
+    },
     airportRepository: {
       getById: async (id: number) => {
         counts.airport += 1;
@@ -1054,7 +1059,7 @@ test('PublicViewService.getHomePageView builds fallback cards from public scores
     value: 3,
   });
   assert.equal(result.sections.today_pick.items[0].stability_tier, 'stable');
-  assert.equal(result.sections.most_stable.items.length, 1);
+  assert.equal(result.sections.most_stable.items.length, 0, 'no unqualified score fallback for summary rotations');
 });
 
 test('PublicViewService.getHomePageView fallback new entries skips hidden scores', async () => {

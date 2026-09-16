@@ -1,4 +1,4 @@
-import type { HomeAirportRotationInfo } from '../../../shared/homeAirportRotation';
+import { HOME_SUMMARY_COPY, nextHomeRotationAt, type HomeAirportRotationInfo } from '../../../shared/homeAirportRotation';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -134,6 +134,7 @@ interface HomePageData {
   sections: Record<HomeSectionKey, {
     title: string;
     subtitle: string;
+    rotation?: HomeAirportRotationInfo;
     items: HomeCardItem[];
   }>;
 }
@@ -163,16 +164,14 @@ const summaryConfig: Array<{
   },
   {
     key: 'best_value',
-    title: '性价比最佳',
-    subtitle: '大带宽 · 日常省钱',
+    ...HOME_SUMMARY_COPY.best_value,
     icon: Zap,
     tone: 'bg-emerald-50 border-emerald-100 text-emerald-600',
     hoverTone: 'hover:border-emerald-200',
   },
   {
     key: 'most_stable',
-    title: '长期稳定机场',
-    subtitle: 'IEPL专线 · 不宕机',
+    ...HOME_SUMMARY_COPY.most_stable,
     icon: ShieldCheck,
     tone: 'bg-sky-50 border-sky-100 text-sky-600',
     hoverTone: 'hover:border-sky-200',
@@ -257,12 +256,14 @@ export function HomePageV3({ date }: { date?: string }) {
   }, [date, initialData, scoreRevision, rotationRevision]);
 
   useEffect(() => {
-    const next = Date.parse(data?.ranking_preview?.rotation?.next_rotation_at || '');
-    if (!Number.isFinite(next)) return;
+    const next = nextHomeRotationAt([data?.ranking_preview?.rotation,
+      data?.sections.most_stable.rotation, data?.sections.best_value.rotation]);
+    if (next === null) return;
     // Also retry a failed refresh; an expired timestamp must never create a tight loop.
     const timer = window.setTimeout(() => setRotationRevision(value => value + 1), Math.max(5_000, next - Date.now() + 100));
     return () => window.clearTimeout(timer);
-  }, [data?.ranking_preview?.rotation?.next_rotation_at, rotationRevision]);
+  }, [data?.ranking_preview?.rotation?.next_rotation_at, data?.sections.most_stable.rotation?.next_rotation_at,
+    data?.sections.best_value.rotation?.next_rotation_at, rotationRevision]);
 
   useEffect(() => {
     if (!data?.hero.report_time_at) return;
@@ -783,7 +784,7 @@ function SummaryBoards({ sections }: { sections: HomePageData['sections'] }) {
                 {items.length === 0 ? (
                   <p className="rounded-xl bg-gray-50 p-4 text-center text-xs text-gray-400">当前没有可展示数据</p>
                 ) : (
-                  <ol className="space-y-2">
+                  <ol className="space-y-2" aria-label={config.risk ? '风险记录' : '展示顺序，非评分排名'}>
                     {items.map((item, index) => (
                       <SummaryBoardItem
                         key={item.airport_id}

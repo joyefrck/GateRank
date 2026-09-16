@@ -567,6 +567,7 @@ export interface PublicCardItem {
 export interface HomeSectionView {
   title: string;
   subtitle: string;
+  rotation?: HomeAirportRotationInfo;
   items: PublicCardItem[];
 }
 
