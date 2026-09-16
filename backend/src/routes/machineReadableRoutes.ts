@@ -114,12 +114,13 @@ export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
     try {
       const siteUrl = getSiteOrigin(req);
       const date = getDateInTimezone();
-      const [summary, rankingsView] = await Promise.all([
+      const [summary, rankingsView, monthlyReports] = await Promise.all([
         getSummary(deps, siteUrl, date),
         deps.publicViewService.getFullRankingView(date, 1, MACHINE_READABLE_PAGE_SIZE),
+        getMonthlyReportsData(deps, siteUrl),
       ]);
       const rankings = buildRankingsData(siteUrl, rankingsView);
-      sendText(res, 'text/plain; charset=utf-8', renderLlmsFullTxt(siteUrl, summary, rankings));
+      sendText(res, 'text/plain; charset=utf-8', renderLlmsFullTxt(siteUrl, summary, rankings, monthlyReports));
     } catch (error) {
       console.error('[machine-readable] failed to render llms-full.txt', { error, requestId: req.requestId || 'unknown' });
       sendText(res.status(500), 'text/plain; charset=utf-8', 'GateRank llms-full.txt 暂时无法生成');

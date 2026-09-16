@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { MonthlyReportGenerationService } from '../src/services/monthlyReportGenerationService';
 import { NewsContentService } from '../src/services/newsContentService';
+import { extractMonthlyReportSummary } from '../src/services/monthlyReportSummary';
 import type { Airport, AirportScoreDaily, DailyMetrics, RankingItem } from '../src/types/domain';
 
 test('MonthlyReportGenerationService builds fixed monthly summary template from listed airports', async () => {
@@ -59,6 +60,14 @@ test('MonthlyReportGenerationService builds fixed monthly summary template from 
   assert.match(report.content_markdown, /风险节点/);
   assert.doesNotMatch(report.content_markdown, /隐藏机场/);
   assert.match(report.content_html, /<h2[^>]*>一、执行摘要<\/h2>/);
+  const published = { ...report, id: 1, created_at: '2026-07-01', updated_at: '2026-07-01' };
+  const facts = extractMonthlyReportSummary(published, published);
+  assert.equal(facts.sample_size, 3);
+  assert.deepEqual(facts.top_airports, ['光速云', '稳连机场', '风险节点']);
+  assert.match(facts.summary, /3 个已上架机场/);
+  assert.ok(facts.risk_observations.some((item) => item.includes('风险节点') && item.includes('投诉 4')));
+  assert.deepEqual(facts.new_airports, []);
+  assert.deepEqual(facts.abnormal_airports, ['风险节点']);
 });
 
 test('MonthlyReportGenerationService rejects fallback data outside selected month', async () => {

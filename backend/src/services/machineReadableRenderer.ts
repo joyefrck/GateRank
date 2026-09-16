@@ -24,6 +24,7 @@ import {
   EMPTY_FULL_RANKING_FILTERS,
 } from '../../../shared/fullRankingFilters';
 import { buildMonthlyReportPath } from '../../../shared/publicSeo';
+import { extractMonthlyReportSummary, monthlyReportHtmlToMarkdown } from './monthlyReportSummary';
 
 export interface PublicSummaryData {
   site: string;
@@ -131,8 +132,14 @@ export interface PublicMonthlyReportDataItem {
   month: string;
   title: string;
   url: string;
-  sample_size: number;
+  sample_size: number | null;
   top_airports: string[];
+  summary: string;
+  risk_observations: string[];
+  new_airports: string[];
+  abnormal_airports: string[];
+  report_url: string;
+  generated_at: string;
   topics: string[];
 }
 
@@ -232,13 +239,14 @@ export function buildMonthlyReportsData(
     total: reports.length,
     reports: reports.map((report) => {
       const detail = detailsBySlug.get(report.slug);
-      const markdown = detail?.content_markdown || '';
+      const reportUrl = `${siteUrl}${buildMonthlyReportPath(report.slug)}`;
       return {
         month: `${report.year}-${String(report.month).padStart(2, '0')}`,
         title: report.title,
-        url: `${siteUrl}${buildMonthlyReportPath(report.slug)}`,
-        sample_size: extractMonthlySampleSize(markdown),
-        top_airports: extractMonthlyTopAirports(markdown),
+        url: reportUrl,
+        ...extractMonthlyReportSummary(report, detail),
+        report_url: reportUrl,
+        generated_at: detail?.updated_at || report.updated_at,
         topics: ['机场推荐', '机场排行榜', '机场测评', '风险观察'],
       };
     }),
@@ -301,7 +309,7 @@ export function renderLlmsTxt(siteUrl: string, summary: PublicSummaryData): stri
   ].join('\n');
 }
 
-export function renderLlmsFullTxt(siteUrl: string, summary: PublicSummaryData, rankings: PublicRankingsData): string {
+export function renderLlmsFullTxt(siteUrl: string, summary: PublicSummaryData, rankings: PublicRankingsData, monthlyReports: PublicMonthlyReportsData): string {
   const filterPages = buildFilterPages(siteUrl);
   const airportPages = rankings.items
     .filter((item) => item.report_url)
@@ -314,7 +322,8 @@ export function renderLlmsFullTxt(siteUrl: string, summary: PublicSummaryData, r
     '',
     '`/data/rankings.json` exposes: rank, name, slug, status, score, monthly_price, payment_methods, clients, node_regions, report_url, score_delta_vs_yesterday, updated_at.',
     '`/data/risk-monitor.json` exposes the ranking fields plus monitor_reason, risk_penalty, risk_reasons and risk_reason_summary.',
-    '`/data/monthly-reports.json` exposes published monthly report URLs, month labels, sample size, top airports and topics.',
+    '`/data/monthly-reports.json` exposes month, title, url, sample_size, top_airports, summary, risk_observations, new_airports, abnormal_airports, report_url, generated_at and topics from published reports.',
+    'Monthly report generated_at is the published source revision time; updated_at is the index response generation time.',
     '`/data/deals.json` exposes public advertising deal references for coupon citation.',
     '`/airports/<slug>.md` exposes a Markdown fact card, score breakdown, risk fields, plan data, clients, payment methods, node regions and 30-day trend summary.',
     '',
@@ -325,6 +334,10 @@ export function renderLlmsFullTxt(siteUrl: string, summary: PublicSummaryData, r
     '## Airport report pages',
     '',
     ...(airportPages.length > 0 ? airportPages : ['- 当前榜单暂无可列出的机场报告。']),
+    '',
+    '## Monthly report summaries',
+    '',
+    ...monthlyReports.reports.flatMap((report) => renderMonthlyReportSummary(report, '###')),
     '',
     '## Citation guidance',
     '',
@@ -468,10 +481,31 @@ export function renderMonthlyReportsMarkdown(data: PublicMonthlyReportsData): st
     '| Month | Title | URL | Sample size | Top airports | Topics |',
     '| --- | --- | --- | --- | --- | --- |',
     ...data.reports.map((report) => (
-      `| ${report.month} | ${escapeMarkdownTable(report.title)} | ${report.url} | ${report.sample_size || '未收录'} | ${escapeMarkdownTable(joinOrNone(report.top_airports))} | ${escapeMarkdownTable(joinOrNone(report.topics))} |`
+      `| ${report.month} | ${escapeMarkdownTable(report.title)} | ${report.url} | ${report.sample_size ?? '原文未明确样本数'} | ${escapeMarkdownTable(report.top_airports.join('、') || '原文未列出 Top 机场')} | ${escapeMarkdownTable(report.topics.join('、'))} |`
     )),
     '',
+    ...data.reports.flatMap((report) => renderMonthlyReportSummary(report, '##')),
   ].join('\n');
+}
+
+function renderMonthlyReportSummary(report: PublicMonthlyReportDataItem, heading: string): string[] {
+  return [
+    `${heading} ${report.month} ${report.title}`,
+    '',
+    `- 样本数：${report.sample_size ?? '原文未明确样本数'}`,
+    `- Top 机场：${report.top_airports.join('、') || '原文未列出 Top 机场'}`,
+    `- 报告链接：${report.report_url}`,
+    `- 源报告更新时间（generated_at）：${report.generated_at}`,
+    '',
+    report.summary,
+    '',
+    '风险观察：',
+    ...(report.risk_observations.length ? report.risk_observations.map((item) => `- ${item}`) : ['- 原文未提供风险观察明细。']),
+    '',
+    `- 新入榜机场：${report.new_airports.join('、') || '本报告未列出新入榜机场'}`,
+    `- 异常机场：${report.abnormal_airports.join('、') || '本报告未列出异常机场'}`,
+    '',
+  ];
 }
 
 export function renderMonthlyReportDetailMarkdown(report: MonthlyReport): string {
@@ -483,7 +517,7 @@ export function renderMonthlyReportDetailMarkdown(report: MonthlyReport): string
     `- Published at: ${report.published_at || 'unpublished'}`,
     `- Updated at: ${report.updated_at}`,
     '',
-    report.content_markdown || htmlToMarkdownText(report.content_html),
+    report.content_markdown.trim() || monthlyReportHtmlToMarkdown(report.content_html),
     '',
   ].join('\n');
 }
@@ -673,35 +707,4 @@ function joinOrNone(values: string[]): string {
 
 function escapeMarkdownTable(value: string): string {
   return value.replace(/\|/g, '\\|').replace(/\n/g, ' ');
-}
-
-function extractMonthlySampleSize(markdown: string): number {
-  const matched = markdown.match(/样本数[：:]\s*(\d+)/);
-  return matched ? Number(matched[1]) : 0;
-}
-
-function extractMonthlyTopAirports(markdown: string): string[] {
-  const matched = markdown.match(/Top\s*3\s*机场[：:]\s*([^\n。]+)/i);
-  if (!matched) {
-    return [];
-  }
-  return matched[1]
-    .split(/[、,，]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .slice(0, 3);
-}
-
-function htmlToMarkdownText(html: string): string {
-  return html
-    .replace(/<h2[^>]*>(.*?)<\/h2>/gi, '## $1\n\n')
-    .replace(/<h3[^>]*>(.*?)<\/h3>/gi, '### $1\n\n')
-    .replace(/<p[^>]*>(.*?)<\/p>/gi, '$1\n\n')
-    .replace(/<strong[^>]*>(.*?)<\/strong>/gi, '**$1**')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .trim();
 }

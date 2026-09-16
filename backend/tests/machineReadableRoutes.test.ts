@@ -4,6 +4,8 @@ import { AddressInfo } from 'node:net';
 import express from 'express';
 import { createMachineReadableRoutes } from '../src/routes/machineReadableRoutes';
 import type { FullRankingView, HomePageView, MonthlyReport, ReportView, RiskMonitorView } from '../src/types/domain';
+import augustReport from './fixtures/monthly-report-2026-08.json';
+import type { PublicMonthlyReportsData } from '../src/services/machineReadableRenderer';
 import type { AirportDealView } from '../../shared/airportAds';
 import type { MarketingEventInsertRecord } from '../src/utils/marketing';
 
@@ -316,6 +318,43 @@ test('GET /data/*.md and /airports/:slug.md return Markdown facts and citations'
   }
 });
 
+test('published August content stays consistent across monthly JSON, Markdown and llms-full', async () => {
+  const { content_markdown, content_html, ...listItem } = augustReport;
+  const { baseUrl, close } = await startMachineReadableServer({
+    monthlyReportPublicService: {
+      getListView: async () => ({ items: [listItem] }),
+      getBySlug: async () => augustReport,
+    },
+  });
+  try {
+    const response = await fetch(`${baseUrl}/data/monthly-reports.json`);
+    assert.equal(response.status, 200);
+    const { reports: [report] } = await response.json() as PublicMonthlyReportsData;
+    assert.equal(report.sample_size, 11);
+    assert.deepEqual(report.top_airports, ['大象网络', 'Now加速·家宽机场', 'Nice加速·AI专线']);
+    assert.match(report.summary, /11 个已上架机场/);
+    assert.deepEqual(report.risk_observations, ['本月已上架样本中未观察到明显风险集中暴露。']);
+    assert.deepEqual(report.new_airports, ['耶耶云', '拼好连']);
+    assert.deepEqual(report.abnormal_airports, ['大象网络', '极速云机场', '云图', '稳连云', '极速Cloud', '鲤云', '拼好连', '耶耶云']);
+    assert.equal(report.report_url, `${baseUrl}/monthly-reports/${augustReport.slug}`);
+    assert.equal(report.generated_at, augustReport.updated_at);
+    for (const path of ['/monthly-reports.md', '/llms-full.txt']) {
+      const result = await fetch(`${baseUrl}${path}`);
+      assert.equal(result.status, 200);
+      const text = await result.text();
+      assert.match(text, /样本数：11/);
+      assert.match(text, /Top 机场：大象网络、Now加速·家宽机场、Nice加速·AI专线/);
+      assert.ok(text.includes(report.summary));
+      assert.ok(text.includes(report.risk_observations[0]));
+      assert.match(text, /新入榜机场：耶耶云、拼好连/);
+      assert.ok(text.includes(report.report_url));
+      assert.doesNotMatch(text, /未收录/);
+    }
+  } finally {
+    await close();
+  }
+});
+
 test('GET deal and monthly report machine-readable endpoints return stable public payloads', async () => {
   const { baseUrl, close } = await startMachineReadableServer();
   try {
@@ -370,6 +409,12 @@ test('GET deal and monthly report machine-readable endpoints return stable publi
       url: `${baseUrl}/monthly-reports/2026-06-airport-vpn-ranking-report`,
       sample_size: 61,
       top_airports: ['大象网络', 'Now加速', '仙踪湾'],
+      summary: '样本数：61。\n\nTop 3 机场：大象网络、Now加速、仙踪湾。',
+      risk_observations: [],
+      new_airports: [],
+      abnormal_airports: [],
+      report_url: `${baseUrl}/monthly-reports/2026-06-airport-vpn-ranking-report`,
+      generated_at: monthlyReport.updated_at,
       topics: ['机场推荐', '机场排行榜', '机场测评', '风险观察'],
     });
 
