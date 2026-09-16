@@ -106,6 +106,10 @@ import {
 import {
   buildToolControlledDownloadUrl,
   buildToolDownloadPlatformHeading,
+  getToolOfficialDownloadEntries,
+  getIosOfficialToolDownload,
+  IOS_TOOL_DOWNLOAD_DESCRIPTION,
+  IOS_APPLE_ID_DOWNLOAD_NOTICE,
   buildToolDownloadTrustMeta,
   getToolDownloadPlatformLabel,
   isToolDownloadPlatform,
@@ -4595,6 +4599,8 @@ function ReportPage({ airportId, airportSlug, date }: { airportId?: number; airp
   );
 }
 
+const TOOL_DOWNLOAD_PRIMARY_CLASS_NAME = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,#0891b2,#10b981)] px-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(8,145,178,0.18)] transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(8,145,178,0.28)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100';
+
 function ToolsDownloadPage({ platform }: { platform?: ToolDownloadPlatform }) {
   const [download, setDownload] = useState<{ item: ToolDownloadItem; platform: ToolDownloadPlatform } | null>(null);
   const initialData = useMemo(
@@ -4651,20 +4657,43 @@ function ToolsDownloadPage({ platform }: { platform?: ToolDownloadPlatform }) {
           <p className="mt-4 max-w-3xl text-base leading-8 text-slate-600">{config?.hero_description || '按系统整理常用科学上网客户端，本地下载优先展示，官方页面作为备用入口。'}</p>
         </section>
         <div id="tools-download-list" className="grid gap-8">
-          {platformGroups.length > 0 ? platformGroups.map(({ platform: groupPlatform, items }) => (
+          {platformGroups.length > 0 ? platformGroups.map(({ platform: groupPlatform, items, officialEntries }) => (
             <section key={groupPlatform} className="grid min-w-0 gap-4">
-              <div className="flex flex-col gap-2 border-b border-slate-200 pb-4 md:flex-row md:items-end md:justify-between">
+              <div className={`flex flex-col gap-2 border-b border-slate-200 pb-4 ${groupPlatform === 'ios' ? '' : 'md:flex-row md:items-end md:justify-between'}`}>
                 <div>
                   <div className="text-xs font-black uppercase tracking-[0.18em] text-cyan-700">{getToolDownloadPlatformLabel(groupPlatform)} 下载</div>
-                  <h2 className="mt-1 text-2xl font-black tracking-normal text-slate-950 md:text-3xl">{buildToolDownloadPlatformHeading(groupPlatform)}</h2>
+                  <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+                    <h2 className="mt-1 text-2xl font-black tracking-normal text-slate-950 md:text-3xl">{buildToolDownloadPlatformHeading(groupPlatform)}</h2>
+                    {groupPlatform === 'ios' && (
+                      <div className="flex flex-wrap items-center gap-x-2 text-xs leading-6 text-slate-500">
+                        <span>{IOS_APPLE_ID_DOWNLOAD_NOTICE.text}</span>
+                        <a className="inline-flex min-h-10 items-center font-semibold text-cyan-700 underline underline-offset-4 hover:text-cyan-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-600" href={IOS_APPLE_ID_DOWNLOAD_NOTICE.href} target="_blank" rel="noopener noreferrer">{IOS_APPLE_ID_DOWNLOAD_NOTICE.link_label}</a>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <p className="max-w-xl text-sm leading-7 text-slate-500">适合 {getToolDownloadPlatformLabel(groupPlatform)} 设备使用的翻墙工具下载，本地安装包优先展示，官方页面作为备用入口。</p>
+                <p className="max-w-xl text-sm leading-7 text-slate-500">{groupPlatform === 'ios' ? IOS_TOOL_DOWNLOAD_DESCRIPTION : `适合 ${getToolDownloadPlatformLabel(groupPlatform)} 设备使用的翻墙工具下载，本地安装包优先展示，官方页面作为备用入口。`}</p>
               </div>
               <div className="grid min-w-0 gap-4 md:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))]">
                 {items.map((item) => (
                   <React.Fragment key={`${groupPlatform}-${item.slug}`}>
                     <ToolDownloadCard item={item} platform={groupPlatform} onDownload={() => setDownload((current) => current || { item, platform: groupPlatform })} />
                   </React.Fragment>
+                ))}
+                {officialEntries.map((entry) => (
+                  <article key={entry.slug} id={`tool-${entry.slug}-ios`} className="flex min-w-0 flex-col rounded-[8px] border border-sky-100 bg-white p-5 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <img className="h-12 w-12 shrink-0 rounded-[8px] object-cover" src={entry.icon_url} alt={`${entry.name} 图标`} width={48} height={48} loading="lazy" />
+                      <h3 className="min-w-0 text-lg font-black text-slate-950">{entry.name}</h3>
+                    </div>
+                    <p className="mt-4 text-sm leading-7 text-slate-600">{entry.description}</p>
+                    <div className="mt-auto grid pt-5">
+                      <a className={TOOL_DOWNLOAD_PRIMARY_CLASS_NAME} href={entry.official_url} target="_blank" rel="nofollow noreferrer noopener">
+                        <Download size={15} />
+                        App Store 下载
+                      </a>
+                    </div>
+                  </article>
                 ))}
               </div>
             </section>
@@ -4673,13 +4702,16 @@ function ToolsDownloadPage({ platform }: { platform?: ToolDownloadPlatform }) {
           )}
         </div>
         {(config?.content_sections || []).length > 0 && (
-          <section className="grid gap-4 md:grid-cols-3">
-            {(config?.content_sections || []).map((section) => (
-              <article key={section.title} className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
-                <h2 className="text-lg font-black">{section.title}</h2>
-                <p className="mt-3 text-sm leading-7 text-neutral-600">{section.body}</p>
-              </article>
-            ))}
+          <section className="grid gap-4">
+            <h2 className="text-2xl font-black tracking-normal">翻墙工具下载与选择说明</h2>
+            <div className="grid gap-4 md:grid-cols-3">
+              {(config?.content_sections || []).map((section) => (
+                <article key={section.title} className="rounded-[8px] border border-slate-200 bg-white p-5 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
+                  <h3 className="text-lg font-black">{section.title}</h3>
+                  <p className="mt-3 text-sm leading-7 text-neutral-600">{section.body}</p>
+                </article>
+              ))}
+            </div>
           </section>
         )}
         {(config?.faq_items || []).length > 0 && (
@@ -4704,12 +4736,13 @@ function buildToolDownloadGroups(view: ToolsDownloadPageView | null, activePlatf
   return platforms
     .map((groupPlatform) => ({
       platform: groupPlatform,
+      officialEntries: getToolOfficialDownloadEntries(groupPlatform, view?.items || []),
       items: (view?.items || [])
         .filter((item) => item.platforms.includes(groupPlatform))
         .slice()
         .sort(compareToolDownloadItems),
     }))
-    .filter((group) => group.items.length > 0);
+    .filter((group) => group.items.length > 0 || group.officialEntries.length > 0);
 }
 
 function compareToolDownloadItems(a: ToolDownloadItem, b: ToolDownloadItem): number {
@@ -4721,6 +4754,8 @@ function getToolDownloadSupportVersion(item: ToolDownloadItem, platform: ToolDow
 }
 
 function ToolDownloadCard({ item, platform, onDownload }: { item: ToolDownloadItem; platform: ToolDownloadPlatform; onDownload: () => void }) {
+  const iosEntry = platform === 'ios' ? getIosOfficialToolDownload(item) : undefined;
+  if (iosEntry) item = { ...item, icon_url: iosEntry.icon_url, official_url: iosEntry.official_url };
   const hasLocalFile = Boolean(item.local_file_url);
   const iconTone = [
     'bg-[linear-gradient(135deg,#0891b2,#14b8a6)]',
@@ -4747,8 +4782,8 @@ function ToolDownloadCard({ item, platform, onDownload }: { item: ToolDownloadIt
       <p className="mt-4 text-sm leading-7 text-slate-600">{item.description || item.summary}</p>
       <p className="mt-4 border-t border-slate-200 pt-3 text-xs font-extrabold text-slate-500">支持版本：{supportVersion}{item.file_size_label ? ` · 大小：${item.file_size_label}` : ''}</p>
       <div className="mt-auto grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 pt-5">
-        {hasLocalFile ? (
-          <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] bg-[linear-gradient(135deg,#0891b2,#10b981)] px-4 text-sm font-black text-white shadow-[0_14px_30px_rgba(8,145,178,0.18)] transition duration-200 ease-out hover:-translate-y-0.5 hover:shadow-[0_18px_34px_rgba(8,145,178,0.28)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100" href={buildToolControlledDownloadUrl(item, platform)} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onDownload(); }}>
+        {iosEntry ? null : hasLocalFile ? (
+          <a className={TOOL_DOWNLOAD_PRIMARY_CLASS_NAME} href={buildToolControlledDownloadUrl(item, platform)} onClick={(event) => { if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return; event.preventDefault(); onDownload(); }}>
             <Download size={15} />
             立即下载
           </a>
@@ -4759,9 +4794,9 @@ function ToolDownloadCard({ item, platform, onDownload }: { item: ToolDownloadIt
           </span>
         )}
         {item.official_url ? (
-          <a className="inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 text-sm font-black text-slate-600 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800 hover:shadow-[0_12px_24px_rgba(15,23,42,0.08)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100" href={item.official_url} target="_blank" rel="nofollow noreferrer noopener">
-            <Globe2 size={15} />
-            官方
+          <a className={iosEntry ? `${TOOL_DOWNLOAD_PRIMARY_CLASS_NAME} col-span-full` : 'inline-flex min-h-11 items-center justify-center gap-2 rounded-[8px] border border-slate-200 bg-white px-3 text-sm font-black text-slate-600 transition duration-200 ease-out hover:-translate-y-0.5 hover:border-cyan-200 hover:bg-cyan-50 hover:text-cyan-800 hover:shadow-[0_12px_24px_rgba(15,23,42,0.08)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-100'} href={item.official_url} target="_blank" rel="nofollow noreferrer noopener">
+            {iosEntry ? <Download size={15} /> : <Globe2 size={15} />}
+            {iosEntry ? 'App Store 下载' : '官方'}
           </a>
         ) : null}
       </div>

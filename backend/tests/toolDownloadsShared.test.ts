@@ -3,6 +3,10 @@ import test from 'node:test';
 
 import {
   DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
+  getToolOfficialDownloadEntries,
+  getIosOfficialToolDownload,
+  IOS_OFFICIAL_TOOL_DOWNLOADS,
+  type ToolDownloadItem,
   buildHomeToolDownloadCta,
   buildToolDownloadPlatformHeading,
   buildToolDownloadTrustMeta,
@@ -90,4 +94,30 @@ test('default tool download FAQ covers long-tail SEO questions', () => {
     DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG.faq_items[2].answer,
     /v2rayNG 更轻量.*Karing 界面更完整/s,
   );
+});
+
+
+test('iOS official entries supplement missing tools without repeating published clients', () => {
+  const existing = [
+    { slug: 'custom-shadowrocket', name: 'Shadowrocket', platforms: ['ios'], official_url: '' },
+    { slug: 'custom-clash-mi', name: 'Clash Mi', platforms: ['ios'], official_url: '' },
+    { slug: 'karing', name: 'Karing', platforms: ['android'], official_url: '' },
+  ] as ToolDownloadItem[];
+  assert.deepEqual(getToolOfficialDownloadEntries('ios', existing).map((entry) => entry.slug), [
+    'stash', 'quantumult-x', 'surge', 'karing',
+  ]);
+  assert.deepEqual(getToolOfficialDownloadEntries('windows', []), []);
+});
+
+
+test('iOS client cards use the matching App Store listing and packaged app icon', () => {
+  assert.deepEqual(IOS_OFFICIAL_TOOL_DOWNLOADS.map((entry) => entry.official_url.match(/id(\d+)$/)?.[1]), [
+    '932747118', '1596063349', '1443988620', '1442620678', '6472431552', '6744321968',
+  ]);
+  for (const entry of IOS_OFFICIAL_TOOL_DOWNLOADS) {
+    assert.equal(new URL(entry.official_url).hostname, 'apps.apple.com');
+    assert.equal(entry.icon_url, `/tool-icons/ios/${entry.slug}.jpg`);
+  }
+  const surge = getIosOfficialToolDownload({slug: 'surge-ios', name: 'Surge 5', official_url: 'https://apps.apple.com/app/id1442620678?platform=iphone'});
+  assert.equal(surge?.slug, 'surge');
 });

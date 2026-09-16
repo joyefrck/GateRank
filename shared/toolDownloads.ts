@@ -5,6 +5,48 @@ export type ToolDownloadStatus = 'draft' | 'published' | 'archived';
 export type ToolDownloadPrimaryAction = 'official' | 'local';
 export type ToolDownloadPlatformVersions = Partial<Record<ToolDownloadPlatform, string>>;
 
+export interface ToolOfficialDownloadEntry {
+  icon_url: string;
+  slug: string;
+  name: string;
+  description: string;
+  official_url: string;
+}
+
+export const IOS_APPLE_ID_DOWNLOAD_NOTICE = {
+  text: '请切换非中国大陆 Apple ID 下载',
+  link_label: '查看注册教程',
+  href: 'https://gate-rank.com/news/china-user-us-apple-id-guide',
+} as const;
+
+export const IOS_TOOL_DOWNLOAD_DESCRIPTION = '适合 iPhone 和 iPad 的客户端，包括小火箭（Shadowrocket）、Stash、Quantumult X、Surge、Karing 和 Clash Mi。点击下方按钮直达 App Store 下载页面，可用地区、价格与系统要求以官方说明为准。';
+
+export const IOS_OFFICIAL_TOOL_DOWNLOADS: readonly ToolOfficialDownloadEntry[] = [
+  { slug: 'shadowrocket', icon_url: '/tool-icons/ios/shadowrocket.jpg', name: '小火箭（Shadowrocket）', description: 'iPhone 和 iPad 规则代理客户端，可导入节点配置并管理分流规则。', official_url: 'https://apps.apple.com/us/app/shadowrocket/id932747118' },
+  { slug: 'stash', icon_url: '/tool-icons/ios/stash.jpg', name: 'Stash', description: '面向 iPhone 和 iPad 的规则代理工具，通过官方 App Store 页面获取。', official_url: 'https://apps.apple.com/us/app/stash-rule-based-proxy/id1596063349' },
+  { slug: 'quantumult-x', icon_url: '/tool-icons/ios/quantumult-x.jpg', name: 'Quantumult X', description: '支持自定义代理、规则分流和网络调试的 iOS 工具。', official_url: 'https://apps.apple.com/us/app/quantumult-x/id1443988620' },
+  { slug: 'surge', icon_url: '/tool-icons/ios/surge.jpg', name: 'Surge', description: '提供代理配置与网络调试功能，直接从 App Store 获取 iOS 版本。', official_url: 'https://apps.apple.com/us/app/surge-5/id1442620678' },
+  { slug: 'karing', icon_url: '/tool-icons/ios/karing.jpg', name: 'Karing', description: '支持订阅导入与规则配置，通过 App Store 安装 iOS 客户端。', official_url: 'https://apps.apple.com/us/app/karing/id6472431552' },
+  { slug: 'clashmi', icon_url: '/tool-icons/ios/clashmi.jpg', name: 'Clash Mi（clashmi）', description: 'Clash Mi 的 iOS 客户端，通过 App Store 安装正式版本。', official_url: 'https://apps.apple.com/us/app/clash-mi/id6744321968' },
+];
+
+export function getIosOfficialToolDownload(item: Pick<ToolDownloadItem, 'slug' | 'name' | 'official_url'>): ToolOfficialDownloadEntry | undefined {
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]/g, '');
+  return IOS_OFFICIAL_TOOL_DOWNLOADS.find((entry) =>
+    normalize(item.slug) === normalize(entry.slug)
+    || normalize(item.name) === normalize(entry.name)
+    || normalize(item.name) === normalize(entry.slug)
+    || /apps\.apple\.com\//.test(item.official_url) && item.official_url.match(/id(\d+)/)?.[1] === entry.official_url.match(/id(\d+)/)?.[1],
+  );
+}
+
+/** Supplement uploaded tools with official iOS entries, without duplicate cards. */
+export function getToolOfficialDownloadEntries(platform: ToolDownloadPlatform, items: ToolDownloadItem[]): ToolOfficialDownloadEntry[] {
+  if (platform !== 'ios') return [];
+  const existing = new Set(items.filter((item) => item.platforms.includes('ios')).map(getIosOfficialToolDownload));
+  return IOS_OFFICIAL_TOOL_DOWNLOADS.filter((entry) => !existing.has(entry));
+}
+
 export interface ToolsDownloadPageContentSection {
   title: string;
   body: string;

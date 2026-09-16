@@ -9,8 +9,8 @@ import { createTimedPromiseCache } from '../src/utils/publicCache';
 import type { AirportDealDetailView, AirportDealView } from '../../shared/airportAds';
 import { buildReportSeo, buildReportFaqItems } from '../../shared/publicSeo';
 import { getDateInTimezone } from '../src/utils/time';
-import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG } from '../../shared/toolDownloads';
-import { renderReportPublicPage } from '../src/services/publicPageRenderer';
+import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, IOS_OFFICIAL_TOOL_DOWNLOADS } from '../../shared/toolDownloads';
+import { renderToolsDownloadPublicPage, renderReportPublicPage } from '../src/services/publicPageRenderer';
 
 const TEST_FRONTEND_ASSETS = {
   script: '/assets/index-CkG9aP2q.js',
@@ -2321,4 +2321,35 @@ test('SSR report renders v2 five-axis network coverage without changing v1 histo
   assert.match(v2Html, /网络覆盖 \(N\)/);
   assert.match(v2Html, /网络覆盖N/);
   assert.doesNotMatch(v2Html, /network-coverage-summary|网络覆盖快照|Healthy \/ Detected/);
+});
+
+
+test('download page keeps an iOS H2 and official clients without uploaded iOS tools', () => {
+  const html = renderToolsDownloadPublicPage('https://gate-rank.com', {
+    config: DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
+    platform: null, platforms: ['windows', 'macos', 'ios', 'android', 'linux'],
+    items: [], hotItems: [], total: 0,
+  });
+  assert.match(html, /<h2>iOS 翻墙工具下载<\/h2>/);
+  for (const name of ['小火箭（Shadowrocket）', 'Stash', 'Quantumult X', 'Surge', 'Karing', 'Clash Mi（clashmi）']) {
+    assert.ok(html.includes(`<h3>${name}</h3>`), name);
+  }
+  assert.doesNotMatch(html, /本地下载待上传/);
+  for (const entry of IOS_OFFICIAL_TOOL_DOWNLOADS) {
+    assert.ok(html.includes(`href="${entry.official_url}"`), entry.name);
+    assert.ok(html.includes(`src="${entry.icon_url}"`), entry.name);
+  }
+  assert.equal((html.match(/>App Store 下载<\/a>/g) || []).length, 6);
+});
+
+
+test('download platform filters keep iOS official entries scoped to iOS', () => {
+  for (const platform of ['ios', 'windows'] as const) {
+    const html = renderToolsDownloadPublicPage('https://gate-rank.com', {
+      config: DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG,
+      platform, platforms: ['windows', 'ios'], items: [], hotItems: [], total: 0,
+    });
+    assert.equal(html.includes('<h2>iOS 翻墙工具下载</h2>'), platform === 'ios');
+    assert.equal(html.includes('id="tool-shadowrocket-ios"'), platform === 'ios');
+  }
 });

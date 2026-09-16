@@ -1,0 +1,32 @@
+[
+  {
+    "slug": "shadowrocket",
+    "app_store_url": "https://apps.apple.com/us/app/shadowrocket/id932747118",
+    "icon_source": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/64/24/2d/64242de2-a763-914f-c686-8777445b83a3/AppIcon-0-0-1x_U007epad-0-1-0-sRGB-85-220.png/100x100bb.jpg"
+  },
+  {
+    "slug": "stash",
+    "app_store_url": "https://apps.apple.com/us/app/stash-rule-based-proxy/id1596063349",
+    "icon_source": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/8a/99/dc/8a99dc65-dbfa-d9f9-be4e-4170a0658239/AppIcon-0-0-1x_U007epad-0-0-0-1-0-0-sRGB-85-220.png/100x100bb.jpg"
+  },
+  {
+    "slug": "quantumult-x",
+    "app_store_url": "https://apps.apple.com/us/app/quantumult-x/id1443988620",
+    "icon_source": "https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/12/42/f2/1242f2b1-d7a6-8b20-8947-7e081f78d7ae/AppIcon-0-0-1x_U007epad-0-1-0-85-220.png/100x100bb.jpg"
+  },
+  {
+    "slug": "surge",
+    "app_store_url": "https://apps.apple.com/us/app/surge-5/id1442620678",
+    "icon_source": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/49/ab/3f/49ab3f82-3504-abd3-6e61-92b927d70e65/AppIconS-0-0-1x_U007epad-0-1-0-85-220.png/100x100bb.jpg"
+  },
+  {
+    "slug": "karing",
+    "app_store_url": "https://apps.apple.com/us/app/karing/id6472431552",
+    "icon_source": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/82/b3/92/82b392c6-2489-83b8-4ed9-2facbaf8e546/AppIcon-0-1x_U007emarketing-0-8-0-85-220-0.png/100x100bb.jpg"
+  },
+  {
+    "slug": "clashmi",
+    "app_store_url": "https://apps.apple.com/us/app/clash-mi/id6744321968",
+    "icon_source": "https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/10/18/e1/1018e181-bce0-1389-bc94-a03e0b848b0e/AppIcon-0-1x_U007emarketing-0-11-0-85-220-0.png/100x100bb.jpg"
+  }
+]

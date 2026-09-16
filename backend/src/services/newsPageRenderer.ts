@@ -1521,7 +1521,8 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
             ${renderCategoryNav(listView)}
           </section>
 
-          <section class="news-hub-grid" style="margin-top: 30px;">
+          <h2 class="news-section-heading" style="margin-top: 30px;">精选文章</h2>
+          <section class="news-hub-grid">
             ${leadStory ? renderHeroCard(leadStory) : `
               <div class="empty-state">
                 <div class="eyebrow" style="justify-content:center;">News</div>
@@ -1555,6 +1556,18 @@ export function renderNewsIndexPage(options: RenderListPageOptions): string {
               ${renderCompactPanel('热门文章', recommended, false)}
             </aside>
           </section>
+          ${!listView.category && !listView.topic && !isSearch ? `
+            <section class="topic-section">
+              <h2 class="news-section-heading">机场月度报告</h2>
+              <p>按月份查看机场评分、稳定性与节点表现，结合历史变化评估服务质量。</p>
+              <a class="feed-card-link" href="/monthly-reports">查看机场月度报告</a>
+            </section>
+            <section class="topic-section">
+              <h2 class="news-section-heading">科学上网教程</h2>
+              ${guides.length ? `<div class="feed-grid">${guides.map(renderFeedCard).join('')}</div>` : '<p>查看客户端安装、机场订阅导入与常见连接问题的使用教程。</p>'}
+              <a class="feed-card-link" href="/news/category/tutorials">查看科学上网教程</a>
+            </section>
+          ` : ''}
         </main>
         ${renderFooter()}
       </div>
@@ -2089,7 +2102,7 @@ function renderCompactPanel(title: string, items: PublicNewsListView['items'], w
       items.length > 0
         ? `<div class="news-panel-list">${items.slice(0, 5).map((item) => `
             <a class="news-panel-link" href="/news/${escapeAttribute(item.slug)}">
-              <span class="news-panel-title">${escapeHtml(item.title)}</span>
+              <h3 class="news-panel-title">${escapeHtml(item.title)}</h3>
               <span class="news-panel-meta">${escapeHtml(item.category?.name || 'GateRank News')} · ${escapeHtml(formatNewsDate(item.published_at))} · ${escapeHtml(formatViewCount(item.view_count))}</span>
             </a>
           `).join('')}</div>`
@@ -2111,7 +2124,7 @@ function renderHeroCard(featured: PublicNewsArticleView | PublicNewsListView['fe
       <div class="hero-copy">
         <div>
           <div class="eyebrow">Featured Story</div>
-          <h2 class="hero-title"><a href="/news/${escapeAttribute(featured.slug)}">${escapeHtml(featured.title)}</a></h2>
+          <h3 class="hero-title"><a href="/news/${escapeAttribute(featured.slug)}">${escapeHtml(featured.title)}</a></h3>
           <p class="hero-summary">${escapeHtml(featured.excerpt)}</p>
           <div class="article-taxonomy">
             ${featured.category ? `<a class="news-taxonomy-chip" href="/news/category/${escapeAttribute(featured.category.slug)}">${escapeHtml(featured.category.name)}</a>` : ''}
@@ -2152,7 +2165,7 @@ function renderFeedCard(item: PublicNewsListView['items'][number]): string {
           <span>${escapeHtml(formatViewCount(item.view_count))}</span>
           <span>${item.reading_minutes} min read</span>
         </div>
-        <h2 class="feed-card-title"><a href="/news/${escapeAttribute(item.slug)}">${escapeHtml(item.title)}</a></h2>
+        <h3 class="feed-card-title"><a href="/news/${escapeAttribute(item.slug)}">${escapeHtml(item.title)}</a></h3>
         <p class="feed-card-excerpt">${escapeHtml(item.excerpt)}</p>
         <a class="feed-card-link" href="/news/${escapeAttribute(item.slug)}">阅读全文</a>
       </div>

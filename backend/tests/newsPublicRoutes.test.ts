@@ -178,8 +178,12 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
     assert.doesNotMatch(html, /\.topbar-inner/);
     assert.doesNotMatch(html, /\.nav-link\s*\{/);
     assert.match(html, /<h1 class="news-index-title">机场榜资讯中心：机场推荐、跑路预警与科学上网指南<\/h1>/);
-    assert.match(html, /<h2 class="hero-title"><a href="\/news\/headline">头条文章<\/a><\/h2>/);
+    assert.match(html, /<h3 class="hero-title"><a href="\/news\/headline">头条文章<\/a><\/h3>/);
     assertNewsOgImage(html, `http://127.0.0.1:${port}`, '/uploads/news/headline.jpg', '头条文章', 'image/jpeg');
+    assert.deepEqual([...html.matchAll(/<h2[^>]*>(.*?)<\/h2>/gs)].map((match) => match[1]), [
+      '精选文章', '专题', '最新文章', '机场月度报告', '科学上网教程',
+    ]);
+    assert.match(html, /<h3 class="feed-card-title"><a href="\/news\/follow-up">次条文章<\/a><\/h3>/);
     assert.match(html, /42 次访问/);
     assert.match(html, /87 次访问/);
     assert.doesNotMatch(html, /<h1 class="hero-title">/);
@@ -321,7 +325,7 @@ test('GET /news?page=2 renders page article in lead slot instead of first-articl
     const html = await response.text();
 
     assert.deepEqual(calls, [{ page: 2 }]);
-    assert.match(html, /<h2 class="hero-title"><a href="\/news\/page-two-story">第二页文章<\/a><\/h2>/);
+    assert.match(html, /<h3 class="hero-title"><a href="\/news\/page-two-story">第二页文章<\/a><\/h3>/);
     assert.doesNotMatch(html, /第一篇文章发布后，这里会显示精选头条与最新文章流。/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

@@ -98,6 +98,10 @@ import {
 import {
   buildToolControlledDownloadUrl,
   buildToolDownloadPlatformHeading,
+  getToolOfficialDownloadEntries,
+  getIosOfficialToolDownload,
+  IOS_TOOL_DOWNLOAD_DESCRIPTION,
+  IOS_APPLE_ID_DOWNLOAD_NOTICE,
   buildToolDownloadTrustMeta,
   buildToolPublicLocalFileMarker,
   getToolDownloadPlatformLabel,
@@ -2141,21 +2145,34 @@ function renderToolDownloadGroups(view: ToolsDownloadPageView): string {
     const items = view.items
       .filter((item) => item.platforms.includes(platform))
       .sort(compareToolDownloadItems);
-    if (items.length === 0) {
+    const officialEntries = getToolOfficialDownloadEntries(platform, items);
+    if (items.length === 0 && officialEntries.length === 0) {
       return '';
     }
     const label = getToolDownloadPlatformLabel(platform);
     return `
       <section class="tools-download-group">
-        <div class="tools-group-head">
+        <div class="tools-group-head${platform === 'ios' ? ' is-ios' : ''}">
           <div>
             <div class="eyebrow">${escapeHtml(label)} 下载</div>
-            <h2>${escapeHtml(buildToolDownloadPlatformHeading(platform))}</h2>
+            <div class="tools-group-title-row">
+              <h2>${escapeHtml(buildToolDownloadPlatformHeading(platform))}</h2>
+              ${platform === 'ios' ? `<div class="tools-ios-notice"><span>${escapeHtml(IOS_APPLE_ID_DOWNLOAD_NOTICE.text)}</span><a href="${escapeAttribute(IOS_APPLE_ID_DOWNLOAD_NOTICE.href)}" target="_blank" rel="noopener noreferrer">${escapeHtml(IOS_APPLE_ID_DOWNLOAD_NOTICE.link_label)}</a></div>` : ''}
+            </div>
           </div>
-          <p>适合 ${escapeHtml(label)} 设备使用的翻墙工具下载，本地安装包优先展示，官方页面作为备用入口。</p>
+          <p>${platform === 'ios' ? escapeHtml(IOS_TOOL_DOWNLOAD_DESCRIPTION) : `适合 ${escapeHtml(label)} 设备使用的翻墙工具下载，本地安装包优先展示，官方页面作为备用入口。`}</p>
         </div>
         <div class="tools-download-card-grid">
           ${items.map((item) => renderToolDownloadCard(item, platform)).join('')}
+          ${officialEntries.map((entry) => `
+            <article id="tool-${escapeAttribute(entry.slug)}-ios" class="tool-card">
+              <div class="tool-card-head"><img src="${escapeAttribute(entry.icon_url)}" alt="${escapeAttribute(entry.name)} 图标" width="48" height="48" loading="lazy" /><div><h3>${escapeHtml(entry.name)}</h3></div></div>
+              <p>${escapeHtml(entry.description)}</p>
+              <div class="tool-action-row">
+                <a class="tool-download-primary tool-app-store-link" href="${escapeAttribute(entry.official_url)}" target="_blank" rel="nofollow noreferrer noopener">App Store 下载</a>
+              </div>
+            </article>
+          `).join('')}
         </div>
       </section>
     `;
@@ -2171,6 +2188,8 @@ function compareToolDownloadItems(a: ToolDownloadItem, b: ToolDownloadItem): num
 }
 
 function renderToolDownloadCard(item: ToolDownloadItem, platform: ToolDownloadPlatform): string {
+  const iosEntry = platform === 'ios' ? getIosOfficialToolDownload(item) : undefined;
+  if (iosEntry) item = { ...item, icon_url: iosEntry.icon_url, official_url: iosEntry.official_url };
   const hasLocalFile = Boolean(item.local_file_url);
   const iconClass = `tool-icon-fallback tool-icon-${String(item.slug.length % 5)}`;
   const supportVersion = getToolDownloadSupportVersion(item, platform);
@@ -2187,8 +2206,8 @@ function renderToolDownloadCard(item: ToolDownloadItem, platform: ToolDownloadPl
       <p>${escapeHtml(item.description || item.summary)}</p>
       <p class="muted tool-version-line">支持版本：${escapeHtml(supportVersion)}${item.file_size_label ? ` · 大小：${escapeHtml(item.file_size_label)}` : ''}</p>
       <div class="tool-action-row">
-        ${hasLocalFile ? `<a class="tool-download-primary" href="${escapeAttribute(buildToolControlledDownloadUrl(item, platform))}">立即下载</a>` : '<span class="tool-download-primary is-disabled">本地下载待上传</span>'}
-        ${item.official_url ? `<a class="tool-official-link" href="${escapeAttribute(item.official_url)}" target="_blank" rel="nofollow noreferrer noopener">官方页面</a>` : ''}
+        ${iosEntry ? '' : hasLocalFile ? `<a class="tool-download-primary" href="${escapeAttribute(buildToolControlledDownloadUrl(item, platform))}">立即下载</a>` : '<span class="tool-download-primary is-disabled">本地下载待上传</span>'}
+        ${item.official_url ? `<a class="${iosEntry ? 'tool-download-primary tool-app-store-link' : 'tool-official-link'}" href="${escapeAttribute(item.official_url)}" target="_blank" rel="nofollow noreferrer noopener">${iosEntry ? 'App Store 下载' : '官方页面'}</a>` : ''}
       </div>
     </article>
   `;
@@ -3490,6 +3509,12 @@ const styles = `
   .tools-download-groups { display: grid; gap: 28px; }
   .tools-download-group { display: grid; gap: 16px; }
   .tools-group-head { display: flex; align-items: end; justify-content: space-between; gap: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; }
+  .tools-group-head.is-ios { flex-direction: column; align-items: stretch; gap: 8px; }
+  .tools-group-title-row { display: flex; flex-wrap: wrap; align-items: baseline; column-gap: 16px; row-gap: 4px; }
+  .tools-ios-notice { display: flex; flex-wrap: wrap; align-items: center; gap: 0 8px; color: #64748b; font-size: 12px; line-height: 2; }
+  .tools-ios-notice a { display: inline-flex; align-items: center; min-height: 40px; color: #0e7490; font-weight: 600; text-decoration: underline; text-underline-offset: 4px; }
+  .tools-ios-notice a:hover { color: #164e63; }
+  .tools-ios-notice a:focus-visible { outline: 2px solid #0891b2; outline-offset: 2px; }
   .tools-group-head h2 { margin: 4px 0 0; color: #0f172a; font-size: 28px; letter-spacing: 0; }
   .tools-group-head p { max-width: 560px; margin: 0; color: #64748b; font-size: 14px; line-height: 1.8; }
   .tools-download-card-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; min-width: 0; }
@@ -3517,6 +3542,7 @@ const styles = `
   .tool-download-primary { background: linear-gradient(135deg, #0891b2, #10b981); color: #fff; box-shadow: 0 14px 30px rgba(8,145,178,.18); }
   .tool-download-primary:not(.is-disabled):hover,
   .tool-download-primary:not(.is-disabled):focus-visible { transform: translateY(-2px); box-shadow: 0 18px 34px rgba(8,145,178,.28); }
+  .tool-app-store-link { grid-column: 1 / -1; }
   .tool-download-primary.is-disabled { background: #e2e8f0; color: #64748b; box-shadow: none; cursor: not-allowed; }
   .tool-official-link { border: 1px solid #e2e8f0; background: #fff; color: #475569; }
   .tool-official-link:hover,
