@@ -43,7 +43,6 @@ const NEWS_FALLBACK_OG_IMAGES = {
 } as const;
 
 const sharedStyles = `
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;900&family=JetBrains+Mono:wght@400;500&display=swap');
   :root {
     --surface: rgba(255,255,255,0.94);
     --text: #111111;
@@ -1686,7 +1685,7 @@ export function renderNewsTopicPage(options: RenderTopicPageOptions): string {
             </div>
             ${coverImage ? `
               <div class="topic-hero-cover">
-                <img src="${escapeAttribute(topic.cover_image_url || '')}" alt="${escapeAttribute(topic.name)}" ${renderImageLoadingAttrs('priority')} />
+                <img src="${escapeAttribute(topic.cover_image_url || '')}" alt="${escapeAttribute(topic.name)}" ${renderImageLoadingAttrs('priority')} ${renderCoverSrcset(topic.cover_image_url || '', 'hero')} />
               </div>
             ` : ''}
           </section>
@@ -1880,7 +1879,7 @@ export function renderNewsArticlePage(options: RenderArticlePageOptions): string
               </header>
               ${hasCover ? `
                 <div class="article-cover">
-                  <img src="${escapeAttribute(article.cover_image_url)}" alt="${escapeAttribute(article.title)}" ${renderImageLoadingAttrs('priority')} />
+                  <img src="${escapeAttribute(article.cover_image_url)}" alt="${escapeAttribute(article.title)}" ${renderImageLoadingAttrs('priority')} ${renderCoverSrcset(article.cover_image_url, 'article')} />
                 </div>
               ` : ''}
               <div class="article-content">
@@ -2142,7 +2141,7 @@ function renderHeroCard(featured: PublicNewsArticleView | PublicNewsListView['fe
       </div>
       ${hasCover ? `
         <div class="hero-cover">
-          <img src="${escapeAttribute(featured.cover_image_url)}" alt="${escapeAttribute(featured.title)}" ${renderImageLoadingAttrs('priority')} />
+          <img src="${escapeAttribute(featured.cover_image_url)}" alt="${escapeAttribute(featured.title)}" ${renderImageLoadingAttrs('priority')} ${renderCoverSrcset(featured.cover_image_url, 'hero')} />
         </div>
       ` : ''}
     </article>
@@ -2155,7 +2154,7 @@ function renderFeedCard(item: PublicNewsListView['items'][number]): string {
     <article class="feed-card${hasCover ? '' : ' no-cover'}">
       ${hasCover ? `
         <a class="feed-card-media" href="/news/${escapeAttribute(item.slug)}">
-          <img src="${escapeAttribute(item.cover_image_url)}" alt="${escapeAttribute(item.title)}" ${renderImageLoadingAttrs('lazy')} />
+          <img src="${escapeAttribute(item.cover_image_url)}" alt="${escapeAttribute(item.title)}" ${renderImageLoadingAttrs('lazy')} ${renderCoverSrcset(item.cover_image_url, 'card')} />
         </a>
       ` : ''}
       <div class="feed-card-body">
@@ -2171,6 +2170,17 @@ function renderFeedCard(item: PublicNewsListView['items'][number]): string {
       </div>
     </article>
   `;
+}
+
+function renderCoverSrcset(url: string, layout: 'card' | 'hero' | 'article'): string {
+  if (!/^\/uploads\/news\/[\p{L}\p{N}_-]+\.(?:webp|jpe?g|png|avif)$/iu.test(url)) return '';
+  const sizes = layout === 'card'
+    ? '(max-width: 720px) calc(100vw - 20px), (max-width: 980px) calc(100vw - 32px), 280px'
+    : layout === 'hero'
+      ? '(max-width: 980px) calc(100vw - 32px), 600px'
+      : '(max-width: 980px) calc(100vw - 32px), 900px';
+  const srcset = [320, 640, 960].map((width) => `${url}?w=${width} ${width}w`).join(', ');
+  return `srcset="${escapeAttribute(srcset)}" sizes="${sizes}"`;
 }
 
 function renderImageLoadingAttrs(mode: 'priority' | 'lazy'): string {

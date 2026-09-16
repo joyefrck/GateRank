@@ -23,18 +23,22 @@ export interface RenderedNewsDocument {
 }
 
 export class NewsContentService {
+  readingMinutes(markdown: string): number {
+    return estimateReadingMinutes(this.prepareMarkdown(markdown));
+  }
+
+  private prepareMarkdown(markdown: string): string {
+    return replaceNewsAirportProfileEmbeds(
+      replaceNewsAirportLinkEmbeds(markdown, (embed) => renderAirportLinkEmbed(embed)),
+      (embed) => renderAirportProfileEmbed(embed),
+    );
+  }
+
   render(markdown: string): RenderedNewsDocument {
     const headings: NewsHeading[] = [];
     const headingSlugCount = new Map<string, number>();
     const marked = new Marked();
-    const markdownWithAirportLinks = replaceNewsAirportLinkEmbeds(
-      markdown,
-      (embed) => renderAirportLinkEmbed(embed),
-    );
-    const markdownWithEmbeds = replaceNewsAirportProfileEmbeds(
-      markdownWithAirportLinks,
-      (embed) => renderAirportProfileEmbed(embed),
-    );
+    const markdownWithEmbeds = this.prepareMarkdown(markdown);
 
     marked.use({
       gfm: true,

@@ -268,7 +268,7 @@ export class NewsPublicService {
       published_at: article.published_at,
       updated_at: article.updated_at,
       view_count: article.view_count,
-      reading_minutes: this.newsContentService.render(markdown).reading_minutes,
+      reading_minutes: this.newsContentService.readingMinutes(markdown),
       category: article.category,
       topics: article.topics,
       is_featured: article.is_featured,

@@ -138,7 +138,7 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
               title: '次条文章',
               slug: 'follow-up',
               excerpt: '次条摘要',
-              cover_image_url: '',
+              cover_image_url: '/uploads/news/follow-up.jpg',
               published_at: '2026-03-27 10:00:00',
               view_count: 87,
               reading_minutes: 4,
@@ -179,6 +179,9 @@ test('GET /news returns server-rendered HTML with aligned public header tokens',
     assert.doesNotMatch(html, /\.nav-link\s*\{/);
     assert.match(html, /<h1 class="news-index-title">机场榜资讯中心：机场推荐、跑路预警与科学上网指南<\/h1>/);
     assert.match(html, /<h3 class="hero-title"><a href="\/news\/headline">头条文章<\/a><\/h3>/);
+    assert.doesNotMatch(html, /fonts\.googleapis\.com|fonts\.gstatic\.com|@import/);
+    assert.match(html, /srcset="\/uploads\/news\/headline\.jpg\?w=320 320w, \/uploads\/news\/headline\.jpg\?w=640 640w, \/uploads\/news\/headline\.jpg\?w=960 960w"/);
+    assert.match(html, /sizes="[^"]*280px"/);
     assertNewsOgImage(html, `http://127.0.0.1:${port}`, '/uploads/news/headline.jpg', '头条文章', 'image/jpeg');
     assert.deepEqual([...html.matchAll(/<h2[^>]*>(.*?)<\/h2>/gs)].map((match) => match[1]), [
       '精选文章', '专题', '最新文章', '机场月度报告', '科学上网教程',

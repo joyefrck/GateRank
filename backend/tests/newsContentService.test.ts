@@ -4,6 +4,12 @@ import { NewsContentService } from '../src/services/newsContentService';
 import { stripLeadingMarkdownH1 } from '../src/services/newsMutationService';
 import { slugifyNewsText } from '../src/utils/news';
 
+test('lightweight reading time matches rendering for Markdown and embedded links', () => {
+  const service = new NewsContentService();
+  const markdown = `${'科学上网教程 test words '.repeat(500)}\n\n![封面](/uploads/news/test.webp)\n\n:::gaterank-airport-link\n{"version":1,"airport_id":12,"name":"示例机场","website":"https://example.com"}\n:::`;
+  assert.equal(service.readingMinutes(markdown), service.render(markdown).reading_minutes);
+});
+
 test('NewsContentService.render supports markdown lists', () => {
   const service = new NewsContentService();
   const rendered = service.render('## 清单\n\n- 第一项\n- 第二项');

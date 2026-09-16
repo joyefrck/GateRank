@@ -67,6 +67,7 @@ import { createOutboundRoutes } from './routes/outboundRoutes';
 import { createPublishRoutes } from './routes/publishRoutes';
 import { createPublicPageRoutes } from './routes/publicPageRoutes';
 import { createNewsPublicRoutes } from './routes/newsPublicRoutes';
+import { createNewsImageRoutes } from './routes/newsImageRoutes';
 import { createToolsAdminRoutes } from './routes/toolsAdminRoutes';
 import { createToolsPublicRoutes } from './routes/toolsPublicRoutes';
 import { createDnsLeakInternalRoutes } from './routes/dnsLeakInternalRoutes';
@@ -379,6 +380,7 @@ export async function createApp() {
   app.use(express.json({ limit: process.env.JSON_BODY_LIMIT || '1mb' }));
   app.use(requestContext);
   app.use(privateSeoGuard);
+  app.use(createNewsImageRoutes());
   app.use('/uploads', express.static(getNewsUploadRootDir()));
   app.use(corsAllowlist);
   app.use('/api/v1', createLiveScoreRoutes(billingEligibility));

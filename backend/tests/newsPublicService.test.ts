@@ -39,6 +39,7 @@ function createHarness() {
     sort_order: 1,
   };
   const detailedQueries: NewsListQuery[] = [];
+  const contentService = new NewsContentService();
   const repository = {
     listCategories: async () => [],
     listTopics: async () => [topic],
@@ -68,7 +69,8 @@ function createHarness() {
   return {
     articles,
     detailedQueries,
-    service: new NewsPublicService(repository as never, new NewsContentService()),
+    service: new NewsPublicService(repository as never, contentService),
+    contentService,
   };
 }
 
@@ -88,6 +90,14 @@ test('news index keeps a full main page and de-duplicates every visible module',
   assert.equal(view.items.length, 12);
   assert.equal(new Set(visibleIds).size, visibleIds.length);
   assert.deepEqual(detailedQueries.at(-1)?.exclude_ids, [1]);
+});
+
+test('news list and topic cards do not render article bodies to calculate reading time', async () => {
+  const { service, contentService } = createHarness();
+  contentService.render = () => { throw new Error('card should not render Markdown'); };
+  const view = await service.getListView(1, 12);
+  assert.ok(view.items.every((item) => item.reading_minutes >= 1));
+  assert.ok(await service.getTopicPageView('test-topic', 1, 12));
 });
 
 test('topic page de-duplicates pinned, feed, and recommended articles', async () => {
