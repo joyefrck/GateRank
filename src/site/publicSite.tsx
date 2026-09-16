@@ -403,6 +403,7 @@ function SiteFooter() {
           ) : (
             <a key={item.kind} href={item.href} onClick={(event) => { event.preventDefault(); navigate(item.href || '/'); }} className="transition-colors hover:text-black">{item.label}</a>
           ))}
+          <a href="/airports" className="hover:text-black transition-colors">机场大全</a>
           <a href="/apply" className="hover:text-black transition-colors">申请入驻</a>
         </nav>
 

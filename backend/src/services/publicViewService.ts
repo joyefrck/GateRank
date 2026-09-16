@@ -79,6 +79,11 @@ interface PublicViewDeps {
     ): Promise<Map<number, DailyMetrics[]>>;
   };
   scoreRepository: {
+    getAvailableReportLinksByAirportIds?(
+      airportIds: number[],
+      onOrBefore: string,
+      scoreRuleVersion?: 'v1_spcr' | 'v2_spncr',
+    ): Promise<Map<number, string>>;
     getLatestAvailableDate(onOrBefore: string): Promise<string | null>;
     getLatestAvailableDateByAirport?(
       airportId: number,
@@ -531,6 +536,13 @@ export class PublicViewService {
         this.buildToolDownloadCta(),
       ]);
 
+    const reportRuleVersion = this.deps.scoreRuleService?.isForceDisabled?.()
+      ? await this.resolveActiveScoreRuleVersion(date)
+      : undefined;
+    const reportLinks = await this.deps.scoreRepository.getAvailableReportLinksByAirportIds?.(
+      result.items.map((item) => item.airport_id), date, reportRuleVersion,
+    );
+
     return {
       date: resolvedDate,
       score_rule_version: scoreRuleVersion,
@@ -541,7 +553,9 @@ export class PublicViewService {
       total: result.total,
       total_pages: Math.max(1, Math.ceil(result.total / safePageSize)),
       tool_download_cta: toolDownloadCta,
-      items: result.items,
+      items: reportLinks
+        ? result.items.map((item) => ({ ...item, report_url: reportLinks.get(item.airport_id) ?? null }))
+        : result.items,
     };
   }
 

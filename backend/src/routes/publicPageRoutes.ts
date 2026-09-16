@@ -12,6 +12,7 @@ import {
 } from '../utils/publicCache';
 import {
   renderApplyPublicPage,
+  renderAirportDirectoryPublicPage,
   renderAirportDealDetailPublicPage,
   renderDealsPublicPage,
   renderFullRankingPublicPage,
@@ -46,6 +47,7 @@ import type { ToolsDownloadService } from '../services/toolsDownloadService';
 import { isToolDownloadPlatform } from '../../../shared/toolDownloads';
 import { sendError } from '../utils/http';
 import { createFullRankingLoadGate, type FullRankingLoadGate } from '../utils/fullRankingLoadGate';
+import { getAirportDirectoryView } from '../services/airportDirectoryService';
 
 interface PublicPageDeps {
   publicViewService: {
@@ -68,14 +70,34 @@ interface PublicPageDeps {
   fullRankingLoadGate?: FullRankingLoadGate;
 }
 
-const FULL_RANKING_PUBLIC_PAGE_SIZE = 100;
-const FULL_RANKING_CLIENT_PAGE_SIZE = 20;
+const FULL_RANKING_PAGE_SIZE = 20;
 
 export function createPublicPageRoutes(deps: PublicPageDeps): Router {
   const router = Router();
   const pageCache = deps.pageCache || createTimedPromiseCache(PUBLIC_PAGE_CACHE_TTL_MS);
   const frontendAssets = deps.frontendAssets || resolvePublicFrontendAssets();
   const fullRankingLoadGate = deps.fullRankingLoadGate || createFullRankingLoadGate();
+
+  router.get(['/airports', '/api/v1/pages/airports'], async (req, res) => {
+    const siteUrl = getSiteOrigin(req);
+    try {
+      const date = getDateInTimezone();
+      const view = await pageCache.getOrLoad(`airport-directory:${date}`, () => getAirportDirectoryView(deps.publicViewService, date));
+      setPublicCacheHeaders(res);
+      if (req.path.startsWith('/api/')) {
+        res.json(view);
+      } else {
+        res.type('html').send(renderAirportDirectoryPublicPage(siteUrl, view, frontendAssets));
+      }
+    } catch (error) {
+      console.error('[public-page] failed to load airport directory', { error });
+      if (req.path.startsWith('/api/')) {
+        res.status(503).json({ message: '机场索引暂时无法加载' });
+      } else {
+        res.status(503).type('html').send(renderPublicHtmlError(siteUrl, 503, '机场索引暂时无法加载', frontendAssets));
+      }
+    }
+  });
 
   router.get('/', async (req, res) => {
     const siteUrl = getSiteOrigin(req);
@@ -109,10 +131,13 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         return;
       }
       const renderDate = requestedDate || getDateInTimezone();
-      const [view, clientView] = await Promise.all([
-        getCachedFullRankingView(pageCache, deps.publicViewService, renderDate, page, FULL_RANKING_PUBLIC_PAGE_SIZE, filters),
-        getCachedFullRankingView(pageCache, deps.publicViewService, renderDate, page, FULL_RANKING_CLIENT_PAGE_SIZE, filters),
-      ]);
+      const view = await getCachedFullRankingView(
+        pageCache, deps.publicViewService, renderDate, page, FULL_RANKING_PAGE_SIZE, filters,
+      );
+      if (page > view.total_pages) {
+        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '榜单分页不存在', frontendAssets));
+        return;
+      }
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderFullRankingPublicPage(
         siteUrl,
@@ -121,7 +146,6 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         page,
         filters,
         frontendAssets,
-        clientView,
       ));
     } catch (error) {
       console.error('[public-page] failed to render full ranking page', { error, requestId: req.requestId || 'unknown' });
@@ -147,10 +171,13 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         return;
       }
       const renderDate = requestedDate || getDateInTimezone();
-      const [view, clientView] = await Promise.all([
-        getCachedFullRankingView(pageCache, deps.publicViewService, renderDate, page, FULL_RANKING_PUBLIC_PAGE_SIZE, filters),
-        getCachedFullRankingView(pageCache, deps.publicViewService, renderDate, page, FULL_RANKING_CLIENT_PAGE_SIZE, filters),
-      ]);
+      const view = await getCachedFullRankingView(
+        pageCache, deps.publicViewService, renderDate, page, FULL_RANKING_PAGE_SIZE, filters,
+      );
+      if (page > view.total_pages) {
+        res.status(404).type('html').send(renderPublicHtmlError(siteUrl, 404, '榜单分页不存在', frontendAssets));
+        return;
+      }
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderFullRankingPublicPage(
         siteUrl,
@@ -159,7 +186,6 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         page,
         filters,
         frontendAssets,
-        clientView,
       ));
     } catch (error) {
       console.error('[public-page] failed to render static full ranking page', { error, requestId: req.requestId || 'unknown' });

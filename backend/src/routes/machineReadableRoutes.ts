@@ -4,6 +4,7 @@ import type { AirportDealView } from '../../../shared/airportAds';
 import { setPublicCacheHeaders } from '../utils/publicCache';
 import { getSiteOrigin } from '../utils/siteUrl';
 import { getDateInTimezone } from '../utils/time';
+import { getPublicReportPaths } from '../services/publicReportDiscovery';
 import {
   buildDealsData,
   buildMonthlyReportsData,
@@ -62,18 +63,15 @@ export function createMachineReadableRoutes(deps: MachineReadableDeps): Router {
   router.get('/sitemap-ai.xml', async (req, res) => {
     try {
       const date = getDateInTimezone();
-      const [rankingsView, monthlyReportSlugs] = await Promise.all([
-        deps.publicViewService.getFullRankingView(date, 1, MACHINE_READABLE_PAGE_SIZE),
+      const [reports, monthlyReportSlugs] = await Promise.all([
+        getPublicReportPaths(deps.publicViewService, date),
         getAiSitemapMonthlyReportSlugs(deps),
       ]);
-      const airportReportPaths = rankingsView.items
-        .map((item) => item.report_url || '')
-        .filter((path) => path.startsWith('/airports/'));
       setPublicCacheHeaders(res);
       res
         .status(200)
         .type('application/xml')
-        .send(renderAiSitemapXml(getSiteOrigin(req), airportReportPaths, monthlyReportSlugs));
+        .send(renderAiSitemapXml(getSiteOrigin(req), reports.paths, monthlyReportSlugs));
     } catch (error) {
       console.error('[machine-readable] failed to render sitemap-ai.xml', {
         error,

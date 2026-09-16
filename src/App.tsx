@@ -1,3 +1,4 @@
+import { AIRPORT_DIRECTORY_SEO, buildAirportDirectoryStructuredData, type AirportDirectoryView } from '../shared/airportDirectory';
 import { portalLoadError, readPortalResponse } from './portal/session';
 import { TurnstileWidget, useTurnstile } from './components/TurnstileWidget';
 import { ToolDownloadDialog } from './pages/tools/ToolDownloadDialog';
@@ -74,6 +75,7 @@ import {
   buildReportContentSections,
   buildReportContentSummary,
   buildReportSeo,
+  buildReportFaqItems,
   buildReportStructuredData,
   buildReportTrendLabel,
   buildRiskMonitorSeo,
@@ -439,7 +441,7 @@ interface ReportCapabilityItem {
   label: string;
 }
 
-type InitialPublicDataKind = 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'deal_detail' | 'monthly_reports' | 'monthly_report' | 'tools_download';
+type InitialPublicDataKind = 'airport_directory' | 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'deal_detail' | 'monthly_reports' | 'monthly_report' | 'tools_download';
 
 interface InitialPublicDataEnvelope<T> {
   kind: InitialPublicDataKind;
@@ -1514,6 +1516,8 @@ function parseRoute(): RouteState {
       date: params.get('date') || undefined,
     };
   }
+
+  if (path === '/airports' || path === '/airports/') return { kind: 'airport_directory' };
 
   if (fullRankingMatch) {
     const page = Number(params.get('page') || '1');
@@ -3747,6 +3751,44 @@ function shouldDisplayAirportTags(
   return status !== 'risk' && status !== 'down' && monitorReason !== 'risk_watch' && monitorReason !== 'down';
 }
 
+function AirportDirectoryPage() {
+  const initialData = useMemo(() => getInitialPublicData<AirportDirectoryView>('airport_directory', () => true), []);
+  const [data, setData] = useState<AirportDirectoryView | null>(initialData);
+  const [error, setError] = useState('');
+  useEffect(() => {
+    if (initialData) return;
+    let active = true;
+    void apiFetch<AirportDirectoryView>('/api/v1/pages/airports')
+      .then((view) => { if (active) setData(view); })
+      .catch(() => { if (active) setError('机场索引暂时无法加载，请稍后重试。'); });
+    return () => { active = false; };
+  }, [initialData]);
+  usePageSeo({
+    ...AIRPORT_DIRECTORY_SEO, canonicalPath: '/airports',
+    structuredData: buildAirportDirectoryStructuredData(buildAbsoluteUrl('/').replace(/\/$/, ''), data || { date: '', items: [] }),
+  });
+  return <PageFrame active="full_ranking">
+    <main className="mx-auto max-w-7xl px-4 py-10 md:py-14">
+      <ListPageHero eyebrow="机场大全" title="机场官网与测评报告索引" subtitle=""
+        description={AIRPORT_DIRECTORY_SEO.description}
+        stats={[{ label: '可用报告', value: data?.items.length ?? '—' }, { label: '数据日期', value: data?.date || '—' }]} />
+      <section className="mt-8 rounded-[24px] border border-neutral-200 bg-white p-5 md:p-8">
+        <h2 className="text-xl font-black text-neutral-900">按名称查找机场</h2>
+        <p className="mt-3 text-sm leading-7 text-neutral-500">本页集中展示已有测评报告的机场。需要按分数和条件比较，可查看<a href="/rankings/all" className="underline underline-offset-4">机场排行</a>。</p>
+        {error ? <p role="alert">{error} <a href="/airports" className="underline">重新加载</a></p> : !data ? <p role="status">正在加载机场索引…</p> : data.items.length === 0 ? <p>暂无可用机场报告。</p> : (
+          <ul className="mt-5 grid gap-x-8 sm:grid-cols-2 lg:grid-cols-3">
+            {data.items.map((item) => <li key={item.path}>
+              <a href={item.path} className="flex min-h-[76px] flex-col justify-center gap-1.5 break-words border-b border-neutral-100 px-1 py-3 transition-colors hover:text-indigo-700 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-indigo-600">
+                <strong className="text-base">{item.name}</strong><span className="text-xs text-neutral-500">官网 · 测评 · 稳定性 →</span>
+              </a>
+            </li>)}
+          </ul>
+        )}
+      </section>
+    </main>
+  </PageFrame>;
+}
+
 function FullRankingPage({
   date,
   page = 1,
@@ -4064,48 +4106,16 @@ function FullRankingPage({
                   ))}
                 </ol>
 
-                <nav
-                  className="mt-8 flex flex-col gap-4 rounded-[24px] border border-neutral-200 bg-neutral-50 px-4 py-4 md:flex-row md:items-center md:justify-between"
-                  aria-label="机场排行分页"
-                >
-                  <div className="text-sm text-neutral-500">
-                    第 <span className="font-black text-neutral-900">{safePage}</span> 页，共 <span className="font-black text-neutral-900">{totalPages}</span> 页
-                  </div>
+                <nav className="mt-8 flex flex-col gap-4 rounded-[24px] border border-neutral-200 bg-neutral-50 px-4 py-4 md:flex-row md:items-center md:justify-between" aria-label="机场排行分页">
+                  <div className="text-sm text-neutral-500">第 <strong>{safePage}</strong> 页，共 <strong>{totalPages}</strong> 页</div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
-                      disabled={safePage <= 1}
-                      onClick={() => navigate(buildFullRankingHref(date, safePage - 1, activeFilters))}
-                    >
-                      <ChevronLeft className="h-4 w-4" />
-                      上一页
-                    </button>
-                    {visiblePages.map((pageNumber) => (
-                      <button
-                        key={`page-${pageNumber}`}
-                        type="button"
-                        className={`min-h-11 min-w-11 rounded-full px-4 py-2 text-sm font-black transition ${
-                          pageNumber === safePage
-                            ? 'bg-neutral-900 text-white shadow-lg'
-                            : 'border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-900 hover:text-neutral-900'
-                        }`}
-                        onClick={() => navigate(buildFullRankingHref(date, pageNumber, activeFilters))}
-                      >
-                        {pageNumber}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      className="inline-flex min-h-11 items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 disabled:cursor-not-allowed disabled:opacity-40"
-                      disabled={safePage >= totalPages}
-                      onClick={() => navigate(buildFullRankingHref(date, safePage + 1, activeFilters))}
-                    >
-                      下一页
-                      <ChevronRight className="h-4 w-4" />
-                    </button>
+                    {safePage > 1 ? <a rel="prev" href={buildFullRankingHref(date, safePage - 1, activeFilters)} className="inline-flex min-h-11 items-center rounded-xl border border-neutral-200 bg-white px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-indigo-600">上一页</a> : <span aria-disabled="true" className="inline-flex min-h-11 items-center px-4 text-sm text-neutral-400">上一页</span>}
+                    {visiblePages.map((pageNumber) => <a key={pageNumber} href={buildFullRankingHref(date, pageNumber, activeFilters)} aria-label={`第 ${pageNumber} 页`} aria-current={pageNumber === safePage ? 'page' : undefined}
+                      className={`inline-flex min-h-11 min-w-11 items-center justify-center rounded-xl px-3 text-sm font-bold focus-visible:outline-2 focus-visible:outline-indigo-600 ${pageNumber === safePage ? 'bg-neutral-900 text-white' : 'border border-neutral-200 bg-white hover:border-neutral-900'}`}>{pageNumber}</a>)}
+                    {safePage < totalPages ? <a rel="next" href={buildFullRankingHref(date, safePage + 1, activeFilters)} className="inline-flex min-h-11 items-center rounded-xl border border-neutral-200 bg-white px-4 text-sm font-semibold focus-visible:outline-2 focus-visible:outline-indigo-600">下一页</a> : <span aria-disabled="true" className="inline-flex min-h-11 items-center px-4 text-sm text-neutral-400">下一页</span>}
                   </div>
                 </nav>
+                <p className="mt-5 text-sm text-neutral-500"><a href="/airports" className="underline underline-offset-4">机场大全：按名称查找所有可用测评报告 →</a></p>
               </>
             )}
           </div>
@@ -4900,6 +4910,16 @@ function ReportContentV2({
       <ReportTrendSection data={data} />
       <ReportPlanTelegramSection data={data} />
       <ReportConclusion data={data} rankPairs={rankPairs} />
+      <section className="rounded-[18px] border border-slate-200 bg-white p-5 md:p-8">
+        <h2 className="text-xl font-black text-slate-950">{data.airport.name}常见问题：官网、稳定性与套餐</h2>
+        <div className="mt-5 grid gap-6 md:grid-cols-2">
+          {buildReportFaqItems(data).map((item) => <article key={item.question}>
+            <h3 className="font-bold text-slate-900">{item.question}</h3>
+            <p className="mt-2 text-sm leading-7 text-slate-600">{item.answer}</p>
+          </article>)}
+        </div>
+        <a href="/airports" className="mt-6 inline-flex min-h-11 items-center text-sm font-bold underline underline-offset-4">返回机场大全，继续查看其他机场测评</a>
+      </section>
     </div>
   );
 }
@@ -4920,6 +4940,8 @@ function ReportHeroV2({ data }: { data: ReportViewResponse }) {
           >
             首页
           </a>
+          <span className="px-1.5 text-slate-300">/</span>
+          <a href="/airports" className="transition hover:text-slate-950">机场大全</a>
           <span className="px-1.5 text-slate-300">/</span>
           {data.airport.name}
         </div>
@@ -9350,6 +9372,8 @@ export default function App() {
       </Suspense>
     );
   }
+
+  if (route.kind === 'airport_directory') return <AirportDirectoryPage />;
 
   if (route.kind === 'full_ranking') {
     return <FullRankingPage date={route.date} page={route.page} filters={route.filters} />;

@@ -479,6 +479,38 @@ export class ScoreRepository {
     return displayScore === null || displayScore === undefined ? null : Number(displayScore);
   }
 
+  async getAvailableReportLinksByAirportIds(
+    airportIds: number[],
+    onOrBefore: string,
+    scoreRuleVersion?: 'v1_spcr' | 'v2_spncr',
+  ): Promise<Map<number, string>> {
+    if (airportIds.length === 0) return new Map();
+    // Match getReportView's historical fallback, including metrics on the chosen
+    // score date. Current ranking participation and wallet balance do not decide
+    // whether a report exists.
+    const [rows] = await this.pool.query<Array<RowDataPacket & {
+      airport_id: number; slug: string | null; name: string; website: string;
+    }>>(
+      `SELECT a.id AS airport_id, a.slug, a.name, a.website
+         FROM (
+           SELECT airport_id, MAX(date) AS report_date
+             FROM airport_scores_daily
+            WHERE airport_id IN (${airportIds.map(() => '?').join(', ')})
+              AND date <= ?
+              ${scoreRuleVersion ? "AND COALESCE(JSON_UNQUOTE(JSON_EXTRACT(details_json, '$.score_rule_version')), 'v1_spcr') = ?" : ''}
+            GROUP BY airport_id
+         ) latest_report
+         JOIN airports a ON a.id = latest_report.airport_id
+         JOIN airport_metrics_daily m
+           ON m.airport_id = a.id AND m.date = latest_report.report_date
+        WHERE a.is_listed = 1`,
+      [...airportIds, onOrBefore, ...(scoreRuleVersion ? [scoreRuleVersion] : [])],
+    );
+    return new Map(rows.map((row) => [
+      Number(row.airport_id), buildAirportReportPath(resolveAirportSlugFromRow(row)),
+    ]));
+  }
+
   async getPublicDisplayScoresByDate(
     airportIds: number[],
     date: string,

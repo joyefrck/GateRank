@@ -499,6 +499,7 @@ export function getPublicOgImageForPath(canonicalPath: string): PublicOgImage | 
   }
   if (pathname === PUBLIC_SEO_PATHS.apply) return PUBLIC_CORE_OG_IMAGES.apply;
   if (pathname === PUBLIC_SEO_PATHS.forAi) return PUBLIC_CORE_OG_IMAGES.forAi;
+  if (pathname === '/airports') return PUBLIC_CORE_OG_IMAGES.fullRanking;
   if (pathname.startsWith('/airports/')) return PUBLIC_CORE_OG_IMAGES.airportReport;
   return undefined;
 }
@@ -952,6 +953,8 @@ export function buildReportSeo(input?: PublicReportSeoView): PublicSeoText {
         `${airportName}跑路`,
         `${airportName}官网`,
         `${searchName}测评`,
+        `${airportName}稳定吗`,
+        `${airportName}有免费试用吗`,
         `${airportName}价格多少`,
         `${airportName}套餐价格`,
         `${airportName}支持USDT吗`,
@@ -1053,6 +1056,20 @@ export function buildReportFaqItems(view: PublicReportSeoView): PublicReportFaqI
   const trialText = formatNullableSupportText(view.capabilities.plan.has_trial_plan);
 
   return [
+    {
+      question: `${airportName}稳定吗？`,
+      answer: `截至 ${view.date}，${airportName}报告记录的 30 天可用率为 ${formatMetric(view.metrics.uptime_percent_30d)}%，稳定性评级为${formatStabilityTierLabel(view.metrics.stability_tier)}，健康记录 ${view.metrics.healthy_days_streak} 天。这是对应日期的监测快照，需结合近期趋势和风险记录判断，不代表后续服务保证。`,
+    },
+    {
+      question: `${airportName}多少钱一个月？`,
+      answer: view.capabilities.plan.lowest_monthly_price === null
+        ? `${airportName}当前未收录最低月付价格。购买前请通过本页官网入口核对套餐流量、计费周期和退款规则。`
+        : `${airportName}当前收录的最低月付价格为 ¥${formatMetric(view.capabilities.plan.lowest_monthly_price)}。${planText}。实际套餐价格、流量和计费周期请以官网结算页为准。`,
+    },
+    {
+      question: `${airportName}有免费试用吗？`,
+      answer: `${airportName}的试用记录为${trialText}。试用是否免费、可用时长和流量限制需以官网当前说明为准，支持试用不等于所有套餐都可免费使用。`,
+    },
     {
       question: `${airportName}怎么样？`,
       answer: `${airportName} 当前公开总分${formatPublicScoreText(view)}，状态为${statusLabel}。GateRank 当前报告结论为：${view.summary_card.conclusion}`,

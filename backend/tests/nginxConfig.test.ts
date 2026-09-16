@@ -13,6 +13,7 @@ test('nginx keeps public SEO routes proxied to backend prerender routes', async 
   for (const route of [
     '/',
     '/rankings/all',
+    '/airports',
     '/monthly-reports',
     '/monthly-reports/',
     '/methodology',

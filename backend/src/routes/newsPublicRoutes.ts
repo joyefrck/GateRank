@@ -16,16 +16,12 @@ import { PUBLISH_TOKEN_DOCS_LAST_UPDATED } from '../../../shared/publishTokenDoc
 import { PUBLIC_DEALS_LASTMOD, PUBLIC_SEO_STATIC_LASTMOD, RANKING_TRANSPARENCY_LASTMOD } from '../../../shared/publicSeo';
 import { getIndexableFullRankingFilterPaths } from '../../../shared/fullRankingFilters';
 import { buildAirportDealDetailPath, type AirportDealSitemapUpdate } from '../../../shared/airportAds';
+import { getPublicReportPaths, type ReportRankingSource } from '../services/publicReportDiscovery';
 
 interface NewsPublicDeps {
   topicRepository?: Pick<TopicRepository, 'list'>;
   newsPublicService: NewsPublicService;
-  publicViewService?: {
-    getFullRankingView(date: string, page: number, pageSize: number): Promise<{
-      date?: string;
-      items: Array<{ report_url?: string | null }>;
-    }>;
-  };
+  publicViewService?: ReportRankingSource;
   monthlyReportPublicService?: MonthlyReportPublicService;
   airportAdCampaignRepository?: {
     listDealSitemapUpdates(): Promise<AirportDealSitemapUpdate[]>;
@@ -223,6 +219,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       ...seoTopics.map(topic => topic.path),
       '/',
       '/rankings/all',
+      '/airports',
       ...getIndexableFullRankingFilterPaths(),
       '/monthly-reports',
       '/deals',
@@ -250,6 +247,7 @@ export function createNewsPublicRoutes(deps: NewsPublicDeps): Router {
       ...Object.fromEntries(seoTopics.map(topic => [topic.path, topic.updated_at])),
       '/': dataLastmod,
       '/rankings/all': dataLastmod,
+      '/airports': dataLastmod,
       ...Object.fromEntries(getIndexableFullRankingFilterPaths().map((path) => [path, dataLastmod])),
       '/monthly-reports': getMonthlyReportsIndexLastmod(monthlyReportEntries),
       '/deals': PUBLIC_DEALS_LASTMOD,
@@ -316,12 +314,9 @@ async function getReportSitemapEntries(deps: NewsPublicDeps): Promise<Array<{ pa
     return [];
   }
   try {
-    const view = await deps.publicViewService.getFullRankingView(getDateInTimezone(), 1, 100);
+    const view = await getPublicReportPaths(deps.publicViewService, getDateInTimezone());
     const lastmod = formatSitemapLastmodDate(view.date || getDateInTimezone());
-    return view.items
-      .map((item) => item.report_url || '')
-      .filter((url) => url.startsWith('/airports/'))
-      .map((path) => ({ path, lastmod }));
+    return view.paths.map((path) => ({ path, lastmod }));
   } catch (error) {
     console.error('[sitemap] failed to load report urls', { error });
     return [];

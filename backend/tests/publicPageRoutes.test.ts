@@ -7,7 +7,7 @@ import { createPublicRoutes } from '../src/routes/publicRoutes';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../src/types/domain';
 import { createTimedPromiseCache } from '../src/utils/publicCache';
 import type { AirportDealDetailView, AirportDealView } from '../../shared/airportAds';
-import { buildReportSeo } from '../../shared/publicSeo';
+import { buildReportSeo, buildReportFaqItems } from '../../shared/publicSeo';
 import { getDateInTimezone } from '../src/utils/time';
 import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG } from '../../shared/toolDownloads';
 import { renderReportPublicPage } from '../src/services/publicPageRenderer';
@@ -1050,7 +1050,7 @@ test('GET /rankings/all includes ranking items and report links in raw HTML', as
   }
 });
 
-test('GET /rankings/all requests the full public page size and exposes more than 20 report links', async () => {
+test('GET /rankings/all uses the same 20-item page for crawlable HTML and client data', async () => {
   const calls: Array<{ page: number; pageSize: number }> = [];
   const app = express();
   app.use(createPublicPageRoutes({
@@ -1060,6 +1060,8 @@ test('GET /rankings/all requests the full public page size and exposes more than
         calls.push({ page, pageSize });
         return {
           ...buildFullRankingViewWithAirportCount(25),
+          items: buildFullRankingViewWithAirportCount(25).items.slice((page - 1) * pageSize, page * pageSize),
+          total_pages: Math.ceil(25 / pageSize),
           page,
           page_size: pageSize,
           filters,
@@ -1073,14 +1075,14 @@ test('GET /rankings/all requests the full public page size and exposes more than
     const port = (server.address() as AddressInfo).port;
     const response = await fetch(`http://127.0.0.1:${port}/rankings/all?date=2026-03-23&page=1`);
     assert.equal(response.status, 200);
-    assert.ok(calls.some((call) => call.page === 1 && call.pageSize === 100));
+    assert.ok(calls.some((call) => call.page === 1 && call.pageSize === 20));
 
     const html = await response.text();
     const reportLinks = new Set(
       Array.from(html.matchAll(/href="(\/airports\/airport-\d+)">测评报告/g), (match) => match[1]),
     );
-    assert.equal(reportLinks.size, 25);
-    assert.ok(reportLinks.size > 20);
+    assert.equal(reportLinks.size, 20);
+    assert.match(html, /href="\/rankings\/all\?date=2026-03-23&amp;page=2"/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -1114,7 +1116,6 @@ test('GET /rankings/all embeds client-sized initial payload for React pagination
     const response = await fetch(`http://127.0.0.1:${port}/rankings/all?date=2026-03-23&page=1`);
     assert.equal(response.status, 200);
     assert.deepEqual(calls, [
-      { page: 1, pageSize: 100 },
       { page: 1, pageSize: 20 },
     ]);
 
@@ -1358,7 +1359,7 @@ test('public data routes revalidate SSR and hydration views on every request', a
 
     assert.equal(first.status, 200);
     assert.equal(second.status, 200);
-    assert.equal(fullRankingCalls, 4);
+    assert.equal(fullRankingCalls, 2);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -1403,7 +1404,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assertStaticOgImage(okHtml, `http://127.0.0.1:${port}`, '/og/airport-report.png', 'GateRank 机场测评报告分享图');
     assert.match(okHtml, /id="report-top"/);
     assert.match(okHtml, /报告日期：2026-03-23/);
-    assert.match(okHtml, /<div class="breadcrumb"><a href="\/">首页<\/a><span>\/<\/span>星云机场<\/div>/);
+    assert.match(okHtml, /<div class="breadcrumb"><a href="\/">首页<\/a><span>\/<\/span><a href="\/airports">机场大全<\/a><span>\/<\/span>星云机场<\/div>/);
     assert.doesNotMatch(okHtml, /机场专题/);
     assert.match(okHtml, /aria-label="报告页面导航"/);
     assert.match(okHtml, /class="is-active" aria-current="location" href="#report-overview"/);
@@ -1597,7 +1598,7 @@ test('GET /airports/:slug renders report HTML and legacy reports redirect to sta
     assert.equal(missingResponse.status, 404);
     const missingHtml = await missingResponse.text();
     assert.match(missingHtml, /<h1>报告不存在<\/h1>/);
-    assert.match(missingHtml, /<meta name="robots" content="index,follow,max-image-preview:large"/);
+    assert.match(missingHtml, /<meta name="robots" content="noindex,follow"/);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -1622,6 +1623,22 @@ test('report long-tail metadata does not invent missing capability facts', () =>
   assert.doesNotMatch(`${seo.description},${seo.keywords}`, /undefined|null|NaN|¥0/);
   assert.match(seo.description, /支持 USDT 吗/);
   assert.doesNotMatch(seo.description, /不支持 USDT/);
+});
+
+test('report long-tail FAQ is rendered as visible content and matching structured data', () => {
+  const view = structuredClone(reportView);
+  view.capabilities.plan.lowest_monthly_price = null;
+  view.capabilities.plan.has_trial_plan = null;
+  const faq = buildReportFaqItems(view);
+  assert.ok(faq.some((item) => item.question === '星云机场稳定吗？' && item.answer.includes(view.date)));
+  assert.ok(faq.some((item) => item.question === '星云机场多少钱一个月？' && item.answer.includes('未收录')));
+  assert.ok(faq.some((item) => item.question === '星云机场有免费试用吗？' && item.answer.includes('以官网当前说明为准')));
+  const html = renderReportPublicPage('https://gate-rank.com', view);
+  for (const item of faq) {
+    assert.ok(html.includes(`<h3>${item.question}</h3>`));
+    assert.ok(html.includes(JSON.stringify(item.question)));
+  }
+  assert.doesNotMatch(faq.map((item) => item.answer).join(''), /undefined|NaN|¥0/);
 });
 
 test('report SSR shows only the public regional review notice', () => {

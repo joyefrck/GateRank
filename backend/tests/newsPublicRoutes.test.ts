@@ -1104,7 +1104,8 @@ test('GET /sitemap.xml includes published news urls', async () => {
     );
     const xml = await response.text();
     const urlBlocks = xml.match(/<url>[\s\S]*?<\/url>/g) || [];
-    assert.equal(urlBlocks.length, 70);
+    assert.equal(urlBlocks.length, 71);
+    assert.ok(urlBlocks.some((block) => block.includes('/airports</loc>')));
     assert.ok(urlBlocks.some((block) => block.includes('/tools/ip-purity-check</loc>')));
     urlBlocks.forEach((block) => {
       assert.match(block, /<lastmod>[^<]+<\/lastmod>/);

@@ -22,6 +22,7 @@ function emitSeoAssets(siteUrl: string): Plugin {
       const urls = [
         ['/', PUBLIC_SEO_STATIC_LASTMOD],
         ['/rankings/all', PUBLIC_SEO_STATIC_LASTMOD],
+        ['/airports', '2026-09-16T00:00:00+08:00'],
         ...getIndexableFullRankingFilterPaths().map((pathname) => [pathname, PUBLIC_SEO_STATIC_LASTMOD] as const),
         ['/monthly-reports', PUBLIC_SEO_STATIC_LASTMOD],
         ['/deals', PUBLIC_DEALS_LASTMOD],

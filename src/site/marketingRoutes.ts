@@ -6,6 +6,7 @@ export type AppRouteKind =
   | 'apply'
   | 'portal'
   | 'full_ranking'
+  | 'airport_directory'
   | 'monthly_reports'
   | 'monthly_report'
   | 'deals'
@@ -28,6 +29,7 @@ export const MARKETING_PAGE_KIND_BY_ROUTE = {
   apply: 'apply',
   portal: null,
   full_ranking: 'full_ranking',
+  airport_directory: null,
   monthly_reports: 'monthly_reports',
   monthly_report: 'monthly_report',
   deals: 'deals',

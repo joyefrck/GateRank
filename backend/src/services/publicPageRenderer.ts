@@ -1,3 +1,4 @@
+import { AIRPORT_DIRECTORY_SEO, buildAirportDirectoryStructuredData, type AirportDirectoryView } from '../../../shared/airportDirectory';
 import { buildIpPuritySeo, IP_PURITY_FAQ, type IpPurityPageConfig } from '../../../shared/ipPurity';
 import type {
   FullRankingItem,
@@ -135,7 +136,7 @@ interface DynamicOgImage {
 }
 
 interface PublicInitialData {
-  kind: 'home' | 'full_ranking' | 'risk_monitor' | 'deals' | 'deal_detail' | 'monthly_reports' | 'monthly_report' | 'tools_download' | 'ip_purity';
+  kind: 'home' | 'full_ranking' | 'airport_directory' | 'risk_monitor' | 'deals' | 'deal_detail' | 'monthly_reports' | 'monthly_report' | 'tools_download' | 'ip_purity';
   params: {
     date?: string | null;
     page?: number | null;
@@ -244,6 +245,25 @@ export function renderHomePublicPage(
   });
 }
 
+export function renderAirportDirectoryPublicPage(siteUrl: string, view: AirportDirectoryView, frontendAssets?: PublicFrontendAssets): string {
+  return renderPublicDocument({
+    siteUrl, canonicalPath: '/airports', seo: AIRPORT_DIRECTORY_SEO, active: 'rankings', frontendAssets,
+    jsonLd: buildAirportDirectoryStructuredData(siteUrl, view),
+    initialData: { kind: 'airport_directory', params: {}, payload: view },
+    body: `<main class="page-main">
+      <section class="hero hero-dark"><div class="eyebrow">机场大全</div>
+        <h1>机场官网与测评报告索引</h1><p>${escapeHtml(AIRPORT_DIRECTORY_SEO.description)}</p>
+        <div class="metric-grid">${renderMetric('可用报告', String(view.items.length))}${renderMetric('数据日期', view.date)}</div>
+      </section>
+      <section class="content-card"><h2>按名称查找机场</h2>
+        <p class="muted">本页集中展示已有测评报告的机场。需要按分数和条件比较，可查看<a href="/rankings/all">机场排行</a>。</p>
+        <ul class="airport-directory-list">${view.items.map((item) => `<li><a href="${escapeAttribute(item.path)}"><strong>${escapeHtml(item.name)}</strong><span>官网 · 测评 · 稳定性 →</span></a></li>`).join('')}</ul>
+        ${view.items.length ? '' : '<p>暂无可用机场报告。</p>'}
+      </section>
+    </main>`,
+  });
+}
+
 export function renderFullRankingPublicPage(
   siteUrl: string,
   view: FullRankingView,
@@ -320,6 +340,8 @@ export function renderFullRankingPublicPage(
         ${renderToolDownloadCta(view.tool_download_cta, { context: 'ranking' })}
         ${renderFullRankingTopicContent(topicContent)}
         ${renderRankingTable(view.items)}
+        ${renderRankingPagination(view, requestedDate, filters)}
+        <p class="muted"><a href="/airports">机场大全：按名称查找所有可用测评报告 →</a></p>
       </main>
     `,
   });
@@ -1134,7 +1156,7 @@ export function renderReportPublicPage(
         </div>
         <section id="report-overview" class="report-hero report-anchor-target">
           <div class="report-hero-copy">
-            <div class="breadcrumb"><a href="/">首页</a><span>/</span>${escapeHtml(view.airport.name)}</div>
+            <div class="breadcrumb"><a href="/">首页</a><span>/</span><a href="/airports">机场大全</a><span>/</span>${escapeHtml(view.airport.name)}</div>
             <h1>${escapeHtml(buildReportPageHeading(view))}</h1>
             <p>${escapeHtml(seo.description)}</p>
             <div class="report-tags">
@@ -1154,7 +1176,7 @@ export function renderReportPublicPage(
           ${renderSnapshotCard('稳定性', formatStabilityTier(view.metrics.stability_tier))}
         </section>
         ${renderReportSummary(view)}
-        ${renderReportFaq(faqItems)}
+        ${renderReportFaq(faqItems, view.airport.name)}
       </main>
     `,
   });
@@ -1977,6 +1999,7 @@ export function renderPublicHtmlError(
   return renderPublicDocument({
     siteUrl,
     status,
+    robots: 'noindex,follow',
     canonicalPath: '/',
     seo: {
       title: `${message} | ${PUBLIC_SITE_BRAND_NAME}`,
@@ -2094,7 +2117,7 @@ function renderFooter(): string {
       <p>以公开监测数据、评分趋势和风险记录构建机场推荐体系，帮助用户在推荐、排行与测评报告之间完成交叉判断。</p>
       <nav aria-label="页脚导航"><!--topic-footer-->
         ${PUBLIC_NAVIGATION_ITEMS.filter((item) => item.href).map((item) => `<a href="${escapeAttribute(item.href || '/')}">${escapeHtml(item.label)}</a>`).join('')}
-        <a href="/apply">申请入驻</a>
+        <a href="/airports">机场大全</a><a href="/apply">申请入驻</a>
       </nav>
       <small>© 2026 ${escapeHtml(PUBLIC_SITE_BRAND_NAME)}. All rights reserved. 评分独立性声明：机场排行按评分排序，首页优秀机场公平轮换。</small>
     </footer>
@@ -2880,6 +2903,18 @@ function getSelectedFilterLabels(filters: FullRankingFilters): string[] {
   return labels;
 }
 
+function renderRankingPagination(view: FullRankingView, date: string | undefined, filters: FullRankingFilters): string {
+  const href = (page: number) => escapeAttribute(buildFullRankingPath(filters, { date, page }));
+  const start = Math.max(1, view.page - 2);
+  const pages = Array.from({ length: Math.max(0, Math.min(view.total_pages, view.page + 2) - start + 1) }, (_, i) => start + i);
+  return `<nav class="ranking-pagination" aria-label="机场排行分页">
+    <span>第 ${view.page} 页，共 ${view.total_pages} 页</span><div>
+    ${view.page > 1 ? `<a rel="prev" href="${href(view.page - 1)}">上一页</a>` : '<span aria-disabled="true">上一页</span>'}
+    ${pages.map((page) => `<a href="${href(page)}" aria-label="第 ${page} 页"${page === view.page ? ' aria-current="page"' : ''}>${page}</a>`).join('')}
+    ${view.page < view.total_pages ? `<a rel="next" href="${href(view.page + 1)}">下一页</a>` : '<span aria-disabled="true">下一页</span>'}
+    </div></nav>`;
+}
+
 function renderRankingTable(items: FullRankingItem[]): string {
   return `
     <section class="content-card">
@@ -2968,10 +3003,10 @@ function renderLinkedInfoCard(title: string, href: string): string {
   `;
 }
 
-function renderReportFaq(items: Array<{ question: string; answer: string }>): string {
+function renderReportFaq(items: Array<{ question: string; answer: string }>, airportName: string): string {
   return `
     <section class="content-card">
-      <h2>常见问题</h2>
+      <h2>${escapeHtml(airportName)}常见问题：官网、稳定性与套餐</h2>
       <div class="card-grid">
         ${items.map((item) => `
           <article class="mini-card">
@@ -3895,6 +3930,16 @@ const styles = `
   .home-v3-empty strong { color: #404040; font-size: 14px; }
   .home-v3-empty p { margin: 6px 0; color: #737373; font-size: 12px; }
   .home-v3-empty a { color: #e11d48; font-size: 12px; font-weight: 900; }
+  .airport-directory-list { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fit,minmax(min(100%,280px),1fr)); gap: 0 32px; }
+  .airport-directory-list a { display: flex; min-height: 72px; flex-direction: column; justify-content: center; gap: 6px; border-bottom: 1px solid #eee; text-decoration: none; padding: 12px 4px; overflow-wrap: anywhere; }
+  .airport-directory-list a:hover { color: #4338ca; }
+  .airport-directory-list span { color: #737373; font-size: 12px; }
+  .ranking-pagination { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 16px; margin: 24px 0; }
+  .ranking-pagination > div { display: flex; flex-wrap: wrap; gap: 8px; }
+  .ranking-pagination a,.ranking-pagination div > span { display: inline-flex; min-width: 44px; min-height: 44px; align-items: center; justify-content: center; padding: 8px 12px; border: 1px solid #e5e5e5; border-radius: 10px; text-decoration: none; }
+  .ranking-pagination [aria-current="page"] { background: #171717; color: white; }
+  .ranking-pagination [aria-disabled="true"] { color: #a3a3a3; }
+  .ranking-pagination a:focus-visible,.airport-directory-list a:focus-visible { outline: 2px solid #4338ca; outline-offset: 3px; }
   .footer { position: relative; margin-top: auto; overflow: hidden; border-top: 1px solid #eee; padding: 56px 24px; background-color: #fff; background-image: linear-gradient(to right,rgba(0,0,0,.03) 1px,transparent 1px),linear-gradient(to bottom,rgba(0,0,0,.03) 1px,transparent 1px),radial-gradient(#eee 1px,transparent 1px); background-size: 30px 30px,30px 30px,24px 24px; text-align: center; color: #737373; }
   .footer-mark { display: flex; width: 44px; height: 44px; align-items: center; justify-content: center; margin: 0 auto 12px; border-radius: 12px; background: #111; color: #fff; font-size: 24px; font-weight: 900; }
   .footer > strong { display: block; color: #171717; font-size: 18px; }
