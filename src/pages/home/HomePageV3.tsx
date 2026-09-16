@@ -101,6 +101,8 @@ interface SponsoredDeal {
 interface NewsUpdate {
   id: number;
   title: string;
+  excerpt: string;
+  cover_image_url: string;
   slug: string;
   href: string;
   published_at: string | null;
@@ -338,9 +340,9 @@ export function HomePageV3({ date }: { date?: string }) {
                     />
                   </div>
                   <HomeSidebar
-                    news={data.news_updates || []}
                     deals={data.sponsored_deals?.items || []}
                   />
+                  <LatestNews news={data.news_updates || []} />
                 </div>
               </section>
               <SummaryBoards sections={data.sections} />
@@ -675,9 +677,9 @@ function RankingMobileCard({ item, index, date }: { item: FullRankingItem; index
   );
 }
 
-function HomeSidebar({ news, deals }: { news: NewsUpdate[]; deals: SponsoredDeal[] }) {
+function HomeSidebar({ deals }: { deals: SponsoredDeal[] }) {
   return (
-    <aside className="space-y-6 lg:col-span-4" aria-label="工具、商业合作与最新动态">
+    <aside className="space-y-6 lg:col-span-4" aria-label="工具与商业合作">
       <section className="relative overflow-hidden rounded-[24px] bg-indigo-950 p-6 text-white shadow-md">
         <div className="absolute right-0 top-0 h-32 w-32 rounded-full bg-indigo-500/10 blur-xl" />
         <div className="absolute bottom-0 left-6 h-32 w-32 rounded-full bg-violet-500/10 blur-xl" />
@@ -722,30 +724,40 @@ function HomeSidebar({ news, deals }: { news: NewsUpdate[]; deals: SponsoredDeal
         </div>
       </section>
 
-      <section id="announcement-dynamics-section" className="home-deferred-section space-y-4 rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
-        <div className="flex items-center justify-between border-b border-gray-50 pb-3">
-          <h2 className="flex items-center gap-2 font-sans text-[16px] font-black tracking-tight text-gray-900 sm:text-[17px]"><Megaphone className="h-[18px] w-[18px] text-indigo-500" />公告与动态</h2>
-          <a href="/news" className="flex items-center gap-0.5 text-[12.5px] font-bold text-gray-400 hover:text-indigo-600">更多 <ChevronRight className="h-3 w-3" /></a>
-        </div>
-        {news.length === 0 ? (
-          <p className="rounded-xl bg-gray-50 p-4 text-xs text-gray-400">暂无已发布 News</p>
-        ) : (
-          <ol className="space-y-1.5 divide-y divide-gray-50">
-            {news.slice(0, 5).map((item) => (
-              <li key={item.id} className="group py-2.5 first:pt-0 last:pb-0">
-                <a href={item.href} className="flex items-center justify-between gap-2.5 text-[13px]">
-                  <span className="flex min-w-0 items-center gap-1.5">
-                    <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-indigo-500" />
-                    <span className="truncate font-semibold leading-relaxed text-gray-700 transition-colors group-hover:text-indigo-600">{item.title}</span>
-                  </span>
-                  <time dateTime={item.published_at || undefined} className="whitespace-nowrap font-mono text-[11px] text-gray-400">{formatNewsDate(item.published_at, true)}</time>
-                </a>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
     </aside>
+  );
+}
+
+function LatestNews({ news }: { news: NewsUpdate[] }) {
+  return (
+    <section id="announcement-dynamics-section" aria-labelledby="latest-news-title" className="home-deferred-section w-full rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm lg:col-span-12">
+      <div className="mb-2 flex items-center justify-between border-b border-gray-50 pb-2">
+        <h2 id="latest-news-title" className="flex items-center gap-2 font-sans text-[16px] font-black tracking-tight text-gray-900 sm:text-[17px]"><Megaphone aria-hidden="true" className="h-[18px] w-[18px] text-indigo-500" />最近新闻</h2>
+        <a href="/news" className="flex min-h-10 items-center gap-0.5 rounded-lg text-[12.5px] font-bold text-gray-400 hover:text-indigo-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500">更多 <ChevronRight aria-hidden="true" className="h-3 w-3" /></a>
+      </div>
+      {news.length === 0 ? (
+        <p className="rounded-xl bg-gray-50 p-4 text-xs text-gray-400">暂无已发布新闻</p>
+      ) : (
+        <ol className="grid grid-cols-1 gap-x-8 md:grid-cols-2">
+          {news.slice(0, 4).map((item) => (
+            <li key={item.id} className="min-w-0 border-t border-gray-100 first:border-t-0 md:[&:nth-child(2)]:border-t-0">
+              <a href={item.href} className="group grid grid-cols-[80px_minmax(0,1fr)] items-center gap-x-3 rounded-lg py-1.5 transition-colors hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 md:min-h-[136px] md:grid-cols-[112px_minmax(0,1fr)] md:gap-x-4 md:py-4">
+                <span className="row-span-2 flex h-14 items-center justify-center overflow-hidden rounded-lg bg-gray-100 md:h-20" aria-hidden="true">
+                  {item.cover_image_url ? (
+                    <img src={item.cover_image_url} alt="" width={112} height={80} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+                  ) : <span className="text-[11px] font-bold tracking-widest text-gray-400">NEWS</span>}
+                </span>
+                <div className="min-w-0">
+                  <h3 className="line-clamp-2 text-[14px] font-bold leading-[18px] text-gray-900 transition-colors group-hover:text-indigo-600 md:leading-5">{item.title}</h3>
+                  <p className="mt-0.5 truncate text-xs leading-4 text-gray-500 md:mt-1 md:line-clamp-2 md:whitespace-normal md:leading-[18px]">{item.excerpt || '点击阅读新闻详情'}</p>
+                </div>
+                <time dateTime={item.published_at || undefined} className="col-start-2 mt-0.5 whitespace-nowrap font-mono text-[11px] leading-[14px] text-gray-400 md:mt-1 md:leading-4">{formatNewsDate(item.published_at)}</time>
+              </a>
+            </li>
+          ))}
+        </ol>
+      )}
+    </section>
   );
 }
 

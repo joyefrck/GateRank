@@ -240,6 +240,7 @@ export function renderHomePublicPage(
             ${renderHomeV3Ranking(view)}
             ${renderHomeV3Sidebar(view)}
           </div>
+          ${renderHomeV3LatestNews(view)}
           ${renderHomeV3Summaries(view)}
           ${renderHomeV3Trust()}
           ${renderHomeV3Faq()}
@@ -2393,9 +2394,8 @@ function renderHomeV3Ranking(view: HomePageView): string {
 }
 
 function renderHomeV3Sidebar(view: HomePageView): string {
-  const news = view.news_updates || [];
   return `
-    <aside class="home-v3-sidebar" aria-label="工具、商业合作与最新动态">
+    <aside class="home-v3-sidebar" aria-label="工具与商业合作">
       <section class="home-v3-explore">
         <span>EXCELLENCE IN CONSOLIDATION</span>
         <h2>探索更多优质机场</h2>
@@ -2415,18 +2415,30 @@ function renderHomeV3Sidebar(view: HomePageView): string {
           `).join('')}
         </div>
       </section>
-      <section>
-        ${renderHomeV3SectionHead('Latest updates', '公告与动态', '最近发布的公开动态')}
-        ${news.length > 0 ? `
-          <ol class="home-v3-news">
-            ${news.slice(0, 5).map((item) => `
-              <li><a href="${escapeAttribute(item.href)}">${escapeHtml(item.title)}</a><time datetime="${escapeAttribute(item.published_at || '')}">${escapeHtml(item.published_at ? formatDateOnly(item.published_at) : '日期待更新')}</time></li>
-            `).join('')}
-          </ol>
-        ` : '<p class="home-v3-muted">暂无已发布 News，稍后再来查看。</p>'}
-        <a class="home-v3-more" href="/news">查看全部 News →</a>
-      </section>
     </aside>
+  `;
+}
+
+function renderHomeV3LatestNews(view: HomePageView): string {
+  const news = view.news_updates || [];
+  return `
+    <section id="announcement-dynamics-section" class="home-v3-latest-news" aria-labelledby="latest-news-title">
+      <div class="home-v3-news-head">
+        <h2 id="latest-news-title"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M7 15v5a1 1 0 0 1-3 0v-6"/></svg>最近新闻</h2>
+        <a href="/news">更多 <span aria-hidden="true">›</span></a>
+      </div>
+      ${news.length > 0 ? `
+        <ol class="home-v3-news">
+          ${news.slice(0, 4).map((item) => `
+            <li><a href="${escapeAttribute(item.href)}">
+              <span class="home-v3-news-thumb" aria-hidden="true">${item.cover_image_url ? `<img src="${escapeAttribute(item.cover_image_url)}" alt="" width="112" height="80" loading="lazy" decoding="async" />` : '<span>NEWS</span>'}</span>
+              <div class="home-v3-news-copy"><h3>${escapeHtml(item.title)}</h3><p>${escapeHtml(item.excerpt || '点击阅读新闻详情')}</p></div>
+              <time${item.published_at ? ` datetime="${escapeAttribute(item.published_at)}"` : ''}>${escapeHtml(item.published_at ? formatDateOnly(item.published_at) : '待更新')}</time>
+            </a></li>
+          `).join('')}
+        </ol>
+      ` : '<p class="home-v3-muted">暂无已发布新闻</p>'}
+    </section>
   `;
 }
 
@@ -3915,10 +3927,34 @@ const styles = `
   .home-v3-tools strong { color: #262626; font-size: 12px; }
   .home-v3-tools span { overflow: hidden; margin-top: 3px; color: #a3a3a3; font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
   .home-v3-tools i { position: absolute; right: 12px; top: 50%; color: #a3a3a3; font-style: normal; transform: translateY(-50%); }
-  .home-v3-news { margin: 0; padding: 0; list-style: none; }
-  .home-v3-news li { border-top: 1px solid #f5f5f5; padding: 10px 0; }
-  .home-v3-news a { display: block; color: #404040; font-size: 12px; font-weight: 800; line-height: 1.55; text-decoration: none; }
-  .home-v3-news time { display: block; margin-top: 4px; color: #a3a3a3; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px; }
+  .home-v3-latest-news { min-width: 0; width: 100%; border: 1px solid #f3f4f6; border-radius: 24px; background: #fff; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,.1); }
+  .home-v3-news-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #f9fafb; }
+  .home-v3-news-head h2 { display: flex; align-items: center; gap: 8px; margin: 0; color: #111827; font-size: 17px; font-weight: 900; letter-spacing: -.025em; }
+  .home-v3-news-head svg { color: #6366f1; }
+  .home-v3-news-head > a { display: flex; align-items: center; gap: 4px; min-height: 40px; border-radius: 8px; color: #9ca3af; font-size: 12.5px; font-weight: 700; text-decoration: none; }
+  .home-v3-news { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); column-gap: 32px; margin: 0; padding: 0; list-style: none; }
+  .home-v3-news li { min-width: 0; }
+  .home-v3-news li:nth-child(n+3) { border-top: 1px solid #f3f4f6; }
+  .home-v3-news a { display: grid; grid-template-columns: 112px minmax(0,1fr); align-items: center; column-gap: 16px; min-height: 136px; border-radius: 8px; padding: 16px 0; text-decoration: none; transition: background-color .15s; }
+  .home-v3-news a:hover { background: #f9fafb; }
+  .home-v3-news a:focus-visible, .home-v3-news-head > a:focus-visible { outline: 2px solid #6366f1; outline-offset: 2px; }
+  .home-v3-news-thumb { display: flex; grid-row: span 2; align-items: center; justify-content: center; height: 80px; overflow: hidden; border-radius: 8px; background: #f3f4f6; color: #9ca3af; font-size: 11px; font-weight: 700; letter-spacing: .1em; }
+  .home-v3-news-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .home-v3-news-copy { min-width: 0; }
+  .home-v3-news h3 { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 0; color: #111827; font-size: 14px; font-weight: 700; line-height: 20px; }
+  .home-v3-news a:hover h3, .home-v3-news-head > a:hover { color: #4f46e5; }
+  .home-v3-news p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; margin: 4px 0 0; color: #6b7280; font-size: 12px; line-height: 18px; }
+  .home-v3-news time { grid-column: 2; margin-top: 4px; color: #9ca3af; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11px; line-height: 16px; white-space: nowrap; }
+  @media (max-width: 767px) {
+    .home-v3-news { grid-template-columns: minmax(0,1fr); }
+    .home-v3-news li + li { border-top: 1px solid #f3f4f6; }
+    .home-v3-news-head h2 { font-size: 16px; }
+    .home-v3-news a { grid-template-columns: 80px minmax(0,1fr); column-gap: 12px; min-height: 0; padding: 6px 0; }
+    .home-v3-news-thumb { height: 56px; }
+    .home-v3-news h3 { -webkit-line-clamp: 2; line-height: 18px; }
+    .home-v3-news p { display: block; margin-top: 2px; line-height: 16px; text-overflow: ellipsis; white-space: nowrap; }
+    .home-v3-news time { grid-column: 2; margin-top: 2px; line-height: 14px; }
+  }
   .home-v3-more { color: #737373; font-size: 11px; font-weight: 900; text-decoration: none; }
   .home-v3-muted { color: #a3a3a3 !important; font-size: 11px !important; }
   .home-v3-summary-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 16px; }

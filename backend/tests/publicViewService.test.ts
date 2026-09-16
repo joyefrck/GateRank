@@ -111,6 +111,8 @@ test('PublicViewService.getHomePageView applies configured ranking count with fi
   const newsItems = Array.from({ length: 6 }, (_, index) => ({
     id: index + 1,
     title: `News ${index + 1}`,
+    excerpt: `新闻摘要 ${index + 1}`,
+    cover_image_url: `/uploads/news/cover-${index + 1}.webp`,
     slug: `news-${index + 1}`,
     published_at: `2026-03-${String(24 - index).padStart(2, '0')}T08:00:00+08:00`,
   })) as never[];
@@ -150,7 +152,11 @@ test('PublicViewService.getHomePageView applies configured ranking count with fi
       listActiveHomeDeals: async () => deals.filter((deal) => deal.home_slot !== null),
     },
     newsRepository: {
-      listPublished: async () => ({ items: newsItems, total: newsItems.length }),
+      listPublished: async (options) => {
+        assert.equal(options.page, 1);
+        assert.equal(options.pageSize, 4);
+        return { items: newsItems, total: newsItems.length };
+      },
     },
     marketingSettingsService: {
       getConfig: async () => ({
@@ -177,8 +183,11 @@ test('PublicViewService.getHomePageView applies configured ranking count with fi
   assert.equal(result.sponsored_deals!.items[0]?.discount_title, '优惠 1');
   assert.equal(result.sponsored_deals!.items[0]?.tracking_days, 4);
   assert.deepEqual(result.sponsored_deals!.items.map((item) => item.home_slot), [1, 2, 3, 4, 5]);
-  assert.equal(result.news_updates!.length, 5);
+  assert.equal(result.news_updates!.length, 4);
   assert.equal(result.news_updates![0]?.href, '/news/news-1');
+  assert.equal(result.news_updates![0]?.excerpt, '新闻摘要 1');
+  assert.equal(result.news_updates![0]?.cover_image_url, '/uploads/news/cover-1.webp');
+  assert.deepEqual(result.news_updates!.map((item) => item.id), [1, 2, 3, 4]);
 });
 
 test('PublicViewService.getHomePageView builds prioritized tool download CTA from published icons', async () => {

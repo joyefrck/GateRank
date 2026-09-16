@@ -258,7 +258,7 @@ test('React homepage renders the 3.0 trust and FAQ content without a duplicated 
   assert.match(source, /<h1 className="[^"]*sm:whitespace-nowrap[^"]*">/);
   assert.match(source, />商业合作专区<\/h2>/);
   assert.match(source, />🏆 GateRank 优秀机场<\/h2>/);
-  assert.match(source, /公告与动态<\/h2>/);
+  assert.match(source, /最近新闻<\/h2>/);
   assert.match(source, /HOME_FAQ_ITEMS/);
   assert.match(source, /function TrustSection/);
   assert.match(source, /function FaqSection/);
@@ -312,7 +312,7 @@ test('React homepage exposes desktop table, mobile cards, empty states, hidden s
   assert.match(source, /if \(hidden \|\| value === null\) return '未公开'/);
   assert.match(source, /当前暂无有效广告/);
   assert.match(source, /暂无符合展示条件的机场/);
-  assert.match(source, /暂无已发布 News/);
+  assert.match(source, /暂无已发布新闻/);
   assert.match(source, /rel="nofollow sponsored noopener noreferrer"/);
   assert.match(source, /placement: 'deal_card'/);
   assert.match(source, /const websiteHref = normalizeExternalHref\(deal\.website\)/);
@@ -362,20 +362,21 @@ test('React homepage uses shared five-slot commercial cards and plain summary sc
   const pageBodyStart = source.indexOf('return (', source.indexOf('export function HomePageV3'));
   const homeHeroStart = source.indexOf('function HomeHero');
   const homeSidebarStart = source.indexOf('function HomeSidebar');
-  const summaryBoardsStart = source.indexOf('function SummaryBoards', homeSidebarStart);
+  const latestNewsStart = source.indexOf('function LatestNews', homeSidebarStart);
   const pageBodySource = source.slice(pageBodyStart, homeHeroStart);
-  const homeSidebarSource = source.slice(homeSidebarStart, summaryBoardsStart);
+  const homeSidebarSource = source.slice(homeSidebarStart, latestNewsStart);
 
   assert.match(source, /import \{ AIRPORT_HOME_AD_SLOTS, type AirportHomeAdSlot \} from '\.\.\/\.\.\/\.\.\/shared\/airportAds';/);
   assert.match(source, /home_slot: AirportHomeAdSlot;/);
   assert.match(sponsoredDealsSource, /AIRPORT_HOME_AD_SLOTS\.map\(\(slot\) =>/);
   assert.doesNotMatch(sponsoredDealsSource, /Array\.from\(\{ length: 4 \}\)/);
-  assert.match(pageBodySource, /<HomeSidebar[\s\S]*news=\{data\.news_updates \|\| \[\]\}[\s\S]*deals=\{data\.sponsored_deals\?\.items \|\| \[\]\}/);
+  assert.match(pageBodySource, /<HomeSidebar\s+deals=\{data\.sponsored_deals\?\.items \|\| \[\]\}/);
+  assert.match(pageBodySource, /<LatestNews news=\{data\.news_updates \|\| \[\]\}/);
   assert.doesNotMatch(pageBodySource, /<>\s*<SponsoredDeals deals=/);
-  assert.match(homeSidebarSource, /function HomeSidebar\(\{ news, deals \}/);
+  assert.match(homeSidebarSource, /function HomeSidebar\(\{ deals \}/);
   assert.ok(homeSidebarSource.indexOf('探索更多优质机场') < homeSidebarSource.indexOf('<SponsoredDeals deals={deals}'));
   assert.ok(homeSidebarSource.indexOf('<SponsoredDeals deals={deals}') < homeSidebarSource.indexOf('实用工具'));
-  assert.ok(homeSidebarSource.indexOf('实用工具') < homeSidebarSource.indexOf('公告与动态'));
+  assert.doesNotMatch(homeSidebarSource, /announcement-dynamics-section|最近新闻/);
   assert.match(sponsoredDealsSource, /grid grid-cols-1 gap-3/);
   assert.doesNotMatch(sponsoredDealsSource, /sm:grid-cols-2|lg:grid-cols-5/);
   assert.match(sponsoredDealCardSource, /useRef<HTMLAnchorElement>\(null\)/);
@@ -431,7 +432,7 @@ test('React homepage omits summary more links and the announcement schedule note
   assert.doesNotMatch(summarySource, /href=\{config\.href\}/);
 });
 
-test('React homepage sidebar keeps the 3.0 tool icon tones and News row rhythm', async () => {
+test('React homepage keeps tool icon tones and four latest news items in two columns', async () => {
   const source = await readFile(path.join(process.cwd(), 'src/pages/home/HomePageV3.tsx'), 'utf8');
 
   assert.match(source, /'text-blue-500'/);
@@ -439,8 +440,13 @@ test('React homepage sidebar keeps the 3.0 tool icon tones and News row rhythm',
   assert.match(source, /'text-emerald-500'/);
   assert.match(source, /'text-amber-500'/);
   assert.match(source, /border-gray-800 p-2\.5/);
-  assert.match(source, /<ol className="space-y-1\.5 divide-y divide-gray-50">/);
-  assert.match(source, /className="group py-2\.5 first:pt-0 last:pb-0"/);
+  const latestNewsSource = source.slice(source.indexOf('function LatestNews'), source.indexOf('function SummaryBoards'));
+  assert.match(latestNewsSource, /lg:col-span-12/);
+  assert.match(latestNewsSource, /news\.slice\(0, 4\)/);
+  assert.match(latestNewsSource, /<ol className="grid grid-cols-1 gap-x-8 md:grid-cols-2">/);
+  assert.match(latestNewsSource, /<img src=\{item\.cover_image_url\}/);
+  assert.match(latestNewsSource, /item\.excerpt/);
+  assert.match(latestNewsSource, /<time dateTime=\{item\.published_at/);
 });
 
 test('React homepage keeps the 3.0 Hero grid and fixed floating navigation interactions', async () => {

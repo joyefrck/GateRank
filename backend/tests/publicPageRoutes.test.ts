@@ -111,14 +111,17 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         const exploreStart = html.indexOf('探索更多优质机场', sidebarStart);
         const sponsoredStart = html.indexOf('<h2 id="home-v3-sponsored-title">商业合作专区</h2>', sidebarStart);
         const toolsStart = html.indexOf('网络工具箱', sidebarStart);
-        const newsStart = html.indexOf('公告与动态', sidebarStart);
+        const newsStart = html.indexOf('<section id="announcement-dynamics-section"', sidebarStart);
         assert.notEqual(sidebarStart, -1);
         assert.notEqual(sidebarEnd, -1);
         assert.ok(sidebarStart < exploreStart);
         assert.ok(exploreStart < sponsoredStart);
         assert.ok(sponsoredStart < toolsStart);
         assert.ok(toolsStart < newsStart);
-        assert.ok(newsStart < sidebarEnd);
+        assert.ok(sidebarEnd < newsStart, 'latest news spans the page below the sidebar');
+        assert.match(html, /<h3>GateRank 3.0 发布说明<\/h3>/);
+        assert.match(html, /<p>了解本次更新的功能与改进。<\/p>/);
+        assert.match(html, /<img src="\/uploads\/news\/release.webp" alt="" width="112" height="80" loading="lazy"/);
         assert.match(html, /星云优惠机场/);
         const homepageDealCards = Array.from(html.matchAll(/<a class="home-v3-deal(?: home-v3-empty)?"/g));
         assert.equal(homepageDealCards.length, 5, 'homepage SSR renders five commercial deal slots');
@@ -165,7 +168,7 @@ test('public SEO routes return crawlable HTML with unique head and H1 content', 
         assert.match(html, /星云机场/);
         assert.match(html, /观察 4 天/);
         assert.match(html, /href="\/airports\/nebula"/);
-        assert.match(html, /<h2>公告与动态<\/h2>/);
+        assert.match(html, /<h2 id="latest-news-title">[\s\S]*?最近新闻<\/h2>/);
         assert.doesNotMatch(html, /<h2>最新 News<\/h2>/);
         assert.match(html, /GateRank 3\.0 发布说明/);
         assert.match(html, /data-public-mobile-drawer="true"/);
@@ -1999,6 +2002,8 @@ const homeView: HomePageView = {
     {
       id: 1,
       title: 'GateRank 3.0 发布说明',
+      excerpt: '了解本次更新的功能与改进。',
+      cover_image_url: '/uploads/news/release.webp',
       slug: 'gaterank-3-release',
       href: '/news/gaterank-3-release',
       published_at: '2026-03-23T09:00:00+08:00',

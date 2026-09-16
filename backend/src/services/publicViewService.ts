@@ -322,7 +322,7 @@ const DEFAULT_SCORE_VISIBILITY: PublicScoreVisibility = {
 };
 const HOME_TOOL_DOWNLOAD_CTA_LIMIT = 4;
 const HOME_SPONSORED_DEAL_LIMIT = AIRPORT_HOME_AD_SLOTS.length;
-const HOME_NEWS_UPDATE_LIMIT = 5;
+const HOME_NEWS_UPDATE_LIMIT = 4;
 
 export class PublicViewService {
   constructor(private readonly deps: PublicViewDeps) {}
@@ -1767,6 +1767,8 @@ function toHomeNewsUpdate(item: NewsArticleListItem): HomeNewsUpdateView {
   return {
     id: item.id,
     title: item.title,
+    excerpt: item.excerpt || '',
+    cover_image_url: item.cover_image_url || '',
     slug: item.slug,
     href: `/news/${encodeURIComponent(item.slug)}`,
     published_at: item.published_at,

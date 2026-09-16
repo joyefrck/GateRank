@@ -592,6 +592,8 @@ export interface HomeSponsoredDealView {
 export interface HomeNewsUpdateView {
   id: number;
   title: string;
+  excerpt: string;
+  cover_image_url: string;
   slug: string;
   href: string;
   published_at: string | null;
