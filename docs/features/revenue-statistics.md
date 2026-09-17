@@ -29,7 +29,7 @@
 - `/api/v1/admin/revenue/transactions`：统一业务交易明细分页。
 - `/api/v1/admin/revenue/filters`：当前日期/口径有记录的机场或申请选项，不受已选机场限制。
 
-共享参数见 `shared/revenue.ts`。默认最近一个月，日粒度，经营收入，按金额降序，每页 20 条。
+共享参数见 `shared/revenue.ts`。默认北京时间今日（开始和结束日期均为当天），重置筛选也恢复今日；URL 指定日期时保留指定范围。日粒度，经营收入，按金额降序，每页 20 条。
 快捷日期支持今日、昨日、近 7 天、最近一个月、最近 3 个月、最近半年、年初至今、本月、上月。最近一个月/3 个月/半年按北京时间向前回溯相应日历月，起止日期均包含；目标月份没有对应日期时取月末。年初至今从当年 1 月 1 日开始。
 `entity` 为 `airport:ID` / `application:ID` / `account:ID`，空表示全部。
 日期接受 2000 年起至今日，`page_size` 为 1–100。`sort` 支持 amount/name/time，`order` 支持 asc/desc。

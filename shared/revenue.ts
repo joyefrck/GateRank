@@ -93,7 +93,7 @@ export function revenuePeriods(query: Pick<RevenueQuery, 'date_from' | 'date_to'
   return keys;
 }
 export function defaultRevenueQuery(now = new Date()): RevenueQuery {
-  return { ...revenuePresetRanges(now).recent, view: 'income', granularity: 'day', entity: '', table: 'airports', page: 1, page_size: 20, sort: 'amount', order: 'desc' };
+  return { ...revenuePresetRanges(now).today, view: 'income', granularity: 'day', entity: '', table: 'airports', page: 1, page_size: 20, sort: 'amount', order: 'desc' };
 }
 export function revenueSearch(query: RevenueQuery): string {
   return new URLSearchParams(Object.entries(query).map(([key, value]) => [key, String(value)] as [string, string])).toString();

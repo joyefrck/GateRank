@@ -60,15 +60,26 @@ test('admin authentication, no-store, validation and all five routes', async () 
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); if (prior === undefined) delete process.env.ADMIN_API_KEY; else process.env.ADMIN_API_KEY = prior; }
 });
 
-test('default recent month and extended presets use calendar months in Shanghai', () => {
+test('default today and extended presets use calendar dates in Shanghai', () => {
   const ranges = revenuePresetRanges(now);
   assert.deepEqual(ranges.recent, { date_from: '2026-08-04', date_to: '2026-09-04' });
   assert.deepEqual(ranges.quarter, { date_from: '2026-06-04', date_to: '2026-09-04' });
   assert.deepEqual(ranges.half_year, { date_from: '2026-03-04', date_to: '2026-09-04' });
   assert.deepEqual(ranges.year_to_date, { date_from: '2026-01-01', date_to: '2026-09-04' });
-  assert.equal(defaultRevenueQuery(now).date_from, ranges.recent.date_from);
-  assert.equal(readRevenueQuery('', now).date_from, ranges.recent.date_from);
-  assert.equal(parseRevenueQuery({}, now).date_from, ranges.recent.date_from);
+  for (const query of [defaultRevenueQuery(now), readRevenueQuery('', now), parseRevenueQuery({}, now)]) {
+    assert.equal(query.date_from, '2026-09-04');
+    assert.equal(query.date_to, '2026-09-04');
+  }
+  for (const instant of ['2026-12-31T15:59:59Z', '2026-12-31T16:00:00Z']) {
+    const boundary = new Date(instant), today = instant.includes('15:59') ? '2026-12-31' : '2027-01-01';
+    for (const query of [defaultRevenueQuery(boundary), readRevenueQuery('', boundary), parseRevenueQuery({}, boundary)]) {
+      assert.equal(query.date_from, today);
+      assert.equal(query.date_to, today);
+    }
+  }
+  const historical = { ...defaultRevenueQuery(now), ...ranges.recent };
+  assert.deepEqual(readRevenueQuery(`?${revenueSearch(historical)}`, now), historical);
+  assert.deepEqual(parseRevenueQuery(Object.fromEntries(new URLSearchParams(revenueSearch(historical))), now), historical);
   assert.equal(revenuePresetRanges(new Date('2026-03-31T12:00:00Z')).recent.date_from, '2026-02-28');
   assert.equal(revenuePresetRanges(new Date('2024-03-31T12:00:00Z')).recent.date_from, '2024-02-29');
   const newYear = revenuePresetRanges(new Date('2026-12-31T16:00:00Z'));

@@ -23,7 +23,7 @@ export function RevenuePage({ routeSearch, fetchJson, onUpdateUrl }: {
   const [detail, setDetail] = useState<Page<RevenueGroup | RevenueTransaction> | null>(null);
   const [options, setOptions] = useState<{ key: string; name: string }[]>([]);
   const [keyword, setKeyword] = useState('');
-  const [preferredPreset, setPreferredPreset] = useState<RevenueDatePreset>('recent');
+  const [preferredPreset, setPreferredPreset] = useState<RevenueDatePreset>('today');
   const [dates, setDates] = useState({ from: query.date_from, to: query.date_to });
   const [reload, setReload] = useState(0), [loading, setLoading] = useState(true), [detailLoading, setDetailLoading] = useState(true);
   const [error, setError] = useState(''), [detailError, setDetailError] = useState('');
@@ -58,7 +58,7 @@ export function RevenuePage({ routeSearch, fetchJson, onUpdateUrl }: {
     setPreferredPreset(key);
     update(ranges[key]);
   };
-  const clear = () => { setKeyword(''); setPreferredPreset('recent'); onUpdateUrl(`/admin/revenue?${revenueSearch(defaultRevenueQuery())}`); };
+  const clear = () => { setKeyword(''); setPreferredPreset('today'); onUpdateUrl(`/admin/revenue?${revenueSearch(defaultRevenueQuery())}`); };
   const columns: { key: keyof RevenueTotals; label: string; count?: boolean }[] = query.view === 'income'
     ? [{ key: 'amount_cents', label: '经营总收入' }, { key: 'application_cents', label: '入驻费收入' }, { key: 'click_cents', label: '点击收入' }, { key: 'advertising_cents', label: '广告收入' }]
     : [{ key: 'amount_cents', label: '实际总收款' }, { key: 'application_cents', label: '入驻收款' }, { key: 'recharge_cents', label: '充值收款' }, { key: 'record_count', label: '成功支付笔数', count: true }];
