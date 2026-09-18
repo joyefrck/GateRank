@@ -2172,32 +2172,8 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       const settingRepository = getPerformanceProbeSettingRepository(deps);
       const before = await settingRepository.getByAirport(airportId);
       const settings = parsePerformanceProbeSettings(payload.settings);
-      const beforeByProbe = new Map(before.settings.map((setting) => [setting.probe_id, setting]));
-      for (const setting of settings) {
-        if (
-          setting.probe_id === 'legacy-control'
-          || !setting.include_in_result
-          || beforeByProbe.get(setting.probe_id)?.include_in_result
-        ) continue;
-        const latest = await deps.performanceRunRepository.getLatestByAirportProbeBeforeDate?.(
-          airportId,
-          setting.probe_id,
-          date,
-        );
-        if (
-          !latest
-          || latest.status !== 'success'
-          || latest.test_profile !== 'proxy_multi_target_v2'
-          || !Number.isFinite(Number(latest.median_download_mbps))
-          || Number(latest.median_download_mbps) <= 0
-        ) {
-          throw new HttpError(
-            409,
-            'PERFORMANCE_PROBE_PROXY_RUN_REQUIRED',
-            `${setting.probe_id} 最近一次统一代理测速没有有效下载结果，暂不能并入测试结果`,
-          );
-        }
-      }
+      // These switches configure the next collection. Historical evidence is
+      // validated by aggregation, not a prerequisite for scheduling official runs.
       const expectedConfigVersion = Number(payload.expected_config_version);
       if (!Number.isInteger(expectedConfigVersion) || expectedConfigVersion < 0) {
         throw new HttpError(400, 'BAD_REQUEST', 'expected_config_version must be a non-negative integer');

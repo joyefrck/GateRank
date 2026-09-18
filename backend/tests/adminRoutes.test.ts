@@ -204,6 +204,40 @@ test('GET and PATCH performance probe settings expose sanitized per-airport swit
   }
 });
 
+for (const latest of [null, { status: 'failed', median_download_mbps: null }, { status: 'success', median_download_mbps: 0 }]) {
+  test(`PATCH probe settings accepts next-run mainland configuration with historical evidence ${JSON.stringify(latest)}`, async () => {
+    let saved = false;
+    let audited = false;
+    const app = express();
+    app.use(express.json());
+    app.use(createAdminRoutes({
+      performanceRunRepository: { getLatestByAirportProbeBeforeDate: async () => latest },
+      performanceProbeSettingRepository: {
+        getByAirport: async () => ({ airport_id: 93, config_version: 0, settings: [] }),
+        saveAll: async (input: unknown) => { saved = true; return input; },
+      },
+      auditRepository: { log: async () => { audited = true; } },
+    } as never));
+    app.use(errorHandler);
+    const server = app.listen(0);
+    try {
+      const response = await fetch(`http://127.0.0.1:${(server.address() as AddressInfo).port}/airports/93/performance-probe-settings`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ date: getDateInTimezone(), expected_config_version: 0, settings: [
+          { probe_id: 'legacy-control', test_enabled: false, include_in_result: false },
+          { probe_id: 'cn-shanghai', test_enabled: true, include_in_result: true },
+          { probe_id: 'cn-guangzhou', test_enabled: true, include_in_result: true },
+        ] }),
+      });
+      assert.equal(response.status, 200);
+      assert.equal(saved, true);
+      assert.equal(audited, true);
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+}
+
 function adminProbe(probeId: 'legacy-control' | 'cn-shanghai' | 'cn-guangzhou') {
   const mainland = probeId !== 'legacy-control';
   return {

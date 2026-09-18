@@ -445,3 +445,35 @@ test('AirportRepository.listLatestApprovedApplicationAirports reads paid reviewe
   assert.ok(calls[0]?.sql.includes("airports.status <> 'down'"));
   assert.ok(calls[0]?.sql.includes('COALESCE(application.reviewed_at, application.updated_at, application.created_at) DESC'));
 });
+
+for (const failSettings of [false, true]) {
+  test(`new airport initializes only Shanghai and Guangzhou atomically (failure=${failSettings})`, async () => {
+    const events: string[] = [];
+    const rows: unknown[][] = [];
+    const execute = async (sql: string, params: unknown[]) => {
+      if (sql.includes('INSERT INTO airports')) { events.push('airport'); return [{ insertId: 99 }]; }
+      assert.match(sql, /INSERT INTO airport_performance_probe_settings/);
+      if (failSettings) throw new Error('settings write failed');
+      rows.push(params);
+      return [{ affectedRows: 1 }];
+    };
+    const repository = new AirportRepository({
+      query: async () => [[]], execute,
+      getConnection: async () => ({
+        beginTransaction: async () => { events.push('begin'); }, execute,
+        commit: async () => { events.push('commit'); },
+        rollback: async () => { events.push('rollback'); },
+        release: () => { events.push('release'); },
+      }),
+    } as never);
+    const create = () => repository.create({ name: 'New Airport', website: 'https://new.example.com', plan_price_month: 10, has_trial: false });
+    if (failSettings) {
+      await assert.rejects(create(), /settings write failed/);
+      assert.deepEqual(events, ['begin', 'airport', 'rollback', 'release']);
+    } else {
+      assert.equal(await create(), 99);
+      assert.deepEqual(events, ['begin', 'airport', 'commit', 'release']);
+      assert.deepEqual(rows, [[99, 'legacy-control', 0, 0], [99, 'cn-shanghai', 1, 1], [99, 'cn-guangzhou', 1, 1]]);
+    }
+  });
+}

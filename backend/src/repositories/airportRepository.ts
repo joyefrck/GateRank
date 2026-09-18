@@ -9,6 +9,7 @@ import type {
 import { mergeDisplayTags, normalizeTagList } from '../utils/tags';
 import { normalizeAirportProfile } from '../utils/airportProfile';
 import { buildAirportSlugCandidate, normalizeAirportSlug } from '../../../shared/publicSeo';
+import { PERFORMANCE_PROBE_DEFINITIONS } from '../config/performanceProbes';
 import type { AirportNameHistoryEntry } from '../../../shared/airportNameHistory';
 
 const AIRPORT_STREAMING_SUPPORT_VALUES: AirportStreamingSupport[] = [
@@ -734,66 +735,86 @@ export class AirportRepository {
     const manualTags = normalizeTagList(input.manual_tags ?? input.tags ?? []);
     const autoTags: string[] = [];
     const mergedTags = mergeDisplayTags(manualTags, autoTags);
-    const [result] = await this.pool.execute<ResultSetHeader>(
-       `INSERT INTO airports (
-         slug,
-         name,
-         website,
-         websites_json,
-         status,
-         is_listed,
-         plan_price_month,
-         has_trial,
-         streaming_support_json,
-         payment_methods_json,
-         payment_crypto_other,
-         has_annual_plan,
-         has_telegram_group,
-         telegram_allows_speaking,
-         has_lifetime_plan,
-         airport_profile_json,
-         subscription_url,
-         applicant_email,
-         applicant_telegram,
-         founded_on,
-         airport_intro,
-         test_account,
-         test_password,
-         manual_tags_json,
-         auto_tags_json,
-         tags_json
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        slug,
-        input.name,
-        websites[0],
-        JSON.stringify(websites),
-        input.status || 'normal',
-        input.is_listed === undefined ? 1 : (input.is_listed ? 1 : 0),
-        input.plan_price_month,
-        input.has_trial ? 1 : 0,
-        JSON.stringify(normalizeAirportStreamingSupport(input.streaming_support)),
-        JSON.stringify(normalizeAirportPaymentMethods(input.payment_methods)),
-        input.payment_crypto_other || null,
-        nullableBooleanToDb(input.has_annual_plan),
-        nullableBooleanToDb(input.has_telegram_group),
-        nullableBooleanToDb(input.telegram_allows_speaking),
-        nullableBooleanToDb(input.has_lifetime_plan),
-        JSON.stringify(normalizeAirportProfile(input.profile)),
-        input.subscription_url || null,
-        input.applicant_email || null,
-        input.applicant_telegram || null,
-        input.founded_on || null,
-        input.airport_intro || null,
-        input.test_account || null,
-        input.test_password || null,
-        JSON.stringify(manualTags),
-        JSON.stringify(autoTags),
-        JSON.stringify(mergedTags),
-      ],
-    );
-
-    return result.insertId;
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [result] = await connection.execute<ResultSetHeader>(
+         `INSERT INTO airports (
+           slug,
+           name,
+           website,
+           websites_json,
+           status,
+           is_listed,
+           plan_price_month,
+           has_trial,
+           streaming_support_json,
+           payment_methods_json,
+           payment_crypto_other,
+           has_annual_plan,
+           has_telegram_group,
+           telegram_allows_speaking,
+           has_lifetime_plan,
+           airport_profile_json,
+           subscription_url,
+           applicant_email,
+           applicant_telegram,
+           founded_on,
+           airport_intro,
+           test_account,
+           test_password,
+           manual_tags_json,
+           auto_tags_json,
+           tags_json
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          slug,
+          input.name,
+          websites[0],
+          JSON.stringify(websites),
+          input.status || 'normal',
+          input.is_listed === undefined ? 1 : (input.is_listed ? 1 : 0),
+          input.plan_price_month,
+          input.has_trial ? 1 : 0,
+          JSON.stringify(normalizeAirportStreamingSupport(input.streaming_support)),
+          JSON.stringify(normalizeAirportPaymentMethods(input.payment_methods)),
+          input.payment_crypto_other || null,
+          nullableBooleanToDb(input.has_annual_plan),
+          nullableBooleanToDb(input.has_telegram_group),
+          nullableBooleanToDb(input.telegram_allows_speaking),
+          nullableBooleanToDb(input.has_lifetime_plan),
+          JSON.stringify(normalizeAirportProfile(input.profile)),
+          input.subscription_url || null,
+          input.applicant_email || null,
+          input.applicant_telegram || null,
+          input.founded_on || null,
+          input.airport_intro || null,
+          input.test_account || null,
+          input.test_password || null,
+          JSON.stringify(manualTags),
+          JSON.stringify(autoTags),
+          JSON.stringify(mergedTags),
+        ],
+      );
+      // Persist defaults only for newly created airports; existing configurations
+      // and legacy migration defaults retain their current behavior.
+      for (const probe of PERFORMANCE_PROBE_DEFINITIONS) {
+        const enabled = probe.probe_type === 'mainland' ? 1 : 0;
+        await connection.execute(
+          `INSERT INTO airport_performance_probe_settings
+             (airport_id, probe_id, test_enabled, include_in_result, config_version, updated_by)
+           VALUES (?, ?, ?, ?, 1, 'airport-create')`,
+          [result.insertId, probe.probe_id, enabled, enabled],
+        );
+      }
+      await connection.commit();
+      return result.insertId;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async update(id: number, input: UpdateAirportInput): Promise<boolean> {
