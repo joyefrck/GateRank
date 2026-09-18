@@ -353,12 +353,22 @@ export class AirportApplicationRepository {
       args.push(query.paymentStatus);
     }
 
-    if (query.keyword) {
-      const keyword = `%${query.keyword}%`;
-      where.push(
-        '(name LIKE ? OR website LIKE ? OR websites_json LIKE ? OR applicant_email LIKE ? OR applicant_telegram LIKE ?)',
-      );
-      args.push(keyword, keyword, keyword, keyword, keyword);
+    const search = query.keyword?.trim();
+    if (search) {
+      const idMatch = search.match(/^#?(\d+)$/);
+      const id = idMatch ? Number(idMatch[1]) : null;
+      const applicationId = id !== null && Number.isSafeInteger(id) && id > 0 ? id : null;
+      if (applicationId !== null && search.startsWith('#')) {
+        where.push('id = ?');
+        args.push(applicationId);
+      } else {
+        const keyword = `%${search}%`;
+        where.push(
+          `(name LIKE ? OR website LIKE ? OR websites_json LIKE ? OR applicant_email LIKE ? OR applicant_telegram LIKE ?${applicationId === null ? '' : ' OR id = ?'})`,
+        );
+        args.push(keyword, keyword, keyword, keyword, keyword);
+        if (applicationId !== null) args.push(applicationId);
+      }
     }
 
     const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';

@@ -2,6 +2,44 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AirportApplicationRepository } from '../src/repositories/airportApplicationRepository';
 
+for (const keyword of ['136', '#136', '  #136  ']) {
+  test(`application search supports ${JSON.stringify(keyword)} with filters and pagination`, async () => {
+    const calls: Array<{ sql: string; params: unknown[] }> = [];
+    const repository = new AirportApplicationRepository({
+      query: async (sql: string, params: unknown[]) => {
+        calls.push({ sql, params });
+        return [sql.includes('COUNT(*)') ? [{ total: 1 }] : []];
+      },
+    } as never);
+    await repository.listByQuery({ keyword, reviewStatus: 'pending', paymentStatus: 'paid', page: 2, pageSize: 10 });
+    for (const call of calls) {
+      assert.match(call.sql, /\bid = \?/);
+      assert.match(call.sql, /review_status = \?/);
+      assert.match(call.sql, /payment_status = \?/);
+      assert.deepEqual(call.params.slice(0, 2), ['pending', 'paid']);
+      assert.ok(call.params.includes(136));
+      if (keyword.trim().startsWith('#')) assert.doesNotMatch(call.sql, /name LIKE/);
+      else assert.match(call.sql, /name LIKE/);
+    }
+    assert.deepEqual(calls[1].params.slice(-2), [10, 10]);
+  });
+}
+
+test('application search retains text search and does not partially parse IDs', async () => {
+  for (const keyword of ['Cloud', '136abc', '#136abc', '9007199254740993', '0']) {
+    const calls: string[] = [];
+    const repository = new AirportApplicationRepository({
+      query: async (sql: string) => {
+        calls.push(sql);
+        return [sql.includes('COUNT(*)') ? [{ total: 0 }] : []];
+      },
+    } as never);
+    await repository.listByQuery({ keyword });
+    assert.match(calls[0], /name LIKE/);
+    assert.doesNotMatch(calls[0], /\bid = \?/);
+  }
+});
+
 test('AirportApplicationRepository.ensureSchema creates table and backfills website arrays', async () => {
   const calls: Array<{ sql: string; params?: unknown[] }> = [];
   let schemaChecks = 0;

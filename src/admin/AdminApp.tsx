@@ -1,5 +1,6 @@
 import { TopicPages } from './topics/TopicPages';
 import { BalanceReminderButton } from './BalanceReminderButton';
+import { AirportNameHistoryButton } from './AirportNameHistoryButton';
 import { RevenuePage } from './revenue/RevenuePage';
 import { Wallet } from 'lucide-react';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -8738,12 +8739,15 @@ function AirportsPage({
                 </div>
 
                 <FormField label="机场名称" hint="用于管理列表、数据台标题与榜单识别。">
-                  <input
-                    className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
-                    placeholder="例如：大象网络"
-                    value={editing.name}
-                    onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                  />
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <input
+                      className="min-w-0 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
+                      placeholder="例如：大象网络"
+                      value={editing.name}
+                      onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                    />
+                    {editing.id && <AirportNameHistoryButton airportId={editing.id} request={apiFetch} formatTime={formatDateTimeInBeijing} />}
+                  </div>
                 </FormField>
 
                 <FormField label="最低月付价格" hint="用于性价比计算，单位按元处理。">
@@ -9573,12 +9577,15 @@ function AirportEditorPage({
       {tab === 'basic' && (
         <section className="space-y-4 rounded border border-neutral-200 bg-white p-5">
           <FormField label="机场名称" hint="用于管理列表、数据台标题与榜单识别。">
-            <input
-              className="w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
-              placeholder="例如：大象网络"
-              value={editing.name}
-              onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-            />
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <input
+                className="min-w-0 w-full rounded border border-neutral-300 bg-white px-4 py-3 text-sm outline-none focus:border-neutral-900"
+                placeholder="例如：大象网络"
+                value={editing.name}
+                onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+              />
+              {editing.id && <AirportNameHistoryButton airportId={editing.id} request={apiFetch} formatTime={formatDateTimeInBeijing} />}
+            </div>
           </FormField>
 
           <FormField label="解锁能力" hint="后台运营资料，支持多选。">
@@ -10278,12 +10285,17 @@ function ApplicationsPage({ onOpenAirports }: { onOpenAirports: () => void }) {
         <div className="relative">
           <Search size={14} className="absolute left-2 top-2.5 text-neutral-400" />
           <input
-            className="border rounded pl-7 pr-3 py-2 text-sm"
-            placeholder="搜索机场 / 邮箱 / Telegram / 官网"
+            className="w-full sm:w-80 border rounded pl-7 pr-3 py-2 text-sm"
+            aria-label="搜索申请 ID、机场、邮箱、Telegram 或官网"
+            placeholder="申请 ID / 机场 / 邮箱 / Telegram / 官网"
+            title="支持申请 ID（如 136 或 #136）、机场、邮箱、Telegram 或官网"
             value={keyword}
             onChange={(e) => {
               setKeyword(e.target.value);
               setPage(1);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { setPage(1); void fetchList(1); }
             }}
           />
         </div>

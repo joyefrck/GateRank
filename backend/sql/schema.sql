@@ -33,6 +33,18 @@ CREATE TABLE IF NOT EXISTS airports (
   UNIQUE KEY uk_airports_name (name)
 );
 
+CREATE TABLE IF NOT EXISTS airport_name_history (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  airport_id BIGINT UNSIGNED NOT NULL,
+  old_name VARCHAR(128) NOT NULL,
+  new_name VARCHAR(128) NOT NULL,
+  changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  INDEX idx_airport_name_history_airport_changed (airport_id, changed_at DESC, id DESC),
+  CONSTRAINT fk_airport_name_history_airport
+    FOREIGN KEY (airport_id) REFERENCES airports(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS airport_applications (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   name VARCHAR(128) NOT NULL,

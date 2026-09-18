@@ -2,6 +2,81 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AirportRepository } from '../src/repositories/airportRepository';
 
+function nameHistoryFixture(options: { missing?: boolean; fail?: 'update' | 'history' } = {}) {
+  const events: string[] = [];
+  let name = '原名称';
+  let history: unknown[][] = [];
+  let savedName = name;
+  let savedHistory = history;
+  const repository = new AirportRepository({
+    getConnection: async () => ({
+      beginTransaction: async () => { events.push('begin'); savedName = name; savedHistory = [...history]; },
+      query: async (sql: string, params: unknown[]) => {
+        assert.match(sql, /SELECT name FROM airports WHERE id = \? FOR UPDATE/);
+        assert.deepEqual(params, [7]);
+        events.push('lock');
+        return [options.missing ? [] : [{ name }]];
+      },
+      execute: async (sql: string, params: unknown[]) => {
+        if (sql.startsWith('UPDATE airports')) {
+          events.push('update');
+          if (options.fail === 'update') throw new Error('duplicate name');
+          name = String(params[0]);
+        } else {
+          assert.match(sql, /INSERT INTO airport_name_history/);
+          events.push('history');
+          if (options.fail === 'history') throw new Error('history unavailable');
+          history.push(params);
+        }
+        return [{ affectedRows: 1 }];
+      },
+      commit: async () => { events.push('commit'); },
+      rollback: async () => { events.push('rollback'); name = savedName; history = savedHistory; },
+      release: () => { events.push('release'); },
+    }),
+  } as never);
+  return { repository, events, state: () => ({ name, history }) };
+}
+
+test('airport rename records each actual transition atomically and skips unchanged names', async () => {
+  const fixture = nameHistoryFixture();
+  assert.equal(await fixture.repository.update(7, { name: '新名称' }), true);
+  assert.deepEqual(fixture.events, ['begin', 'lock', 'update', 'history', 'commit', 'release']);
+  await fixture.repository.update(7, { name: '新名称' });
+  await fixture.repository.update(7, { name: '原名称' });
+  assert.deepEqual(fixture.state(), { name: '原名称', history: [[7, '原名称', '新名称'], [7, '新名称', '原名称']] });
+});
+
+for (const fail of ['update', 'history'] as const) {
+  test(`airport rename rolls back when ${fail} fails`, async () => {
+    const fixture = nameHistoryFixture({ fail });
+    await assert.rejects(fixture.repository.update(7, { name: '新名称' }));
+    assert.deepEqual(fixture.state(), { name: '原名称', history: [] });
+    assert.deepEqual(fixture.events.slice(-2), ['rollback', 'release']);
+    assert.ok(!fixture.events.includes('commit'));
+  });
+}
+
+test('missing airport does not create name history', async () => {
+  const fixture = nameHistoryFixture({ missing: true });
+  assert.equal(await fixture.repository.update(7, { name: '新名称' }), false);
+  assert.equal(fixture.state().history.length, 0);
+  assert.ok(!fixture.events.includes('update'));
+  assert.equal(fixture.events.at(-1), 'release');
+});
+
+test('airport name history is scoped and ordered newest first with serializable timestamps', async () => {
+  const repository = new AirportRepository({
+    query: async (sql: string, params: unknown[]) => {
+      assert.match(sql, /WHERE airport_id = \?/);
+      assert.match(sql, /ORDER BY changed_at DESC, id DESC/);
+      assert.deepEqual(params, [7]);
+      return [[{ id: 1, old_name: '原名称', new_name: '新名称', changed_at: new Date('2026-09-18T02:30:00Z') }]];
+    },
+  } as never);
+  assert.deepEqual(await repository.listNameHistory(7), [{ id: 1, old_name: '原名称', new_name: '新名称', changed_at: '2026-09-18T02:30:00.000Z' }]);
+});
+
 test('AirportRepository.ensureSchema adds missing JSON columns and backfills defaults', async () => {
   const calls: Array<{ sql: string; params?: unknown[] }> = [];
   let schemaChecks = 0;
@@ -18,6 +93,10 @@ test('AirportRepository.ensureSchema adds missing JSON columns and backfills def
   } as never);
 
   await repository.ensureSchema();
+
+  assert.ok(calls.some((call) => call.sql.includes('CREATE TABLE IF NOT EXISTS airport_name_history')
+    && call.sql.includes('changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP')
+    && call.sql.includes('FOREIGN KEY (airport_id) REFERENCES airports(id)')));
 
   assert.ok(
     calls.some((call) => call.sql.includes('ALTER TABLE airports ADD COLUMN slug VARCHAR(160) NULL AFTER id')),

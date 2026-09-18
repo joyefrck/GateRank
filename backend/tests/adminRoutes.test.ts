@@ -20,6 +20,35 @@ import { buildPerformanceNodeKey, buildPerformanceNodeMatchIdentity } from '../s
 import { getDateInTimezone } from '../src/utils/time';
 import type { AirportHomeAdSlotPrices } from '../../shared/airportAds';
 
+test('airport name history endpoint returns scoped history, empty results and missing airports', async () => {
+  const queried: number[] = [];
+  const entries = [{ id: 1, old_name: '原名称', new_name: '新名称', changed_at: '2026-09-18T02:30:00.000Z' }];
+  const app = express();
+  app.use(createAdminRoutes({
+    airportRepository: {
+      ...stubAirportRepository(),
+      getById: async (id: number) => id === 99 ? null : { id },
+      listNameHistory: async (id: number) => { queried.push(id); return id === 7 ? entries : []; },
+    },
+  } as never));
+  app.use(errorHandler);
+  const server = app.listen(0);
+  try {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    const history = await fetch(`${base}/airports/7/name-history`);
+    assert.equal(history.status, 200);
+    assert.deepEqual(await history.json(), { items: entries });
+    const empty = await fetch(`${base}/airports/8/name-history`);
+    assert.equal(empty.status, 200);
+    assert.deepEqual(await empty.json(), { items: [] });
+    assert.equal((await fetch(`${base}/airports/99/name-history`)).status, 404);
+    assert.equal((await fetch(`${base}/airports/0/name-history`)).status, 400);
+    assert.deepEqual(queried, [7, 8]);
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
+
 test('GET and PATCH performance probe settings expose sanitized per-airport switches', async () => {
   const today = getDateInTimezone();
   const audits: Array<{ action: string; payload: unknown }> = [];

@@ -9,6 +9,7 @@ import type {
 import { mergeDisplayTags, normalizeTagList } from '../utils/tags';
 import { normalizeAirportProfile } from '../utils/airportProfile';
 import { buildAirportSlugCandidate, normalizeAirportSlug } from '../../../shared/publicSeo';
+import type { AirportNameHistoryEntry } from '../../../shared/airportNameHistory';
 
 const AIRPORT_STREAMING_SUPPORT_VALUES: AirportStreamingSupport[] = [
   'netflix',
@@ -134,6 +135,19 @@ export class AirportRepository {
   constructor(private readonly pool: Pool) {}
 
   async ensureSchema(): Promise<void> {
+    await this.pool.query(`
+      CREATE TABLE IF NOT EXISTS airport_name_history (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        airport_id BIGINT UNSIGNED NOT NULL,
+        old_name VARCHAR(128) NOT NULL,
+        new_name VARCHAR(128) NOT NULL,
+        changed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (id),
+        INDEX idx_airport_name_history_airport_changed (airport_id, changed_at DESC, id DESC),
+        CONSTRAINT fk_airport_name_history_airport
+          FOREIGN KEY (airport_id) REFERENCES airports(id) ON DELETE CASCADE
+      )
+    `);
     await this.ensureColumn('slug', 'VARCHAR(160) NULL AFTER id');
     await this.ensureColumn('websites_json', 'JSON NULL AFTER website');
     await this.ensureColumn('is_listed', 'TINYINT(1) NOT NULL DEFAULT 1 AFTER status');
@@ -906,16 +920,66 @@ export class AirportRepository {
     }
 
     values.push(id);
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      `UPDATE airports SET ${sets.join(', ')} WHERE id = ?`,
-      values,
-    );
+    const sql = `UPDATE airports SET ${sets.join(', ')} WHERE id = ?`;
+    const result = typeof input.name === 'string'
+      ? await this.updateWithNameHistory(id, input.name, sql, values)
+      : (await this.pool.execute<ResultSetHeader>(sql, values))[0];
 
     if (result.affectedRows > 0 && (Array.isArray(input.manual_tags) || Array.isArray(input.tags))) {
       await this.rebuildMergedTags(id);
     }
 
     return result.affectedRows > 0;
+  }
+
+  async listNameHistory(id: number): Promise<AirportNameHistoryEntry[]> {
+    const [rows] = await this.pool.query<RowDataPacket[]>(
+      `SELECT id, old_name, new_name, changed_at
+         FROM airport_name_history
+        WHERE airport_id = ?
+        ORDER BY changed_at DESC, id DESC`,
+      [id],
+    );
+    return rows.map((row) => ({
+      id: Number(row.id),
+      old_name: row.old_name,
+      new_name: row.new_name,
+      changed_at: row.changed_at instanceof Date ? row.changed_at.toISOString() : row.changed_at,
+    }));
+  }
+
+  private async updateWithNameHistory(
+    id: number,
+    name: string,
+    sql: string,
+    values: Array<string | number | null>,
+  ): Promise<Pick<ResultSetHeader, 'affectedRows'>> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [rows] = await connection.query<RowDataPacket[]>(
+        'SELECT name FROM airports WHERE id = ? FOR UPDATE',
+        [id],
+      );
+      if (rows.length === 0) {
+        await connection.rollback();
+        return { affectedRows: 0 };
+      }
+      const [result] = await connection.execute<ResultSetHeader>(sql, values);
+      if (result.affectedRows > 0 && rows[0].name !== name) {
+        await connection.execute(
+          'INSERT INTO airport_name_history (airport_id, old_name, new_name) VALUES (?, ?, ?)',
+          [id, rows[0].name, name],
+        );
+      }
+      await connection.commit();
+      return result;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async setManualTags(id: number, tags: string[]): Promise<void> {

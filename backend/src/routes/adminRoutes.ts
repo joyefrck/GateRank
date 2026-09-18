@@ -43,6 +43,7 @@ import type {
   WalletTransactionView,
 } from '../repositories/applicantBillingRepository';
 import type { AirportListSortBy, AirportListSortOrder } from '../repositories/airportRepository';
+import type { AirportNameHistoryEntry } from '../../../shared/airportNameHistory';
 import type { AccessTokenScope } from '../utils/accessToken';
 import type { SubscriptionNodeCaptureResult } from '../services/subscriptionNodeCaptureService';
 import { createRandomPassword, hashPassword } from '../utils/password';
@@ -118,6 +119,7 @@ interface AdminDeps {
       scoreDate?: string | null;
     }): Promise<{ items: unknown[]; total: number }>;
     getById(id: number): Promise<unknown | null>;
+    listNameHistory?(id: number): Promise<AirportNameHistoryEntry[]>;
     create(input: {
       slug?: string | null;
       name: string;
@@ -1542,6 +1544,21 @@ export function createAdminRoutes(deps: AdminDeps): Router {
       res.status(201).json({ airport_id: airportId });
     } catch (error) {
       next(normalizeAirportMutationError(error));
+    }
+  });
+
+  router.get('/airports/:id/name-history', async (req, res, next) => {
+    try {
+      const airportId = toAirportId(req.params.id);
+      if (!await deps.airportRepository.getById(airportId)) {
+        throw new HttpError(404, 'AIRPORT_NOT_FOUND', `airport ${airportId} not found`);
+      }
+      if (!deps.airportRepository.listNameHistory) {
+        throw new HttpError(503, 'NAME_HISTORY_UNAVAILABLE', '名称历史暂不可用');
+      }
+      res.json({ items: await deps.airportRepository.listNameHistory(airportId) });
+    } catch (error) {
+      next(error);
     }
   });
 
