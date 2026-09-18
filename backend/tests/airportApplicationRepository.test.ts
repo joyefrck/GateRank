@@ -13,7 +13,8 @@ for (const keyword of ['136', '#136', '  #136  ']) {
     } as never);
     await repository.listByQuery({ keyword, reviewStatus: 'pending', paymentStatus: 'paid', page: 2, pageSize: 10 });
     for (const call of calls) {
-      assert.match(call.sql, /\bid = \?/);
+      assert.match(call.sql, /airport_applications\.id = \?/);
+      assert.doesNotMatch(call.sql, /(?:WHERE|OR) id = \?/);
       assert.match(call.sql, /review_status = \?/);
       assert.match(call.sql, /payment_status = \?/);
       assert.deepEqual(call.params.slice(0, 2), ['pending', 'paid']);

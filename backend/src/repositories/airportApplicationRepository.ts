@@ -359,12 +359,12 @@ export class AirportApplicationRepository {
       const id = idMatch ? Number(idMatch[1]) : null;
       const applicationId = id !== null && Number.isSafeInteger(id) && id > 0 ? id : null;
       if (applicationId !== null && search.startsWith('#')) {
-        where.push('id = ?');
+        where.push('airport_applications.id = ?');
         args.push(applicationId);
       } else {
         const keyword = `%${search}%`;
         where.push(
-          `(name LIKE ? OR website LIKE ? OR websites_json LIKE ? OR applicant_email LIKE ? OR applicant_telegram LIKE ?${applicationId === null ? '' : ' OR id = ?'})`,
+          `(name LIKE ? OR website LIKE ? OR websites_json LIKE ? OR applicant_email LIKE ? OR applicant_telegram LIKE ?${applicationId === null ? '' : ' OR airport_applications.id = ?'})`,
         );
         args.push(keyword, keyword, keyword, keyword, keyword);
         if (applicationId !== null) args.push(applicationId);
