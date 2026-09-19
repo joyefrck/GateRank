@@ -1,3 +1,4 @@
+import { seedHomeRotationAirportOverrides } from '../src/db/migrations/homeRotationAirportOverrides';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import mysql from 'mysql2/promise';
@@ -10,7 +11,7 @@ import { ScoreRuleService } from '../src/services/scoreRuleService';
 test('homepage rotation MySQL: eligibility, concurrency, persistence and balance changes', {
   skip: !process.env.GATERANK_ROTATION_TEST_PORT,
 }, async () => {
-  const config = { host: '127.0.0.1', port: Number(process.env.GATERANK_ROTATION_TEST_PORT), user: 'root', password: '', decimalNumbers: true };
+  const config = { host: '127.0.0.1', port: Number(process.env.GATERANK_ROTATION_TEST_PORT), user: process.env.GATERANK_ROTATION_TEST_USER || 'root', password: process.env.GATERANK_ROTATION_TEST_PASSWORD || '', decimalNumbers: true };
   const admin = mysql.createPool(config);
   const database = `gaterank_rotation_test_${process.pid}_${Date.now()}`;
   await admin.query(`CREATE DATABASE ${database}`);
@@ -84,10 +85,33 @@ test('homepage rotation MySQL: eligibility, concurrency, persistence and balance
     assert.ok(!withoutNodes.airport_ids.includes(missingNodesId), 'latest empty snapshot removes the airport from the entire queue');
     await pool.execute("INSERT INTO airport_subscription_node_snapshots (airport_id, captured_at, parsed_nodes_count) VALUES (?, '2026-09-15 01:00:00', 30)", [missingNodesId]);
     assert.equal((await service.getSelection(12, 30)).total, 5, 'new valid nodes restore eligibility');
+    // No application/account/wallet and no snapshot at all; explicit selection still participates.
+    await pool.execute("INSERT INTO airports (id, is_listed, status) VALUES (14, 1, 'normal')");
+    const overrides = [1, 6, 7, 8, 9, 10, 11, 12, 13, 14, 14, 999];
+    const overridden = await service.getSelection(100, 30, overrides);
+    assert.deepEqual([...overridden.airport_ids].sort((a, b) => a - b), [1,2,3,4,5,6,7,8,11,12,13,14]);
+    assert.equal(overridden.total, 12, 'duplicates, unlisted, down and missing airports are excluded');
+    assert.equal((await service.getSelection(100, 30, [])).total, 5, 'clearing overrides restores normal eligibility');
+    await pool.execute("UPDATE airports SET is_listed = 0 WHERE id = 14");
+    assert.equal((await service.getSelection(100, 30, [14])).total, 5, 'unlisting pauses a designated airport');
+    await pool.execute("UPDATE airports SET is_listed = 1, status = 'risk' WHERE id = 14");
+    assert.equal((await service.getSelection(100, 30, [14])).total, 6, 'listed risk airports follow existing status rules');
     await pool.query('UPDATE applicant_wallets SET balance = 0');
     const empty = await service.getSelection(4, 120);
     assert.deepEqual(empty.airport_ids, []);
     assert.equal(empty.total, 0);
+    await pool.query('ALTER TABLE airports ADD COLUMN name VARCHAR(100)');
+    await seedHomeRotationAirportOverrides(pool, await settings.getConfig());
+    assert.deepEqual((await settings.getConfig()).home_rotation_airport_ids, [], 'missing airport is not fabricated');
+    await pool.execute('UPDATE airports SET name = ? WHERE id = 14', ['大象网络']);
+    await pool.query("UPDATE admin_system_settings SET value_json = JSON_REMOVE(value_json, '$.home_rotation_airport_ids') WHERE setting_key = 'marketing_billing'");
+    await seedHomeRotationAirportOverrides(pool, await settings.getConfig());
+    assert.deepEqual((await settings.getConfig()).home_rotation_airport_ids, [14]);
+    assert.equal((await settings.getConfig()).click_charge_amount, 1, 'migration preserves existing billing config');
+    await settings.updateAdminSettings({ home_rotation_airport_ids: [] }, 'admin');
+    await seedHomeRotationAirportOverrides(pool, await settings.getConfig());
+    assert.deepEqual((await settings.getConfig()).home_rotation_airport_ids, [], 'restart never overrides an administrator removal');
+
   } finally {
     await pool.end();
     await admin.query(`DROP DATABASE ${database}`);

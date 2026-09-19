@@ -147,6 +147,7 @@ test('MarketingSettingsService saves application, click fees, ad monthly price, 
     },
     recharge_amounts: [100, 300, 500],
     admin_telegram_username: 'GateRank_Admin',
+    home_rotation_airport_ids: [],
     home_rotation_interval_minutes: 120,
     home_section_limits: {
       today_pick: 6,
@@ -433,4 +434,17 @@ test('homepage rotation interval defaults, persists, and survives unrelated part
     await assert.rejects(service.updateAdminSettings({ home_rotation_interval_minutes: value }, 'admin'), /home_rotation_interval_minutes/);
   }
   assert.equal((await service.getConfig()).home_rotation_interval_minutes, 30);
+});
+
+test('home rotation override list persists, deduplicates, preserves omitted values and clears explicitly', async () => {
+  const { repository } = createSettingsRepository();
+  const service = new MarketingSettingsService({ systemSettingRepository: repository });
+  assert.deepEqual((await service.getConfig()).home_rotation_airport_ids, []);
+  assert.deepEqual((await service.updateAdminSettings({ home_rotation_airport_ids: [7, 3, 7] }, 'admin')).home_rotation_airport_ids, [7, 3]);
+  assert.deepEqual((await service.updateAdminSettings({ home_rotation_interval_minutes: 30 }, 'admin')).home_rotation_airport_ids, [7, 3]);
+  for (const invalid of [null, '7', [0], [-1], [1.5], ['7'], [Number.MAX_SAFE_INTEGER + 1]]) {
+    await assert.rejects(() => service.updateAdminSettings({ home_rotation_airport_ids: invalid as number[] }, 'admin'));
+    assert.deepEqual((await service.getConfig()).home_rotation_airport_ids, [7, 3]);
+  }
+  assert.deepEqual((await service.updateAdminSettings({ home_rotation_airport_ids: [] }, 'admin')).home_rotation_airport_ids, []);
 });

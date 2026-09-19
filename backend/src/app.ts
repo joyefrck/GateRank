@@ -1,3 +1,4 @@
+import { seedHomeRotationAirportOverrides } from './db/migrations/homeRotationAirportOverrides';
 import { HomeAirportRotationService } from './services/homeAirportRotationService';
 import { TopicRepository } from './topics/topicRepository';
 import { TopicService } from './topics/topicService';
@@ -214,6 +215,7 @@ export async function createApp() {
   const marketingSettingsService = new MarketingSettingsService({
     systemSettingRepository,
   });
+  await seedHomeRotationAirportOverrides(pool, await marketingSettingsService.getConfig());
   const billingEligibility = new BillingEligibilityService(pool, marketingSettingsService, scoreRuleService);
   scoreRepository.billingEligibility = billingEligibility;
   applicantBillingRepository.billingEligibility = billingEligibility;

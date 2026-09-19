@@ -8111,3 +8111,40 @@ function stubPublicViewService() {
     getReportView: async () => null,
   };
 }
+
+test('marketing rotation options expose only display fields; saves validate, audit and clear homepage cache', async () => {
+  const writes: unknown[] = [];
+  const audits: unknown[] = [];
+  let clears = 0;
+  const app = express();
+  app.use(express.json());
+  app.use(createAdminRoutes({
+    airportRepository: {
+      ...stubAirportRepository(),
+      getById: async (id: number) => id === 7 ? { id } : null,
+      listByQuery: async () => ({ total: 1, items: [{ id: 7, name: '大象网络', is_listed: true, status: 'normal', subscription_url: 'private', test_password: 'private' }] }),
+    },
+    marketingSettingsService: { updateAdminSettings: async (input: unknown) => { writes.push(input); return input; } },
+    auditRepository: { log: async (...args: unknown[]) => { audits.push(args); } },
+    publicPageCache: { clear: () => { clears++; } },
+  } as never));
+  app.use(errorHandler);
+  const server = app.listen(0);
+  try {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    assert.deepEqual(await (await fetch(`${base}/marketing/home-rotation-airports`)).json(), {
+      total: 1, items: [{ id: 7, name: '大象网络', is_listed: true, status: 'normal' }],
+    });
+    const save = (ids: unknown) => fetch(`${base}/marketing/settings`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ home_rotation_airport_ids: ids }) });
+    assert.equal((await save([7, 7])).status, 200);
+    assert.deepEqual((writes[0] as { home_rotation_airport_ids: number[] }).home_rotation_airport_ids, [7]);
+    assert.equal((await save([99])).status, 400);
+    assert.equal((await save('7')).status, 400);
+    assert.equal((await save([0])).status, 400);
+    assert.equal(writes.length, 1);
+    assert.equal((await save([])).status, 200);
+    assert.deepEqual((writes[1] as { home_rotation_airport_ids: number[] }).home_rotation_airport_ids, []);
+    assert.equal(audits.length, 2);
+    assert.equal(clears, 2);
+  } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});

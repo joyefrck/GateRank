@@ -453,8 +453,9 @@ test('PublicViewService.getHomePageView reuses card context across sections for 
     },
   };
   const service = new PublicViewService({
+    marketingSettingsService: { getConfig: async () => ({ click_charge_amount: 1, home_rotation_airport_ids: [1, 7] }) },
     homeAirportRotationService: {
-      getSelection: async () => ({ airport_ids: [1], total: 1, rotation: { interval_minutes: 120, round: 1, started_at: '2026-03-24T00:00:00Z', next_rotation_at: '2026-03-24T02:00:00Z' } }),
+      getSelection: async (_limit, _interval, ids) => { assert.deepEqual(ids, [1, 7]); return ({ airport_ids: [1], total: 1, rotation: { interval_minutes: 120, round: 1, started_at: '2026-03-24T00:00:00Z', next_rotation_at: '2026-03-24T02:00:00Z' } }); },
       getSummarySelections: async () => {
         const selection = { airport_ids: [1], total: 1, rotation: { interval_minutes: 120, round: 1, started_at: '2026-03-24T00:00:00Z', next_rotation_at: '2026-03-24T02:00:00Z' } };
         return { most_stable: selection, best_value: selection };

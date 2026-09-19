@@ -1,3 +1,4 @@
+import { normalizeHomeRotationAirportIds } from '../services/marketingSettingsService';
 import { SCORE_COMPONENT_KEYS, type ManualScoreComponents, type ScoreComponentEditorState } from '../../../shared/gateRankScore';
 import { componentEditorState } from '../services/scoreComponents';
 import type { ScoreDetailValue } from '../types/domain';
@@ -721,6 +722,17 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     }
   });
 
+  router.get('/marketing/home-rotation-airports', async (req, res, next) => {
+    try {
+      const page = toPositiveInt(req.query.page, 1);
+      const result = await deps.airportRepository.listByQuery({ page, pageSize: 100 });
+      res.json({ total: result.total, items: result.items.map(item => {
+        const airport = item as { id: number; name: string; is_listed: boolean; status: string };
+        return { id: airport.id, name: airport.name, is_listed: airport.is_listed, status: airport.status };
+      }) });
+    } catch (error) { next(error); }
+  });
+
   router.get('/marketing/settings', async (_req, res, next) => {
     try {
       res.json(await getMarketingSettingsService(deps).getAdminSettings());
@@ -732,6 +744,13 @@ export function createAdminRoutes(deps: AdminDeps): Router {
   router.patch('/marketing/settings', async (req, res, next) => {
     try {
       const input = parseMarketingSettingsPayload((req.body ?? {}) as Record<string, unknown>);
+      if (input.home_rotation_airport_ids) {
+        for (const id of input.home_rotation_airport_ids) {
+          if (!await deps.airportRepository.getById(id)) {
+            throw new HttpError(400, 'BAD_REQUEST', `指定轮换机场 #${id} 不存在，请移除后重试`);
+          }
+        }
+      }
       const result = await getMarketingSettingsService(deps).updateAdminSettings(
         input,
         actorFromReq(req),
@@ -3429,6 +3448,9 @@ function parseMarketingSettingsPayload(
       payload.admin_telegram_username === undefined
         ? undefined
         : optionalString(payload.admin_telegram_username),
+    ...(payload.home_rotation_airport_ids === undefined ? {} : {
+      home_rotation_airport_ids: normalizeHomeRotationAirportIds(payload.home_rotation_airport_ids, true),
+    }),
     home_rotation_interval_minutes: payload.home_rotation_interval_minutes === undefined
       ? undefined
       : mustNumber(payload.home_rotation_interval_minutes, 'home_rotation_interval_minutes'),

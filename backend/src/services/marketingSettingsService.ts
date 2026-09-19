@@ -16,6 +16,7 @@ export interface MarketingSettingsInput {
   home_ad_slot_monthly_prices?: Partial<AirportHomeAdSlotPrices>;
   recharge_amounts?: number[];
   admin_telegram_username?: string | null;
+  home_rotation_airport_ids?: number[];
   home_rotation_interval_minutes?: number;
   home_section_limits?: Partial<HomeSectionLimits>;
 }
@@ -40,6 +41,7 @@ export interface MarketingSettingsView {
   home_ad_slot_monthly_prices: AirportHomeAdSlotPrices;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
+  home_rotation_airport_ids: number[];
   home_rotation_interval_minutes: number;
   home_section_limits: HomeSectionLimits;
   updated_at: string | null;
@@ -54,6 +56,7 @@ export interface MarketingBillingConfig {
   home_ad_slot_monthly_prices: AirportHomeAdSlotPrices;
   recharge_amounts: number[];
   admin_telegram_username: string | null;
+  home_rotation_airport_ids: number[];
   home_rotation_interval_minutes: number;
   home_section_limits: HomeSectionLimits;
 }
@@ -149,6 +152,9 @@ export class MarketingSettingsService {
         input.admin_telegram_username === undefined
           ? base.admin_telegram_username
           : normalizeTelegramUsername(input.admin_telegram_username),
+      home_rotation_airport_ids: input.home_rotation_airport_ids === undefined
+        ? base.home_rotation_airport_ids
+        : normalizeHomeRotationAirportIds(input.home_rotation_airport_ids, true),
       home_rotation_interval_minutes: input.home_rotation_interval_minutes === undefined
         ? base.home_rotation_interval_minutes
         : normalizeHomeRotationInterval(input.home_rotation_interval_minutes, true),
@@ -212,6 +218,7 @@ function getBaseDefaults(): MarketingBillingConfig {
     home_ad_slot_monthly_prices: createDefaultHomeAdSlotMonthlyPrices(),
     recharge_amounts: [...DEFAULT_MARKETING_RECHARGE_AMOUNTS],
     admin_telegram_username: null,
+    home_rotation_airport_ids: [],
     home_rotation_interval_minutes: 120,
     home_section_limits: { ...DEFAULT_HOME_SECTION_LIMITS },
   };
@@ -250,6 +257,7 @@ function normalizeConfig(value: unknown, defaults: MarketingBillingConfig): Mark
       false,
     ),
     admin_telegram_username: normalizeStoredTelegramUsername(record.admin_telegram_username),
+    home_rotation_airport_ids: normalizeHomeRotationAirportIds(record.home_rotation_airport_ids),
     home_rotation_interval_minutes: normalizeHomeRotationInterval(record.home_rotation_interval_minutes),
     home_section_limits: normalizeHomeSectionLimits(
       record.home_section_limits,
@@ -529,4 +537,13 @@ export function normalizeHomeRotationInterval(value: unknown, strict = false): n
   if (typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= 10080) return value;
   if (strict) throw new HttpError(400, 'BAD_REQUEST', 'home_rotation_interval_minutes must be an integer between 1 and 10080');
   return 120;
+}
+
+/** Omitted legacy config is empty; malformed admin input must never silently clear the list. */
+export function normalizeHomeRotationAirportIds(value: unknown, strict = false): number[] {
+  if (!Array.isArray(value) || value.some(id => typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0)) {
+    if (strict) throw new HttpError(400, 'BAD_REQUEST', '指定轮换机场必须是有效的机场 ID 列表');
+    return [];
+  }
+  return [...new Set(value)];
 }

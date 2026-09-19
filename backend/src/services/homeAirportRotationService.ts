@@ -94,7 +94,7 @@ export class HomeAirportRotationService {
     }
   }
 
-  async getSelection(limit: number, intervalMinutes: number): Promise<HomeAirportSelection> {
+  async getSelection(limit: number, intervalMinutes: number, forcedAirportIds: number[] = []): Promise<HomeAirportSelection> {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -130,6 +130,16 @@ export class HomeAirportRotationService {
       const eligibility = await this.billingEligibility.getSnapshot(connection);
       const ids = candidates.map(row => Number(row.airport_id))
         .filter(id => eligibility.get(id)?.score_hidden === false);
+      // Query independently: a designated airport may have no application, account or wallet.
+      if (forcedAirportIds.length) {
+        const [forced] = await connection.query<Array<RowDataPacket & { airport_id: number }>>(
+          `SELECT id AS airport_id FROM airports
+            WHERE is_listed = 1 AND status IN ('normal', 'risk')
+              AND id IN (${forcedAirportIds.map(() => '?').join(',')}) ORDER BY id`,
+          forcedAirportIds,
+        );
+        ids.push(...forced.map(row => Number(row.airport_id)));
+      }
       const state = advanceHomeAirportRotation(previous, ids, this.now(), intervalMinutes);
       if (JSON.stringify(previous) !== JSON.stringify(state)) {
         await connection.execute('UPDATE home_airport_rotation SET state_json = ? WHERE id = 1', [JSON.stringify(state)]);

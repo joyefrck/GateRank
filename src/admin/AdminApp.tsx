@@ -1,3 +1,4 @@
+import { HomeRotationAirportPicker, type HomeRotationAirportOptions } from './marketing/HomeRotationAirportPicker';
 import { TopicPages } from './topics/TopicPages';
 import { BalanceReminderButton } from './BalanceReminderButton';
 import { AirportNameHistoryButton } from './AirportNameHistoryButton';
@@ -1059,6 +1060,7 @@ interface PaymentGatewaySettingsFormState {
 }
 
 interface MarketingSettingsView {
+  home_rotation_airport_ids: number[];
   home_rotation_interval_minutes: number;
   application_fee_amount: number;
   click_charge_amount: number;
@@ -1079,6 +1081,7 @@ interface MarketingSettingsView {
 }
 
 interface MarketingSettingsFormState {
+  home_rotation_airport_ids: number[];
   home_rotation_interval_minutes: string;
   application_fee_amount: string;
   click_charge_amount: string;
@@ -4697,6 +4700,7 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
     home_ad_slot_monthly_prices: { ...defaultHomeAdSlotMonthlyPriceForm },
     recharge_amounts: defaultRechargeAmountForm,
     admin_telegram_username: '',
+    home_rotation_airport_ids: [],
     home_rotation_interval_minutes: '120',
     home_section_limits: defaultHomeSectionLimitForm,
   });
@@ -4732,6 +4736,7 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
       ) as Record<MarketingHomeAdSlot, string>,
       recharge_amounts: rechargeAmounts.map((amount) => String(amount)),
       admin_telegram_username: view.admin_telegram_username ? `@${view.admin_telegram_username}` : '',
+      home_rotation_airport_ids: view.home_rotation_airport_ids ?? [],
       home_rotation_interval_minutes: String(view.home_rotation_interval_minutes ?? 120),
       home_section_limits: {
         today_pick: String(view.home_section_limits?.today_pick || 3),
@@ -4787,6 +4792,7 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
           ),
           recharge_amounts: form.recharge_amounts.map((amount) => Number(amount)),
           admin_telegram_username: form.admin_telegram_username,
+          home_rotation_airport_ids: form.home_rotation_airport_ids,
           home_rotation_interval_minutes: Number(form.home_rotation_interval_minutes),
           home_section_limits: {
             today_pick: Number(form.home_section_limits.today_pick),
@@ -5054,7 +5060,13 @@ function MarketingSettingsPage({ onNavigateTab }: { onNavigateTab: (path: string
                   />
                 </FormField>
               </div>
-              <p className="mb-5 text-sm leading-6 text-neutral-500">已付费入驻、已充值、余额足够扣费且最新订阅节点数量大于 0 的机场参与轮换。所有候选每轮依次获得一次首位；展示数量只限制当前显示几家。评分和点击扣费档位保持原有规则。</p>
+              <p className="mb-5 text-sm leading-6 text-neutral-500">普通候选需已付费入驻、已充值、余额足够扣费且最新订阅节点数量大于 0；管理员指定的机场可豁免这些条件。所有候选每轮依次获得一次首位；展示数量只限制当前显示几家。评分和点击扣费档位保持原有规则。</p>
+              <HomeRotationAirportPicker
+                value={form.home_rotation_airport_ids}
+                onChange={(ids) => { setForm((current) => ({ ...current, home_rotation_airport_ids: ids })); setSuccess(''); }}
+                loadPage={async (page) => apiFetch(`/api/v1/admin/marketing/home-rotation-airports?page=${page}`) as Promise<HomeRotationAirportOptions>}
+                disabled={loading || saving}
+              />
               <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
                 {homeSectionLimitFields.map((item) => (
                   <div key={item.key}>

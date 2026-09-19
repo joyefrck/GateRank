@@ -1,6 +1,6 @@
 import type { HomeAirportRotationService } from './homeAirportRotationService';
 import { homeAirportRotationDescription, HOME_SUMMARY_COPY } from '../../../shared/homeAirportRotation';
-import { normalizeHomeRotationInterval } from './marketingSettingsService';
+import { normalizeHomeRotationInterval, normalizeHomeRotationAirportIds } from './marketingSettingsService';
 import { effectiveComponent } from './scoreComponents';
 import { isHomeSummaryEligible } from '../utils/homeSummaryEligibility';
 import { NEW_AIRPORT_DAYS, SHANGHAI_TIMEZONE } from '../config/scoring';
@@ -209,6 +209,7 @@ interface PublicViewDeps {
       getConfig(): Promise<{
         click_charge_amount: number;
         home_section_limits?: Partial<HomeSectionLimits>;
+        home_rotation_airport_ids?: number[];
         home_rotation_interval_minutes?: number;
       }>;
     };
@@ -333,7 +334,7 @@ export class PublicViewService {
       const clickChargeAmount = marketingConfig.click_charge_amount;
       const sectionLimits = marketingConfig.home_section_limits;
       const selection = await this.deps.homeAirportRotationService?.getSelection(
-        sectionLimits.today_pick, marketingConfig.home_rotation_interval_minutes,
+        sectionLimits.today_pick, marketingConfig.home_rotation_interval_minutes, marketingConfig.home_rotation_airport_ids,
       );
       const scoreRuleVersion = await this.resolveActiveScoreRuleVersion(resolvedDate);
       const [
@@ -732,12 +733,14 @@ export class PublicViewService {
   private async getMarketingConfig(): Promise<{
     click_charge_amount: number;
     home_section_limits: HomeSectionLimits;
+    home_rotation_airport_ids: number[];
     home_rotation_interval_minutes: number;
   }> {
     if (!this.deps.marketingSettingsService) {
       return {
         click_charge_amount: CLICK_CHARGE_AMOUNT,
         home_section_limits: { ...DEFAULT_HOME_SECTION_LIMITS },
+        home_rotation_airport_ids: [],
         home_rotation_interval_minutes: 120,
       };
     }
@@ -746,6 +749,7 @@ export class PublicViewService {
     return {
       click_charge_amount: Number.isFinite(amount) && amount > 0 ? amount : CLICK_CHARGE_AMOUNT,
       home_section_limits: normalizeHomeSectionLimits(config.home_section_limits),
+      home_rotation_airport_ids: normalizeHomeRotationAirportIds(config.home_rotation_airport_ids),
       home_rotation_interval_minutes: normalizeHomeRotationInterval(config.home_rotation_interval_minutes),
     };
   }
