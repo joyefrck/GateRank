@@ -270,7 +270,15 @@ export class AdminSchedulerService {
     const nextRunAt = computeNextRunAt(task.schedule_time, this.nowFn(), task.timezone);
     const delayMs = Math.max(0, nextRunAt.getTime() - this.nowFn().getTime());
     const timer = this.setTimeoutFn(() => {
-      void this.executeTask(task.task_key, 'schedule');
+      void this.executeTask(task.task_key, 'schedule').catch((error) => {
+        this.logger.error(`[scheduler] task ${task.task_key} execution failed`, error);
+        const state = this.runtime.get(task.task_key);
+        // A lookup or rescheduling failure can happen outside the run lifecycle.
+        // Keep the next daily slot armed even if the database is temporarily down.
+        if (this.started && !state?.isRunning && (!state?.nextRunAt || state.nextRunAt <= this.nowFn())) {
+          this.applyTask(task);
+        }
+      });
     }, delayMs);
 
     this.runtime.set(task.task_key, {
@@ -317,18 +325,18 @@ export class AdminSchedulerService {
 
     const startedAt = this.nowFn();
     const runDate = resolveRunDate(task, triggerSource, startedAt, scheduledRunAt);
-    const run = await this.deps.schedulerRunRepository.createRunning({
-      taskKey,
-      runDate,
-      triggerSource,
-      message: '任务执行中',
-      detailJson: {
-        task_key: taskKey,
-        trigger_source: triggerSource,
-      },
-    });
-
+    let run: { id: number } | null = null;
     try {
+      run = await this.deps.schedulerRunRepository.createRunning({
+        taskKey,
+        runDate,
+        triggerSource,
+        message: '任务执行中',
+        detailJson: {
+          task_key: taskKey,
+          trigger_source: triggerSource,
+        },
+      });
       const result = await this.deps.schedulerTaskExecutor.runTask(taskKey, runDate);
       await this.deps.schedulerRunRepository.markFinished({
         id: run.id,
@@ -338,6 +346,9 @@ export class AdminSchedulerService {
         detailJson: result.detail,
       });
     } catch (error) {
+      // There is no run to finish if its INSERT failed. Surface the failure to
+      // manual callers (or the timer handler) while still releasing runtime state.
+      if (!run) throw error;
       const message = error instanceof Error ? error.message : String(error);
       await this.deps.schedulerRunRepository.markFinished({
         id: run.id,

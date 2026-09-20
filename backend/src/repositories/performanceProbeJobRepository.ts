@@ -7,6 +7,9 @@ import type {
 } from '../types/domain';
 import { sqlDateTimeToTimezoneIso } from '../utils/time';
 
+// Initial execution plus two retries. Do not interrupt an unexpired last attempt.
+const MAX_PROBE_JOB_ATTEMPTS = 3;
+
 interface PerformanceProbeJobRow extends RowDataPacket, Omit<PerformanceProbeJob,
   'test_enabled_snapshot' | 'include_in_result_snapshot' | 'lease_expires_at' |
   'selected_node_keys' | 'created_at' | 'updated_at' | 'completed_at'> {
@@ -114,19 +117,28 @@ export class PerformanceProbeJobRepository {
       await connection.beginTransaction();
       await connection.execute<ResultSetHeader>(
         `UPDATE performance_probe_jobs
+            SET status = 'expired', lease_owner = NULL, lease_expires_at = NULL
+          WHERE probe_id = ? AND attempts >= ?
+            AND (status = 'queued' OR (status = 'leased' AND lease_expires_at < CURRENT_TIMESTAMP))`,
+        [probeId, MAX_PROBE_JOB_ATTEMPTS],
+      );
+      await connection.execute<ResultSetHeader>(
+        `UPDATE performance_probe_jobs
             SET status = 'queued', lease_owner = NULL, lease_expires_at = NULL
-          WHERE probe_id = ? AND status = 'leased' AND lease_expires_at < CURRENT_TIMESTAMP`,
-        [probeId],
+          WHERE probe_id = ? AND status = 'leased' AND lease_expires_at < CURRENT_TIMESTAMP
+            AND attempts < ?`,
+        [probeId, MAX_PROBE_JOB_ATTEMPTS],
       );
       const [rows] = await connection.query<PerformanceProbeJobRow[]>(
         `SELECT ${SELECT_COLUMNS}
            FROM performance_probe_jobs
           WHERE probe_id = ? AND status = 'queued'
+            AND attempts < ?
             AND (? = 1 OR test_profile <> 'network_coverage_proxy_http_v1')
           ORDER BY (source LIKE 'manual-%') DESC, created_at ASC
           LIMIT 1
           FOR UPDATE`,
-        [probeId, supportsCoverage ? 1 : 0],
+        [probeId, MAX_PROBE_JOB_ATTEMPTS, supportsCoverage ? 1 : 0],
       );
       const row = rows[0];
       if (!row) {

@@ -34,6 +34,96 @@ function emptyLatestRuns(): Record<SchedulerTaskKey, SchedulerRun | null> {
   };
 }
 
+function reminderHarness(failure?: 'create' | 'finish' | 'lookup') {
+  const task = createTask({ task_key: 'ad_expiry_reminder', schedule_time: '09:00' });
+  const callbacks: Array<() => void> = [];
+  const errors: unknown[][] = [];
+  const executions: string[] = [];
+  const finished: string[] = [];
+  let currentFailure = failure;
+  let now = new Date('2026-09-20T00:59:59Z');
+  const service = new AdminSchedulerService({
+    schedulerTaskRepository: {
+      listAll: async () => [task],
+      getByKey: async () => {
+        if (currentFailure === 'lookup') throw new Error('lookup_failed');
+        return task;
+      },
+      update: async () => {}, markRestarted: async () => {},
+    },
+    schedulerRunRepository: {
+      createRunning: async ({ taskKey, runDate }) => {
+        assert.equal(taskKey, 'ad_expiry_reminder');
+        assert.equal(runDate, '2026-09-20');
+        if (currentFailure === 'create') throw new Error('Data truncated for column task_key');
+        return { id: 1 };
+      },
+      markFinished: async ({ status }) => {
+        if (currentFailure === 'finish') throw new Error('finish_failed');
+        finished.push(status);
+      },
+      listLatestByTaskKeys: async () => emptyLatestRuns(),
+      listByQuery: async () => ({ items: [], total: 0 }), getDailyStats: async () => [],
+    },
+    schedulerTaskExecutor: {
+      runTask: async (key) => {
+        executions.push(key);
+        return { status: 'succeeded', message: 'ok', detail: {} };
+      },
+    },
+    now: () => now,
+    setTimeoutFn: ((callback: () => void) => { callbacks.push(callback); return {} as never; }) as never,
+    clearTimeoutFn: () => {},
+    logger: { log: () => {}, warn: () => {}, error: (...args) => { errors.push(args); } },
+  });
+  return {
+    service, callbacks, errors, executions, finished,
+    advance: () => { now = new Date('2026-09-20T01:00:00Z'); },
+    recover: () => { currentFailure = undefined; },
+  };
+}
+
+test('09:00 ad reminder executes and records success with the correct date', async () => {
+  const h = reminderHarness();
+  await h.service.startAll();
+  h.advance();
+  await h.service.triggerTick();
+  assert.deepEqual(h.executions, ['ad_expiry_reminder']);
+  assert.deepEqual(h.finished, ['succeeded']);
+  const [task] = await h.service.listTasks();
+  assert.equal(task.next_run_at, '2026-09-21T09:00:00+08:00');
+});
+
+test('run record creation failure releases runtime state and schedules the next day', async () => {
+  const h = reminderHarness('create');
+  await h.service.startAll();
+  h.advance();
+  await assert.rejects(h.service.triggerTick(), /Data truncated/);
+  const [task] = await h.service.listTasks();
+  assert.equal(task.is_running, false);
+  assert.equal(task.next_run_at, '2026-09-21T09:00:00+08:00');
+  assert.deepEqual(h.executions, []);
+  h.recover();
+  await h.service.restartTask('ad_expiry_reminder', 'tester');
+  assert.deepEqual(h.executions, ['ad_expiry_reminder']);
+});
+
+for (const failure of ['create', 'finish', 'lookup'] as const) {
+  test(`scheduled ${failure} failure is contained instead of rejecting outside the timer`, async () => {
+    const h = reminderHarness(failure);
+    await h.service.startAll();
+    h.advance();
+    h.callbacks[0]();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(h.errors.length, 1);
+    assert.match(String(h.errors[0][0]), /ad_expiry_reminder/);
+    h.recover();
+    const [task] = await h.service.listTasks();
+    assert.equal(task.is_running, false);
+    assert.equal(task.next_run_at, '2026-09-21T09:00:00+08:00');
+  });
+}
+
 test('AdminSchedulerService describes the ad expiry reminder task', async () => {
   const tasks = [createTask({ task_key: 'ad_expiry_reminder', name: '广告到期提醒', schedule_time: '09:00' })];
   const service = new AdminSchedulerService({

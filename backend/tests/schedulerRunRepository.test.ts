@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SchedulerRunRepository } from '../src/repositories/schedulerRunRepository';
+import { SchedulerTaskRepository } from '../src/repositories/schedulerTaskRepository';
 
 test('SchedulerRunRepository.ensureSchema creates scheduler runs table', async () => {
   const queries: string[] = [];
@@ -17,6 +18,25 @@ test('SchedulerRunRepository.ensureSchema creates scheduler runs table', async (
 
   assert.ok(queries.some((sql) => sql.includes('CREATE TABLE IF NOT EXISTS admin_scheduler_runs')));
   assert.ok(queries.some((sql) => sql.includes('MODIFY COLUMN task_key') && sql.includes('subscription_node_refresh')));
+  assert.ok(queries.some((sql) => sql.includes('MODIFY COLUMN task_key') && sql.includes('ad_expiry_reminder')));
+});
+
+test('scheduler task and run schemas accept the same task keys, including the 09:00 reminder', async () => {
+  const queries: string[] = [];
+  const pool = {
+    query: async (sql: string) => { queries.push(sql); return [[]]; },
+    execute: async () => [{}],
+  };
+  await new SchedulerTaskRepository(pool as never).ensureSchema();
+  const repository = new SchedulerRunRepository(pool as never);
+  await repository.ensureSchema();
+  const enums = queries.filter((sql) => sql.includes('MODIFY COLUMN task_key'))
+    .map((sql) => sql.match(/ENUM\([^)]+\)/)?.[0]);
+  assert.equal(enums.length, 2);
+  assert.equal(enums[0], enums[1]);
+  const latest = await repository.listLatestByTaskKeys([]);
+  assert.equal(latest.ad_expiry_reminder, null);
+  assert.equal(latest.network_coverage, null);
 });
 
 test('SchedulerRunRepository.listByQuery maps rows and parses detail json', async () => {

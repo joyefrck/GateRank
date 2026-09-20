@@ -1,3 +1,4 @@
+import { SCHEDULER_TASK_ENUM, SCHEDULER_TASK_KEYS, SCHEDULER_TASK_ORDER } from '../config/schedulerTasks';
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type {
   SchedulerRun,
@@ -6,9 +7,6 @@ import type {
   SchedulerTriggerSource,
 } from '../types/domain';
 import { formatDateOnly, formatDateTimeInTimezoneIso } from '../utils/time';
-
-const SCHEDULER_TASK_ENUM = "ENUM('stability', 'subscription_node_refresh', 'performance', 'network_coverage', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard')";
-const SCHEDULER_TASK_ORDER = "'stability', 'subscription_node_refresh', 'performance', 'network_coverage', 'risk', 'aggregate_recompute', 'billing_listing_sync', 'stability_resample_guard'";
 
 interface SchedulerRunRow extends RowDataPacket {
   id: number;
@@ -142,15 +140,7 @@ export class SchedulerRunRepository {
   }
 
   async listLatestByTaskKeys(taskKeys: SchedulerTaskKey[]): Promise<Record<SchedulerTaskKey, SchedulerRun | null>> {
-    const result = {
-      stability: null,
-      subscription_node_refresh: null,
-      performance: null,
-      risk: null,
-      aggregate_recompute: null,
-      billing_listing_sync: null,
-      stability_resample_guard: null,
-    } as Record<SchedulerTaskKey, SchedulerRun | null>;
+    const result = Object.fromEntries(SCHEDULER_TASK_KEYS.map((key) => [key, null])) as Record<SchedulerTaskKey, SchedulerRun | null>;
 
     if (taskKeys.length === 0) {
       return result;
