@@ -1,6 +1,16 @@
 import { createHash } from 'node:crypto';
 import type { SubscriptionNodeSnapshotNode } from '../types/domain';
 
+export function uniquePerformanceNodes(nodes: SubscriptionNodeSnapshotNode[]): SubscriptionNodeSnapshotNode[] {
+  const seen = new Set<string>();
+  return nodes.filter((node) => {
+    const key = buildPerformanceNodeKey(node);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function buildPerformanceNodeKey(node: SubscriptionNodeSnapshotNode): string {
   const rawUri = String(node.raw_uri || '').trim();
   if (rawUri) {

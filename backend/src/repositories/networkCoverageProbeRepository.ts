@@ -19,6 +19,7 @@ export interface CoverageProbeBatch {
   results: Partial<Record<PerformanceProbeId, CoverageProbeResult>>;
   status: 'pending' | 'completed' | 'failed' | 'superseded';
   run_id: number | null;
+  error_code?: 'COVERAGE_RESULT_INVALID' | 'COVERAGE_COLLECTOR_FAILED';
 }
 
 export class NetworkCoverageProbeRepository {

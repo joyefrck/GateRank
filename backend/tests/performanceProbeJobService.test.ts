@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { PerformanceProbeJobService } from '../src/services/performanceProbeJobService';
 import type { PerformanceProbeJob, PerformanceRunInput, PerformanceRunTarget } from '../src/types/domain';
+import { buildPerformanceNodeKey } from '../src/utils/performanceNodeKey';
 
 const leasedJob: PerformanceProbeJob = {
   job_id: 'job-1',
@@ -44,6 +45,27 @@ const acceptedPayload = {
     valid: true,
   }],
 };
+
+test('coverage lease deduplicates old snapshots without changing them or collapsing same-name distinct nodes', async () => {
+  const node = { name: '美国', region: 'US', type: 'vless', raw_uri: 'vless://node-a', outbound: { server: 'example.com', server_port: 443 } };
+  const nodes = [node, { ...node }, { ...node, raw_uri: 'vless://node-b' }];
+  const service = new PerformanceProbeJobService({
+    jobRepository: {
+      leaseNext: async () => ({ ...leasedJob, test_profile: 'network_coverage_proxy_http_v1', selected_node_keys: nodes.map(buildPerformanceNodeKey) }),
+      getById: async () => null,
+      markCompleted: async () => true,
+    },
+    snapshotRepository: { getById: async () => ({ id: 12, airport_id: 9, parsed_nodes_count: 3, supported_nodes_count: 3, nodes } as never) },
+    runRepository: { insert: async () => 1 },
+    targetRepository: { insertMany: async () => undefined },
+  });
+  const payload = await service.leaseNextJob('cn-shanghai', 'worker-a', true);
+  const snapshot = payload!.snapshot as { nodes: unknown[]; supported_nodes_count: number };
+  assert.equal(snapshot.nodes.length, 2);
+  assert.equal(snapshot.supported_nodes_count, 2);
+  assert.equal((payload!.selected_node_keys as string[]).length, 2);
+  assert.equal(nodes.length, 3);
+});
 
 test('PerformanceProbeJobService leases only the reusable snapshot payload', async () => {
   const service = new PerformanceProbeJobService({

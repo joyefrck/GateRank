@@ -191,6 +191,21 @@ export class PerformanceProbeJobRepository {
     return rows.map(toPerformanceProbeJob);
   }
 
+  async markFailed(
+    jobId: string,
+    probeId: PerformanceProbeId,
+    executor: Pool | PoolConnection = this.pool,
+  ): Promise<boolean> {
+    const [result] = await executor.execute<ResultSetHeader>(
+      `UPDATE performance_probe_jobs
+          SET status = 'failed', lease_owner = NULL, lease_expires_at = NULL,
+              completed_at = CURRENT_TIMESTAMP
+        WHERE job_id = ? AND probe_id = ? AND status = 'leased'`,
+      [jobId, probeId],
+    );
+    return result.affectedRows > 0;
+  }
+
   async markCompleted(
     jobId: string,
     probeId: PerformanceProbeId,

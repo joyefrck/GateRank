@@ -4,6 +4,9 @@ import mysql, { type Pool, type RowDataPacket } from 'mysql2/promise';
 import { PerformanceProbeJobRepository } from '../src/repositories/performanceProbeJobRepository';
 import { SchedulerRunRepository } from '../src/repositories/schedulerRunRepository';
 import { SchedulerTaskRepository } from '../src/repositories/schedulerTaskRepository';
+import { NetworkCoverageProbeRepository } from '../src/repositories/networkCoverageProbeRepository';
+import { NetworkCoverageProbeService } from '../src/services/networkCoverageProbeService';
+import { getDateInTimezone } from '../src/utils/time';
 
 test('MySQL retry boundaries and upgrade of the old scheduler task enum', {
   skip: process.env.PROBE_RETRY_TEST_MYSQL !== '1',
@@ -105,6 +108,53 @@ test('MySQL retry boundaries and upgrade of the old scheduler task enum', {
       ]);
       assert.equal(results.filter(Boolean).length, 1);
       assert.equal((await jobs.getById('last-attempt'))?.attempts, 3);
+    });
+    await t.test('terminal coverage failure commits atomically and cannot be leased or completed again', async () => {
+      await clear();
+      await seed('rejected-coverage', { profile: 'network_coverage_proxy_http_v1' });
+      await jobs.leaseNext('cn-shanghai', 'worker', 900, true);
+      await assert.rejects(jobs.withTransaction(async (connection) => {
+        assert.equal(await jobs.markFailed('rejected-coverage', 'cn-shanghai', connection), true);
+        throw new Error('rollback-test');
+      }), /rollback-test/);
+      assert.equal((await jobs.getById('rejected-coverage'))?.status, 'leased');
+      assert.equal(await jobs.markFailed('rejected-coverage', 'cn-guangzhou'), false);
+      await jobs.withTransaction(async (connection) => {
+        assert.equal(await jobs.markFailed('rejected-coverage', 'cn-shanghai', connection), true);
+      });
+      const failed = await jobs.getById('rejected-coverage');
+      assert.equal(failed?.status, 'failed');
+      assert.equal(failed?.lease_expires_at, null);
+      assert.equal(failed?.lease_owner, null);
+      assert.ok(failed?.completed_at);
+      assert.equal(await jobs.leaseNext('cn-shanghai', 'worker', 900, true), null);
+      assert.equal(await jobs.markCompleted('rejected-coverage', 'cn-shanghai', 7), false);
+    });
+    await t.test('coverage HTTP rejection preserves both terminal records after the real transaction commits', async () => {
+      await clear();
+      const batches = new NetworkCoverageProbeRepository(db);
+      await batches.ensureSchema();
+      const snapshot = { id: 1, airport_id: 1, subscription_url: 'https://example.test/sub',
+        nodes: [{ name: 'HK', type: 'vless', region: 'HK', raw_uri: 'vless://test', outbound: {} }], unsupported_nodes: [] };
+      const coverage = new NetworkCoverageProbeService({
+        batchRepository: batches, jobRepository: jobs,
+        snapshotRepository: { getById: async () => snapshot as never, getLatestByAirport: async () => snapshot as never },
+        probeRepository: { list: async () => [{ probe_id: 'cn-shanghai', probe_type: 'mainland', globally_enabled: true, token_configured: true }] as never },
+        airportRepository: { listAll: async () => [], getById: async () => ({ subscription_url: snapshot.subscription_url }) },
+        runRepository: { insert: async () => { throw new Error('invalid evidence must not publish'); } },
+        dispatchService: { waitForJobs: async () => ({ total: 1, completed: 0, failed: 1, pending: 0 }) },
+        recomputeService: { recomputeAirportForDate: async () => { throw new Error('invalid evidence must not score'); } },
+      });
+      const date = getDateInTimezone();
+      const batch = await coverage.dispatchAirport(1, date, 'manual-network-coverage:test');
+      const job = await jobs.leaseNext('cn-shanghai', 'worker', 900, true);
+      assert.ok(job);
+      await assert.rejects(coverage.submitRun(job, { sampled_at: `${date}T12:00:00+08:00`, status: 'success', nodes: [] }), { code: 'COVERAGE_RESULT_INVALID' });
+      assert.equal((await jobs.getById(job.job_id))?.status, 'failed');
+      const saved = await batches.get(batch.batch_key);
+      assert.equal(saved?.status, 'failed');
+      assert.equal(saved?.error_code, 'COVERAGE_RESULT_INVALID');
+      assert.deepEqual(saved?.results, {});
     });
     await t.test('old enum is upgraded repeatably and records the ad reminder without losing history', async () => {
       const tasks = new SchedulerTaskRepository(db);

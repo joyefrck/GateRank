@@ -6,12 +6,12 @@ import type { PerformanceProbeJobRepository } from '../repositories/performanceP
 import type { NetworkCoverageRunRepository } from '../repositories/networkCoverageRunRepository';
 import type { PerformanceProbeDispatchService } from './performanceProbeDispatchService';
 import type { PerformanceProbe, PerformanceProbeId, PerformanceProbeJob, SubscriptionNodeSnapshot } from '../types/domain';
-import { buildPerformanceNodeKey } from '../utils/performanceNodeKey';
+import { buildPerformanceNodeKey, uniquePerformanceNodes } from '../utils/performanceNodeKey';
 import { formatSqlDateTimeInTimezone, getDateInTimezone } from '../utils/time';
 
 type Deps = {
   batchRepository: Pick<NetworkCoverageProbeRepository, 'insert' | 'get' | 'save' | 'hasNewerCompleted' | 'lockAirport'>;
-  jobRepository: Pick<PerformanceProbeJobRepository, 'withTransaction' | 'create' | 'markCompleted'>;
+  jobRepository: Pick<PerformanceProbeJobRepository, 'withTransaction' | 'create' | 'markCompleted' | 'markFailed'>;
   runRepository: Pick<NetworkCoverageRunRepository, 'insert'>;
   snapshotRepository: { getLatestByAirport(id: number): Promise<SubscriptionNodeSnapshot | null>; getById(id: number): Promise<SubscriptionNodeSnapshot | null> };
   probeRepository: { list(): Promise<PerformanceProbe[]> };
@@ -45,7 +45,7 @@ export class NetworkCoverageProbeService {
           node_snapshot_id: snapshot.id, config_version: 0,
           test_enabled_snapshot: true, include_in_result_snapshot: true,
           test_profile: COVERAGE_PROBE_PROFILE, scoring_rule_version: 'network_coverage_v1',
-          selected_node_keys: snapshot.nodes.map(buildPerformanceNodeKey), source,
+          selected_node_keys: uniquePerformanceNodes(snapshot.nodes).map(buildPerformanceNodeKey), source,
           idempotency_key: `network-coverage:${batch.batch_key}:${probe.probe_id}`,
         }, connection);
         if (!created) throw new Error('网络覆盖任务创建冲突');
@@ -56,8 +56,15 @@ export class NetworkCoverageProbeService {
 
   async collectAirport(airportId: number, date: string, source: string): Promise<void> {
     const batch = await this.dispatchAirport(airportId, date, source);
-    await this.deps.dispatchService.waitForJobs(Object.values(batch.jobs), { timeoutMs: 60 * 60 * 1000 });
+    try {
+      await this.deps.dispatchService.waitForJobs(Object.values(batch.jobs), { timeoutMs: 60 * 60 * 1000 });
+    } catch (error) {
+      const failed = await this.deps.batchRepository.get(batch.batch_key);
+      if (failed?.status === 'failed') throw coverageFailure(failed);
+      throw error;
+    }
     const completed = await this.deps.batchRepository.get(batch.batch_key);
+    if (completed?.status === 'failed') throw coverageFailure(completed);
     if (completed?.status !== 'completed') throw new Error('大陆网络覆盖未形成完整结果，原成绩保留');
   }
 
@@ -84,7 +91,28 @@ export class NetworkCoverageProbeService {
         throw new HttpError(403, 'PROBE_JOB_FORBIDDEN', 'Coverage job does not belong to this batch');
       }
       const duplicate = Boolean(batch.results[job.probe_id]);
-      if (!duplicate) batch.results[job.probe_id] = validateResult(payload, snapshot, batch.date);
+      let validationError: HttpError | undefined;
+      if (!duplicate) {
+        try {
+          batch.results[job.probe_id] = validateResult(payload, snapshot, batch.date);
+        } catch (error) {
+          if (!(error instanceof HttpError) || error.code !== 'COVERAGE_RESULT_INVALID') throw error;
+          validationError = error;
+        }
+      }
+      const regionalFailed = validationError || batch.results[job.probe_id]?.status === 'failed';
+      if (regionalFailed) {
+        if (batch.status === 'pending') {
+          batch.status = 'failed';
+          batch.error_code = validationError ? 'COVERAGE_RESULT_INVALID' : 'COVERAGE_COLLECTOR_FAILED';
+        }
+        await this.deps.batchRepository.save(batch, connection);
+        if (!await this.deps.jobRepository.markFailed(job.job_id, job.probe_id, connection)) {
+          throw new HttpError(409, 'PROBE_JOB_COMPLETION_CONFLICT', 'Coverage failure could not be recorded');
+        }
+        // Return the rejection so the transaction commits the terminal state before HTTP 400.
+        return { batch, duplicate, validationError };
+      }
       if (batch.status === 'pending' && Object.keys(batch.jobs).every((id) => batch.results[id as PerformanceProbeId])) {
         if (Object.values(batch.results).some((r) => r.status !== 'success')) batch.status = 'failed';
         else if (await this.deps.batchRepository.hasNewerCompleted(batch, connection)) batch.status = 'superseded';
@@ -97,6 +125,7 @@ export class NetworkCoverageProbeService {
       }
       return { batch, duplicate };
     });
+    if (outcome.validationError) throw outcome.validationError;
     if (outcome.batch.status === 'completed') {
       await this.deps.recomputeService.recomputeAirportForDate(outcome.batch.date, job.airport_id);
     }
@@ -106,7 +135,7 @@ export class NetworkCoverageProbeService {
   private async publish(batch: CoverageProbeBatch, snapshot: SubscriptionNodeSnapshot, connection: PoolConnection): Promise<void> {
     const regional = Object.entries(batch.results);
     const byProbe = regional.map(([probeId, result]) => ({ probeId, result, nodes: new Map(result.nodes.map((n) => [n.key, n])) }));
-    const nodes = snapshot.nodes.map((node) => {
+    const nodes = uniquePerformanceNodes(snapshot.nodes).map((node) => {
       const key = buildPerformanceNodeKey(node);
       const healthy = byProbe.some((probe) => probe.nodes.get(key)?.healthy);
       return { key, name: safeName(node.name), type: node.type, healthy,
@@ -130,6 +159,13 @@ export class NetworkCoverageProbeService {
     batch.run_id = run.id;
     batch.status = 'completed';
   }
+}
+
+function coverageFailure(batch: CoverageProbeBatch): Error {
+  const reason = batch.error_code === 'COVERAGE_RESULT_INVALID'
+    ? '结果校验失败（节点重复、缺失或采样日期不符）'
+    : '探针采集失败';
+  return new Error(`网络覆盖采集失败：${reason}，原成绩保留`);
 }
 
 function validateResult(payload: Record<string, unknown>, snapshot: SubscriptionNodeSnapshot, date: string): CoverageProbeResult {

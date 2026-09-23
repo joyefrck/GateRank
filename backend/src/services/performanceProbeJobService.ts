@@ -5,6 +5,7 @@ import type { Pool, PoolConnection } from 'mysql2/promise';
 
 import { PERFORMANCE_PROBE_DEFINITIONS } from '../config/performanceProbes';
 import { HttpError } from '../middleware/errorHandler';
+import { buildPerformanceNodeKey, uniquePerformanceNodes } from '../utils/performanceNodeKey';
 import type {
   PerformanceProbeId,
   PerformanceProbeJob,
@@ -63,6 +64,9 @@ export class PerformanceProbeJobService {
     if (!snapshot || snapshot.airport_id !== job.airport_id) {
       throw new HttpError(409, 'PROBE_JOB_SNAPSHOT_MISSING', 'Performance probe job snapshot is unavailable');
     }
+    // Canonicalize even previously queued jobs without mutating their immutable snapshots.
+    const isCoverage = job.test_profile === COVERAGE_PROBE_PROFILE;
+    const nodes = isCoverage ? uniquePerformanceNodes(snapshot.nodes) : snapshot.nodes;
     return {
       job_id: job.job_id,
       airport_id: job.airport_id,
@@ -71,15 +75,15 @@ export class PerformanceProbeJobService {
       run_mode: job.include_in_result_snapshot ? 'official' : 'shadow',
       test_profile: job.test_profile,
       scoring_rule_version: job.scoring_rule_version,
-      selected_node_keys: job.selected_node_keys,
+      selected_node_keys: isCoverage ? nodes.map(buildPerformanceNodeKey) : job.selected_node_keys,
       lease_expires_at: job.lease_expires_at,
       snapshot: {
         id: snapshot.id,
         captured_at: snapshot.captured_at,
         subscription_format: snapshot.subscription_format,
         parsed_nodes_count: snapshot.parsed_nodes_count,
-        supported_nodes_count: snapshot.supported_nodes_count,
-        nodes: snapshot.nodes,
+        supported_nodes_count: isCoverage ? nodes.length : snapshot.supported_nodes_count,
+        nodes,
       },
       calibration: buildCalibrationConfig(),
       speed_targets: buildSpeedTargets(),

@@ -6,15 +6,19 @@ import type { NetworkCoverageRunInput, PerformanceProbeJob, PerformanceProbeJobI
 import { buildPerformanceNodeKey } from '../src/utils/performanceNodeKey';
 import { getDateInTimezone } from '../src/utils/time';
 
-function fixture() {
+function fixture(options: { duplicateNodes?: boolean; differentUri?: boolean; waitFails?: boolean } = {}) {
   const date = getDateInTimezone();
   const nodes = ['香港', '日本', '台湾'].map((name) => ({ name, type: 'vless', region: null, raw_uri: `vless://secret-${name}`, outbound: { server: 'example.com', server_port: 443 } }));
+  if (options.duplicateNodes) nodes.push({ ...nodes[0] }, { ...nodes[1] });
+  if (options.differentUri) nodes.push({ ...nodes[0], raw_uri: 'vless://another-secret' });
   const snapshot = { id: 10, airport_id: 61, nodes, unsupported_nodes: [], subscription_format: 'clash_yaml', subscription_url: 'https://subscription.example/secret' } as unknown as SubscriptionNodeSnapshot;
   let batch: CoverageProbeBatch;
   const jobs: PerformanceProbeJobInput[] = [];
   const writes: NetworkCoverageRunInput[] = [];
   let recomputed = 0;
   let newer = false;
+  const failedJobs: string[] = [];
+  let committed = false;
   const service = new NetworkCoverageProbeService({
     batchRepository: {
       insert: async (input) => { input.id = 1; batch = structuredClone(input); },
@@ -24,9 +28,10 @@ function fixture() {
       hasNewerCompleted: async () => newer,
     },
     jobRepository: {
-      withTransaction: async (fn) => fn({} as never),
+      withTransaction: async (fn) => { committed = false; const result = await fn({} as never); committed = true; return result; },
       create: async (input) => { jobs.push(input); return true; },
       markCompleted: async () => true,
+      markFailed: async (id: string) => { failedJobs.push(id); return true; },
     },
     runRepository: { insert: async (input) => { writes.push(input); return { id: 50 } as never; } },
     snapshotRepository: { getLatestByAirport: async () => snapshot, getById: async () => snapshot },
@@ -36,7 +41,15 @@ function fixture() {
       { probe_id: 'cn-guangzhou', probe_type: 'mainland', globally_enabled: true, token_configured: true },
     ] as never },
     airportRepository: { listAll: async () => [{ id: 61 }], getById: async () => ({ subscription_url: 'https://subscription.example/secret' }) },
-    dispatchService: { waitForJobs: async () => ({ total: 2, completed: 2, failed: 0, pending: 0 }) },
+    dispatchService: { waitForJobs: async () => {
+      if (options.waitFails) {
+        await service.submitRun({ ...jobs[0], status: 'leased' } as PerformanceProbeJob, {
+          status: 'failed', sampled_at: `${date}T12:00:00+08:00`, nodes: [],
+        });
+        throw new Error('地区性能任务失败');
+      }
+      return { total: 2, completed: 2, failed: 0, pending: 0 };
+    } },
     recomputeService: { recomputeAirportForDate: async () => { recomputed++; } },
   });
   const payload = (health: boolean[]) => ({
@@ -44,8 +57,45 @@ function fixture() {
     nodes: nodes.map((node, i) => ({ key: buildPerformanceNodeKey(node), healthy: health[i], error_code: 'tcp_unreachable:secret' })),
   });
   const submit = (i: number, body: Record<string, unknown>) => service.submitRun({ ...jobs[i], status: 'leased' } as PerformanceProbeJob, body);
-  return { service, jobs, writes, payload, submit, date, batch: () => batch!, recomputed: () => recomputed, newer: () => { newer = true; } };
+  return { service, jobs, writes, payload, submit, date, failedJobs, committed: () => committed, batch: () => batch!, recomputed: () => recomputed, newer: () => { newer = true; } };
 }
+
+test('coverage deduplicates immutable snapshots through dispatch and publication, preserving distinct same-name nodes', async () => {
+  const f = fixture({ duplicateNodes: true, differentUri: true });
+  await f.service.dispatchAirport(61, f.date, 'manual-network-coverage:1');
+  assert.equal(f.jobs[0].selected_node_keys.length, 4);
+  const raw = f.payload([true, false, true, true, false, true]);
+  const payload = { ...raw, nodes: [...new Map(raw.nodes.map((n) => [n.key, n])).values()] };
+  await f.submit(0, payload);
+  await f.submit(1, payload);
+  assert.equal(f.writes[0].nodes?.length, 4);
+  assert.equal(f.writes[0].nodes?.filter((n) => n.name === '香港').length, 2);
+  const regional = f.writes[0].diagnostics?.regional_results as Array<{ detected_nodes_count: number }>;
+  assert.ok(regional.every((r) => r.detected_nodes_count === 4));
+});
+
+test('invalid coverage results commit failed job and batch before returning HTTP 400', async () => {
+  const f = fixture();
+  await f.service.dispatchAirport(61, f.date, 'manual-network-coverage:1');
+  await assert.rejects(f.submit(0, { ...f.payload([true, true, true]), nodes: [] }), { code: 'COVERAGE_RESULT_INVALID' });
+  assert.equal(f.committed(), true);
+  assert.deepEqual(f.failedJobs, [f.jobs[0].job_id]);
+  assert.equal(f.batch().status, 'failed');
+  assert.equal(f.batch().error_code, 'COVERAGE_RESULT_INVALID');
+  await f.submit(1, f.payload([true, true, true]));
+  assert.equal(f.writes.length, 0);
+  assert.equal(f.recomputed(), 0);
+});
+
+test('collector failure finishes immediately and manual collection reports the coverage reason', async () => {
+  const f = fixture();
+  await f.service.dispatchAirport(61, f.date, 'manual-network-coverage:1');
+  await f.submit(0, { ...f.payload([]), status: 'failed', nodes: [] });
+  assert.equal(f.batch().status, 'failed');
+  assert.deepEqual(f.failedJobs, [f.jobs[0].job_id]);
+  const g = fixture({ waitFails: true });
+  await assert.rejects(g.service.collectAirport(61, g.date, 'manual-network-coverage:2'), /网络覆盖采集失败.*原成绩保留/);
+});
 
 test('coverage dispatch pins all nodes on mainland probes and only publishes the complete union', async () => {
   const f = fixture();
@@ -92,6 +142,8 @@ test('collector failure preserves N while a completed all-unhealthy measurement 
 test('late older batches and mismatched measurement dates cannot overwrite current coverage', async () => {
   const f = fixture(); await f.service.dispatchAirport(61, f.date, 'manual-network-coverage:1');
   await assert.rejects(f.submit(0, { ...f.payload([true, true, true]), sampled_at: '2020-01-01T12:00:00+08:00' }), /全部节点/);
-  f.newer(); await f.submit(0, f.payload([true, true, true])); await f.submit(1, f.payload([true, true, true]));
-  assert.equal(f.batch().status, 'superseded'); assert.equal(f.writes.length, 0);
+  assert.equal(f.batch().status, 'failed'); assert.equal(f.writes.length, 0);
+  const g = fixture(); await g.service.dispatchAirport(61, g.date, 'manual-network-coverage:2');
+  g.newer(); await g.submit(0, g.payload([true, true, true])); await g.submit(1, g.payload([true, true, true]));
+  assert.equal(g.batch().status, 'superseded'); assert.equal(g.writes.length, 0);
 });
