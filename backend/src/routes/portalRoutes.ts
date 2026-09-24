@@ -1951,10 +1951,14 @@ async function notifyPaymentReceivedSafely(
     const application = input.applicationId != null
       ? await deps.airportApplicationRepository.getById(input.applicationId)
       : await getApplicationByApplicantAccountId(deps, Number(input.applicantAccountId));
+    const airportId = Number(application?.approved_airport_id || 0);
+    const airport = airportId && deps.airportRepository?.getById
+      ? await deps.airportRepository.getById(airportId)
+      : null;
 
     await deps.applicationNotificationService.notifyPaymentReceived({
       ...input,
-      airportName: input.airportName || application?.name || '-',
+      airportName: airport?.name || input.airportName || application?.name || '-',
       applicationId: input.applicationId ?? application?.id ?? null,
     });
   } catch (error) {

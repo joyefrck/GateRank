@@ -3380,8 +3380,26 @@ test('POST /portal/recharge-notify credits recharge order on valid callback', as
         getById: async () => ({
           id: 7,
           name: 'Cloud Airport',
+          approved_airport_id: 11,
         }),
         markPaid: async () => true,
+      },
+      airportRepository: {
+        getById: async (id) => {
+          assert.equal(id, 11);
+          return {
+            id: 11,
+            name: '后台最新机场名称',
+            website: 'https://example.com',
+            status: 'normal',
+            is_listed: true,
+            plan_price_month: 10,
+            has_trial: false,
+            tags: [],
+            created_at: '2026-04-18 10:00:00',
+          };
+        },
+        update: async () => true,
       },
       applicationPaymentOrderRepository: {
         create: async () => 1,
@@ -3451,7 +3469,7 @@ test('POST /portal/recharge-notify credits recharge order on valid callback', as
     assert.equal(creditedOrders[0].gateway_trade_no, 'trade_recharge_1');
     assert.equal(paymentNotifications.length, 1);
     assert.equal(paymentNotifications[0].paymentType, 'wallet_recharge_paid');
-    assert.equal(paymentNotifications[0].airportName, 'Cloud Airport');
+    assert.equal(paymentNotifications[0].airportName, '后台最新机场名称');
     assert.equal(paymentNotifications[0].amount, 300);
     assert.equal(paymentNotifications[0].outTradeNo, 'grr_1_1');
   } finally {
@@ -4826,6 +4844,7 @@ test('POST /portal/recharge-orders/:outTradeNo/sync credits paid recharge and no
   const application: any = {
     id: 7,
     name: '充值同步测试机场',
+    approved_airport_id: 11,
     website: 'https://example.com',
     websites: ['https://example.com'],
     review_status: 'reviewed',
@@ -4870,6 +4889,23 @@ test('POST /portal/recharge-orders/:outTradeNo/sync credits paid recharge and no
       airportApplicationRepository: {
         getById: async () => application,
         markPaid: async () => true,
+      },
+      airportRepository: {
+        getById: async (id) => {
+          assert.equal(id, 11);
+          return {
+            id: 11,
+            name: '后台最新机场名称',
+            website: 'https://example.com',
+            status: 'normal',
+            is_listed: true,
+            plan_price_month: 10,
+            has_trial: false,
+            tags: [],
+            created_at: '2026-04-18 10:00:00',
+          };
+        },
+        update: async () => true,
       },
       applicationPaymentOrderRepository: {
         create: async () => 1,
@@ -4946,7 +4982,7 @@ test('POST /portal/recharge-orders/:outTradeNo/sync credits paid recharge and no
     assert.equal(data.recharge_order.paid_at, '2026-05-10 09:01:00');
     assert.equal(notifications.length, 1);
     assert.equal(notifications[0].paymentType, 'wallet_recharge_paid');
-    assert.equal(notifications[0].airportName, '充值同步测试机场');
+    assert.equal(notifications[0].airportName, '后台最新机场名称');
     assert.equal(notifications[0].amount, 100);
     assert.equal(notifications[0].outTradeNo, 'grr_1_sync');
   } finally {

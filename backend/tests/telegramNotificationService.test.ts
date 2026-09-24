@@ -31,6 +31,7 @@ const samplePayment: PaymentReceivedNotificationInput = {
   channel: 'alipay',
   paidAt: '2026-04-18 10:00:00',
   applicationId: 7,
+  applicantAccountId: 1,
 };
 
 test('TelegramNotificationService uses stored DB config before env fallback', async () => {
@@ -339,6 +340,7 @@ test('TelegramNotificationService sends Telegram payment notification text', asy
   assert.match(text, /网关交易号: trade_1/);
   assert.match(text, /支付渠道: 支付宝/);
   assert.match(text, /申请 ID: #7/);
+  assert.doesNotMatch(text, /账户 ID/);
 });
 
 test('TelegramNotificationService sends webhook payment notification payload', async () => {

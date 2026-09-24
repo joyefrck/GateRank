@@ -443,10 +443,6 @@ function buildPaymentMessage(input: PaymentReceivedNotificationInput): string {
   if (input.applicationId != null) {
     lines.push(`申请 ID: #${input.applicationId}`);
   }
-  if (input.applicantAccountId != null) {
-    lines.push(`账户 ID: #${input.applicantAccountId}`);
-  }
-
   return lines.join('\n');
 }
 
