@@ -3930,7 +3930,7 @@ test('PATCH /portal/application updates unpaid applicant details and syncs login
       },
       body: JSON.stringify({
         name: 'Cloud Airport Pro',
-        websites: ['https://example.com', 'https://mirror.example.com'],
+        websites: ['example.com', 'https://mirror.example.com'],
         plan_price_month: 1888,
         has_trial: false,
         subscription_url: 'https://subscribe-new.example.com',
@@ -3948,7 +3948,7 @@ test('PATCH /portal/application updates unpaid applicant details and syncs login
     assert.deepEqual(consumedCodes, [{ accountId: 1, email: 'owner@example.com', code: '123456' }]);
     assert.equal(updatedDrafts.length, 1);
     assert.equal(updatedDrafts[0].name, 'Cloud Airport');
-    assert.deepEqual(updatedDrafts[0].websites, ['https://example.com', 'https://mirror.example.com']);
+    assert.deepEqual(updatedDrafts[0].websites, ['https://example.com/', 'https://mirror.example.com/']);
     assert.equal(updatedEmails.length, 1);
     assert.equal(updatedEmails[0].email, 'owner@example.com');
     const data = (await response.json()) as {
@@ -3959,7 +3959,7 @@ test('PATCH /portal/application updates unpaid applicant details and syncs login
     assert.equal(data.application.name, 'Cloud Airport');
     assert.equal(data.application.applicant_email, 'owner@example.com');
     assert.equal(data.application.plan_price_month, 1888);
-    assert.deepEqual(data.application.websites, ['https://example.com', 'https://mirror.example.com']);
+    assert.deepEqual(data.application.websites, ['https://example.com/', 'https://mirror.example.com/']);
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
   }
@@ -4321,7 +4321,7 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
       body: JSON.stringify({
         name: 'Injected Name',
         applicant_email: 'attacker@example.com',
-        websites: ['https://new.example.com', 'https://backup.example.com'],
+        websites: ['new.example.com', 'https://backup.example.com'],
         plan_price_month: 1888,
         has_trial: false,
         streaming_support: ['netflix', 'chatgpt'],
@@ -4360,7 +4360,7 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
     assert.equal(updatedApplications.length, 1);
     assert.equal(updatedApplications[0].id, 7);
     assert.equal(updatedApplications[0].name, 'Cloud Airport');
-    assert.deepEqual(updatedApplications[0].websites, ['https://new.example.com', 'https://backup.example.com']);
+    assert.deepEqual(updatedApplications[0].websites, ['https://new.example.com/', 'https://backup.example.com/']);
     assert.deepEqual(updatedApplications[0].streaming_support, ['netflix', 'chatgpt']);
     assert.deepEqual(updatedApplications[0].payment_methods, ['wechat', 'crypto_other']);
     assert.equal(updatedApplications[0].payment_crypto_other, 'USDC');
@@ -4371,7 +4371,7 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
     assert.equal(updatedAirports[0].id, 42);
     assert.equal(Object.hasOwn(updatedAirports[0], 'name'), false);
     assert.equal(approvedAirport.name, 'Cloud Airport Pro');
-    assert.deepEqual(updatedAirports[0].websites, ['https://new.example.com', 'https://backup.example.com']);
+    assert.deepEqual(updatedAirports[0].websites, ['https://new.example.com/', 'https://backup.example.com/']);
     assert.equal(updatedAirports[0].plan_price_month, 1888);
     assert.equal(updatedAirports[0].has_trial, false);
     assert.deepEqual(updatedAirports[0].streaming_support, ['netflix', 'chatgpt']);
@@ -4434,7 +4434,7 @@ test('PATCH /portal/application/operations updates paid operations and syncs app
     assert.equal(data.application.applicant_email, 'user@example.com');
     assert.equal(data.application.plan_price_month, 1888);
     assert.equal(data.application.has_trial, false);
-    assert.deepEqual(data.application.websites, ['https://new.example.com', 'https://backup.example.com']);
+    assert.deepEqual(data.application.websites, ['https://new.example.com/', 'https://backup.example.com/']);
     assert.equal((data.application as any).subscription_url, 'https://subscribe-new.example.com');
   } finally {
     await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));

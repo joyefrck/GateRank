@@ -1,3 +1,5 @@
+import { RiskCheckDetails } from './RiskCheckDetails';
+import type { RiskCheckHistory } from '../../shared/riskCheck';
 import { HomeRotationAirportPicker, type HomeRotationAirportOptions } from './marketing/HomeRotationAirportPicker';
 import { TopicPages } from './topics/TopicPages';
 import { BalanceReminderButton } from './BalanceReminderButton';
@@ -593,6 +595,7 @@ interface AirportDashboardView {
     }>;
   } | null;
   risk: {
+    checks?: RiskCheckHistory;
     domain_ok: boolean | null;
     ssl_days_left: number | null;
     recent_complaints_count: number | null;
@@ -11761,42 +11764,45 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
       )}
 
       {tab === 'risk' && (
-        hasRiskData && dashboard ? (
-          <div className="space-y-4">
-            <div className="rounded border border-neutral-200 bg-white p-4">
-              <div className="text-sm font-semibold text-neutral-900">评分公式</div>
-              <div className="mt-2 text-xs text-neutral-500 whitespace-pre-wrap">
-                {'DomainPenalty = domain_ok ? 0 : 30\n'}
-                {'SslPenalty = ssl_days_left 为 null 时记 5；< 0 记 30；< 7 记 20；< 15 记 10；< 30 记 5；其余记 0\n'}
-                {'ComplaintPenalty = min(recent_complaints_count * 3, 15)\n'}
-                {'HistoryPenalty = min(history_incidents * 10, 30)\n'}
-                {dashboard.base.score_rule_version === 'v2_spncr'
-                  ? 'v2 不再计节点不可用率惩罚，避免与网络覆盖 N 重复计权。\nRiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty\n'
-                  : '历史 v1：NodeAvailabilityPenalty 按不可用率分段计入。\nRiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty + NodeAvailabilityPenalty\n'}
-                {'R = clamp(100 - RiskPenalty, 0, 100)'}
+        <div>
+          {dashboard && <RiskCheckDetails checks={dashboard.risk.checks} date={date} />}
+          {hasRiskData && dashboard ? (
+            <div className="space-y-4">
+              <div className="rounded border border-neutral-200 bg-white p-4">
+                <div className="text-sm font-semibold text-neutral-900">评分公式</div>
+                <div className="mt-2 text-xs text-neutral-500 whitespace-pre-wrap">
+                  {'DomainPenalty = domain_ok ? 0 : 30\n'}
+                  {'SslPenalty = ssl_days_left 为 null 时记 5；< 0 记 30；< 7 记 20；< 15 记 10；< 30 记 5；其余记 0\n'}
+                  {'ComplaintPenalty = min(recent_complaints_count * 3, 15)\n'}
+                  {'HistoryPenalty = min(history_incidents * 10, 30)\n'}
+                  {dashboard.base.score_rule_version === 'v2_spncr'
+                    ? 'v2 不再计节点不可用率惩罚，避免与网络覆盖 N 重复计权。\nRiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty\n'
+                    : '历史 v1：NodeAvailabilityPenalty 按不可用率分段计入。\nRiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty + NodeAvailabilityPenalty\n'}
+                  {'R = clamp(100 - RiskPenalty, 0, 100)'}
+                </div>
               </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4 text-sm">
-              <ReadField label="域名是否正常 (domain_ok)" value={valueOrDash(dashboard.risk.domain_ok)} />
-              <ReadField label="SSL剩余天数 (ssl_days_left)" value={valueOrDash(dashboard.risk.ssl_days_left)} />
-              <ReadField label="投诉数量 (recent_complaints_count)" value={valueOrDash(dashboard.risk.recent_complaints_count)} />
-              <ReadField label="历史异常 (history_incidents)" value={valueOrDash(dashboard.risk.history_incidents)} />
-              {dashboard.base.score_rule_version !== 'v2_spncr' && (
-                <ReadField label="节点可用性惩罚 (node_availability_penalty)" value={valueOrDash(dashboard.risk.node_availability_penalty)} />
-              )}
-              <ReadField label="域名惩罚 (domain_penalty)" value={valueOrDash(dashboard.risk.domain_penalty)} />
-              <ReadField label="SSL惩罚 (ssl_penalty)" value={valueOrDash(dashboard.risk.ssl_penalty)} />
-              <ReadField label="投诉惩罚 (complaint_penalty)" value={valueOrDash(dashboard.risk.complaint_penalty)} />
-              <ReadField label="历史惩罚 (history_penalty)" value={valueOrDash(dashboard.risk.history_penalty)} />
-              <ReadField label="总惩罚 (total_penalty)" value={valueOrDash(dashboard.risk.total_penalty)} />
-              <ReadField label="风险惩罚 (risk_penalty)" value={valueOrDash(dashboard.risk.risk_penalty)} />
-              <ReadField label="风险评分 (R)" value={valueOrDash(dashboard.risk.r)} />
-              <ReadField label="风险等级 (risk_level)" value={valueOrDash(dashboard.risk.risk_level)} />
-            </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <ReadField label="官网探测通过 (domain_ok)" value={valueOrDash(dashboard.risk.domain_ok)} />
+                <ReadField label="SSL剩余天数 (ssl_days_left)" value={valueOrDash(dashboard.risk.ssl_days_left)} />
+                <ReadField label="投诉数量 (recent_complaints_count)" value={valueOrDash(dashboard.risk.recent_complaints_count)} />
+                <ReadField label="历史异常 (history_incidents)" value={valueOrDash(dashboard.risk.history_incidents)} />
+                {dashboard.base.score_rule_version !== 'v2_spncr' && (
+                  <ReadField label="节点可用性惩罚 (node_availability_penalty)" value={valueOrDash(dashboard.risk.node_availability_penalty)} />
+                )}
+                <ReadField label="域名惩罚 (domain_penalty)" value={valueOrDash(dashboard.risk.domain_penalty)} />
+                <ReadField label="SSL惩罚 (ssl_penalty)" value={valueOrDash(dashboard.risk.ssl_penalty)} />
+                <ReadField label="投诉惩罚 (complaint_penalty)" value={valueOrDash(dashboard.risk.complaint_penalty)} />
+                <ReadField label="历史惩罚 (history_penalty)" value={valueOrDash(dashboard.risk.history_penalty)} />
+                <ReadField label="总惩罚 (total_penalty)" value={valueOrDash(dashboard.risk.total_penalty)} />
+                <ReadField label="风险惩罚 (risk_penalty)" value={valueOrDash(dashboard.risk.risk_penalty)} />
+                <ReadField label="风险评分 (R)" value={valueOrDash(dashboard.risk.r)} />
+                <ReadField label="风险等级 (risk_level)" value={valueOrDash(dashboard.risk.risk_level)} />
+              </div>
 
-          </div>
-        ) : <div className="text-sm text-neutral-500">当日暂无数据</div>
+            </div>
+          ) : <div className="text-sm text-neutral-500">当日暂无数据</div>}
+        </div>
       )}
 
       {tab === 'time_decay' && (

@@ -1,3 +1,4 @@
+import { RiskCheckRepository } from './repositories/riskCheckRepository';
 import { seedHomeRotationAirportOverrides } from './db/migrations/homeRotationAirportOverrides';
 import { HomeAirportRotationService } from './services/homeAirportRotationService';
 import { TopicRepository } from './topics/topicRepository';
@@ -146,6 +147,8 @@ export async function createApp() {
   await applicantBillingRepository.backfillLegacyAirportWallets();
   const metricsRepository = new MetricsRepository(pool);
   await metricsRepository.ensureSchema();
+  const riskCheckRepository = new RiskCheckRepository(pool);
+  await riskCheckRepository.ensureSchema();
   const probeSampleRepository = new ProbeSampleRepository(pool);
   await probeSampleRepository.ensureSchema();
   const performanceRunRepository = new PerformanceRunRepository(pool);
@@ -209,6 +212,7 @@ export async function createApp() {
     performanceProbeSettingRepository,
   });
   const riskCheckService = new RiskCheckService({
+    riskCheckRepository,
     airportRepository,
     metricsRepository,
   });
@@ -510,6 +514,7 @@ export async function createApp() {
     '/api/v1/admin',
     adminAuth,
     createAdminRoutes({
+      riskCheckRepository,
       airportRepository,
       airportApplicationRepository,
       applicationPaymentOrderRepository,

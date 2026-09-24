@@ -86,7 +86,7 @@ export function buildRiskReasonSummary(options: DeriveRiskReasonOptions): string
   }
 
   if (metrics.domain_ok === true) {
-    return `官网当前探测正常，当前风险主要来自${joined}。`;
+    return `官网探测可达（不代表页面内容已验证），当前风险主要来自${joined}。`;
   }
 
   return `当前风险主要来自${joined}。`;

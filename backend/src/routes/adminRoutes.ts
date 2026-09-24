@@ -1,3 +1,5 @@
+import type { RiskCheckHistory } from '../../../shared/riskCheck';
+import { normalizeWebsiteUrls } from '../../../shared/websiteUrl';
 import { normalizeHomeRotationAirportIds } from '../services/marketingSettingsService';
 import { SCORE_COMPONENT_KEYS, type ManualScoreComponents, type ScoreComponentEditorState } from '../../../shared/gateRankScore';
 import { componentEditorState } from '../services/scoreComponents';
@@ -108,6 +110,7 @@ import {
 } from '../../../shared/airportAds';
 
 interface AdminDeps {
+  riskCheckRepository?: { getHistory(airportId: number, date: string): Promise<RiskCheckHistory> };
   airportRepository: {
     listByQuery(query: {
       keyword?: string;
@@ -2399,7 +2402,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     try {
       const airportId = toAirportId(req.params.id);
       const date = parseDate(req.query.date);
-      const [base, metrics, score, networkCoverageRun, performanceRun, latestPerformanceRun, performanceRuns, dayProbeSamples, latestAvailableScoreDate] = await Promise.all([
+      const [base, metrics, score, networkCoverageRun, performanceRun, latestPerformanceRun, performanceRuns, dayProbeSamples, latestAvailableScoreDate, riskChecks] = await Promise.all([
         deps.airportRepository.getById(airportId),
         deps.metricsRepository.getByAirportAndDate(airportId, date),
         deps.scoreRepository.getByAirportAndDate(airportId, date),
@@ -2409,6 +2412,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
         deps.performanceRunRepository.listByAirportAndDate?.(airportId, date) ?? Promise.resolve([]),
         deps.probeSampleRepository.listProbeSamples(airportId, date, undefined, 1),
         deps.scoreRepository.getLatestAvailableDate?.(date) ?? null,
+        deps.riskCheckRepository?.getHistory(airportId, date) ?? Promise.resolve({ latest: null, last_applied: null }),
       ]);
 
       if (!base) {
@@ -2650,6 +2654,7 @@ export function createAdminRoutes(deps: AdminDeps): Router {
           })),
         } : null,
         risk: {
+          checks: riskChecks,
           domain_ok: boolOrNull(metricsObj.domain_ok),
           ssl_days_left: numberOrNull(metricsObj.ssl_days_left),
           recent_complaints_count: numberOrNull(metricsObj.recent_complaints_count),
@@ -3947,9 +3952,11 @@ function parseWebsiteFields(
   const normalized = [primaryWebsite || '', ...(websiteItems || [])]
     .map((value) => value.trim())
     .filter(Boolean);
-  const websites = [...new Set(normalized)];
+  let websites: string[];
+  try { websites = normalizeWebsiteUrls(normalized); }
+  catch { throw new HttpError(400, 'INVALID_WEBSITE_URL', '官网地址无效，请填写 HTTP/HTTPS 域名或完整网址'); }
 
-  if (required && websites.length === 0) {
+  if ((required || payload.website !== undefined || payload.websites !== undefined) && websites.length === 0) {
     throw new HttpError(400, 'BAD_REQUEST', 'website or websites is required');
   }
 

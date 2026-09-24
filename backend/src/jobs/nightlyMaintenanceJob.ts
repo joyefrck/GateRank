@@ -231,11 +231,13 @@ export class NightlyMaintenanceJob {
         : airports;
       let successCount = 0;
       let failureCount = 0;
+      let websiteAbnormalCount = 0;
 
       for (let index = 0; index < filtered.length; index += 1) {
         const airport = filtered[index];
         try {
-          await this.deps.riskCheckService.inspectAirportForDate(airport.id, date);
+          const result = await this.deps.riskCheckService.inspectAirportForDate(airport.id, date);
+          if (!result.domain_ok) websiteAbnormalCount += 1;
           successCount += 1;
         } catch (error) {
           failureCount += 1;
@@ -247,7 +249,7 @@ export class NightlyMaintenanceJob {
         }
       }
 
-      const detail = `${successCount} succeeded, ${failureCount} failed`;
+      const detail = `${successCount} succeeded, ${failureCount} failed; 官网探测异常 ${websiteAbnormalCount}，执行失败 ${failureCount}（执行成功不等于页面正常）`;
       if (failureCount > 0) {
         return { stage: 'risk', status: 'failed', detail };
       }

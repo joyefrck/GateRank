@@ -41,7 +41,7 @@ test('buildRiskReasonSummary describes recovered reachability as current probe n
     },
   });
 
-  assert.equal(summary, '官网当前探测正常，当前风险主要来自近期投诉 2 条。');
+  assert.equal(summary, '官网探测可达（不代表页面内容已验证），当前风险主要来自近期投诉 2 条。');
 });
 
 test('deriveRiskReasonCodes still reports domain and ssl reasons independently', () => {

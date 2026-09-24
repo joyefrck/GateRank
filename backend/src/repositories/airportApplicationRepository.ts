@@ -1,3 +1,4 @@
+import { normalizeWebsiteUrls } from '../../../shared/websiteUrl';
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type {
   AirportApplication,
@@ -272,7 +273,7 @@ export class AirportApplicationRepository {
   }
 
   async create(input: CreateAirportApplicationInput): Promise<number> {
-    const websites = normalizeWebsiteList(input.websites, input.website);
+    const websites = normalizeWebsiteUrls([input.website || '', ...(input.websites || [])]);
     const [result] = await this.pool.execute<ResultSetHeader>(
       `INSERT INTO airport_applications (
         name,
@@ -535,7 +536,7 @@ export class AirportApplicationRepository {
   }
 
   async updateApplicantDraft(id: number, input: UpdateAirportApplicationInput): Promise<boolean> {
-    const websites = normalizeWebsiteList(input.websites, input.website);
+    const websites = normalizeWebsiteUrls([input.website || '', ...(input.websites || [])]);
     const [result] = await this.pool.execute<ResultSetHeader>(
       `UPDATE airport_applications
           SET name = ?,
@@ -572,7 +573,7 @@ export class AirportApplicationRepository {
   }
 
   async updateApplicantOperations(id: number, input: UpdateAirportApplicationOperationsInput): Promise<boolean> {
-    const websites = normalizeWebsiteList(input.websites, input.website);
+    const websites = normalizeWebsiteUrls([input.website || '', ...(input.websites || [])]);
     const sets = [
       'name = ?',
       'website = ?',

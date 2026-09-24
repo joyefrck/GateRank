@@ -1,3 +1,4 @@
+import { normalizeWebsiteUrls } from '../../../shared/websiteUrl';
 import { createTurnstileService, type TurnstileVerifier } from '../services/turnstileService';
 import { randomInt, randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
@@ -2141,7 +2142,9 @@ function parseWebsiteFields(
   const normalized = [primaryWebsite || '', ...(websiteItems || [])]
     .map((value) => value.trim())
     .filter(Boolean);
-  const websites = [...new Set(normalized)];
+  let websites: string[];
+  try { websites = normalizeWebsiteUrls(normalized); }
+  catch { throw new HttpError(400, 'INVALID_WEBSITE_URL', '官网地址无效，请填写 HTTP/HTTPS 域名或完整网址'); }
 
   if (required && websites.length === 0) {
     throw new HttpError(400, 'BAD_REQUEST', 'website or websites is required');

@@ -675,3 +675,16 @@ CREATE TABLE IF NOT EXISTS news_articles (
   INDEX idx_news_articles_status_published_at (status, published_at DESC),
   INDEX idx_news_articles_updated_at (updated_at DESC)
 );
+
+CREATE TABLE IF NOT EXISTS airport_risk_checks (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  airport_id BIGINT UNSIGNED NOT NULL,
+  date DATE NOT NULL,
+  applied_to_metrics TINYINT(1) NOT NULL,
+  result_json JSON NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_risk_airport_date (airport_id, date, id),
+  KEY idx_risk_applied (airport_id, applied_to_metrics, date, id),
+  CONSTRAINT fk_risk_check_airport FOREIGN KEY (airport_id) REFERENCES airports(id) ON DELETE CASCADE
+);

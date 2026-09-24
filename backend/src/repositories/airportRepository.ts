@@ -1,3 +1,4 @@
+import { normalizeWebsiteUrls } from '../../../shared/websiteUrl';
 import type { Pool, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import type {
   Airport,
@@ -726,7 +727,7 @@ export class AirportRepository {
   }
 
   async create(input: CreateAirportInput): Promise<number> {
-    const websites = normalizeWebsiteList(input.websites, input.website);
+    const websites = normalizeWebsiteUrls([input.website || '', ...(input.websites || [])]);
     const slug = await this.resolveAirportSlug({
       requestedSlug: input.slug,
       name: input.name,
@@ -837,13 +838,13 @@ export class AirportRepository {
       values.push(input.name);
     }
     if (Array.isArray(input.websites)) {
-      const websites = normalizeWebsiteList(input.websites, input.website);
+      const websites = normalizeWebsiteUrls([input.website || '', ...(input.websites || [])]);
       sets.push('website = ?');
       values.push(websites[0]);
       sets.push('websites_json = ?');
       values.push(JSON.stringify(websites));
     } else if (typeof input.website === 'string') {
-      const websites = normalizeWebsiteList(undefined, input.website);
+      const websites = normalizeWebsiteUrls([input.website || '']);
       sets.push('website = ?');
       values.push(websites[0]);
       sets.push('websites_json = ?');

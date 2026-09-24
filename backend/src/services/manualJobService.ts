@@ -42,7 +42,7 @@ interface ManualJobServiceDeps {
     recomputeAirportForDate(date: string, airportId: number): Promise<{ recomputed: number }>;
   };
   riskCheckService: {
-    inspectAirportForDate(airportId: number, date: string): Promise<{ domain_ok: boolean; ssl_days_left: number | null }>;
+    inspectAirportForDate(airportId: number, date: string): Promise<{ domain_ok: boolean; ssl_days_left: number | null; summary?: string }>;
   };
   auditRepository: {
     log(action: string, actor: string, requestId: string, payload: unknown): Promise<void>;
@@ -285,7 +285,7 @@ export class ManualJobService {
       if (isToday) {
         const result = await this.deps.riskCheckService.inspectAirportForDate(job.airport_id, job.date);
         const recomputeResult = await this.deps.recomputeService.recomputeAirportForDate(job.date, job.airport_id);
-        return `风险体检完成：domain_ok=${String(result.domain_ok)}，ssl_days_left=${result.ssl_days_left ?? '-'}，重算 ${recomputeResult.recomputed} 条`;
+        return `风险体检完成：${result.summary ? `${result.summary}，` : ''}domain_ok=${String(result.domain_ok)}，ssl_days_left=${result.ssl_days_left ?? '-'}，重算 ${recomputeResult.recomputed} 条`;
       }
       const recomputeResult = await this.deps.recomputeService.recomputeAirportForDate(job.date, job.airport_id);
       return `历史日期仅重算风险相关数据：重算 ${recomputeResult.recomputed} 条`;

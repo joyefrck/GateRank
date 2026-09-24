@@ -1,3 +1,4 @@
+import { emptyProbeResult } from '../src/services/websiteProbe';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { AddressInfo } from 'node:net';
@@ -3561,10 +3562,12 @@ test('GET /airports/:id/dashboard exposes manual total score override metadata',
 });
 
 test('GET /airports/:id/dashboard exposes risk breakdown details', async () => {
+  const checks = { latest: { ...emptyProbeResult('config_error'), id: 2, date: '2026-03-22', applied_to_metrics: false }, last_applied: null };
   const app = express();
   app.use(express.json());
   app.use(
     createAdminRoutes({
+      riskCheckRepository: { getHistory: async (id, date) => { assert.equal(id, 1); assert.equal(date, '2026-03-22'); return checks; } },
       airportRepository: stubAirportRepository(),
       airportApplicationRepository: stubAirportApplicationRepository(),
       probeSampleRepository: {
@@ -3618,6 +3621,7 @@ test('GET /airports/:id/dashboard exposes risk breakdown details', async () => {
     const response = await fetch(`http://127.0.0.1:${port}/airports/1/dashboard?date=2026-03-22`);
     assert.equal(response.status, 200);
     const data = (await response.json()) as { risk: Record<string, unknown> };
+    assert.deepEqual(data.risk.checks, checks);
     assert.equal(data.risk.domain_penalty, 30);
     assert.equal(data.risk.ssl_penalty, 5);
     assert.equal(data.risk.complaint_penalty, 6);
@@ -8147,4 +8151,27 @@ test('marketing rotation options expose only display fields; saves validate, aud
     assert.equal(audits.length, 2);
     assert.equal(clears, 2);
   } finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+});
+
+test('admin website writes normalize URLs and reject invalid or empty websites before mutation', async () => {
+  const inputs: Array<{ website: string; websites?: string[] }> = [];
+  const app = express();
+  app.use(express.json());
+  app.use(createAdminRoutes({
+    airportRepository: { ...stubAirportRepository(), create: async (input: { website: string; websites?: string[] }) => { inputs.push(input); return 94; } },
+    auditRepository: { log: async () => {} },
+  } as never));
+  app.use(errorHandler);
+  const server = app.listen(0);
+  try {
+    const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/airports`;
+    const post = (website: string) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Example', website, plan_price_month: 5, has_trial: false }) });
+    assert.equal((await post('www.example.com/#/signup?ref=abc')).status, 201);
+    assert.equal(inputs[0].website, 'https://www.example.com/#/signup?ref=abc');
+    for (const website of ['javascript:alert(1)', '', 'https://user:secret@example.com']) {
+      assert.equal((await post(website)).status, 400);
+    }
+    assert.equal(inputs.length, 1);
+  } finally { await new Promise<void>((resolve) => server.close(() => resolve())); }
 });
