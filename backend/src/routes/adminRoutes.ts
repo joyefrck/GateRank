@@ -1,3 +1,5 @@
+import { parseManualAdInput } from '../utils/manualAdInput';
+import type { ManualAdInput, ManualAdList, ManualAdQuery } from '../../../shared/manualAds';
 import type { RiskCheckHistory } from '../../../shared/riskCheck';
 import { normalizeWebsiteUrls } from '../../../shared/websiteUrl';
 import { normalizeHomeRotationAirportIds } from '../services/marketingSettingsService';
@@ -259,6 +261,9 @@ interface AdminDeps {
     updatePassword?(id: number, passwordHash: string, mustChangePassword: boolean): Promise<boolean>;
   };
   airportAdCampaignRepository?: {
+    listManualAds(input: ManualAdQuery): Promise<ManualAdList>;
+    saveManualAd(input: ManualAdInput, actor: string, campaignId?: number): Promise<number>;
+    cancelManualAd(campaignId: number, actor: string): Promise<void>;
     listAdminStats(input: {
       page: number;
       keyword?: string;
@@ -693,6 +698,59 @@ export function createAdminRoutes(deps: AdminDeps): Router {
     } catch (error) {
       next(error);
     }
+  });
+
+  router.get('/marketing/manual-ads/airports', async (req, res, next) => {
+    try {
+      const page = req.query.page === undefined ? 1 : toPositiveIntOrThrow(req.query.page, 'page');
+      const result = await deps.airportRepository.listByQuery({ page, pageSize: 30, keyword: optionalString(req.query.q) });
+      res.json({ total: result.total, page, items: result.items.map(value => {
+        const airport = value as { id: number; name: string; is_listed: boolean; status: string };
+        return { id: airport.id, name: airport.name, eligible: Boolean(airport.is_listed) && airport.status !== 'down' };
+      }) });
+    } catch (error) { next(error); }
+  });
+
+  router.get('/marketing/manual-ads', async (req, res, next) => {
+    try {
+      const page = req.query.page === undefined ? 1 : toPositiveIntOrThrow(req.query.page, 'page');
+      const status = String(req.query.status || 'all');
+      if (!['all', 'scheduled', 'active', 'expired', 'canceled'].includes(status)) throw new HttpError(400, 'BAD_REQUEST', '投放状态无效');
+      res.json(await getAirportAdCampaignRepository(deps).listManualAds({
+        page, q: optionalString(req.query.q), status: status as ManualAdQuery['status'], placement: parseAdminAirportAdPlacement(req.query.placement),
+      }));
+    } catch (error) { next(error); }
+  });
+
+  router.post('/marketing/manual-ads', async (req, res, next) => {
+    try {
+      const input = parseManualAdInput(req.body);
+      const campaignId = await getAirportAdCampaignRepository(deps).saveManualAd(input, actorFromReq(req));
+      deps.publicPageCache?.clear();
+      await deps.auditRepository.log('create_manual_ad', actorFromReq(req), req.requestId, { campaign_id: campaignId, ...input });
+      res.status(201).json({ campaign_id: campaignId });
+    } catch (error) { next(error); }
+  });
+
+  router.patch('/marketing/manual-ads/:campaignId', async (req, res, next) => {
+    try {
+      const campaignId = toPositiveIntOrThrow(req.params.campaignId, 'campaignId');
+      const input = parseManualAdInput(req.body);
+      await getAirportAdCampaignRepository(deps).saveManualAd(input, actorFromReq(req), campaignId);
+      deps.publicPageCache?.clear();
+      await deps.auditRepository.log('update_manual_ad', actorFromReq(req), req.requestId, { campaign_id: campaignId, ...input });
+      res.json({ campaign_id: campaignId });
+    } catch (error) { next(error); }
+  });
+
+  router.post('/marketing/manual-ads/:campaignId/cancel', async (req, res, next) => {
+    try {
+      const campaignId = toPositiveIntOrThrow(req.params.campaignId, 'campaignId');
+      await getAirportAdCampaignRepository(deps).cancelManualAd(campaignId, actorFromReq(req));
+      deps.publicPageCache?.clear();
+      await deps.auditRepository.log('cancel_manual_ad', actorFromReq(req), req.requestId, { campaign_id: campaignId });
+      res.json({ campaign_id: campaignId });
+    } catch (error) { next(error); }
   });
 
   router.get('/marketing/ad-campaigns', async (req, res, next) => {
@@ -3026,8 +3084,8 @@ function getAirportAdCampaignRepository(
 
 function parseAdminAirportAdStatus(value: unknown): AdminAirportAdStatusFilter {
   const status = value === undefined || value === '' ? 'all' : String(value);
-  if (!['all', 'active', 'expired', 'canceled'].includes(status)) {
-    throw new HttpError(400, 'BAD_REQUEST', 'status must be all, active, expired, or canceled');
+  if (!['all', 'scheduled', 'active', 'expired', 'canceled'].includes(status)) {
+    throw new HttpError(400, 'BAD_REQUEST', 'status must be all, scheduled, active, expired, or canceled');
   }
   return status as AdminAirportAdStatusFilter;
 }

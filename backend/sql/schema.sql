@@ -306,9 +306,12 @@ CREATE TABLE IF NOT EXISTS application_payment_orders (
 CREATE TABLE IF NOT EXISTS airport_ad_campaigns (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   airport_id BIGINT UNSIGNED NOT NULL,
-  applicant_account_id BIGINT UNSIGNED NOT NULL,
-  application_id BIGINT UNSIGNED NOT NULL,
-  wallet_id BIGINT UNSIGNED NOT NULL,
+  applicant_account_id BIGINT UNSIGNED NULL,
+  application_id BIGINT UNSIGNED NULL,
+  wallet_id BIGINT UNSIGNED NULL,
+  campaign_source ENUM('merchant', 'admin') NOT NULL DEFAULT 'merchant',
+  updated_by VARCHAR(128) NULL,
+  home_slot TINYINT UNSIGNED NULL,
   coupon_code VARCHAR(64) NOT NULL,
   discount_title VARCHAR(128) NOT NULL,
   discount_description TEXT NOT NULL,
@@ -330,6 +333,9 @@ CREATE TABLE IF NOT EXISTS airport_ad_campaigns (
   INDEX idx_airport_ad_campaigns_airport_active (airport_id, status, ends_at),
   INDEX idx_airport_ad_campaigns_account_created (applicant_account_id, created_at DESC)
 );
+
+CREATE TABLE IF NOT EXISTS airport_ad_campaign_write_lock (id TINYINT UNSIGNED NOT NULL PRIMARY KEY);
+INSERT IGNORE INTO airport_ad_campaign_write_lock (id) VALUES (1);
 
 CREATE TABLE IF NOT EXISTS airport_metrics_daily (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,

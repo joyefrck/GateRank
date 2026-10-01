@@ -63,7 +63,7 @@ export function DealCard({ deal, tone, pagePath, detailHref, showDetailAction = 
 
       <ul className="m-0 grid list-none gap-2.5 p-0">
         <DealField label="优惠码">
-          <span className="inline-flex items-center gap-1.5">
+          {deal.coupon_code ? <span className="inline-flex items-center gap-1.5">
             <span className="inline-flex h-7 items-center rounded-lg bg-blue-50 px-2.5 font-black text-blue-700">{deal.coupon_code}</span>
             <button
               type="button"
@@ -74,9 +74,9 @@ export function DealCard({ deal, tone, pagePath, detailHref, showDetailAction = 
             >
               {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
             </button>
-          </span>
+          </span> : <span className="text-slate-500">无需优惠码</span>}
         </DealField>
-        <DealField label="折扣说明">{deal.discount_description}</DealField>
+        <DealField label="折扣说明">{deal.discount_description || deal.discount_title}</DealField>
         <DealField label="适用套餐">{deal.applicable_plan}</DealField>
         <DealField label="活动时间">{formatDate(deal.starts_at)} ～ {formatDate(deal.ends_at)}</DealField>
       </ul>

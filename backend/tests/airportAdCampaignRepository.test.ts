@@ -191,7 +191,7 @@ test('AirportAdCampaignRepository.listAdminStats returns filtered campaigns with
   assert.match(countCall?.sql || '', /airport\.name LIKE \?/);
   assert.match(countCall?.sql || '', /campaign\.status = 'active'/);
   assert.match(countCall?.sql || '', /campaign\.home_slot = \?/);
-  assert.deepEqual(countCall?.params, ['%YH%', '%YH%', '2026-07-31 12:00:00', 1]);
+  assert.deepEqual(countCall?.params, ['%YH%', '%YH%', '2026-07-31 12:00:00', '2026-07-31 12:00:00', 1]);
   assert.deepEqual(listCall?.params?.slice(-3), [20, 0, '2026-07-31 12:00:00']);
 });
 

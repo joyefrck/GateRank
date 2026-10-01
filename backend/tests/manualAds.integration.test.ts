@@ -1,0 +1,67 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import mysql from 'mysql2/promise';
+import { AirportAdCampaignRepository } from '../src/repositories/airportAdCampaignRepository';
+import type { ManualAdInput } from '../../shared/manualAds';
+
+// Explicit opt-in uses a loopback-only disposable MySQL instance; never a project's DB.
+const port = Number(process.env.MANUAL_AD_TEST_MYSQL_PORT || 0);
+test('real MySQL: legacy migration, free CRUD, concurrent reservations, merchant renewals, public display and stats', { skip: !port }, async () => {
+  const database = `manual_ads_test_${randomBytes(6).toString('hex')}`;
+  const root = mysql.createPool({ host: '127.0.0.1', port, user: 'root', password: '', multipleStatements: true });
+  await root.query(`CREATE DATABASE ${database} CHARACTER SET utf8mb4`);
+  const pool = mysql.createPool({ host: '127.0.0.1', port, user: 'root', password: '', database, dateStrings: true, connectionLimit: 8 });
+  try {
+    const schema = readFileSync('backend/sql/schema.sql', 'utf8');
+    const table = (name: string) => schema.match(new RegExp(`CREATE TABLE IF NOT EXISTS ${name} \\([\\s\\S]+?\\n\\);`))![0];
+    await pool.query(table('airports'));
+    let legacy = table('airport_ad_campaigns').replace(/  campaign_source[^\n]+\n|  updated_by[^\n]+\n/g, '');
+    for (const field of ['applicant_account_id', 'application_id', 'wallet_id']) legacy = legacy.replace(`${field} BIGINT UNSIGNED NULL`, `${field} BIGINT UNSIGNED NOT NULL`);
+    await pool.query(legacy);
+    await pool.query(table('applicant_wallets'));
+    await pool.query(table('applicant_wallet_transactions'));
+    await pool.query('CREATE TABLE marketing_events (campaign_id BIGINT, event_date DATE, event_type VARCHAR(64))');
+    await pool.query("INSERT INTO airports (id, slug, name, website, plan_price_month) VALUES (1, 'test-airport', '测试机场', 'https://example.com', 20)");
+    const repo = new AirportAdCampaignRepository(pool); const now = new Date('2026-10-01T12:00:00+08:00');
+    await repo.ensureSchema(now); await repo.ensureSchema(now);
+    const ad: ManualAdInput = { airport_id: 1, home_slot: 1, coupon_code: '', discount_title: '国庆活动', discount_description: '', applicable_plan: '', discount_percent: null, is_stackable: false, refund_supported: false, starts_at: '2026-10-01T00:00:00+08:00', ends_at: '2026-11-01T00:00:00+08:00' };
+    const id = await repo.saveManualAd(ad, 'integration-admin', undefined, now);
+    const [records] = await pool.query<mysql.RowDataPacket[]>('SELECT * FROM airport_ad_campaigns WHERE id = ?', [id]);
+    assert.equal(records[0].applicant_account_id, null); assert.equal(Number(records[0].billed_amount), 0); assert.equal(records[0].tracking_started_at, '2026-10-01 12:00:00');
+    assert.equal((await repo.listActiveHomeDeals(now))[0].campaign_id, id);
+    assert.equal((await repo.listActiveDeals(now))[0].campaign_id, id);
+    assert.equal((await repo.listPortalCampaignsByAirportId(1, now)).length, 0);
+    assert.equal((await repo.getPortalStatus(1, 100, now)).active_campaign, null);
+    await pool.query("INSERT INTO marketing_events VALUES (?, '2026-10-01', 'airport_impression'), (?, '2026-10-01', 'outbound_click')", [id, id]);
+    const stats = await repo.getAdminStats({ campaign_id: id, page: 1 }, now);
+    assert.deepEqual(stats.summary, { impressions: 1, clicks: 1, ctr: 1 });
+    assert.equal((await repo.listAdminStats({ page: 1, status: 'all', placement: 'all' }, now)).items[0].summary.clicks, 1);
+    await repo.saveManualAd({ ...ad, discount_title: '更新优惠' }, 'editor', id, now);
+    assert.equal((await repo.listManualAds({ page: 1 }, now)).items[0].discount_title, '更新优惠');
+    await assert.rejects(repo.saveManualAd({ ...ad, starts_at: '2026-10-20T00:00:00+08:00' }, 'admin', undefined, now), /已有投放/);
+    const adjacent = { ...ad, starts_at: ad.ends_at, ends_at: '2026-12-01T00:00:00+08:00' };
+    const adjacentId = await repo.saveManualAd(adjacent, 'admin', undefined, now);
+    assert.equal((await repo.listManualAds({ page: 1, status: 'scheduled' }, now)).items[0].campaign_id, adjacentId);
+    assert.equal((await repo.listAdminStats({ page: 1, status: 'scheduled', placement: 'all' }, now)).items[0].status, 'scheduled');
+    await repo.cancelManualAd(id, 'admin'); assert.equal((await repo.listActiveHomeDeals(now)).length, 0);
+    const races = await Promise.allSettled([repo.saveManualAd({ ...ad, home_slot: 2 }, 'a', undefined, now), repo.saveManualAd({ ...ad, home_slot: 2 }, 'b', undefined, now)]);
+    assert.equal(races.filter(result => result.status === 'fulfilled').length, 1);
+    assert.equal(races.filter(result => result.status === 'rejected').length, 1);
+    const future = { ...ad, home_slot: 3 as const, starts_at: '2026-10-20T00:00:00+08:00', ends_at: '2026-11-20T00:00:00+08:00' };
+    await repo.saveManualAd(future, 'admin', undefined, now);
+    await pool.query('INSERT INTO applicant_wallets (applicant_account_id, application_id, airport_id, balance) VALUES (7, 8, 1, 5000)');
+    const merchant = { airport_id: 1, applicant_account_id: 7, application_id: 8, months: 1, monthly_price: 100, home_slot: 3 as const, coupon_code: 'MERCHANT', discount_title: '商家广告', discount_description: '', applicable_plan: '', is_stackable: false, refund_supported: false, discount_percent: null };
+    await assert.rejects(repo.purchase(merchant, now), /已有投放/);
+    const paid = await repo.purchase({ ...merchant, home_slot: 4 }, now);
+    const balance = async () => { const [rows] = await pool.query<mysql.RowDataPacket[]>('SELECT balance FROM applicant_wallets'); return Number(rows[0].balance); };
+    assert.equal(await balance(), 4900);
+    await repo.saveManualAd({ ...future, home_slot: 4, starts_at: '2026-11-01T12:00:00+08:00', ends_at: '2026-12-01T00:00:00+08:00' }, 'admin', undefined, now);
+    await assert.rejects(repo.renew({ ...merchant, campaign_id: paid.campaign_id, months: 1 }, now), /已有投放/);
+    await assert.rejects(repo.update({ ...merchant, campaign_id: paid.campaign_id, extend_months: 1 }, now), /已有投放/);
+    assert.equal(await balance(), 4900);
+    await assert.rejects(repo.saveManualAd(ad, 'admin', paid.campaign_id, now), /不存在/);
+    await assert.rejects(repo.cancelManualAd(paid.campaign_id, 'admin'), /不存在/);
+  } finally { await pool.end(); await root.query(`DROP DATABASE ${database}`); await root.end(); }
+});

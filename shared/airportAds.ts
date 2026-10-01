@@ -121,7 +121,7 @@ export interface PortalAirportAdStatsView {
   };
 }
 
-export type AdminAirportAdStatusFilter = 'all' | 'active' | 'expired' | 'canceled';
+export type AdminAirportAdStatusFilter = 'all' | 'scheduled' | 'active' | 'expired' | 'canceled';
 export type AdminAirportAdPlacementFilter = 'all' | 'deal' | `home_${AirportHomeAdSlot}`;
 export type AdminAirportAdDerivedStatus = Exclude<AdminAirportAdStatusFilter, 'all'>;
 

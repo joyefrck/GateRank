@@ -1,3 +1,4 @@
+import type { ManualAdInput, ManualAdList, ManualAdQuery, ManualAdView } from '../../../shared/manualAds';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolConnection, ResultSetHeader, RowDataPacket } from 'mysql2/promise';
 import {
@@ -79,6 +80,7 @@ interface CampaignRow extends RowDataPacket {
   discount_percent: number | null;
   home_slot: number | null;
   tracking_started_at: string | null;
+  updated_by?: string | null;
   campaign_status: 'active' | 'canceled';
   created_at: string;
   updated_at: string;
@@ -173,9 +175,11 @@ export class AirportAdCampaignRepository {
       CREATE TABLE IF NOT EXISTS airport_ad_campaigns (
         id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
         airport_id BIGINT UNSIGNED NOT NULL,
-        applicant_account_id BIGINT UNSIGNED NOT NULL,
-        application_id BIGINT UNSIGNED NOT NULL,
-        wallet_id BIGINT UNSIGNED NOT NULL,
+        applicant_account_id BIGINT UNSIGNED NULL,
+        application_id BIGINT UNSIGNED NULL,
+        wallet_id BIGINT UNSIGNED NULL,
+        campaign_source ENUM('merchant', 'admin') NOT NULL DEFAULT 'merchant',
+        updated_by VARCHAR(128) NULL,
         coupon_code VARCHAR(64) NOT NULL,
         discount_title VARCHAR(128) NOT NULL,
         discount_description TEXT NOT NULL,
@@ -200,6 +204,18 @@ export class AirportAdCampaignRepository {
         INDEX idx_airport_ad_campaigns_account_created (applicant_account_id, created_at DESC)
       )
     `);
+    await this.ensureColumn('airport_ad_campaigns', 'campaign_source', "ENUM('merchant', 'admin') NOT NULL DEFAULT 'merchant'");
+    await this.ensureColumn('airport_ad_campaigns', 'updated_by', 'VARCHAR(128) NULL');
+    for (const column of ['applicant_account_id', 'application_id', 'wallet_id']) {
+      const [columns] = await this.pool.query<RowDataPacket[]>(
+        `SELECT IS_NULLABLE AS nullable FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'airport_ad_campaigns' AND COLUMN_NAME = ?`, [column],
+      );
+      if (columns[0]?.nullable === 'NO') await this.pool.query(`ALTER TABLE airport_ad_campaigns MODIFY COLUMN ${column} BIGINT UNSIGNED NULL`);
+    }
+    await this.pool.query(`CREATE TABLE IF NOT EXISTS airport_ad_campaign_write_lock (id TINYINT UNSIGNED NOT NULL PRIMARY KEY)`);
+    await this.pool.query('INSERT IGNORE INTO airport_ad_campaign_write_lock (id) VALUES (1)');
+
     await this.ensureColumn(
       'airport_ad_campaigns',
       'home_slot',
@@ -312,6 +328,7 @@ export class AirportAdCampaignRepository {
     const [rows] = await this.pool.query<CampaignRow[]>(
       `${this.selectDealSql()}
         WHERE campaign.airport_id = ?
+          AND campaign.campaign_source = 'merchant'
         ORDER BY campaign.ends_at DESC, campaign.id DESC
         LIMIT 20`,
       [airportId],
@@ -368,7 +385,10 @@ export class AirportAdCampaignRepository {
       whereParams.push(`%${keyword}%`, `%${keyword}%`);
     }
     if (input.status === 'active') {
-      where.push("campaign.status = 'active' AND campaign.ends_at > ?");
+      where.push("campaign.status = 'active' AND campaign.starts_at <= ? AND campaign.ends_at > ?");
+      whereParams.push(nowSql, nowSql);
+    } else if (input.status === 'scheduled') {
+      where.push("campaign.status = 'active' AND campaign.starts_at > ?");
       whereParams.push(nowSql);
     } else if (input.status === 'expired') {
       where.push("campaign.status = 'active' AND campaign.ends_at <= ?");
@@ -488,8 +508,85 @@ export class AirportAdCampaignRepository {
       starts_at: sqlDateTimeToTimezoneIso(campaign.starts_at),
       ends_at: sqlDateTimeToTimezoneIso(campaign.ends_at),
       purchased_months: Number(campaign.purchased_months),
-      status: deriveAdminCampaignStatus(campaign.campaign_status, campaign.ends_at, nowSql),
+      status: deriveAdminCampaignStatus(campaign.campaign_status, campaign.ends_at, nowSql, campaign.starts_at),
     };
+  }
+
+  async listManualAds(input: ManualAdQuery, now: Date = new Date()): Promise<ManualAdList> {
+    if (!Number.isSafeInteger(input.page) || input.page <= 0) throw new HttpError(400, 'BAD_REQUEST', 'page must be positive integer');
+    const where = ["campaign.campaign_source = 'admin'"];
+    const params: Array<string | number> = [];
+    const nowSql = formatSqlDateTimeInTimezone(now);
+    if (input.q) { where.push('(airport.name LIKE ? OR campaign.coupon_code LIKE ?)'); params.push(`%${input.q}%`, `%${input.q}%`); }
+    if (input.status === 'canceled') where.push("campaign.status = 'canceled'");
+    else if (input.status && input.status !== 'all') {
+      where.push("campaign.status = 'active'");
+      if (input.status === 'scheduled') { where.push('campaign.starts_at > ?'); params.push(nowSql); }
+      if (input.status === 'active') { where.push('campaign.starts_at <= ? AND campaign.ends_at > ?'); params.push(nowSql, nowSql); }
+      if (input.status === 'expired') { where.push('campaign.ends_at <= ?'); params.push(nowSql); }
+    }
+    if (input.placement === 'deal') where.push('campaign.home_slot IS NULL');
+    else if (input.placement && input.placement !== 'all') { where.push('campaign.home_slot = ?'); params.push(Number(input.placement.slice(5))); }
+    const clause = `WHERE ${where.join(' AND ')}`;
+    const [counts] = await this.pool.query<CountRow[]>(`SELECT COUNT(*) AS total FROM airport_ad_campaigns campaign JOIN airports airport ON airport.id = campaign.airport_id ${clause}`, params);
+    const total = Number(counts[0]?.total || 0);
+    const [rows] = await this.pool.query<CampaignRow[]>(`${this.selectDealSql()} ${clause} ORDER BY campaign.created_at DESC, campaign.id DESC LIMIT 20 OFFSET ?`, [...params, (input.page - 1) * 20]);
+    return { items: rows.map(row => this.toManualView(row, nowSql)), pagination: { page: input.page, page_size: 20, total, total_pages: Math.ceil(total / 20) } };
+  }
+
+  async saveManualAd(input: ManualAdInput, actor: string, campaignId?: number, now: Date = new Date()): Promise<number> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await this.lockCampaignWrites(connection);
+      if (campaignId) {
+        const [existing] = await connection.query<RowDataPacket[]>("SELECT id, airport_id, home_slot FROM airport_ad_campaigns WHERE id = ? AND campaign_source = 'admin' AND status = 'active' FOR UPDATE", [campaignId]);
+        if (!existing.length) throw new HttpError(404, 'MANUAL_AD_NOT_EDITABLE', '手动投放不存在或已下架');
+        // Keep attribution stable once a campaign has been created.
+        if (Number(existing[0].airport_id) !== input.airport_id || normalizeHomeSlotOrNull(existing[0].home_slot) !== input.home_slot) {
+          throw new HttpError(400, 'BAD_REQUEST', '已有投放不能更换机场或位置，请下架后新建');
+        }
+      }
+      const [airports] = await connection.query<RowDataPacket[]>("SELECT id FROM airports WHERE id = ? AND is_listed = 1 AND status <> 'down' FOR UPDATE", [input.airport_id]);
+      if (!airports.length) throw new HttpError(400, 'BAD_REQUEST', '请选择已公开且未停服的机场');
+      const starts = formatSqlDateTimeInTimezone(new Date(input.starts_at));
+      const ends = formatSqlDateTimeInTimezone(new Date(input.ends_at));
+      if (input.home_slot !== null) await this.assertHomeSlotAvailableForUpdate(connection, input.home_slot, starts, campaignId, ends);
+      const values = [input.coupon_code, input.discount_title, input.discount_description, input.applicable_plan,
+        input.is_stackable ? 1 : 0, input.refund_supported ? 1 : 0, input.discount_percent, starts, ends, actor.slice(0, 128)];
+      let id = campaignId;
+      if (id) {
+        await connection.execute(`UPDATE airport_ad_campaigns SET coupon_code = ?, discount_title = ?, discount_description = ?, applicable_plan = ?, is_stackable = ?, refund_supported = ?, discount_percent = ?, starts_at = ?, ends_at = ?, updated_by = ?, updated_at = NOW() WHERE id = ? AND campaign_source = 'admin'`, [...values, id]);
+      } else {
+        const [result] = await connection.execute<ResultSetHeader>(`INSERT INTO airport_ad_campaigns (airport_id, home_slot, coupon_code, discount_title, discount_description, applicable_plan, is_stackable, refund_supported, discount_percent, starts_at, ends_at, updated_by, applicant_account_id, application_id, wallet_id, campaign_source, purchased_months, billed_amount, tracking_started_at, display_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, NULL, 'admin', 0, 0, ?, ?)`, [input.airport_id, input.home_slot, ...values, formatSqlDateTimeInTimezone(new Date(Math.max(now.getTime(), new Date(input.starts_at).getTime()))), await this.nextDisplayOrder(connection)]);
+        id = result.insertId;
+      }
+      await connection.commit();
+      return id;
+    } catch (error) { await connection.rollback(); throw error; }
+    finally { connection.release(); }
+  }
+
+  async cancelManualAd(campaignId: number, actor: string): Promise<void> {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await this.lockCampaignWrites(connection);
+      const [result] = await connection.execute<ResultSetHeader>("UPDATE airport_ad_campaigns SET status = 'canceled', updated_by = ?, updated_at = NOW() WHERE id = ? AND campaign_source = 'admin' AND status = 'active'", [actor.slice(0, 128), campaignId]);
+      if (!result.affectedRows) throw new HttpError(404, 'MANUAL_AD_NOT_FOUND', '手动投放不存在或已下架');
+      await connection.commit();
+    } catch (error) { await connection.rollback(); throw error; }
+    finally { connection.release(); }
+  }
+
+  private toManualView(row: CampaignRow, nowSql: string): ManualAdView {
+    return { ...toDealView(row), updated_by: row.updated_by || null,
+      status: row.campaign_status === 'canceled' ? 'canceled' : row.starts_at > nowSql ? 'scheduled' : row.ends_at <= nowSql ? 'expired' : 'active' };
+  }
+
+  private async lockCampaignWrites(connection: PoolConnection): Promise<void> {
+    // One persistent lock row covers empty slots as well as existing campaigns.
+    await connection.query('SELECT id FROM airport_ad_campaign_write_lock WHERE id = 1 FOR UPDATE');
   }
 
   async purchase(input: AirportAdCampaignInput, now: Date = new Date()): Promise<AirportDealView> {
@@ -503,10 +600,11 @@ export class AirportAdCampaignRepository {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
+      await this.lockCampaignWrites(connection);
       const homeSlot = input.home_slot ?? null;
       if (homeSlot !== null) {
         assertHomeSlot(homeSlot);
-        await this.assertHomeSlotAvailableForUpdate(connection, homeSlot, nowSql);
+        await this.assertHomeSlotAvailableForUpdate(connection, homeSlot, nowSql, undefined, formatSqlDateTimeInTimezone(addMonths(now, input.months)));
       }
 
       const wallet = await this.ensureWalletForAccount(connection, input);
@@ -595,6 +693,7 @@ export class AirportAdCampaignRepository {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
+      await this.lockCampaignWrites(connection);
       const existing = await this.getEditableCampaignForUpdate(connection, input, nowSql);
       if (!existing) {
         throw new HttpError(404, 'AIRPORT_AD_CAMPAIGN_NOT_EDITABLE', '投放不存在、已过期或不属于当前机场');
@@ -608,6 +707,7 @@ export class AirportAdCampaignRepository {
           existingHomeSlot,
           nowSql,
           existing.id,
+          formatSqlDateTimeInTimezone(addMonths(new Date(sqlDateTimeToTimezoneIso(existing.ends_at)), input.extend_months)),
         );
       }
 
@@ -638,8 +738,8 @@ export class AirportAdCampaignRepository {
         input.discount_percent,
       ];
       if (amount > 0) {
-        const baseEndsAt = new Date(existing.ends_at).getTime() > now.getTime()
-          ? new Date(existing.ends_at)
+        const baseEndsAt = new Date(sqlDateTimeToTimezoneIso(existing.ends_at)).getTime() > now.getTime()
+          ? new Date(sqlDateTimeToTimezoneIso(existing.ends_at))
           : now;
         const nextEndsAtSql = formatSqlDateTimeInTimezone(addMonths(baseEndsAt, input.extend_months));
         await connection.execute<ResultSetHeader>(
@@ -724,6 +824,7 @@ export class AirportAdCampaignRepository {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
+      await this.lockCampaignWrites(connection);
       const existing = await this.getRenewableCampaignForUpdate(connection, input);
       if (!existing) {
         throw new HttpError(
@@ -737,7 +838,8 @@ export class AirportAdCampaignRepository {
         ? Number(existing.home_slot) as AirportHomeAdSlot
         : null;
       if (homeSlot !== null) {
-        await this.assertHomeSlotAvailableForUpdate(connection, homeSlot, nowSql, existing.id);
+        await this.assertHomeSlotAvailableForUpdate(connection, homeSlot, nowSql, existing.id,
+          formatSqlDateTimeInTimezone(addMonths(new Date(Math.max(now.getTime(), new Date(sqlDateTimeToTimezoneIso(existing.ends_at)).getTime())), input.months)));
       }
 
       const wallet = await this.ensureWalletForAccount(connection, input);
@@ -804,6 +906,7 @@ export class AirportAdCampaignRepository {
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
+      await this.lockCampaignWrites(connection);
       const existing = await this.getEditableCampaignForUpdate(connection, input, nowSql);
       if (!existing) {
         throw new HttpError(404, 'AIRPORT_AD_CAMPAIGN_NOT_CANCELABLE', '投放不存在、已过期或不属于当前机场');
@@ -939,6 +1042,7 @@ export class AirportAdCampaignRepository {
         campaign.home_slot,
         DATE_FORMAT(campaign.tracking_started_at, '%Y-%m-%d %H:%i:%s') AS tracking_started_at,
         campaign.status AS campaign_status,
+        campaign.updated_by,
         DATE_FORMAT(campaign.created_at, '%Y-%m-%d %H:%i:%s') AS created_at,
         DATE_FORMAT(campaign.updated_at, '%Y-%m-%d %H:%i:%s') AS updated_at
       FROM airport_ad_campaigns campaign
@@ -951,6 +1055,7 @@ export class AirportAdCampaignRepository {
     const [rows] = await this.pool.query<CampaignRow[]>(
       `${this.selectDealSql()}
         WHERE campaign.airport_id = ?
+          AND campaign.campaign_source = 'merchant'
           AND campaign.status = 'active'
           AND campaign.starts_at <= ?
           AND campaign.ends_at > ?
@@ -995,8 +1100,9 @@ export class AirportAdCampaignRepository {
     homeSlot: AirportHomeAdSlot,
     nowSql: string,
     excludeCampaignId?: number,
+    endsAtSql?: string,
   ): Promise<void> {
-    const params: Array<string | number> = [homeSlot, nowSql, nowSql];
+    const params: Array<string | number> = [homeSlot, endsAtSql || nowSql, nowSql];
     const excludeSql = excludeCampaignId ? 'AND id <> ?' : '';
     if (excludeCampaignId) {
       params.push(excludeCampaignId);
@@ -1006,7 +1112,7 @@ export class AirportAdCampaignRepository {
          FROM airport_ad_campaigns
         WHERE home_slot = ?
           AND status = 'active'
-          AND starts_at <= ?
+          AND starts_at < ?
           AND ends_at > ?
           ${excludeSql}
         LIMIT 1
@@ -1017,7 +1123,7 @@ export class AirportAdCampaignRepository {
       throw new HttpError(
         409,
         'AIRPORT_HOME_AD_SLOT_OCCUPIED',
-        `首页 ${homeSlot} 号位正在投放中，请选择其他位置`,
+        `首页 ${homeSlot} 号位在此时间段已有投放，请调整位置或时间`,
       );
     }
   }
@@ -1162,7 +1268,7 @@ function toAdminStatsListItem(
     starts_at: sqlDateTimeToTimezoneIso(row.starts_at),
     ends_at: sqlDateTimeToTimezoneIso(row.ends_at),
     purchased_months: Number(row.purchased_months),
-    status: deriveAdminCampaignStatus(row.campaign_status, row.ends_at, nowSql),
+    status: deriveAdminCampaignStatus(row.campaign_status, row.ends_at, nowSql, row.starts_at),
     tracking_started_on: row.tracking_started_at?.slice(0, 10) || null,
     summary: { impressions, clicks, ctr: computeAdCtr(clicks, impressions) },
   };
@@ -1172,10 +1278,12 @@ function deriveAdminCampaignStatus(
   campaignStatus: 'active' | 'canceled',
   endsAt: string,
   nowSql: string,
+  startsAt?: string,
 ): AdminAirportAdDerivedStatus {
   if (campaignStatus === 'canceled') {
     return 'canceled';
   }
+  if (startsAt && startsAt > nowSql) return 'scheduled';
   return String(endsAt) > nowSql ? 'active' : 'expired';
 }
 

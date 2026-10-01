@@ -5884,6 +5884,9 @@ test('GET admin marketing campaign list and detail forward normalized filters', 
     auditRepository: { log: async () => undefined },
     publicViewService: stubPublicViewService(),
     airportAdCampaignRepository: {
+      listManualAds: async () => ({ items: [], pagination: { page: 1, page_size: 20, total: 0, total_pages: 0 } }),
+      saveManualAd: async () => 1,
+      cancelManualAd: async () => undefined,
       listAdminStats: async (input) => {
         listInputs.push(input);
         return { items: [], pagination: { page: 2, page_size: 20, total: 0, total_pages: 0 } };

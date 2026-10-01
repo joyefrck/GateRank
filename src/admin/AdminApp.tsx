@@ -42,6 +42,7 @@ import { TagBadgeGroup } from '../components/TagBadge';
 import { NewsEditorPage, NewsListPage } from './news/NewsPages';
 import { MonthlyReportEditorPage, MonthlyReportListPage } from './monthlyReports/MonthlyReportPages';
 import { MarketingModuleTabs } from './marketing/MarketingModuleTabs';
+import { MarketingConfigurationPage } from './marketing/MarketingConfigurationPage';
 import { MarketingStatisticsPage } from './marketing/MarketingStatisticsPage';
 import { buildPublishTokenDocsHref } from '../site/publicSite';
 import {
@@ -1368,7 +1369,7 @@ const ADMIN_NAV_ITEMS = [
     path: '/admin/marketing-settings',
     label: '营销模块',
     icon: MousePointerClick,
-    isActive: (path: string) => path === '/admin/marketing-settings' || path === '/admin/marketing-statistics',
+    isActive: (path: string) => path === '/admin/marketing-settings' || path === '/admin/marketing-statistics' || path === '/admin/marketing-configuration',
   },
   {
     path: '/admin/revenue',
@@ -1941,6 +1942,7 @@ export default function AdminApp() {
           {path === '/admin/revenue' && <RevenuePage routeSearch={search} fetchJson={apiFetch} onUpdateUrl={(to, mode) => mode === 'replace' ? replaceNavigate(to) : navigate(to)} />}
           {path === '/admin/marketing' && <MarketingPage />}
           {path === '/admin/marketing-settings' && <MarketingSettingsPage onNavigateTab={navigate} />}
+          {path === '/admin/marketing-configuration' && <MarketingConfigurationPage fetchJson={apiFetch} onNavigateTab={navigate} />}
           {path === '/admin/marketing-statistics' && (
             <MarketingStatisticsPage
               routeSearch={search}

@@ -11,7 +11,7 @@ export interface AdminMarketingStatisticsQueryState {
   placement: AdminAirportAdPlacementFilter;
 }
 
-const STATUS_VALUES: AdminAirportAdStatusFilter[] = ['all', 'active', 'expired', 'canceled'];
+const STATUS_VALUES: AdminAirportAdStatusFilter[] = ['all', 'scheduled', 'active', 'expired', 'canceled'];
 const PLACEMENT_VALUES: AdminAirportAdPlacementFilter[] = [
   'all',
   'deal',

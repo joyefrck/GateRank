@@ -2702,8 +2702,8 @@ function renderDealMiniCard(deal: AirportDealView): string {
     <article class="mini-card">
       <div class="eyebrow">广告</div>
       <h3><a href="${escapeAttribute(detailPath)}">${escapeHtml(deal.airport_name)}</a></h3>
-      <p><strong>优惠码：</strong>${escapeHtml(deal.coupon_code)}</p>
-      <p><strong>折扣说明：</strong>${escapeHtml(deal.discount_description)}</p>
+      <p><strong>优惠码：</strong>${escapeHtml(deal.coupon_code || '无需优惠码')}</p>
+      <p><strong>折扣说明：</strong>${escapeHtml(deal.discount_description || deal.discount_title)}</p>
       <p><strong>适用套餐：</strong>${escapeHtml(deal.applicable_plan)}</p>
       <p><strong>活动时间：</strong>${escapeHtml(formatDateOnly(deal.starts_at))} ～ ${escapeHtml(formatDateOnly(deal.ends_at))}</p>
       <p class="muted">试用：${deal.supports_trial ? '支持' : '不支持'} · USDT：${deal.supports_usdt ? '支持' : '不支持'} · 流媒体：${deal.supports_streaming ? '支持' : '不支持'} · AI：${deal.supports_ai ? '支持' : '不支持'}</p>
@@ -2718,8 +2718,8 @@ function renderAirportDealDetailCard(deal: AirportDealView): string {
     <article class="mini-card" data-campaign-id="${escapeAttribute(String(deal.campaign_id))}">
       <div class="eyebrow">广告</div>
       <h3>${escapeHtml(deal.discount_title)}</h3>
-      <p><strong>优惠码：</strong><code>${escapeHtml(deal.coupon_code)}</code></p>
-      <p><strong>折扣说明：</strong>${escapeHtml(deal.discount_description)}</p>
+      <p><strong>优惠码：</strong><code>${escapeHtml(deal.coupon_code || '无需优惠码')}</code></p>
+      <p><strong>折扣说明：</strong>${escapeHtml(deal.discount_description || deal.discount_title)}</p>
       <p><strong>适用套餐：</strong>${escapeHtml(deal.applicable_plan)}</p>
       <p><strong>活动时间：</strong>${escapeHtml(formatDateOnly(deal.starts_at))} ～ ${escapeHtml(formatDateOnly(deal.ends_at))}</p>
       <p class="muted">叠加：${deal.is_stackable ? '支持' : '不支持'} · 退款：${deal.refund_supported ? '支持' : '不支持'}</p>

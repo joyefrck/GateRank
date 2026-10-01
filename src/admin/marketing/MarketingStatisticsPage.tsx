@@ -162,6 +162,7 @@ export function MarketingStatisticsPage({
           aria-label="投放状态"
         >
           <option value="all">全部状态</option>
+          <option value="scheduled">待投放</option>
           <option value="active">投放中</option>
           <option value="expired">已到期</option>
           <option value="canceled">已下架</option>
@@ -211,7 +212,7 @@ export function MarketingStatisticsPage({
                 <tr key={item.campaign_id} className="align-top">
                   <td className="px-4 py-4"><div className="font-semibold text-neutral-950">{item.airport_name}</div><div className="mt-1 text-xs text-neutral-500">{item.coupon_code}</div></td>
                   <td className="px-4 py-4">{formatPlacement(item.home_slot)}{item.home_slot !== null && <div className="mt-1 text-xs text-neutral-500">含活动优惠页</div>}</td>
-                  <td className="px-4 py-4"><div>{formatDate(item.starts_at)} — {formatDate(item.ends_at)}</div><div className="mt-1 text-xs text-neutral-500">累计 {item.purchased_months} 个月</div></td>
+                  <td className="px-4 py-4"><div>{formatDate(item.starts_at)} — {formatDate(item.ends_at)}</div><div className="mt-1 text-xs text-neutral-500">{item.purchased_months ? `累计 ${item.purchased_months} 个月` : '管理员手动投放'}</div></td>
                   <td className="px-4 py-4"><StatusBadge status={item.status} /></td>
                   <td className="px-4 py-4 text-right font-semibold">{formatCount(item.summary.impressions)}</td>
                   <td className="px-4 py-4 text-right font-semibold">{formatCount(item.summary.clicks)}</td>
@@ -239,7 +240,7 @@ export function MarketingStatisticsPage({
               <div>
                 <div className="text-xs font-bold uppercase tracking-[0.18em] text-neutral-500">{selectedCampaign.airport_name} · {formatPlacement(selectedCampaign.home_slot)}</div>
                 <h3 id="admin-marketing-stats-title" className="mt-2 text-2xl font-black">每日统计</h3>
-                <p className="mt-2 text-sm text-neutral-500">优惠码 {selectedCampaign.coupon_code} · {formatDate(selectedCampaign.starts_at)} — {formatDate(selectedCampaign.ends_at)} · 累计 {selectedCampaign.purchased_months} 个月</p>
+                <p className="mt-2 text-sm text-neutral-500">优惠码 {selectedCampaign.coupon_code} · {formatDate(selectedCampaign.starts_at)} — {formatDate(selectedCampaign.ends_at)} · {selectedCampaign.purchased_months ? `累计 ${selectedCampaign.purchased_months} 个月` : '管理员手动投放'}</p>
                 <p className="mt-1 text-sm text-neutral-500">{detail?.tracking_started_on ? `精确统计始于 ${detail.tracking_started_on}` : '上线前历史无法精确归属到本条广告'}</p>
               </div>
               <button type="button" aria-label="关闭每日统计" className="rounded-full border border-neutral-300 p-2 disabled:opacity-40" onClick={closeDetail} disabled={detailLoading}><X size={18} /></button>
@@ -284,8 +285,8 @@ function MetricCard({ label, value }: { label: string; value: string }) {
 }
 
 function StatusBadge({ status }: { status: AdminAirportAdDerivedStatus }) {
-  const label = status === 'active' ? '投放中' : status === 'expired' ? '已到期' : '已下架';
-  const theme = status === 'active' ? 'bg-emerald-50 text-emerald-700' : status === 'expired' ? 'bg-neutral-100 text-neutral-600' : 'bg-rose-50 text-rose-700';
+  const label = status === 'scheduled' ? '待投放' : status === 'active' ? '投放中' : status === 'expired' ? '已到期' : '已下架';
+  const theme = status === 'scheduled' ? 'bg-blue-50 text-blue-700' : status === 'active' ? 'bg-emerald-50 text-emerald-700' : status === 'expired' ? 'bg-neutral-100 text-neutral-600' : 'bg-rose-50 text-rose-700';
   return <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${theme}`}>{label}</span>;
 }
 
