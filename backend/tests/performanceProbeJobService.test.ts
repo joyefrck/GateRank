@@ -90,6 +90,8 @@ test('PerformanceProbeJobService leases only the reusable snapshot payload', asy
           type: 'vless',
           outbound: { type: 'vless', server: 'node.example', server_port: 443 },
           raw_uri: 'vless://required-by-worker',
+          dns_resolvers: ['192.0.2.53'],
+          dns_ipv6: false,
         }],
         unsupported_nodes: [],
         created_at: '2026-08-08T11:50:01+08:00',
@@ -103,6 +105,8 @@ test('PerformanceProbeJobService leases only the reusable snapshot payload', asy
   const serialized = JSON.stringify(payload);
 
   assert.match(serialized, /node\.example/);
+  assert.deepEqual((payload?.snapshot as { nodes: Array<{ dns_resolvers: string[]; dns_ipv6: boolean }> }).nodes[0]?.dns_resolvers, ['192.0.2.53']);
+  assert.equal((payload?.snapshot as { nodes: Array<{ dns_ipv6: boolean }> }).nodes[0]?.dns_ipv6, false);
   assert.doesNotMatch(serialized, /subscription\.example/);
   assert.equal(payload?.run_mode, 'shadow');
   assert.equal(payload?.scoring_rule_version, 'cn_dual_probe_v1');

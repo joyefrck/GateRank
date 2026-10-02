@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import copy
 import hashlib
 import json
 import os
@@ -42,6 +43,11 @@ try:
     import yaml
 except ImportError:  # pragma: no cover - covered by runtime diagnostics.
     yaml = None
+
+try:
+    from scripts.subscription_node_dns import normalize_dns_resolvers, resolve_node_addresses
+except ModuleNotFoundError:  # Standalone probe installation.
+    from subscription_node_dns import normalize_dns_resolvers, resolve_node_addresses
 
 
 DEFAULT_API_BASE = "http://127.0.0.1:8787"
@@ -145,6 +151,8 @@ class ParsedNode:
     region: str | None
     outbound: dict[str, Any]
     raw_uri: str
+    dns_resolvers: list[str] = field(default_factory=list)
+    dns_ipv6: bool | None = None
 
 
 @dataclass
@@ -183,6 +191,7 @@ class NodeAvailabilityResult:
     check: str = "tcp"
     tcp_reachable: bool | None = None
     tcp_error_code: str | None = None
+    resolved_address: str | None = None
 
 
 @dataclass
@@ -1020,6 +1029,12 @@ def parse_clash_yaml_nodes(subscription_text: str) -> tuple[list[ParsedNode], li
     if not isinstance(proxies, list):
         return [], [{"uri": "clash_yaml", "reason": "clash_proxies_not_array"}]
 
+    dns_config = data.get("dns") if isinstance(data.get("dns"), dict) else {}
+    if dns_config.get("enable") is False:
+        dns_config = {}
+    dns_resolvers = normalize_dns_resolvers(dns_config.get("proxy-server-nameserver"))
+    dns_ipv6 = dns_config.get("ipv6") if isinstance(dns_config.get("ipv6"), bool) else None
+
     parsed_nodes: list[ParsedNode] = []
     unsupported_nodes: list[dict[str, str]] = []
     for index, proxy in enumerate(proxies):
@@ -1028,7 +1043,10 @@ def parse_clash_yaml_nodes(subscription_text: str) -> tuple[list[ParsedNode], li
             unsupported_nodes.append({"uri": identifier, "reason": "clash_proxy_not_object"})
             continue
         try:
-            parsed_nodes.append(parse_clash_proxy(proxy))
+            node = parse_clash_proxy(proxy)
+            node.dns_resolvers = list(dns_resolvers)
+            node.dns_ipv6 = dns_ipv6
+            parsed_nodes.append(node)
         except Exception as exc:
             unsupported_nodes.append({"uri": identifier, "reason": str(exc)})
     return parsed_nodes, unsupported_nodes
@@ -1653,11 +1671,9 @@ def check_nodes_availability(
 
 def probe_node_availability(config: Config, node: ParsedNode) -> NodeAvailabilityResult:
     try:
-        address = resolve_probe_address(node)
-        with socket.socket(address[0], socket.SOCK_STREAM) as sock:
-            sock.settimeout(config.http_timeout)
-            sock.connect(address[4])
-        return NodeAvailabilityResult(node=node, available=True, check="tcp", tcp_reachable=True)
+        address = connect_node_address(config, node)
+        return NodeAvailabilityResult(node=node, available=True, check="tcp", tcp_reachable=True,
+                                      resolved_address=address)
     except Exception as exc:
         error_code = str(exc)
         return NodeAvailabilityResult(
@@ -1685,7 +1701,8 @@ def probe_node_proxy_http_availability(config: Config, node: ParsedNode) -> Node
     config_path = ""
     proc: subprocess.Popen[Any] | None = None
     try:
-        proc, config_path = run_sing_box(config, node)
+        proxy_node = pin_node_address(node, tcp_result.resolved_address) if tcp_result.resolved_address else node
+        proc, config_path = run_sing_box(config, proxy_node)
         errors: list[Exception] = []
         for test_url in proxy_http_availability_targets(config):
             for attempt in range(DEFAULT_PROXY_AVAILABILITY_ATTEMPTS_PER_TARGET):
@@ -1815,6 +1832,8 @@ def run_sing_box(config: Config, node: ParsedNode) -> tuple[subprocess.Popen[Any
     sing_box_path = config.sing_box_bin if os.path.sep in config.sing_box_bin else shutil.which(config.sing_box_bin)
     if not sing_box_path:
         raise RuntimeError("singbox_not_found")
+    if node.dns_resolvers or node.dns_ipv6 is False:
+        node = pin_node_address(node, connect_node_address(config, node))
     sing_box_config = {
         "log": {"disabled": True},
         "inbounds": [
@@ -1876,22 +1895,18 @@ def wait_for_port(host: str, port: int, timeout_seconds: int) -> None:
 
 
 def test_node_connect_latency(config: Config, node: ParsedNode) -> tuple[list[float], list[str], int, int]:
-    address = resolve_probe_address(node)
+    addresses = resolve_probe_addresses(node, config.http_timeout)
     latencies: list[float] = []
     sampled_at: list[str] = []
     failures = 0
     for index in range(config.latency_attempts):
         started = time.perf_counter()
-        sock = socket.socket(address[0], socket.SOCK_STREAM)
-        sock.settimeout(config.http_timeout)
         try:
-            sock.connect(address[4])
+            connect_node_address(config, node, addresses)
             latencies.append(round((time.perf_counter() - started) * 1000, 2))
             sampled_at.append(shanghai_now_iso())
         except Exception:
             failures += 1
-        finally:
-            sock.close()
         if index < config.latency_attempts - 1:
             time.sleep(config.latency_sample_interval_seconds)
     return latencies, sampled_at, failures, config.latency_attempts
@@ -2101,12 +2116,41 @@ def build_proxy_opener(config: Config):
 
 
 def resolve_probe_address(node: ParsedNode) -> tuple[int, int, int, str, tuple[Any, ...]]:
+    return resolve_probe_addresses(node, DEFAULT_HTTP_TIMEOUT)[0]
+
+
+def resolve_probe_addresses(node: ParsedNode, timeout: float) -> list[tuple]:
     server = str(require_value(node.outbound.get("server"), "node server"))
     port = int(require_value(node.outbound.get("server_port"), "node server_port"))
-    infos = socket.getaddrinfo(server, port, type=socket.SOCK_STREAM)
-    if not infos:
-        raise RuntimeError("node_address_resolve_failed")
-    return infos[0]
+    return resolve_node_addresses(server, port, node.dns_resolvers, node.dns_ipv6, timeout)
+
+
+def connect_node_address(config: Config, node: ParsedNode, addresses: list[tuple] | None = None) -> str:
+    last_error: Exception = RuntimeError("node_address_resolve_failed")
+    for address in addresses or resolve_probe_addresses(node, config.http_timeout):
+        try:
+            with socket.socket(address[0], socket.SOCK_STREAM) as sock:
+                sock.settimeout(config.http_timeout)
+                sock.connect(address[4])
+            return address[4][0]
+        except OSError as exc:
+            last_error = exc
+    raise last_error
+
+
+def pin_node_address(node: ParsedNode, address: str) -> ParsedNode:
+    outbound = copy.deepcopy(node.outbound)
+    original_server = outbound["server"]
+    outbound["server"] = address
+    tls = outbound.get("tls")
+    if isinstance(tls, dict) and tls.get("enabled") and not tls.get("server_name"):
+        tls["server_name"] = original_server
+    transport = outbound.get("transport")
+    if isinstance(transport, dict) and transport.get("type") == "ws":
+        headers = transport.setdefault("headers", {})
+        if not any(key.lower() == "host" for key in headers):
+            headers["Host"] = original_server
+    return replace(node, outbound=outbound, dns_resolvers=[], dns_ipv6=None)
 
 
 def build_https_handler(context: ssl.SSLContext):
@@ -2190,6 +2234,8 @@ def node_to_snapshot(node: ParsedNode) -> dict[str, Any]:
         "type": node.node_type,
         "outbound": node.outbound,
         "raw_uri": node.raw_uri,
+        **({"dns_resolvers": list(node.dns_resolvers)} if node.dns_resolvers else {}),
+        **({"dns_ipv6": node.dns_ipv6} if node.dns_ipv6 is not None else {}),
     }
 
 
@@ -2224,6 +2270,8 @@ def nodes_from_snapshot(snapshot: dict[str, Any]) -> tuple[list[ParsedNode], lis
                 region=None if region_value in (None, "") else str(region_value),
                 outbound=outbound,
                 raw_uri=raw_uri,
+                dns_resolvers=normalize_dns_resolvers(item.get("dns_resolvers")),
+                dns_ipv6=item.get("dns_ipv6") if isinstance(item.get("dns_ipv6"), bool) else None,
             )
         )
     return nodes, invalid_nodes

@@ -25,6 +25,7 @@ source /etc/os-release
 [[ "${ID:-}" == "debian" && "${VERSION_ID:-}" == "12" ]] || fail 'Debian 12 is required'
 [[ -f "$SOURCE_ROOT/scripts/performance_probe_runner.py" ]] || fail 'performance_probe_runner.py not found'
 [[ -f "$SOURCE_ROOT/scripts/monitor_performance.py" ]] || fail 'monitor_performance.py not found'
+[[ -f "$SOURCE_ROOT/scripts/subscription_node_dns.py" ]] || fail 'subscription_node_dns.py not found'
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -38,8 +39,10 @@ install -d -o root -g root -m 0755 "$INSTALL_ROOT" "$INSTALL_ROOT/bin" "$INSTALL
 install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0700 "$STATE_ROOT"
 
 python3 -m venv "$INSTALL_ROOT/venv"
+"$INSTALL_ROOT/venv/bin/python" -m pip install -r "$SOURCE_ROOT/requirements-monitor.txt"
 install -o root -g root -m 0644 "$SOURCE_ROOT/scripts/performance_probe_runner.py" "$INSTALL_ROOT/scripts/performance_probe_runner.py"
 install -o root -g root -m 0644 "$SOURCE_ROOT/scripts/monitor_performance.py" "$INSTALL_ROOT/scripts/monitor_performance.py"
+install -o root -g root -m 0644 "$SOURCE_ROOT/scripts/subscription_node_dns.py" "$INSTALL_ROOT/scripts/subscription_node_dns.py"
 
 TEMP_DIR="$(mktemp -d)"
 cleanup() {

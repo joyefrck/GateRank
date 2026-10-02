@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import socket
 import ssl
 import subprocess
 import sys
@@ -20,11 +21,14 @@ from scripts.monitor_performance import (
     filter_legacy_enabled_airports,
     list_airports,
     nodes_from_snapshot,
+    node_to_snapshot,
     normalize_subscription_text,
     parse_node_line,
     parse_nodes,
     performance_node_key,
     probe_node_proxy_http_availability,
+    probe_node_availability,
+    pin_node_address,
     probe_node,
     resolve_selected_nodes,
     run_for_airport,
@@ -54,6 +58,64 @@ def node_to_test_snapshot(node):
 
 
 class MonitorPerformanceTests(unittest.TestCase):
+    def test_tcp_probe_tries_remaining_addresses_after_first_address_fails(self) -> None:
+        node = parse_node_line("trojan://pass@hk.example.test:443#HK")
+        addresses = [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("2001:db8::1", 443, 0, 0)),
+                     (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("192.0.2.10", 443))]
+        first, second = MagicMock(), MagicMock()
+        first.__enter__.return_value = first
+        second.__enter__.return_value = second
+        first.connect.side_effect = OSError("unreachable")
+        with patch("scripts.monitor_performance.resolve_probe_addresses", return_value=addresses), \
+                patch("scripts.monitor_performance.socket.socket", side_effect=[first, second]):
+            result = probe_node_availability(self.make_config(), node)
+        self.assertTrue(result.available)
+        self.assertEqual(result.resolved_address, "192.0.2.10")
+        first.connect.assert_called_once_with(addresses[0][4])
+        second.connect.assert_called_once_with(addresses[1][4])
+
+    def test_pinning_preserves_tls_reality_websocket_identity_and_original_node(self) -> None:
+        node = parse_node_line("vless://id@hk.example.test:443?security=tls&type=ws#HK")
+        node.outbound["tls"]["reality"] = {"enabled": True, "public_key": "test-public-key"}
+        pinned = pin_node_address(node, "192.0.2.10")
+        self.assertEqual(pinned.outbound["server"], "192.0.2.10")
+        self.assertEqual(pinned.outbound["tls"]["server_name"], "hk.example.test")
+        self.assertEqual(pinned.outbound["tls"]["reality"], node.outbound["tls"]["reality"])
+        self.assertEqual(pinned.outbound["transport"]["headers"]["Host"], "hk.example.test")
+        self.assertEqual(node.outbound["server"], "hk.example.test")
+        self.assertEqual(performance_node_key(node), performance_node_key(pinned))
+
+    def test_coverage_uses_the_same_address_that_passed_tcp_for_proxy_check(self) -> None:
+        node = parse_node_line("trojan://pass@hk.example.test:443#HK")
+        with patch("scripts.monitor_performance.probe_node_availability", return_value=NodeAvailabilityResult(
+                node, True, resolved_address="192.0.2.10")), \
+                patch("scripts.monitor_performance.run_sing_box", return_value=(MagicMock(), "/tmp/test.json")) as run, \
+                patch("scripts.monitor_performance.stop_sing_box"), \
+                patch("scripts.monitor_performance.test_proxy_http_once"):
+            result = probe_node_proxy_http_availability(self.make_config(), node)
+        self.assertTrue(result.available)
+        self.assertEqual(run.call_args.args[1].outbound["server"], "192.0.2.10")
+        self.assertEqual(result.node.outbound["server"], "hk.example.test")
+
+    def test_clash_node_dns_survives_snapshot_without_changing_identity(self) -> None:
+        text = """
+dns:
+  ipv6: false
+  proxy-server-nameserver: [192.0.2.53]
+proxies:
+  - {name: HK, type: vless, server: hk.example.test, port: 443, uuid: test-id, tls: true}
+"""
+        nodes, unsupported = parse_nodes(text, "clash_yaml")
+        self.assertEqual(unsupported, [])
+        self.assertEqual(nodes[0].dns_resolvers, ["192.0.2.53"])
+        self.assertFalse(nodes[0].dns_ipv6)
+        saved = node_to_snapshot(nodes[0])
+        restored, invalid = nodes_from_snapshot({"nodes": [saved]})
+        self.assertEqual(invalid, [])
+        self.assertEqual(restored[0].dns_resolvers, ["192.0.2.53"])
+        self.assertFalse(restored[0].dns_ipv6)
+        self.assertEqual(performance_node_key(restored[0]), performance_node_key(nodes[0]))
+
     def make_config(self) -> Config:
         return Config(
             api_base="http://127.0.0.1:8787",

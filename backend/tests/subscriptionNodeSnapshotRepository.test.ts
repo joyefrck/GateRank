@@ -49,6 +49,8 @@ test('SubscriptionNodeSnapshotRepository creates table, inserts snapshot, and re
               type: 'trojan',
               outbound: { type: 'trojan', server: 'hk.example.com', server_port: 443 },
               raw_uri: 'trojan://password@hk.example.com:443#HK-1',
+              dns_resolvers: ['192.0.2.53'],
+              dns_ipv6: false,
             },
           ]),
           unsupported_nodes_json: JSON.stringify([{ uri: 'unknown://node', reason: 'unsupported_scheme' }]),
@@ -79,6 +81,8 @@ test('SubscriptionNodeSnapshotRepository creates table, inserts snapshot, and re
         type: 'trojan',
         outbound: { type: 'trojan', server: 'hk.example.com', server_port: 443 },
         raw_uri: 'trojan://password@hk.example.com:443#HK-1',
+        dns_resolvers: ['192.0.2.53'],
+        dns_ipv6: false,
       },
     ],
     unsupported_nodes: [{ uri: 'unknown://node', reason: 'unsupported_scheme' }],
@@ -96,6 +100,11 @@ test('SubscriptionNodeSnapshotRepository creates table, inserts snapshot, and re
   assert.equal(latest?.captured_at, '2026-05-13T12:34:56+08:00');
   assert.equal(latest?.nodes[0]?.name, 'HK-1');
   assert.equal(latest?.nodes[0]?.outbound.server, 'hk.example.com');
+  assert.deepEqual(latest?.nodes[0]?.dns_resolvers, ['192.0.2.53']);
+  assert.equal(latest?.nodes[0]?.dns_ipv6, false);
+  const savedNodes = JSON.parse(String(insertCall?.params?.[8]));
+  assert.deepEqual(savedNodes[0].dns_resolvers, ['192.0.2.53']);
+  assert.equal(savedNodes[0].dns_ipv6, false);
   assert.deepEqual(latest?.region_counts, { HK: 1 });
   assert.equal(latest?.unsupported_nodes[0]?.reason, 'unsupported_scheme');
 });

@@ -1188,6 +1188,8 @@ export interface SubscriptionNodeSnapshotNode {
   type: string;
   outbound: Record<string, unknown>;
   raw_uri: string;
+  dns_resolvers?: string[];
+  dns_ipv6?: boolean;
 }
 
 export interface SubscriptionNodeSnapshotUnsupportedNode {

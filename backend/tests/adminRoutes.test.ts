@@ -545,6 +545,8 @@ test('POST /airports/:id/subscription-node-snapshots stores reusable nodes witho
           type: 'trojan',
           outbound: { type: 'trojan', server: 'hk.example.com', server_port: 443, password: 'secret' },
           raw_uri: 'trojan://secret@hk.example.com:443#HK-1',
+          dns_resolvers: ['192.0.2.53'],
+          dns_ipv6: false,
         }],
         unsupported_nodes: [{ uri: 'unknown://node', reason: 'unsupported_scheme' }],
       }),
@@ -555,6 +557,9 @@ test('POST /airports/:id/subscription-node-snapshots stores reusable nodes witho
     assert.equal(data.snapshot_id, 55);
     assert.equal(data.airport_id, 9);
     assert.equal(insertedSnapshots.length, 1);
+    const captured = insertedSnapshots[0] as { nodes: Array<{ dns_resolvers: string[]; dns_ipv6: boolean }> };
+    assert.deepEqual(captured.nodes[0].dns_resolvers, ['192.0.2.53']);
+    assert.equal(captured.nodes[0].dns_ipv6, false);
     assert.equal(audits[0]?.action, 'insert_subscription_node_snapshot');
     assert.equal(JSON.stringify(audits[0]?.payload).includes('secret'), false);
     assert.equal(JSON.stringify(audits[0]?.payload).includes('raw_uri'), false);

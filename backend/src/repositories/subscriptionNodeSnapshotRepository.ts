@@ -6,6 +6,7 @@ import type {
   SubscriptionNodeSnapshotUnsupportedNode,
 } from '../types/domain';
 import { isInformationalNodeName } from '../utils/informationalNode';
+import { parseNodeDnsMetadata } from '../utils/nodeDnsMetadata';
 import { findNodeRegionDefinition } from '../utils/nodeRegion';
 import { sqlDateTimeToTimezoneIso } from '../utils/time';
 
@@ -193,6 +194,7 @@ function normalizeNodes(value: unknown): SubscriptionNodeSnapshotNode[] {
         type: String(record.type || ''),
         outbound,
         raw_uri: String(record.raw_uri || ''),
+        ...parseNodeDnsMetadata(record),
       };
     })
     .filter((item) => item.name && item.type && item.raw_uri && Object.keys(item.outbound).length > 0);

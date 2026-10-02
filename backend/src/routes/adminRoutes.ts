@@ -1,4 +1,5 @@
 import { parseManualAdInput } from '../utils/manualAdInput';
+import { parseNodeDnsMetadata } from '../utils/nodeDnsMetadata';
 import type { ManualAdInput, ManualAdList, ManualAdQuery } from '../../../shared/manualAds';
 import type { RiskCheckHistory } from '../../../shared/riskCheck';
 import { normalizeWebsiteUrls } from '../../../shared/websiteUrl';
@@ -4714,12 +4715,19 @@ function toSubscriptionSnapshotNode(value: unknown, index: number): Subscription
   if (!outbound || typeof outbound !== 'object' || Array.isArray(outbound)) {
     throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}].outbound must be object`);
   }
+  let dnsMetadata;
+  try {
+    dnsMetadata = parseNodeDnsMetadata(record);
+  } catch {
+    throw new HttpError(400, 'BAD_REQUEST', `nodes[${index}].node DNS configuration is invalid`);
+  }
   return {
     name,
     region: record.region == null ? null : String(record.region),
     type,
     outbound: outbound as Record<string, unknown>,
     raw_uri: rawUri,
+    ...dnsMetadata,
   };
 }
 
