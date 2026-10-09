@@ -42,6 +42,8 @@ GateRank 是一个「机场测评与榜单」系统。
 原始 `latency_mean_ms`、`latency_std_ms`、`latency_cv` 仍会保留，主要用于后台诊断和核对采样质量。
 N 只使用报告当天完整成功的网络覆盖运行，不做历史衰减、不沿用旧值；同日缺少成功 N 时不生成 v2 当天分。v2 风险项为 `RiskPenalty = DomainPenalty + SslPenalty + ComplaintPenalty + HistoryPenalty`，不再重复计入节点不可用率；历史 v1 快照保持原规则。
 
+SSL 仅在确认已过期（`ssl_days_left < 0`）时扣 30 分；证书仍有效（包括剩余不足 1 天）或检测结果未知时不扣 SSL 分、不触发证书预警。取消原来的不足 30、15、7 天及未知结果扣分；已保存的历史评分快照不自动改写。
+
 ## 技术方案
 
 ### 架构

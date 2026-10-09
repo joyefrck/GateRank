@@ -3135,6 +3135,51 @@ test('PublicViewService.getHomePageView filters stale normal airports from persi
   assert.deepEqual(result.sections.risk_alerts.items, []);
 });
 
+test('risk report cards identify SSL expiry without warning for valid or unknown certificates', async () => {
+  for (const days of [null, 0, 1, 6, 29, -1]) {
+    const metrics = {
+      airport_id: 1, date: '2026-10-09', uptime_percent_30d: 100,
+      median_latency_ms: 50, median_download_mbps: 100, packet_loss_percent: 0,
+      stable_days_streak: 30, domain_ok: true, ssl_days_left: days,
+      recent_complaints_count: 1, history_incidents: 0,
+    };
+    const score = {
+      airport_id: 1, date: '2026-10-09', s: 90, p: 90, c: 90, r: 97,
+      risk_penalty: 3, score: 90, recent_score: 90, historical_score: 90, final_score: 90,
+      // A legacy short-lived certificate penalty must not manufacture an expiry reason.
+      details: { ssl_penalty: days === -1 ? 30 : 20, complaint_penalty: 3 },
+    };
+    const service = new PublicViewService({
+      airportRepository: { getById: async () => ({
+        id: 1, name: 'Short-lived', website: 'https://example.com', status: 'normal',
+        is_listed: true, plan_price_month: 10, has_trial: false, tags: ['风险观察'],
+        created_at: '2026-01-01',
+      }) },
+      metricsRepository: { getByAirportAndDate: async () => metrics, getTrend: async () => [metrics] },
+      scoreRepository: {
+        getLatestAvailableDate: async () => '2026-10-09',
+        getByAirportAndDate: async () => score, getPublicDisplayScoreByAirportAndDate: async () => 90,
+        getTrend: async () => [score], getPublicFullRankingByDate: async () => ({ total: 0, items: [] }),
+      },
+      rankingRepository: {
+        getLatestAvailableDate: async () => '2026-10-09', getRanking: async () => [],
+        getRanksForAirport: async () => ({}),
+      },
+      statsRepository: { getHomeStats: async () => ({
+        monitored_airports: 1, realtime_tests: 0, latest_data_at: null,
+      }) },
+    });
+    const report = await service.getReportView(1, '2026-10-09');
+    assert.equal(report?.summary_card.type, 'risk');
+    assert.equal(report?.summary_card.details[0].value, days === -1 ? '证书已失效' : '投诉上升', String(days));
+    if (days === -1) {
+      assert.match(report!.summary_card.conclusion, /SSL 证书已失效/);
+    } else {
+      assert.doesNotMatch(report!.summary_card.conclusion, /SSL|证书/);
+    }
+  }
+});
+
 test('PublicViewService.getRiskMonitorView includes down airports and risk-watch tags', async () => {
   const service = new PublicViewService({
     airportRepository: {

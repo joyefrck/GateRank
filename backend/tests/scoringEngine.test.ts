@@ -482,13 +482,12 @@ test('computeScore prefers healthy streak days when minor fluctuation should not
   assert.equal(out.details.streak_score, 40);
 });
 
-test('risk penalty helpers follow stepped MVP rules', () => {
-  assert.equal(calcSslPenalty(null), 5);
+test('risk penalty helpers charge SSL only for confirmed expiry', () => {
+  for (const days of [null, undefined, NaN, Infinity, -Infinity, 0, 1, 3, 7, 10, 15, 20, 30, 45]) {
+    assert.equal(calcSslPenalty(days), 0, String(days));
+  }
   assert.equal(calcSslPenalty(-1), 30);
-  assert.equal(calcSslPenalty(3), 20);
-  assert.equal(calcSslPenalty(10), 10);
-  assert.equal(calcSslPenalty(20), 5);
-  assert.equal(calcSslPenalty(45), 0);
+  assert.equal(calcSslPenalty(-0.01), 30);
 
   assert.equal(calcComplaintPenalty(2), 6);
   assert.equal(calcComplaintPenalty(10), 15);
@@ -550,7 +549,7 @@ test('computeScore applies node availability penalty to R only', () => {
   assert.equal(out.details.node_unavailability_percent, 25);
 });
 
-test('computeScore treats missing ssl data as light risk', () => {
+test('computeScore does not penalize unknown SSL data', () => {
   const airport: Airport = {
     id: 1,
     name: 'A',
@@ -581,11 +580,11 @@ test('computeScore treats missing ssl data as light risk', () => {
   };
 
   const out = computeScore(airport, metrics, 0);
-  assert.equal(out.risk_penalty, 21);
-  assert.equal(out.r, 79);
-  assert.equal(out.details.ssl_penalty, 5);
+  assert.equal(out.risk_penalty, 16);
+  assert.equal(out.r, 84);
+  assert.equal(out.details.ssl_penalty, 0);
   assert.equal(out.details.complaint_penalty, 6);
   assert.equal(out.details.history_penalty, 10);
-  assert.equal(out.details.total_penalty, 21);
+  assert.equal(out.details.total_penalty, 16);
   assert.equal(out.details.risk_level, 'medium_low');
 });

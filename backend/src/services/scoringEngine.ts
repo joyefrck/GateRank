@@ -16,6 +16,7 @@ import {
   getStabilityTier,
 } from '../utils/stability';
 import { SCORE_RULE_V1, SCORE_RULE_V2, type GateRankScoreRuleVersion } from './networkCoverageScoring';
+import { hasExpiredSslCertificate } from '../utils/risk';
 
 export interface ComputeScoreOptions {
   ruleVersion?: GateRankScoreRuleVersion;
@@ -336,22 +337,7 @@ export function calcDomainPenalty(domainOk: boolean): number {
 }
 
 export function calcSslPenalty(sslDaysLeft: number | null | undefined): number {
-  if (sslDaysLeft === null || sslDaysLeft === undefined) {
-    return 5;
-  }
-  if (sslDaysLeft < 0) {
-    return 30;
-  }
-  if (sslDaysLeft < 7) {
-    return 20;
-  }
-  if (sslDaysLeft < 15) {
-    return 10;
-  }
-  if (sslDaysLeft < 30) {
-    return 5;
-  }
-  return 0;
+  return hasExpiredSslCertificate(sslDaysLeft) ? 30 : 0;
 }
 
 export function calcComplaintPenalty(recentComplaintsCount: number): number {

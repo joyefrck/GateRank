@@ -39,12 +39,22 @@ test('unlisted, risky, down, tagged and active risk records are excluded', () =>
     row => { row.airport.is_listed = false; }, row => { row.airport.status = 'risk'; },
     row => { row.airport.status = 'down'; }, row => { row.airport.tags = ['风险观察']; },
     row => { row.airport.tags = ['不推荐']; }, row => { row.metrics.domain_ok = false; },
-    row => { row.metrics.ssl_days_left = null; }, row => { row.metrics.recent_complaints_count = 1; },
+    row => { row.metrics.ssl_days_left = -1; }, row => { row.metrics.recent_complaints_count = 1; },
     row => { row.metrics.history_incidents = 1; }, row => { row.score.details.complaint_penalty = 1; },
   ];
   for (const mutate of mutations) {
     const row = candidate(); mutate(row);
     assert.equal(isHomeSummaryEligible(row, 'most_stable'), false);
     assert.equal(isHomeSummaryEligible(row, 'best_value'), false);
+  }
+});
+
+test('valid short-lived and unknown certificates do not exclude otherwise eligible airports', () => {
+  for (const days of [null, 0, 1, 6, 7, 14, 29]) {
+    const row = candidate();
+    row.metrics.ssl_days_left = days;
+    row.score.details.ssl_penalty = 20;
+    assert.ok(isHomeSummaryEligible(row, 'most_stable'), String(days));
+    assert.ok(isHomeSummaryEligible(row, 'best_value'), String(days));
   }
 });

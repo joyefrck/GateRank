@@ -21,7 +21,7 @@ interface DeriveRiskReasonOptions {
 
 const RISK_REASON_LABELS: Record<RiskReasonCode, string> = {
   domain_unreachable: '官网探测异常',
-  ssl_warning: 'SSL 告警',
+  ssl_warning: 'SSL 证书已失效',
   recent_complaints: '近期投诉记录',
   history_incidents: '历史异常记录',
   low_r_score: '风险分偏低',
@@ -36,10 +36,7 @@ export function deriveRiskReasonCodes(options: DeriveRiskReasonOptions): RiskRea
     reasons.push('domain_unreachable');
   }
 
-  if (
-    getPenalty(score.details, 'ssl_penalty') > 0 ||
-    hasSslWarning(metrics.ssl_days_left)
-  ) {
+  if (hasExpiredSslCertificate(metrics.ssl_days_left)) {
     reasons.push('ssl_warning');
   }
 
@@ -109,20 +106,15 @@ function formatRiskReasonLabel(
 
 function getPenalty(
   details: Record<string, ScoreDetailValue> | null | undefined,
-  key: 'ssl_penalty' | 'complaint_penalty' | 'history_penalty',
+  key: 'complaint_penalty' | 'history_penalty',
 ): number {
   const value = details?.[key];
   return typeof value === 'number' && Number.isFinite(value) ? value : 0;
 }
 
-function hasSslWarning(sslDaysLeft: number | null | undefined): boolean {
-  if (sslDaysLeft === null) {
-    return true;
-  }
-  if (sslDaysLeft === undefined) {
-    return false;
-  }
-  return sslDaysLeft < 30;
+export function hasExpiredSslCertificate(sslDaysLeft: number | null | undefined): boolean {
+  // Zero includes the last valid partial day; unknown results do not prove expiry.
+  return typeof sslDaysLeft === 'number' && Number.isFinite(sslDaysLeft) && sslDaysLeft < 0;
 }
 
 function joinLabels(labels: string[]): string {

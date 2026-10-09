@@ -39,7 +39,7 @@ import {
   formatRelativeTimeFromNow,
   getDateInTimezone,
 } from '../utils/time';
-import { buildRiskReasonSummary } from '../utils/risk';
+import { buildRiskReasonSummary, hasExpiredSslCertificate } from '../utils/risk';
 import { isInformationalNodeName } from '../utils/informationalNode';
 import { findNodeRegionDefinition, REPORT_NODE_REGION_DEFINITIONS } from '../utils/nodeRegion';
 import { buildTodayPickRows, isTodayPickEligible, type RankedAirportInput } from './rankingService';
@@ -1547,8 +1547,8 @@ function getPrimaryRiskReason(metrics: DailyMetrics): string {
   if (metrics.domain_ok === false) {
     return '官网探测异常';
   }
-  if (typeof metrics.ssl_days_left === 'number' && metrics.ssl_days_left <= 7) {
-    return '证书告急';
+  if (hasExpiredSslCertificate(metrics.ssl_days_left)) {
+    return '证书已失效';
   }
   if (metrics.recent_complaints_count > 0) {
     return '投诉上升';

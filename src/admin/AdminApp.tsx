@@ -11774,7 +11774,7 @@ function AirportDataPage({ airportId, onBack }: { airportId: number; onBack: () 
                 <div className="text-sm font-semibold text-neutral-900">评分公式</div>
                 <div className="mt-2 text-xs text-neutral-500 whitespace-pre-wrap">
                   {'DomainPenalty = domain_ok ? 0 : 30\n'}
-                  {'SslPenalty = ssl_days_left 为 null 时记 5；< 0 记 30；< 7 记 20；< 15 记 10；< 30 记 5；其余记 0\n'}
+                  {'SslPenalty = 仅确认过期（ssl_days_left < 0）时记 30；仍有效或检测结果未知时记 0\n'}
                   {'ComplaintPenalty = min(recent_complaints_count * 3, 15)\n'}
                   {'HistoryPenalty = min(history_incidents * 10, 30)\n'}
                   {dashboard.base.score_rule_version === 'v2_spncr'
