@@ -1,4 +1,5 @@
 import { AIRPORT_DIRECTORY_SEO, buildAirportDirectoryStructuredData, type AirportDirectoryView } from '../shared/airportDirectory';
+import { APPLICATION_NAME_MAX_LENGTH, APPLICATION_INTRO_MAX_LENGTH } from '../shared/applicationContent';
 import { portalLoadError, readPortalResponse } from './portal/session';
 import { TurnstileWidget, useTurnstile } from './components/TurnstileWidget';
 import { ToolDownloadDialog } from './pages/tools/ToolDownloadDialog';
@@ -2329,7 +2330,7 @@ function PortalApplicationEditModal({
 
         <form onSubmit={onSubmit} className="min-h-0 flex-1 overflow-y-auto px-6 py-6 space-y-6 overscroll-contain">
           {error && (
-            <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
               {error}
             </div>
           )}
@@ -2490,10 +2491,11 @@ function PortalApplicationEditModal({
             </label>
           </div>
 
-          <PublicFormField label="机场简介">
+          <PublicFormField label="机场简介" hint={`最多 ${APPLICATION_INTRO_MAX_LENGTH} 个字符，请使用客观、文明的描述。`}>
             <textarea
               className={`${portalInputClass} min-h-32`}
               value={applicationForm.airport_intro}
+              maxLength={APPLICATION_INTRO_MAX_LENGTH}
               onChange={(e) => setApplicationForm((current) => ({ ...current, airport_intro: e.target.value }))}
               required
             />
@@ -2531,7 +2533,7 @@ function PortalApplicationEditModal({
               className={portalPrimaryButtonClass}
               disabled={savingApplication}
             >
-              {savingApplication ? '保存中...' : '保存申请资料'}
+              {savingApplication ? '校验并审核中…' : '保存申请资料'}
             </button>
           </div>
         </form>
@@ -5899,6 +5901,7 @@ function ApplicationPage() {
               <input
                 className="w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
                 value={form.name}
+                maxLength={APPLICATION_NAME_MAX_LENGTH}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="机场官方名称"
                 required
@@ -6025,10 +6028,11 @@ function ApplicationPage() {
               />
             </PublicFormField>
 
-            <PublicFormField label="机场基本介绍" hint="简要说明定位、地区、线路特色或服务亮点。">
+            <PublicFormField label="机场基本介绍" hint={`简要说明定位、地区、线路特色或服务亮点。最多 ${APPLICATION_INTRO_MAX_LENGTH} 个字符，请使用客观、文明的描述。`}>
               <textarea
                 className="min-h-32 w-full rounded-2xl border border-neutral-300 bg-white px-4 py-3 text-sm outline-none transition focus:border-neutral-900"
                 value={form.airport_intro}
+                maxLength={APPLICATION_INTRO_MAX_LENGTH}
                 onChange={(e) => setForm({ ...form, airport_intro: e.target.value })}
                 placeholder="请介绍机场特色、主要节点地区、适用人群等。"
                 required
@@ -6064,7 +6068,7 @@ function ApplicationPage() {
             </div>
           </section>
 
-          {error && <div className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
+          {error && <div role="alert" className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
           <div className="flex flex-col items-end justify-end gap-4 sm:flex-row sm:items-center sm:justify-between">
             <TurnstileWidget action="airport_apply" generation={turnstile.generation} onChange={turnstile.onChange} />
@@ -6073,7 +6077,7 @@ function ApplicationPage() {
               className="min-h-12 rounded-2xl bg-neutral-900 px-5 py-3 text-sm font-black uppercase tracking-[0.18em] text-white disabled:opacity-50"
               disabled={submitting || !turnstile.ready}
             >
-              {submitting ? '提交中...' : '提交申请'}
+              {submitting ? '校验并审核中…' : '提交申请'}
             </button>
           </div>
         </form>
@@ -7593,10 +7597,11 @@ function PortalPage() {
                       </PublicFormField>
                     </div>
                   </div>
-                  <PublicFormField label="机场简介">
+                  <PublicFormField label="机场简介" hint={`最多 ${APPLICATION_INTRO_MAX_LENGTH} 个字符，请使用客观、文明的描述。`}>
                     <textarea
                       className={`${portalInputClass} min-h-28`}
                       value={applicationForm.airport_intro}
+                      maxLength={APPLICATION_INTRO_MAX_LENGTH}
                       onChange={(e) => setApplicationForm((current) => ({ ...current, airport_intro: e.target.value }))}
                       required
                     />
@@ -7716,7 +7721,7 @@ function PortalPage() {
                   className={portalPrimaryButtonClass}
                   disabled={savingApplication}
                 >
-                  {savingApplication ? '保存中...' : '保存运营资料'}
+                  {savingApplication ? '校验并审核中…' : '保存运营资料'}
                 </button>
               </div>
             </section>

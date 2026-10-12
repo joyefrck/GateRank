@@ -1,11 +1,12 @@
 import { normalizeWebsiteUrls } from '../../../shared/websiteUrl';
 import { createTurnstileService, type TurnstileVerifier } from '../services/turnstileService';
+import { createApplicationModerationService, type ApplicationModerationVerifier } from '../services/applicationModerationService';
 import { randomInt, randomUUID } from 'node:crypto';
 import { Router, type Request, type Response } from 'express';
 import { APPLICATION_FEE_AMOUNT, CLICK_CHARGE_AMOUNT, RECHARGE_AMOUNTS } from '../config/billing';
 import { HttpError } from '../middleware/errorHandler';
 import { portalAuth } from '../middleware/portalAuth';
-import { createPortalLoginFlowRateLimit, createPortalLoginRateLimit } from '../middleware/rateLimit';
+import { createApplicationIpRateLimit, createPortalLoginFlowRateLimit, createPortalLoginRateLimit } from '../middleware/rateLimit';
 import type { ApplicantAccount } from '../repositories/applicantAccountRepository';
 import type { ApplicantEmailChangeCodeRepository } from '../repositories/applicantEmailChangeCodeRepository';
 import type { ApplicantTelegramBinding } from '../repositories/applicantTelegramBindingRepository';
@@ -66,6 +67,7 @@ import {
 
 interface PortalDeps {
   turnstile?: TurnstileVerifier;
+  applicationModeration?: ApplicationModerationVerifier;
   applicantAccountRepository: {
     getById(id: number): Promise<ApplicantAccount | null>;
     getByEmail?(email: string): Promise<ApplicantAccount | null>;
@@ -317,6 +319,8 @@ interface ApplicantApplicationOperationsInput {
 export function createPortalRoutes(deps: PortalDeps): Router {
   const router = Router();
   const turnstile = deps.turnstile || createTurnstileService();
+  const applicationModeration = deps.applicationModeration || createApplicationModerationService();
+  const applicationMutationRateLimit = createApplicationIpRateLimit();
   const portalLoginRateLimit = createPortalLoginRateLimit();
   const portalLoginFlowRateLimit = createPortalLoginFlowRateLimit();
 
@@ -1053,7 +1057,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
   });
 
-  router.patch('/portal/application', portalAuth, async (req, res, next) => {
+  router.patch('/portal/application', portalAuth, applicationMutationRateLimit, async (req, res, next) => {
     try {
       const session = requireApplicantSession(req);
       const account = await requireApplicantAccount(deps, session.applicant_id);
@@ -1082,14 +1086,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
           );
         }
       }
-      if (emailWillChange) {
-        await consumeApplicantEmailChangeCode(
-          deps,
-          account.id,
-          applicantEmail,
-          mustString(payload.email_code, 'email_code'),
-        );
-      }
+      const emailCode = emailWillChange ? mustString(payload.email_code, 'email_code') : null;
 
       const input = {
         name: application.name,
@@ -1105,6 +1102,11 @@ export function createPortalRoutes(deps: PortalDeps): Router {
         test_account: mustString(payload.test_account, 'test_account'),
         test_password: mustString(payload.test_password, 'test_password'),
       };
+
+      await applicationModeration.verify({ name: input.name, airport_intro: input.airport_intro });
+      if (emailCode) {
+        await consumeApplicantEmailChangeCode(deps, account.id, applicantEmail, emailCode);
+      }
 
       if (!deps.airportApplicationRepository.updateApplicantDraft) {
         throw new Error('airportApplicationRepository.updateApplicantDraft is not configured');
@@ -1124,7 +1126,7 @@ export function createPortalRoutes(deps: PortalDeps): Router {
     }
   });
 
-  router.patch('/portal/application/operations', portalAuth, async (req, res, next) => {
+  router.patch('/portal/application/operations', portalAuth, applicationMutationRateLimit, async (req, res, next) => {
     try {
       const session = requireApplicantSession(req);
       const account = await requireApplicantAccount(deps, session.applicant_id);
@@ -1133,6 +1135,8 @@ export function createPortalRoutes(deps: PortalDeps): Router {
       const input = parseApplicantApplicationOperationsPayload(payload);
       input.name = application.name;
       input.profile = preserveProtectedProfileRegions(input.profile, application.profile);
+
+      await applicationModeration.verify({ name: input.name, airport_intro: input.airport_intro });
 
       if (!deps.airportApplicationRepository.updateApplicantOperations) {
         throw new Error('airportApplicationRepository.updateApplicantOperations is not configured');

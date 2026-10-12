@@ -58,6 +58,18 @@ export function createApplicationRateLimit() {
   });
 }
 
+export function createApplicationIpRateLimit() {
+  return rateLimit({
+    windowMs: FIFTEEN_MINUTES_MS,
+    // A separate generous IP ceiling bounds model spend when the email changes.
+    limit: numberFromEnv('APPLICATION_IP_RATE_LIMIT_MAX', 50),
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => ipKeyGenerator(req.ip || ''),
+    handler: rateLimitHandler,
+  });
+}
+
 export function createPerformanceProbeRateLimit() {
   return rateLimit({
     windowMs: numberFromEnv('PERFORMANCE_PROBE_RATE_LIMIT_WINDOW_MS', 60 * 1000),

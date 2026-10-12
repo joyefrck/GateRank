@@ -1,5 +1,6 @@
 import { createTurnstileService, type TurnstileVerifier } from '../services/turnstileService';
-import { createApplicationRateLimit } from '../middleware/rateLimit';
+import { createApplicationModerationService, type ApplicationModerationVerifier } from '../services/applicationModerationService';
+import { createApplicationIpRateLimit, createApplicationRateLimit } from '../middleware/rateLimit';
 import { publicScoreSummary } from '../services/scoreComponents';
 import { Router } from 'express';
 import { APPLICATION_FEE_AMOUNT } from '../config/billing';
@@ -31,6 +32,7 @@ import { sendError } from '../utils/http';
 
 interface PublicDeps {
   turnstile?: TurnstileVerifier;
+  applicationModeration?: ApplicationModerationVerifier;
   billingEligibility?: BillingEligibilityService;
   airportRepository: {
     getById(id: number): Promise<unknown | null>;
@@ -137,6 +139,7 @@ const MARKETING_TARGET_KINDS: MarketingTargetKind[] = ['website', 'subscription_
 export function createPublicRoutes(deps: PublicDeps): Router {
   const router = Router();
   const turnstile = deps.turnstile || createTurnstileService();
+  const applicationModeration = deps.applicationModeration || createApplicationModerationService();
   router.get('/security/turnstile', (_req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
     try { res.json(turnstile.publicConfig()); } catch (error) { next(error); }
@@ -194,7 +197,7 @@ export function createPublicRoutes(deps: PublicDeps): Router {
     }
   });
 
-  router.post('/airport-applications', createApplicationRateLimit(), async (req, res, next) => {
+  router.post('/airport-applications', createApplicationIpRateLimit(), createApplicationRateLimit(), async (req, res, next) => {
     try {
       const payload = (req.body ?? {}) as Record<string, unknown>;
       await turnstile.verify(payload.turnstile_token, 'airport_apply');
@@ -230,6 +233,8 @@ export function createPublicRoutes(deps: PublicDeps): Router {
         test_account: mustString(payload.test_account, 'test_account'),
         test_password: mustString(payload.test_password, 'test_password'),
       };
+
+      await applicationModeration.verify({ name: applicationInput.name, airport_intro: applicationInput.airport_intro });
 
       const applicationId = await deps.airportApplicationRepository.create(applicationInput);
       const initialPassword = createRandomPassword();

@@ -119,8 +119,10 @@ import { createTimedPromiseCache, PUBLIC_PAGE_CACHE_TTL_MS } from './utils/publi
 import { BillingEligibilityService } from './services/billingEligibilityService';
 import { createLiveScoreRoutes } from './routes/liveScoreRoutes';
 import { createFullRankingLoadGate } from './utils/fullRankingLoadGate';
+import { createApplicationModerationService } from './services/applicationModerationService';
 
 export async function createApp() {
+  const applicationModeration = createApplicationModerationService();
   const pool = getDbPool();
   const airportRepository = new AirportRepository(pool);
   await airportRepository.ensureSchema();
@@ -405,6 +407,7 @@ export async function createApp() {
   app.use(
     '/api/v1',
     createPublicRoutes({
+      applicationModeration,
       billingEligibility,
       airportRepository,
       airportApplicationRepository,
@@ -443,6 +446,7 @@ export async function createApp() {
   app.use(
     '/api/v1',
     createPortalRoutes({
+      applicationModeration,
       applicantAccountRepository,
       applicantEmailChangeCodeRepository,
       airportApplicationRepository,
