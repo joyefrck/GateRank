@@ -11,11 +11,51 @@ import { buildReportSeo, buildReportFaqItems } from '../../shared/publicSeo';
 import { getDateInTimezone } from '../src/utils/time';
 import { DEFAULT_TOOLS_DOWNLOAD_PAGE_CONFIG, IOS_OFFICIAL_TOOL_DOWNLOADS } from '../../shared/toolDownloads';
 import { renderToolsDownloadPublicPage, renderReportPublicPage } from '../src/services/publicPageRenderer';
+import { errorHandler } from '../src/middleware/errorHandler';
 
 const TEST_FRONTEND_ASSETS = {
   script: '/assets/index-CkG9aP2q.js',
   stylesheet: '/assets/index-BzS9fL3m.css',
 };
+
+test('HTML and API overloads return retryable 503 while an abandoned load still occupies capacity', async () => {
+  const pageCache = createTimedPromiseCache(300_000, { maxPendingLoads: 1, maxPendingRequests: 1 });
+  let release!: (value: string) => void;
+  const pending = pageCache.getOrLoad('report:blocked', () => new Promise<string>((resolve) => { release = resolve; }));
+  const publicViewService = createPublicViewServiceStub();
+  const app = express();
+  app.use('/api/v1', createPublicRoutes({
+    airportRepository: { getById: async () => null },
+    airportApplicationRepository: { create: async () => 1 },
+    metricsRepository: { getByAirportAndDate: async () => null },
+    scoreRepository: { getByAirportAndDate: async () => null, getTrend: async () => [] },
+    rankingRepository: { getRanking: async () => [] },
+    publicViewService,
+    pageCache,
+  }));
+  app.use(createPublicPageRoutes({ publicViewService, pageCache, frontendAssets: TEST_FRONTEND_ASSETS }));
+  app.use(errorHandler);
+  const server = app.listen(0);
+  try {
+    const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    for (const path of ['/', '/rankings/all', '/risk-monitor', '/api/v1/pages/home']) {
+      const response = await fetch(base + path);
+      assert.equal(response.status, 503, path);
+      assert.equal(response.headers.get('retry-after'), '2');
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      assert.match(await response.text(), /页面访问繁忙/);
+    }
+    release('done');
+    await pending;
+    const response = await fetch(base + '/');
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('cache-control'), 'no-store, max-age=0');
+  } finally {
+    release('done');
+    await pending;
+    await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
+});
 
 function extractBalancedCssBlock(css: string, openingPattern: RegExp, requiredSelector: string): string {
   const flags = openingPattern.flags.includes('g') ? openingPattern.flags : `${openingPattern.flags}g`;

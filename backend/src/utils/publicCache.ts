@@ -1,3 +1,5 @@
+import { HttpError } from '../middleware/errorHandler';
+
 export const PUBLIC_PAGE_CACHE_TTL_MS = 300_000;
 export const PUBLIC_PAGE_CACHE_MAX_ENTRIES = 256;
 export const PUBLIC_CACHE_CONTROL = 'public, max-age=60, s-maxage=300, stale-while-revalidate=600';
@@ -14,6 +16,8 @@ export interface TimedPromiseCache {
 
 interface TimedPromiseCacheOptions {
   maxEntries?: number;
+  maxPendingLoads?: number;
+  maxPendingRequests?: number;
 }
 
 export function setPublicCacheHeaders(res: CacheableResponse): void {
@@ -32,6 +36,30 @@ export function createTimedPromiseCache(
 ): TimedPromiseCache {
   const cache = new Map<string, { expiresAt: number; promise: Promise<unknown> }>();
   const maxEntries = normalizeMaxEntries(options.maxEntries);
+  // Keep unfinished database work bounded, even when browsers abandon requests.
+  const pending = new Map<string, Promise<unknown>>();
+  const maxPendingLoads = normalizeMaxEntries(options.maxPendingLoads ?? 8);
+  const maxPendingRequests = normalizeMaxEntries(options.maxPendingRequests ?? 256);
+  let pendingRequests = 0;
+
+  function loadLiveView<T>(key: string, loader: () => Promise<T>): Promise<T> {
+    const existing = pending.get(key);
+    if (pendingRequests >= maxPendingRequests || (!existing && pending.size >= maxPendingLoads)) {
+      return Promise.reject(new HttpError(503, 'PUBLIC_LOAD_BUSY', '页面访问繁忙，请稍后重试'));
+    }
+    pendingRequests += 1;
+    let promise = existing as Promise<T> | undefined;
+    if (!promise) {
+      try {
+        promise = loader().finally(() => { pending.delete(key); });
+      } catch (error) {
+        pendingRequests -= 1;
+        return Promise.reject(error);
+      }
+      pending.set(key, promise);
+    }
+    return promise.finally(() => { pendingRequests -= 1; });
+  }
 
   function deleteExpired(now: number): void {
     for (const [key, entry] of cache) {
@@ -58,8 +86,10 @@ export function createTimedPromiseCache(
 
   return {
     getOrLoad<T>(key: string, loader: () => Promise<T>): Promise<T> {
-      // These views contain wallet-dependent visibility. Never retain their final payload.
-      if (/^(?:home|full-ranking|risk-monitor|report|report-view|airport-report):/.test(key)) return loader();
+      // Share pending work only. Completed wallet-sensitive payloads are never retained.
+      if (/^(?:home|full-ranking|risk-monitor|report|report-view|airport-report):/.test(key)) {
+        return loadLiveView(key, loader);
+      }
       const now = Date.now();
       deleteExpired(now);
       const cached = cache.get(key);

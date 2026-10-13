@@ -15,6 +15,7 @@ export function getDbPool(): Pool {
     database: process.env.MYSQL_DATABASE || 'gaterank',
     waitForConnections: true,
     connectionLimit: Number(process.env.MYSQL_POOL_SIZE || 10),
+    queueLimit: 1000,
     charset: 'utf8mb4',
     namedPlaceholders: true,
     decimalNumbers: true,

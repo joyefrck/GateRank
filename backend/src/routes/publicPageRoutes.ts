@@ -1,5 +1,6 @@
 import { DEFAULT_IP_PURITY_CONFIG } from '../../../shared/ipPurity';
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response } from 'express';
+import { HttpError } from '../middleware/errorHandler';
 import type { FullRankingView, HomePageView, ReportView, RiskMonitorView } from '../types/domain';
 import type { AirportDealDetailView, AirportDealView } from '../../../shared/airportAds';
 import { getSiteOrigin } from '../utils/siteUrl';
@@ -90,6 +91,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         res.type('html').send(renderAirportDirectoryPublicPage(siteUrl, view, frontendAssets));
       }
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to load airport directory', { error });
       if (req.path.startsWith('/api/')) {
         res.status(503).json({ message: '机场索引暂时无法加载' });
@@ -111,6 +113,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderHomePublicPage(siteUrl, view, requestedDate, frontendAssets));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render home page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '首页加载失败', frontendAssets));
     }
@@ -148,6 +151,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         frontendAssets,
       ));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render full ranking page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '机场排行加载失败', frontendAssets));
     }
@@ -188,6 +192,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
         frontendAssets,
       ));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render static full ranking page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '筛选榜单加载失败', frontendAssets));
     }
@@ -213,6 +218,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderRiskMonitorPublicPage(siteUrl, view, requestedDate, page, frontendAssets));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render risk monitor page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '跑路监测加载失败', frontendAssets));
     }
@@ -231,6 +237,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderDealsPublicPage(siteUrl, deals, frontendAssets));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render deals page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '活动优惠加载失败', frontendAssets));
     }
@@ -254,6 +261,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderAirportDealDetailPublicPage(siteUrl, view, frontendAssets));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render airport deal page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '机场优惠页面加载失败', frontendAssets));
     }
@@ -333,6 +341,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderToolsDownloadPublicPage(siteUrl, view, frontendAssets));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render download page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '工具下载页加载失败', frontendAssets));
     }
@@ -350,6 +359,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderToolsDownloadPublicPage(siteUrl, view, frontendAssets));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render download page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '工具下载页加载失败', frontendAssets));
     }
@@ -418,6 +428,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderMonthlyReportsPublicPage(siteUrl, view, frontendAssets));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render monthly reports page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '月度报告加载失败', frontendAssets));
     }
@@ -439,6 +450,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderMonthlyReportDetailPage(siteUrl, report, false, frontendAssets));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render monthly report page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '月度报告加载失败', frontendAssets));
     }
@@ -483,6 +495,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       setPublicCacheHeaders(res);
       res.status(200).type('html').send(renderReportPublicPage(siteUrl, view, requestedDate, frontendAssets));
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render airport report page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '报告加载失败', frontendAssets));
     }
@@ -508,6 +521,7 @@ export function createPublicPageRoutes(deps: PublicPageDeps): Router {
       res.redirect(301, `/airports/${encodeURIComponent(view.airport.slug)}`);
       return;
     } catch (error) {
+      if (sendPublicLoadOverload(req, res, error, frontendAssets)) return;
       console.error('[public-page] failed to render report page', { error, requestId: req.requestId || 'unknown' });
       res.status(500).type('html').send(renderPublicHtmlError(siteUrl, 500, '报告加载失败', frontendAssets));
     }
@@ -644,6 +658,18 @@ function parseDateQuery(input: unknown): string | undefined {
 function toPositiveInt(value: unknown, fallback: number): number {
   const num = Number(value ?? fallback);
   return Number.isInteger(num) && num > 0 ? num : fallback;
+}
+
+function sendPublicLoadOverload(req: Request, res: Response, error: unknown, assets: PublicFrontendAssets): boolean {
+  if (!(error instanceof HttpError) || error.code !== 'PUBLIC_LOAD_BUSY') return false;
+  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Retry-After', '2');
+  if (req.path.startsWith('/api/')) {
+    sendError(res, 503, error.code, error.message, req.requestId || 'unknown');
+  } else {
+    res.status(503).type('html').send(renderPublicHtmlError(getSiteOrigin(req), 503, error.message, assets));
+  }
+  return true;
 }
 
 function sendFullRankingRateLimitedPage(

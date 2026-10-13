@@ -18,6 +18,10 @@ export function notFoundHandler(req: Request, res: Response): void {
 
 export function errorHandler(err: unknown, req: Request, res: Response, _next: NextFunction): void {
   if (err instanceof HttpError) {
+    if (err.status === 503) {
+      res.setHeader('Retry-After', '2');
+      res.setHeader('Cache-Control', 'no-store');
+    }
     sendError(res, err.status, err.code, err.message, req.requestId || 'unknown');
     return;
   }
