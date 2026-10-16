@@ -184,7 +184,8 @@ def main():
     if not base.startswith('https://') or len(token) < 24: raise ValueError('PROBE_CONFIGURATION_INVALID')
     def request(path, payload=None):
         data = json.dumps(payload).encode() if payload is not None else None
-        req = Request(base+path,data=data,headers={'Authorization':'Bearer '+token,'Content-Type':'application/json'})
+        req = Request(base+path,data=data,headers={'Authorization':'Bearer '+token,'Content-Type':'application/json',
+                      'Accept':'application/json','User-Agent':'GateRank-Performance-Probe/1.0'})
         with urlopen(req,timeout=10) as response:
             return json.loads(response.read(32768)) if response.status != 204 else None
     job = request('/website-jobs')

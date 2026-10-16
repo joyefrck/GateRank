@@ -67,3 +67,15 @@ class HttpEvidenceTests(unittest.TestCase):
             status, headers, body = w.request_url(urlsplit('http://example.com/'),'8.8.8.8',1)
         self.assertEqual(status,418)
         self.assertEqual(body,'')
+
+class ProbeApiCompatibilityTests(unittest.TestCase):
+    def test_website_worker_uses_existing_probe_request_identity(self):
+        response = unittest.mock.MagicMock(status=204)
+        response.__enter__.return_value=response
+        def open_request(request,timeout):
+            self.assertEqual(request.get_header('User-agent'),'GateRank-Performance-Probe/1.0')
+            self.assertEqual(request.get_header('Accept'),'application/json')
+            return response
+        with patch.dict(w.os.environ,{'PROBE_API_BASE':'https://gate-rank.com/api/v1/performance-probe','PROBE_API_TOKEN':'test-identity-for-probe-api'},clear=True), \
+             patch('sys.argv',['website_probe_runner.py']), patch.object(w,'urlopen',side_effect=open_request):
+            w.main()
