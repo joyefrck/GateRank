@@ -22,6 +22,7 @@ export function RiskCheckDetails({ checks, date }: { checks?: RiskCheckHistory; 
           <Field label="HTTP 状态" value={run.http_status ?? '无响应'} />
           <Field label="TLS 证书剩余天数" value={run.ssl_days_left ?? '未知'} />
           <Field label="证书检测地址" value={run.ssl_target_url || '未检测 HTTPS'} />
+          <Field label="证书检测位置" value={run.ssl_probe_location || run.probe_location} />
           <Field label="证书校验" value={run.tls_authorized === null ? '未确认' : run.tls_authorized ? '通过' : '未通过'} />
           <Field label="复核 / 根路径回退" value={`${run.retried ? '已复核一次' : '未复核'} / ${run.root_fallback ? '使用根路径结果' : '未使用'}`} />
           <Field label="耗时 / 错误码" value={`${(run.duration_ms / 1000).toFixed(2)} 秒 / ${run.error_code || '无'}`} />
@@ -31,7 +32,14 @@ export function RiskCheckDetails({ checks, date }: { checks?: RiskCheckHistory; 
           {run.date !== date ? ` 所选 ${date} 尚无检测记录，当前展示 ${run.date} 的最近记录。` : ''}
           {' 最近采用的检测时间：'}{time(checks?.last_applied?.checked_at)}。
         </p>
-        <p className="mt-1 text-xs leading-relaxed text-neutral-500">Cloudflare 验证或 TLS 可达不能证明源站页面正常；证书信息可能来自 CDN 边缘。</p>
+        <p className="mt-1 text-xs leading-relaxed text-neutral-500">网站安全验证、Cloudflare 验证或 TLS 可达不能证明源站页面正常；证书信息可能来自 CDN 边缘。</p>
+        {run.observations && <div className="mt-3 space-y-2 text-xs text-neutral-600">
+          <p>已发起异地复核；以上为采用结果，各检测点证据如下。</p>
+          {run.observations.map((item, index) => <div key={index} className="rounded bg-neutral-50 p-2">
+            {item.probe_location} · {WEBSITE_STATUS_LABELS[item.status]} · HTTP {item.http_status ?? '无响应'}
+            {' · '}{item.error_code || '无错误'} · {time(item.checked_at)}
+          </div>)}
+        </div>}
         <details className="mt-3 border-t border-neutral-200 pt-2">
           <summary className="min-h-10 cursor-pointer py-2 text-xs font-medium text-neutral-700 focus-visible:outline-indigo-600">查看分阶段检测记录（{run.attempts.length} 条）</summary>
           <ol className="space-y-2 text-xs text-neutral-600">

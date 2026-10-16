@@ -1,7 +1,8 @@
-export type WebsiteStatus = 'accessible' | 'challenge' | 'restricted' | 'tls_only'
+export type WebsiteStatus = 'accessible' | 'challenge' | 'waf_challenge' | 'restricted' | 'tls_only'
   | 'service_error' | 'unreachable' | 'config_error' | 'internal_error';
 
 export const WEBSITE_STATUS_LABELS: Record<WebsiteStatus, string> = {
+  waf_challenge: '网站安全验证，源站页面未确认',
   accessible: '页面可访问', challenge: 'Cloudflare 验证，源站页面未确认',
   restricted: '访问受限，页面内容未确认', tls_only: 'TLS 可达，网页响应未确认',
   service_error: '网页服务异常', unreachable: '当前检测点无法访问',
@@ -17,6 +18,8 @@ export interface WebsiteAttempt {
 }
 
 export interface WebsiteProbeResult {
+  observations?: Omit<WebsiteProbeResult, 'observations'>[];
+  ssl_probe_location?: string;
   domain_ok: boolean | null;
   ssl_days_left: number | null;
   status: WebsiteStatus;

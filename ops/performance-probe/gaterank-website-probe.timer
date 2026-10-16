@@ -1,0 +1,11 @@
+[Unit]
+Description=Poll GateRank website verification independently of speed tests
+
+[Timer]
+OnBootSec=10s
+OnUnitInactiveSec=3s
+AccuracySec=1s
+Unit=gaterank-website-probe.service
+
+[Install]
+WantedBy=timers.target

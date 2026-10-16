@@ -3,13 +3,32 @@ import { Router } from 'express';
 import { HttpError } from '../middleware/errorHandler';
 import type { PerformanceProbeId } from '../types/domain';
 import type { PerformanceProbeJobService } from '../services/performanceProbeJobService';
+import type { WebsiteProbeQueue } from '../services/websiteProbeQueue';
 
 interface PerformanceProbeRoutesDeps {
   jobService: Pick<PerformanceProbeJobService, 'leaseNextJob' | 'submitRun'>;
+  websiteProbeQueue?: Pick<WebsiteProbeQueue, 'lease' | 'submit'>;
 }
 
 export function createPerformanceProbeRoutes(deps: PerformanceProbeRoutesDeps): Router {
   const router = Router();
+  router.get('/website-jobs', async (req, res, next) => {
+    try {
+      const identity = requireIdentity(req.performanceProbeAuth);
+      const job = await deps.websiteProbeQueue?.lease(identity.probe_id);
+      if (!job) { res.status(204).end(); return; }
+      res.json(job);
+    } catch (error) { next(error); }
+  });
+  router.post('/website-runs', async (req, res, next) => {
+    try {
+      const identity = requireIdentity(req.performanceProbeAuth);
+      if (!deps.websiteProbeQueue) throw new HttpError(503, 'WEBSITE_PROBE_UNAVAILABLE', 'Website probe queue is unavailable');
+      if (Buffer.byteLength(JSON.stringify(req.body ?? {}), 'utf8') > 32768) throw new HttpError(413, 'WEBSITE_PROBE_TOO_LARGE', 'Website probe evidence exceeds 32 KiB');
+      await deps.websiteProbeQueue.submit(identity.probe_id, req.body);
+      res.status(201).json({ accepted: true });
+    } catch (error) { next(error); }
+  });
 
   router.get('/jobs', async (req, res, next) => {
     try {

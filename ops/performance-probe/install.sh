@@ -41,6 +41,7 @@ install -d -o "$SERVICE_USER" -g "$SERVICE_USER" -m 0700 "$STATE_ROOT"
 python3 -m venv "$INSTALL_ROOT/venv"
 "$INSTALL_ROOT/venv/bin/python" -m pip install -r "$SOURCE_ROOT/requirements-monitor.txt"
 install -o root -g root -m 0644 "$SOURCE_ROOT/scripts/performance_probe_runner.py" "$INSTALL_ROOT/scripts/performance_probe_runner.py"
+install -o root -g root -m 0644 "$SOURCE_ROOT/scripts/website_probe_runner.py" "$INSTALL_ROOT/scripts/website_probe_runner.py"
 install -o root -g root -m 0644 "$SOURCE_ROOT/scripts/monitor_performance.py" "$INSTALL_ROOT/scripts/monitor_performance.py"
 install -o root -g root -m 0644 "$SOURCE_ROOT/scripts/subscription_node_dns.py" "$INSTALL_ROOT/scripts/subscription_node_dns.py"
 
@@ -60,6 +61,8 @@ install -o root -g root -m 0755 \
 install -o root -g root -m 0644 "$SCRIPT_DIR/gaterank-probe.service" /etc/systemd/system/gaterank-probe.service
 install -o root -g root -m 0644 "$SCRIPT_DIR/gaterank-probe.timer" /etc/systemd/system/gaterank-probe.timer
 install -o root -g root -m 0644 "$SCRIPT_DIR/gaterank-probe.env.example" /etc/gaterank-probe.env.example
+install -o root -g root -m 0644 "$SCRIPT_DIR/gaterank-website-probe.service" /etc/systemd/system/gaterank-website-probe.service
+install -o root -g root -m 0644 "$SCRIPT_DIR/gaterank-website-probe.timer" /etc/systemd/system/gaterank-website-probe.timer
 systemctl daemon-reload
 
 printf '%s\n' '[gaterank-probe] installed; timer remains disabled until explicitly enabled'

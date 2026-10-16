@@ -173,3 +173,17 @@ test('DNS failure gets a bounded second lookup and remains distinct from configu
   assert.equal(result.domain_ok, false);
   assert.equal(calls, 2);
 });
+
+test('VeilX safety verification is distinct from a failed origin page', async () => {
+  const result = await probeWebsite('https://example.com', { ...base,
+    requestUrl: async () => ({ status: 418, waf_challenge: true }),
+  } as never);
+  assert.equal(result.status, 'waf_challenge');
+  assert.equal(result.domain_ok, true);
+  assert.equal(result.http_status, 418);
+});
+test('an unrecognized HTTP 418 remains a service failure', async () => {
+  const result = await probeWebsite('https://example.com', { ...base, requestUrl: async () => ({ status: 418 }) } as never);
+  assert.equal(result.status, 'service_error');
+  assert.equal(result.domain_ok, false);
+});

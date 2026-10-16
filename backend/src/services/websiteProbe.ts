@@ -8,7 +8,7 @@ import type { WebsiteProbeResult, WebsiteStatus } from '../../../shared/riskChec
 import { isPublicIpAddress } from '../utils/ipCheckTarget';
 
 export interface ResolvedAddress { address: string; family: 4 | 6 }
-export interface HttpProbeResponse { status?: number; challenge?: boolean; location?: string; error_code?: string }
+export interface HttpProbeResponse { status?: number; challenge?: boolean; waf_challenge?: boolean; location?: string; error_code?: string }
 export interface TlsProbeResponse { days: number | null; authorized: boolean | null; error_code?: string }
 export interface WebsiteProbeDeps {
   resolveAddresses(url: URL): Promise<ResolvedAddress[]>;
@@ -99,6 +99,7 @@ export async function probeWebsite(rawUrl: string, overrides: Partial<WebsitePro
         if (response.status !== undefined) break;
       }
       if (response.status === undefined) return { status: 'unreachable', url, code: response.error_code ?? 'CONNECTION_FAILED', http: null };
+      if (response.waf_challenge) return { status: 'waf_challenge', url, code: null, http: response.status };
       if (response.challenge) return { status: 'challenge', url, code: null, http: response.status };
       if (REDIRECTS.has(response.status)) {
         if (!response.location) return { status: 'service_error', url, code: 'REDIRECT_NO_LOCATION', http: response.status };
@@ -158,22 +159,22 @@ export async function probeWebsite(rawUrl: string, overrides: Partial<WebsitePro
           if (!NETWORK_CODES.has(code)) throw error;
           outcome = { status: 'unreachable', url: candidate, code, http: null };
         }
-        if (['accessible', 'challenge', 'restricted'].includes(outcome.status)) {
+        if (['accessible', 'challenge', 'waf_challenge', 'restricted'].includes(outcome.status)) {
           result.root_fallback = candidate !== parsed;
           break;
         }
         // Retain explicit server/redirect failure when a later request times out.
         if (!lastFailure || outcome.status === 'service_error') lastFailure = outcome;
       }
-      if (outcome && ['accessible', 'challenge', 'restricted'].includes(outcome.status)) break;
+      if (outcome && ['accessible', 'challenge', 'waf_challenge', 'restricted'].includes(outcome.status)) break;
       if (Date.now() >= deadline || (lastFailure?.http && lastFailure.http < 500)) break;
     }
     await tlsWork;
     if (tlsError && (!(tlsError instanceof ProbeError) || tlsError.configuration) && !NETWORK_CODES.has(errorCode(tlsError))) throw tlsError;
-    if (!outcome || !['accessible', 'challenge', 'restricted'].includes(outcome.status)) outcome = lastFailure ?? outcome;
+    if (!outcome || !['accessible', 'challenge', 'waf_challenge', 'restricted'].includes(outcome.status)) outcome = lastFailure ?? outcome;
     if (!outcome) throw new ProbeError('INTERNAL_ERROR');
     result.status = outcome.status === 'unreachable' && result.ssl_days_left !== null ? 'tls_only' : outcome.status;
-    result.domain_ok = ['accessible', 'challenge', 'restricted', 'tls_only'].includes(result.status);
+    result.domain_ok = ['accessible', 'challenge', 'waf_challenge', 'restricted', 'tls_only'].includes(result.status);
     result.final_url = safeUrl(outcome.url);
     result.http_status = outcome.http;
     result.error_code = outcome.code;
@@ -193,8 +194,10 @@ async function resolveAddresses(url: URL): Promise<ResolvedAddress[]> {
   return (await lookup(host, { all: true, verbatim: false })).map((item) => ({ address: item.address, family: item.family === 6 ? 6 : 4 }));
 }
 
-function requestUrlByAddress(url: URL, address: ResolvedAddress, timeoutMs: number, signal: AbortSignal): Promise<HttpProbeResponse> {
+export function requestUrlByAddress(url: URL, address: ResolvedAddress, timeoutMs: number, signal: AbortSignal): Promise<HttpProbeResponse> {
   return new Promise((resolve) => {
+    const began = Date.now();
+    let received: HttpProbeResponse | undefined;
     const client = url.protocol === 'https:' ? https : http;
     const request = client.request({ host: address.address, family: address.family,
       port: url.port ? Number(url.port) : url.protocol === 'https:' ? 443 : 80,
@@ -203,13 +206,33 @@ function requestUrlByAddress(url: URL, address: ResolvedAddress, timeoutMs: numb
       rejectUnauthorized: false, signal,
       headers: { Host: url.host, 'User-Agent': 'GateRank-Risk-Check/1.0', Accept: 'text/html,application/xhtml+xml' },
     }, (response) => {
-      resolve({ status: response.statusCode, challenge: response.headers['cf-mitigated'] === 'challenge', location: response.headers.location });
-      // Headers are enough; never download an unbounded body or run challenge scripts.
-      response.destroy(); request.destroy();
+      const result: HttpProbeResponse = { status: response.statusCode, challenge: response.headers['cf-mitigated'] === 'challenge', location: response.headers.location };
+      received = result;
+      let bodyTimer: ReturnType<typeof setTimeout> | undefined;
+      const finish = () => {
+        clearTimeout(bodyTimer);
+        signal.removeEventListener('abort', finish);
+        resolve(result); response.destroy(); request.destroy();
+      };
+      if (response.statusCode !== 418) { finish(); return; }
+      // Read at most 8 KiB only for a potential WAF response; never execute verification scripts.
+      const chunks: Buffer[] = [];
+      let bytes = 0;
+      const inspect = () => { result.waf_challenge = isWebsiteWafChallenge(String(response.headers.server || ''), Buffer.concat(chunks).toString('utf8')); finish(); };
+      // Finish with the observed status before the outer deadline, even if a body stalls.
+      bodyTimer = setTimeout(inspect, Math.max(1, Math.min(1000, timeoutMs - (Date.now() - began) - 25)));
+      signal.addEventListener('abort', finish, { once: true });
+      response.on('data', (chunk: Buffer) => {
+        chunks.push(chunk.subarray(0, Math.max(0, 8192 - bytes)));
+        bytes += chunk.length;
+        if (bytes >= 8192) inspect();
+      });
+      response.once('end', inspect);
+      response.once('error', finish);
     });
     const timer = setTimeout(() => request.destroy(new ProbeError('ETIMEDOUT')), timeoutMs);
     request.once('close', () => clearTimeout(timer));
-    request.on('error', (error) => resolve({ error_code: signal.aborted ? 'PROBE_TIMEOUT' : errorCode(error) }));
+    request.on('error', (error) => resolve(received ?? { error_code: signal.aborted ? 'PROBE_TIMEOUT' : errorCode(error) }));
     request.end();
   });
 }
@@ -231,4 +254,10 @@ function getSslDaysLeftByAddress(url: URL, address: ResolvedAddress, timeoutMs: 
     socket.on('error', (error) => resolve({ days: null, authorized: null, error_code: errorCode(error) }));
     if (signal.aborted) abort();
   });
+}
+
+/** Match the observed VeilX verification document, not HTTP 418 alone. */
+export function isWebsiteWafChallenge(server: string, body: string): boolean {
+  return /VeilX/i.test(server) && /<title>\s*安全验证\s*<\/title>/i.test(body)
+    && /["']\/_waf\//i.test(body);
 }

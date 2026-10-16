@@ -104,3 +104,24 @@ sudo userdel gaterank-probe
 ```
 
 保留 `/var/lib/gaterank-probe` 直到确认不再需要本机运行证据，再按运维保留策略处理。不要用未解析变量或宽泛路径执行递归删除。
+
+## 官网风险异地复核
+
+官网复核复用每台探针的身份和环境文件，使用独立 `gaterank-website-probe.timer`，不占用性能或网络覆盖 worker，也不开放新入站端口。先发布支持 `/website-jobs`、`/website-runs` 的 API，再在上海、广州安装 `scripts/website_probe_runner.py` 和同目录的 `gaterank-website-probe.service/.timer`。
+
+对已有探针只需要复制这三个新增文件，保留现有环境和性能服务；不必重新安装 sing-box。先备份将被替换的文件和 unit，然后：
+
+```bash
+sudo install -o root -g root -m 0644 scripts/website_probe_runner.py /opt/gaterank-probe/scripts/website_probe_runner.py
+sudo install -o root -g root -m 0644 ops/performance-probe/gaterank-website-probe.service /etc/systemd/system/gaterank-website-probe.service
+sudo install -o root -g root -m 0644 ops/performance-probe/gaterank-website-probe.timer /etc/systemd/system/gaterank-website-probe.timer
+sudo systemctl daemon-reload
+sudo systemd-analyze verify /etc/systemd/system/gaterank-website-probe.service /etc/systemd/system/gaterank-website-probe.timer
+sudo systemctl start gaterank-website-probe.service
+sudo journalctl -u gaterank-website-probe.service -n 10 --no-pager
+sudo systemctl enable --now gaterank-website-probe.timer
+```
+
+空队列输出 `idle`。官网单次检测总时限 30 秒，任务 45 秒失效，每次空闲后 3 秒轮询；失败与未回传不会伪造正常页面。中心点异常时触发两地复核，明确取得 2xx 的地点优先。VeilX 418 必须同时具有指定服务头、安全验证标题与 `/_waf/` 资源特征，才标记为“网站安全验证，源站页面未确认”，不执行挑战脚本。普通 418/5xx 仍保留服务错误；异地未完成时不采用新的单点失败指标。所有地点观察随风险记录保存，历史检测不改写。
+
+回滚时停用独立 timer：`sudo systemctl disable --now gaterank-website-probe.timer`；确认 worker 已结束后恢复本次备份。原性能、网络覆盖 timer 保持运行。新队列表保留证据，无需删表。

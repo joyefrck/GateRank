@@ -104,6 +104,7 @@ import { PublicViewService } from './services/publicViewService';
 import { AirportDealDetailService } from './services/airportDealDetailService';
 import { RecomputeService } from './services/recomputeService';
 import { RiskCheckService } from './services/riskCheckService';
+import { WebsiteProbeQueue } from './services/websiteProbeQueue';
 import { SmtpSettingsService } from './services/smtpSettingsService';
 import { AdExpiryReminderService } from './services/adExpiryReminderService';
 import { AdminSchedulerService } from './services/adminSchedulerService';
@@ -213,10 +214,13 @@ export async function createApp() {
     performanceRunTargetRepository,
     performanceProbeSettingRepository,
   });
+  const websiteProbeQueue = new WebsiteProbeQueue(pool);
+  await websiteProbeQueue.ensureSchema();
   const riskCheckService = new RiskCheckService({
     riskCheckRepository,
     airportRepository,
     metricsRepository,
+    regionalProbe: (airportId, website) => websiteProbeQueue.inspect(airportId, website),
   });
   const marketingSettingsService = new MarketingSettingsService({
     systemSettingRepository,
@@ -401,7 +405,7 @@ export async function createApp() {
     '/api/v1/performance-probe',
     createPerformanceProbeRateLimit(),
     performanceProbeAuth(performanceProbeRepository),
-    createPerformanceProbeRoutes({ jobService: performanceProbeJobService }),
+    createPerformanceProbeRoutes({ jobService: performanceProbeJobService, websiteProbeQueue }),
   );
 
   app.use(
